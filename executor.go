@@ -271,8 +271,10 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 		}
 		if counter.Failure != nil {
 			f := *counter.Failure
+			// The runs the step was not run in are runs of the job too, as
+			// the count in the report files has them.
 			f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
-				counter.FailureCount, counter.SuccessCount+counter.FailureCount, f.Message)
+				counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount, f.Message)
 			stepResult.Failure = &f
 		}
 

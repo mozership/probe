@@ -1814,6 +1814,18 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
 		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
 	}
+	// The message of a failure counts the runs the step was not run in
+	// among the runs, as the count of the report does.
+	failed := NewResult()
+	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx.Result = failed
+	ctx.StepCounters = map[int]StepRepeatCounter{
+		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
+	}
+	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {
+		t.Errorf("message = %q, want the three runs counted", got)
+	}
 }
 
 // A repeated job reports every entry of an iteration, and the steps after

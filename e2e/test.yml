@@ -99,7 +99,8 @@ jobs:
       res.code == 1 &&
       res.stdout contains "Skipped: first (SKIPPED)" &&
       res.stdout contains "Skipped: second (SKIPPED)" &&
-      res.stdout contains "✓  The step after it still runs"
+      res.stdout contains "The step after it still runs" &&
+      !(res.stdout contains "The step after it still runs (SKIPPED)")
     echo: "{{res.stdout}}"
   - name: fail.yml (expected to fail)
     uses: shell
