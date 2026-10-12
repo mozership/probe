@@ -349,8 +349,8 @@ func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
 	}
 	for _, want := range []string{
 		// The first entry: skipped for want of one in the first run, which
-		// counts as its own skipif does, and run in the two others.
-		"0. Each none (repeating 3 times) ✓ 3/3 success (100.0%)",
+		// is neither a success nor a failure, and run in the two others.
+		"0. Each none (repeating 3 times) ✓ 2/3 success (66.7%), 1 skipped",
 		// The second entry is run in the second run alone.
 		"1. Each b (repeating 1 times) ✓ 1/3 success (33.3%)",
 		// The step after it is one step, run in every run.
@@ -376,5 +376,35 @@ func TestStep_counterKey(t *testing.T) {
 	}
 	if a.counterKey() >= c.counterKey() || c.counterKey() >= b.counterKey() {
 		t.Errorf("keys = %d, %d, %d, want them in the order the steps run in", a.counterKey(), c.counterKey(), b.counterKey())
+	}
+	// An entry past those told apart is not taken for the next step's.
+	far := &Step{pos: 1, ordinal: counterEntries, placed: true}
+	if far.counterKey() == b.counterKey() || far.counterKey() <= c.counterKey() {
+		t.Errorf("key = %d, want it before that of the next step, %d", far.counterKey(), b.counterKey())
+	}
+}
+
+// An iteration that comes to no entry in any run of a repeated job leaves
+// its step skipped, not passed.
+func TestWorkflow_Start_RepeatWithIterationAlwaysEmpty(t *testing.T) {
+	noColor := color.NoColor
+	color.NoColor = true
+	defer func() { color.NoColor = noColor }()
+
+	each := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Repeat",
+		Vars: map[string]any{"none": []any{}},
+		Jobs: []Job{{ID: "work", Name: "Work", Repeat: &Repeat{Count: 2}, Steps: []*Step{
+			{Name: "Each", Uses: "hello", actionRunner: each, Test: "true", Iteration: Iteration{Expr: "{{ vars.none }}"}},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if len(each.Calls["hello"]) != 0 || !strings.Contains(report, "skipped in 2/2 runs") || strings.Contains(report, "success") && !strings.Contains(report, "All jobs succeeded") {
+		t.Errorf("the step should be reported as skipped in both runs:\n%s", report)
+	}
+	if w.exitStatus != 0 {
+		t.Errorf("exit status = %d, want 0:\n%s", w.exitStatus, report)
 	}
 }

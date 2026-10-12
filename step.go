@@ -1043,20 +1043,24 @@ func (st *Step) counterKey() int {
 	if !st.placed {
 		return st.Idx
 	}
-	return st.pos*counterEntries + st.ordinal
+	// The entries past that many are counted with the last of them, so
+	// that none is counted as an entry of the step written after.
+	return st.pos*counterEntries + min(st.ordinal, counterEntries-1)
 }
 
 // skipAfterFailure reports the step as skipped without running it, as a job
 // with fail_fast does each step after one that failed.
 func (st *Step) skipAfterFailure(jCtx *JobContext) {
-	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", true, jCtx)
+	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", jCtx)
 }
 
 // skipWithoutRun reports the step as skipped for reason without running any
-// of it. Its name is the only thing of it that is evaluated. afterFailure
-// is whether it is skipped for a step that failed before it.
-func (st *Step) skipWithoutRun(reason string, afterFailure bool, jCtx *JobContext) {
-	st.handleSkip(st.nameWithoutRun(), reason, afterFailure, jCtx)
+// of it: for a step that failed before it, or for an iteration that came to
+// no entry. Its name is the only thing of it that is evaluated. Neither is
+// the step's own doing, as a skipif is, so in a repeated job the run counts
+// as neither a success nor a failure of it.
+func (st *Step) skipWithoutRun(reason string, jCtx *JobContext) {
+	st.handleSkip(st.nameWithoutRun(), reason, true, jCtx)
 }
 
 // failBeforeRun reports the step as failed with err before any of it ran,
@@ -1084,9 +1088,10 @@ func (st *Step) nameWithoutRun() string {
 }
 
 // handleSkip handles the skipped step logic. reason says why it is skipped,
-// for the verbose log, and afterFailure whether it is for a step that failed
-// before it, rather than for its own skipif.
-func (st *Step) handleSkip(name, reason string, afterFailure bool, jCtx *JobContext) {
+// for the verbose log, and notRun whether it is for something other than
+// its own skipif: a step that failed before it, or an iteration without an
+// entry.
+func (st *Step) handleSkip(name, reason string, notRun bool, jCtx *JobContext) {
 	// The step is logged and then recorded: a verbose run reports the
 	// steps it skipped as any other run does.
 	if jCtx.Verbose {
@@ -1097,7 +1102,7 @@ func (st *Step) handleSkip(name, reason string, afterFailure bool, jCtx *JobCont
 
 	// Handle repeat execution for skipped steps
 	if jCtx.IsRepeating {
-		st.handleSkipRepeatExecution(jCtx, name, afterFailure)
+		st.handleSkipRepeatExecution(jCtx, name, notRun)
 		return
 	}
 
@@ -1112,9 +1117,10 @@ func (st *Step) handleSkip(name, reason string, afterFailure bool, jCtx *JobCont
 
 // handleSkipRepeatExecution handles skipped step in repeat mode. A step
 // skipped by its own skipif did what it was written to do, and the run
-// counts as a success of it. One skipped after a failure was not run at
-// all, and the run counts as neither a success nor a failure of it.
-func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFailure bool) {
+// counts as a success of it. One skipped after a failure, or for an
+// iteration without an entry, was given nothing to do, and the run counts
+// as neither a success nor a failure of it.
+func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun bool) {
 	// Update counter atomically with lock held throughout
 	jCtx.countersMu.Lock()
 	counter, exists := jCtx.StepCounters[st.counterKey()]
@@ -1126,7 +1132,7 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFa
 		}
 	}
 
-	if afterFailure {
+	if notRun {
 		counter.SkippedCount++
 	} else {
 		// Count as successful (skipped is not a failure)
