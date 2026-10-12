@@ -226,7 +226,9 @@ class Picture:
                 pace = 0.045 if kind == "command" else 0.028
                 self.items.append((row, cells, t, end, pace))
                 t += 0.3 + pace * (len(cells) - 2) + (0.5 if kind == "command" else 0.7)
-                row += 1
+                # A comment is followed by an empty line, to set it off from the
+                # command it is about.
+                row += 1 if kind == "command" else 2
             else:
                 for line in lines:
                     for part in wrap(line):
