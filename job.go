@@ -13,13 +13,16 @@ import (
 )
 
 type Job struct {
-	Name     string   `yaml:"name" validate:"required"`
-	ID       string   `yaml:"id,omitempty"`
-	Needs    []string `yaml:"needs,omitempty"`
-	Steps    []*Step  `yaml:"steps" validate:"required"`
-	Repeat   *Repeat  `yaml:"repeat"`
-	Defaults any      `yaml:"defaults"`
-	SkipIf   string   `yaml:"skipif,omitempty"`
+	Name  string   `yaml:"name" validate:"required"`
+	ID    string   `yaml:"id,omitempty"`
+	Needs []string `yaml:"needs,omitempty"`
+	// Always runs the job once the jobs it needs are over, whether or not
+	// they succeeded, as a job that removes what they made has to.
+	Always   bool    `yaml:"always,omitempty"`
+	Steps    []*Step `yaml:"steps" validate:"required"`
+	Repeat   *Repeat `yaml:"repeat"`
+	Defaults any     `yaml:"defaults"`
+	SkipIf   string  `yaml:"skipif,omitempty"`
 }
 
 func (j *Job) Start(ctx JobContext) error {

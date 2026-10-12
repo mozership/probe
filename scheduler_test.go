@@ -336,3 +336,109 @@ func TestJobScheduler_ValidateDependencies(t *testing.T) {
 		}
 	})
 }
+
+func TestJobScheduler_AlwaysJob(t *testing.T) {
+	newScheduler := func(t *testing.T, jobs ...*Job) *JobScheduler {
+		t.Helper()
+		s := NewJobScheduler()
+		for _, j := range jobs {
+			if err := s.AddJob(j); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return s
+	}
+
+	t.Run("waits for what it needs to be over", func(t *testing.T) {
+		s := newScheduler(t,
+			&Job{ID: "work"},
+			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
+		)
+		if s.CanRunJob("cleanup") {
+			t.Error("cleanup can run before work has started")
+		}
+		s.SetJobStatus("work", JobRunning, false)
+		if s.CanRunJob("cleanup") {
+			t.Error("cleanup can run while work is running")
+		}
+	})
+
+	t.Run("runs after a job that succeeded", func(t *testing.T) {
+		s := newScheduler(t,
+			&Job{ID: "work"},
+			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
+		)
+		s.IncrementRepeatCounter("work")
+		s.SetJobStatus("work", JobCompleted, true)
+		if !s.CanRunJob("cleanup") {
+			t.Error("cleanup cannot run after work succeeded")
+		}
+	})
+
+	t.Run("runs after a job that failed, where another job is skipped", func(t *testing.T) {
+		s := newScheduler(t,
+			&Job{ID: "work"},
+			&Job{ID: "report", Needs: []string{"work"}},
+			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
+		)
+		s.IncrementRepeatCounter("work")
+		s.SetJobStatus("work", JobCompleted, false)
+
+		if !s.CanRunJob("cleanup") {
+			t.Error("cleanup cannot run after work failed")
+		}
+		if s.CanRunJob("report") {
+			t.Error("report can run after work failed")
+		}
+		if skipped := s.MarkJobsWithFailedDependencies(); len(skipped) != 1 || skipped[0] != "report" {
+			t.Errorf("skipped = %v, want report alone", skipped)
+		}
+		if !s.CanRunJob("cleanup") {
+			t.Error("cleanup cannot run once the others are skipped")
+		}
+	})
+
+	t.Run("runs after a job that was skipped for what it needs", func(t *testing.T) {
+		s := newScheduler(t,
+			&Job{ID: "setup"},
+			&Job{ID: "work", Needs: []string{"setup"}},
+			&Job{ID: "cleanup", Needs: []string{"setup", "work"}, Always: true},
+			&Job{ID: "after", Needs: []string{"cleanup"}},
+		)
+		s.IncrementRepeatCounter("setup")
+		s.SetJobStatus("setup", JobCompleted, false)
+		if s.CanRunJob("cleanup") {
+			t.Error("cleanup can run while work is still pending")
+		}
+		if skipped := s.MarkJobsWithFailedDependencies(); len(skipped) != 1 || skipped[0] != "work" {
+			t.Errorf("skipped = %v, want work alone: cleanup always runs, and after waits for it", skipped)
+		}
+		if !s.CanRunJob("cleanup") {
+			t.Error("cleanup cannot run once work is skipped")
+		}
+
+		// A job that needs the one that always runs is held to how that
+		// one ends, as it is to any other.
+		s.IncrementRepeatCounter("cleanup")
+		s.SetJobStatus("cleanup", JobCompleted, true)
+		if !s.CanRunJob("after") {
+			t.Error("after cannot run although cleanup succeeded")
+		}
+	})
+
+	t.Run("waits for every run of a repeated job", func(t *testing.T) {
+		s := newScheduler(t,
+			&Job{ID: "work", Repeat: &Repeat{Count: 2}},
+			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
+		)
+		s.IncrementRepeatCounter("work")
+		s.SetJobStatus("work", JobCompleted, false)
+		if s.CanRunJob("cleanup") {
+			t.Error("cleanup can run before the second run of work")
+		}
+		s.IncrementRepeatCounter("work")
+		if !s.CanRunJob("cleanup") {
+			t.Error("cleanup cannot run after both runs of work")
+		}
+	})
+}

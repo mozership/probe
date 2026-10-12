@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1610,4 +1611,36 @@ func (r *recordingRunner) RunActions(name string, with map[string]any, opts RunO
 	r.with = with
 	r.opts = opts
 	return r.result, nil
+}
+
+// A job that always runs does so after a job it needs failed, where a job
+// that does not is skipped, and the run still fails.
+func TestWorkflow_Start_AlwaysJob(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	cleanup := NewMockActionRunner()
+	skipped := NewMockActionRunner()
+
+	w := &Workflow{
+		Name: "Always",
+		Jobs: []Job{
+			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
+			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello", actionRunner: skipped}}},
+			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
+		},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if len(cleanup.Calls["hello"]) != 1 {
+		t.Errorf("the job that always runs ran %d times, want once:\n%s", len(cleanup.Calls["hello"]), report)
+	}
+	if len(skipped.Calls["hello"]) != 0 {
+		t.Errorf("the job that needs the failed one ran:\n%s", report)
+	}
+	if w.exitStatus == 0 {
+		t.Errorf("exit status = 0, want the run failed:\n%s", report)
+	}
+	if !strings.Contains(report, "Removes") {
+		t.Errorf("the report lacks the step of the job that always runs:\n%s", report)
+	}
 }
