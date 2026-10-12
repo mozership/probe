@@ -49,6 +49,11 @@ type Step struct {
 	expandedName string
 	startedAt    time.Time
 	failure      *StepFailure
+	// pos is where the step is among the steps the job is written with,
+	// and ordinal which entry of its iteration it is running with. placed
+	// is whether the job set them, as it does before it runs a step.
+	pos, ordinal int
+	placed       bool
 	// templateErr holds the templates of the step's name and vars that
 	// could not be evaluated, so that the step fails rather than run with
 	// them.
@@ -592,7 +597,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 
 	// Update counter atomically with lock held throughout
 	jCtx.countersMu.Lock()
-	counter, exists := jCtx.StepCounters[st.Idx]
+	counter, exists := jCtx.StepCounters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
@@ -624,7 +629,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 
 	// Store updated counter back to map. The step's result is made from the
 	// counter once every run is done (Executor.appendRepeatStepResults).
-	jCtx.StepCounters[st.Idx] = counter
+	jCtx.StepCounters[st.counterKey()] = counter
 	jCtx.countersMu.Unlock()
 
 	if st.Echo != "" {
@@ -1024,6 +1029,23 @@ func (st *Step) shouldSkip(jCtx *JobContext) bool {
 	return boolResult
 }
 
+// counterEntries is how many entries of an iteration a step's counters of a
+// repeated job are told apart for.
+const counterEntries = 1 << 20
+
+// counterKey is what the counter of the step is kept by in a repeated job:
+// where the step is written in the job, and which entry of its iteration it
+// runs with. The index it runs with would not do: an iteration that comes to
+// another number of entries in each run gives the steps after it another
+// index in each, and their counters would then count one another's runs.
+// A step run without a job, as a test runs one, is kept by its index.
+func (st *Step) counterKey() int {
+	if !st.placed {
+		return st.Idx
+	}
+	return st.pos*counterEntries + st.ordinal
+}
+
 // skipAfterFailure reports the step as skipped without running it, as a job
 // with fail_fast does each step after one that failed.
 func (st *Step) skipAfterFailure(jCtx *JobContext) {
@@ -1095,7 +1117,7 @@ func (st *Step) handleSkip(name, reason string, afterFailure bool, jCtx *JobCont
 func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFailure bool) {
 	// Update counter atomically with lock held throughout
 	jCtx.countersMu.Lock()
-	counter, exists := jCtx.StepCounters[st.Idx]
+	counter, exists := jCtx.StepCounters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
@@ -1114,7 +1136,7 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFa
 
 	// Store updated counter back to map. The step's result is made from the
 	// counter once every run is done (Executor.appendRepeatStepResults).
-	jCtx.StepCounters[st.Idx] = counter
+	jCtx.StepCounters[st.counterKey()] = counter
 	jCtx.countersMu.Unlock()
 }
 

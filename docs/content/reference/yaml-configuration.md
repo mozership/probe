@@ -551,6 +551,7 @@ steps:
 - A template that cannot be evaluated, or that does not come to a list, fails the step without running it.
 - A list without entries skips the step, which is reported as skipped: there is nothing to run it with. An `iteration` written as an empty list, `[]`, runs the step once, as a step without `iteration` does.
 - The entries are taken as they are: a `{{ }}` in a value of an entry is not evaluated.
+- In a job with [`repeat`](#repeat), the template is evaluated in each run and may come to another number of entries in each. Each entry is counted by its place in the list, and the steps after it as themselves.
 
 ## The Expression Context
 

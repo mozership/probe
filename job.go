@@ -202,8 +202,9 @@ func (j *Job) cloneForAsync() *Job {
 // executeSteps runs all steps in the job, handling iterations appropriately
 func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	idx := 0
-	for _, st := range j.Steps {
+	for pos, st := range j.Steps {
 		st.Expr = ev
+		st.pos, st.ordinal, st.placed = pos, 0, true
 
 		switch {
 		case st.Iteration.Expr != "":
@@ -231,7 +232,8 @@ func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]a
 
 // executeStepWithIterations executes a step multiple times with different variable sets
 func (j *Job) executeStepWithIterations(st *Step, entries []map[string]any, idx *int, ctx *JobContext) {
-	for _, vars := range entries {
+	for ordinal, vars := range entries {
+		st.ordinal = ordinal
 		j.executeStep(st, idx, ctx, vars)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/goccy/go-yaml"
 )
 
@@ -312,4 +313,66 @@ jobs:
 		{SeverityError, 8, "iteration: template {{ parse_json(file('cases.json') }}"},
 		{SeverityError, 13, "iteration: outputs.later.rows"},
 	})
+}
+
+// In a repeated job, an iteration may come to another number of entries in
+// each run. The steps after it are then run with another index in each, and
+// are still counted as themselves, by where they are written.
+func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	each := NewMockActionRunner()
+	after := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Repeat",
+		Vars: map[string]any{"runs": []any{
+			[]any{},
+			[]any{map[string]any{"n": "a"}, map[string]any{"n": "b"}},
+			[]any{map[string]any{"n": "a"}},
+		}},
+		Jobs: []Job{{ID: "work", Name: "Work", Repeat: &Repeat{Count: 3}, Steps: []*Step{
+			// No entry in the first run, two in the second, one in the third.
+			{Name: "Each {{vars.n ?? 'none'}}", Uses: "hello", actionRunner: each, Test: "true", Iteration: Iteration{Expr: "{{ vars.runs[repeat_index] }}"}},
+			{Name: "After", Uses: "hello", actionRunner: after, Test: "true"},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if got := len(each.Calls["hello"]); got != 3 {
+		t.Errorf("the iterated step ran %d times, want 3:\n%s", got, report)
+	}
+	if got := len(after.Calls["hello"]); got != 3 {
+		t.Errorf("the step after it ran %d times, want once in each run:\n%s", got, report)
+	}
+	for _, want := range []string{
+		// The first entry: skipped for want of one in the first run, which
+		// counts as its own skipif does, and run in the two others.
+		"0. Each none (repeating 3 times) ✓ 3/3 success (100.0%)",
+		// The second entry is run in the second run alone.
+		"1. Each b (repeating 1 times) ✓ 1/3 success (33.3%)",
+		// The step after it is one step, run in every run.
+		"2. After (repeating 3 times) ✓ 3/3 success (100.0%)",
+	} {
+		// The spaces a report is laid out with are not what is checked.
+		if !strings.Contains(strings.Join(strings.Fields(report), " "), want) {
+			t.Errorf("the report lacks %q:\n%s", want, report)
+		}
+	}
+}
+
+func TestStep_counterKey(t *testing.T) {
+	// A step run without a job is kept by its index.
+	if got := (&Step{Idx: 3}).counterKey(); got != 3 {
+		t.Errorf("counterKey() = %d, want the index", got)
+	}
+	a := &Step{Idx: 5, pos: 1, ordinal: 0, placed: true}
+	b := &Step{Idx: 5, pos: 2, ordinal: 0, placed: true}
+	c := &Step{Idx: 1, pos: 1, ordinal: 4, placed: true}
+	if a.counterKey() == b.counterKey() || a.counterKey() == c.counterKey() {
+		t.Errorf("keys = %d, %d, %d, want one for each place", a.counterKey(), b.counterKey(), c.counterKey())
+	}
+	if a.counterKey() >= c.counterKey() || c.counterKey() >= b.counterKey() {
+		t.Errorf("keys = %d, %d, %d, want them in the order the steps run in", a.counterKey(), c.counterKey(), b.counterKey())
+	}
 }
