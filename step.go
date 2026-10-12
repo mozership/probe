@@ -771,6 +771,9 @@ func (st *Step) DoTest(printer *Printer) (string, bool) {
 			if dump, isBool := st.ctx.Res["dump"].(bool); isBool && !dump {
 				clause.Operands = nil
 			}
+			// The message is cut before the report masks it, so the
+			// secrets are hidden here, in the values themselves.
+			clause = printer.maskClause(clause)
 			message += ": " + clauseSummary(clause)
 			detail = printer.generateFalseClause(clause)
 		}

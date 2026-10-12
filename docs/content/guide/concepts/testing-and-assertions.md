@@ -40,7 +40,7 @@ test: |
            response: ...
 ```
 
-The condition is shown as Probe read it, so its spacing and quotes may differ from the workflow's. The values are shown for a comparison, such as `==`, `<`, `in` or `contains`, and for what a `!` negates; a value written in the test itself, such as `"healthy"`, is not repeated. Conditions joined with `||` are one condition, and are shown together. The same line is the message of the failure in the files `--report` writes, as `test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`.
+The condition is shown as Probe read it, so its spacing and quotes may differ from the workflow's. The values are shown for a comparison, such as `==`, `<`, `in` or `contains`, and for what a `!` negates; a value written in the test itself, such as `"healthy"`, is not repeated. Conditions joined with `||` are one condition, and are shown together. A test that calls a function whose value changes from one call to the next, `random_int`, `random_str`, `unixtime` or `now`, is not taken apart, as evaluating it again could name another condition; it shows the request and the response only. The same line is the message of the failure in the files `--report` writes, as `test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`.
 
 ### Test Expression Context
 

@@ -465,6 +465,13 @@ func redacted(v any) any {
 	}
 }
 
+// Value returns v, a value read out of a request or a response, with secret
+// values hidden in every string at any depth, as Map hides them in a whole
+// one. The original is left untouched.
+func (m *Masker) Value(v any) any {
+	return m.value(v)
+}
+
 func (m *Masker) value(v any) any {
 	switch val := v.(type) {
 	case string:

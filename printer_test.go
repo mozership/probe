@@ -1483,7 +1483,7 @@ func TestPrinter_generateFalseClause(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := printer.generateFalseClause(tt.clause); got != tt.want {
+			if got := printer.generateFalseClause(printer.maskClause(tt.clause)); got != tt.want {
 				t.Errorf("generateFalseClause() = %q, want %q", got, tt.want)
 			}
 		})
@@ -1536,5 +1536,29 @@ func TestClauseSummary(t *testing.T) {
 	}
 	if got := clauseSummary(expr.Clause{Expr: "1 == 2"}); got != "1 == 2" {
 		t.Errorf("clauseSummary() = %q, want the condition alone", got)
+	}
+}
+
+// A secret is hidden before its value is written out and cut: cut first, or
+// with its quotes escaped, it is no longer the text the masker knows.
+func TestPrinter_maskClauseBeforeCutting(t *testing.T) {
+	long := strings.Repeat("k", maxOperandLength+50)
+	quoted := `pa"ss\word`
+	printer := NewPrinter(false, []string{})
+	printer.SetMasker(mask.New(nil, nil))
+	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": long}, "password": quoted})
+
+	clause := printer.maskClause(expr.Clause{Expr: `res.body.token == "` + long + `"`, Operands: []expr.Operand{
+		{Expr: "res.body.token", Value: long},
+		{Expr: "res.body", Value: map[string]any{"list": []any{quoted}, "nested": map[string]any{"token": long}}},
+	}})
+
+	for _, out := range []string{printer.generateFalseClause(clause), clauseSummary(clause)} {
+		if strings.Contains(out, strings.Repeat("k", 20)) {
+			t.Errorf("a cut secret is shown: %q", out)
+		}
+		if strings.Contains(out, "ss") {
+			t.Errorf("a secret with a quote is shown: %q", out)
+		}
 	}
 }

@@ -644,13 +644,27 @@ func (p *Printer) generateTestFailure(testExpr string, result any, req, res map[
 //
 //	failed: res.code == 200
 //	  res.code = 500
+//
+// c is a condition maskClause has hidden the secrets of.
 func (p *Printer) generateFalseClause(c expr.Clause) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "       %s %s\n", colorInfo().Sprintf("failed:"), p.masker.String(c.Expr))
+	fmt.Fprintf(&b, "       %s %s\n", colorInfo().Sprintf("failed:"), c.Expr)
 	for _, o := range c.Operands {
-		fmt.Fprintf(&b, "         %s\n", p.masker.String(operandText(o)))
+		fmt.Fprintf(&b, "         %s\n", operandText(o))
 	}
 	return b.String()
+}
+
+// maskClause returns c with the secrets hidden in the condition and in what
+// its operands evaluated to. The values are masked as data, before they are
+// written out and cut: a secret that is cut, or whose quotes are escaped, is
+// no longer the text the masker knows.
+func (p *Printer) maskClause(c expr.Clause) expr.Clause {
+	out := expr.Clause{Expr: p.masker.String(c.Expr)}
+	for _, o := range c.Operands {
+		out.Operands = append(out.Operands, expr.Operand{Expr: p.masker.String(o.Expr), Value: p.masker.Value(o.Value)})
+	}
+	return out
 }
 
 // maxOperandLength is how much of a value a false condition compared is

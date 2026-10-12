@@ -88,6 +88,22 @@ func TestFalseClause(t *testing.T) {
 			found: true,
 		},
 		{
+			name:  "a map of literals is a literal",
+			input: `res.body == {"name": "alice", "tags": ["a"]}`,
+			want: Clause{Expr: `res.body == {name: "alice", tags: ["a"]}`, Operands: []Operand{
+				{Expr: "res.body", Value: map[string]any{"name": "alice", "items": []any{"a", "b"}, "ok": true}},
+			}},
+			found: true,
+		},
+		{
+			name:  "a map that reads a value is not a literal",
+			input: `{"name": vars.name} == {"name": "alice"}`,
+			want: Clause{Expr: `{name: vars.name} == {name: "alice"}`, Operands: []Operand{
+				{Expr: `{name: vars.name}`, Value: map[string]any{"name": "bob"}},
+			}},
+			found: true,
+		},
+		{
 			name:  "a condition that is nil",
 			input: `res.body.ok && res.body.missing`,
 			want:  Clause{Expr: `res.body.missing`},
@@ -104,6 +120,22 @@ func TestFalseClause(t *testing.T) {
 		{
 			name:  "a condition that cannot be evaluated",
 			input: `res.body.ok && nothing.here == 1`,
+		},
+		{
+			name:  "a function that returns another value each time",
+			input: `random_int(2) == 5 && res.code == 200`,
+		},
+		{
+			name:  "such a function at any depth",
+			input: `res.code == 200 && len(random_str(4)) == 5`,
+		},
+		{
+			name:  "the time, which changes",
+			input: `res.code == 200 && now().Year() > 3000`,
+		},
+		{
+			name:  "the time in seconds",
+			input: `unixtime() < res.code`,
 		},
 	}
 
