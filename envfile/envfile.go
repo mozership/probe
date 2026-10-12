@@ -58,24 +58,27 @@ func Parse(r io.Reader) ([]Var, error) {
 	for sc.Scan() {
 		line++
 		start := line
-		text := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\xef\xbb\xbf"))
-		if text == "" || strings.HasPrefix(text, "#") {
+		// The spaces at the end of the line are kept until the value is
+		// known not to be quoted: in quotes that go on over lines they
+		// are part of the value.
+		text := strings.TrimLeft(strings.TrimPrefix(sc.Text(), "\xef\xbb\xbf"), " \t")
+		if trimmed := strings.TrimSpace(text); trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 		if rest, ok := strings.CutPrefix(text, "export "); ok {
-			text = strings.TrimSpace(rest)
+			text = strings.TrimLeft(rest, " \t")
 		}
 
 		name, value, ok := strings.Cut(text, "=")
 		name = strings.TrimSpace(name)
 		if !ok {
-			return nil, fmt.Errorf("%d: %q is not NAME=value", start, text)
+			return nil, fmt.Errorf("%d: %q is not NAME=value", start, strings.TrimSpace(text))
 		}
 		if !validName(name) {
 			return nil, fmt.Errorf("%d: %q is not a name of an environment variable: letters, digits and _, not starting with a digit", start, name)
 		}
 
-		value = strings.TrimSpace(value)
+		value = strings.TrimLeft(value, " \t")
 		switch {
 		case strings.HasPrefix(value, `"`):
 			// What is quoted goes on until the quote that closes it, on
@@ -91,6 +94,11 @@ func Parse(r io.Reader) ([]Var, error) {
 					break
 				}
 				if !sc.Scan() {
+					// A file that could not be read to its end is told
+					// as that, not as a quote left open.
+					if err := sc.Err(); err != nil {
+						return nil, fmt.Errorf("%d: %w", line+1, err)
+					}
 					return nil, fmt.Errorf("%d: %s: the double quote is not closed", start, name)
 				}
 				line++
@@ -106,13 +114,9 @@ func Parse(r io.Reader) ([]Var, error) {
 			}
 			value = value[1 : end+1]
 		default:
-			// A # starts a comment when a space comes before it, so that
-			// a value such as a URL with a fragment keeps its own.
-			if i := strings.Index(value, " #"); i >= 0 {
-				value = strings.TrimSpace(value[:i])
-			} else if strings.HasPrefix(value, "#") {
-				value = ""
-			}
+			// A # starts a comment when a space or a tab comes before it,
+			// so that a value such as a URL with a fragment keeps its own.
+			value = strings.TrimSpace(uncomment(value))
 		}
 		vars = append(vars, Var{Name: name, Value: value})
 	}
@@ -120,6 +124,17 @@ func Parse(r io.Reader) ([]Var, error) {
 		return nil, fmt.Errorf("%d: %w", line+1, err)
 	}
 	return vars, nil
+}
+
+// uncomment returns s, a value that is not quoted, without the comment
+// after it: what starts at a # that comes first or after a space or a tab.
+func uncomment(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '#' && (i == 0 || s[i-1] == ' ' || s[i-1] == '\t') {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // unquoteDouble reads s, what comes after an opening double quote, up to

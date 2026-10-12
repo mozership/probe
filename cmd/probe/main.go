@@ -175,7 +175,11 @@ func (c *Cmd) parseArgs(args []string) error {
 					skipNext = true
 				}
 				if flagName == "env-file" {
-					c.EnvFiles = append(c.EnvFiles, splitList(flagValue)...)
+					files := splitList(flagValue)
+					if len(files) == 0 {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					c.EnvFiles = append(c.EnvFiles, files...)
 					break
 				}
 				if _, _, err := parseVar(flagValue); err != nil {

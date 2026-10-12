@@ -1004,8 +1004,14 @@ func TestCmd_parseArgs_envFile(t *testing.T) {
 	if want := []string{"a.env", "b.env", "c.env"}; !reflect.DeepEqual(c.EnvFiles, want) {
 		t.Errorf("EnvFiles = %q, want %q", c.EnvFiles, want)
 	}
-	if err := newBufferCmd().parseArgs([]string{"w.yml", "--env-file"}); err == nil {
-		t.Error("parseArgs() = nil, want --env-file to need an argument")
+	for _, args := range [][]string{
+		{"w.yml", "--env-file"},
+		{"--env-file=", "w.yml"},
+		{"--env-file", " , ", "w.yml"},
+	} {
+		if err := newBufferCmd().parseArgs(args); err == nil {
+			t.Errorf("parseArgs(%q) = nil, want --env-file to need a file", args)
+		}
 	}
 }
 
