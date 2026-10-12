@@ -26,6 +26,8 @@
 
 When an AI coding agent changes a service, something other than the code and the unit tests it wrote has to show that the change works. A Probe workflow shows it from outside: readable YAML that drives the running service over HTTP, gRPC, databases, mail, SSH and shell, with jobs in parallel, and checks every response. The agent learns to write one from `probe skill`, `probe check` finds its mistakes before anything runs, and `--read-only` and `--allow-host` refuse the writes and connections you did not allow. Probe is a single binary that runs the same on your machine, in CI and from cron, with the result in its exit status. Documentation: [probe.linyo.ws](https://probe.linyo.ws/)
 
+![Demo: probe check finds the mistakes in a workflow an agent wrote, the fixed workflow calls an API and queries the row it wrote, and --read-only refuses a write](/misc/demo.svg)
+
 ![Architecture](/misc/probe-architecture.svg)
 
 Features
