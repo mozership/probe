@@ -108,7 +108,7 @@ func TestCmd_usage(t *testing.T) {
 }
 
 func TestCmd_start(t *testing.T) {
-	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/linyows/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>\n       probe gen <openapi-file>\n       probe dag [--mermaid] <workflow-file>\n       probe check <workflow-file>\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to YAML workflow file(s). Multiple files can be\n                   specified with comma-separated paths (e.g., \"base.yml,override.yml\")\n                   to merge configurations.\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>       Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format\n  check <file>     Find what is wrong or weak in a workflow without running it\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read environment variables from files of NAME=value lines, as file,...; can be repeated\n"
+	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/linyows/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>\n       probe gen <openapi-file>\n       probe dag [--mermaid] <workflow-file>\n       probe check <workflow-file>\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to YAML workflow file(s). Multiple files can be\n                   specified with comma-separated paths (e.g., \"base.yml,override.yml\")\n                   to merge configurations.\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>       Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format\n  check <file>     Find what is wrong or weak in a workflow without running it\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n"
 
 	tests := []struct {
 		name           string
@@ -1025,44 +1025,28 @@ func TestLoadEnvFiles(t *testing.T) {
 		}
 		return path
 	}
-	// Setenv restores each of them once the test is over; the ones the
-	// files set are unset first, as if the environment had none of them.
-	for _, name := range []string{"ENVFILE_TEST_A", "ENVFILE_TEST_B", "ENVFILE_TEST_C", "PROBE_ALLOW_ACTIONS", "PROBE_READ_ONLY"} {
-		t.Setenv(name, "")
-		if err := os.Unsetenv(name); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("ENVFILE_TEST_C", "from the environment")
 
-	base := write("base.env", "ENVFILE_TEST_A=base\nENVFILE_TEST_B=base\nENVFILE_TEST_C=base\n")
+	base := write("base.env", "ENVFILE_TEST_A=base\nENVFILE_TEST_B=base\nPROBE_ALLOW_ACTIONS=shell\n")
 	local := write("local.env", "ENVFILE_TEST_B=local\n")
-	guard := write("guard.env", "PROBE_ALLOW_ACTIONS=shell\nPROBE_READ_ONLY=false\nPROBE_ALLOW_ACTIONS=http\n")
-	ignored, err := loadEnvFiles([]string{base, local, guard})
+	env, err := loadEnvFiles([]string{base, local})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A setting of Probe is not read from a file, and is told once.
-	if want := []string{"PROBE_ALLOW_ACTIONS", "PROBE_READ_ONLY"}; !reflect.DeepEqual(ignored, want) {
-		t.Errorf("ignored = %q, want %q", ignored, want)
+	// The file read last wins among the files.
+	want := map[string]string{"ENVFILE_TEST_A": "base", "ENVFILE_TEST_B": "local", "PROBE_ALLOW_ACTIONS": "shell"}
+	if !reflect.DeepEqual(env, want) {
+		t.Errorf("loadEnvFiles() = %#v, want %#v", env, want)
 	}
-	if _, set := os.LookupEnv("PROBE_ALLOW_ACTIONS"); set {
-		t.Error("PROBE_ALLOW_ACTIONS was set from a file")
-	}
-	for name, want := range map[string]string{
-		"ENVFILE_TEST_A": "base",
-		// The file read last wins among the files.
-		"ENVFILE_TEST_B": "local",
-		// What the environment has wins over every file.
-		"ENVFILE_TEST_C": "from the environment",
-	} {
-		if got := os.Getenv(name); got != want {
-			t.Errorf("%s = %q, want %q", name, got, want)
+	// Nothing is set in the environment of the process, so that a setting
+	// of Probe, or what an action runs with, is not what a file says.
+	for name := range want {
+		if _, set := os.LookupEnv(name); set {
+			t.Errorf("%s was set in the environment", name)
 		}
 	}
 
-	if _, err := loadEnvFiles(nil); err != nil {
-		t.Errorf("loadEnvFiles(nil) = %v", err)
+	if env, err := loadEnvFiles(nil); err != nil || env != nil {
+		t.Errorf("loadEnvFiles(nil) = %v, %v", env, err)
 	}
 	if _, err := loadEnvFiles([]string{filepath.Join(dir, "missing.env")}); err == nil {
 		t.Error("loadEnvFiles() = nil, want an error for a file that does not exist")

@@ -253,7 +253,7 @@ probe base-workflow.yml,staging.yml
 probe base-workflow.yml,production.yml
 ```
 
-When the environments differ only in a few values, the workflow can stay one file, and the values be given as it is run. `--env-file` reads the environment variables the workflow reads into its `vars` from a file, and `--var` gives a var in place of what the workflow writes for it:
+When the environments differ only in a few values, the workflow can stay one file, and the values be given as it is run. `--env-file` reads the variables the workflow reads into its `vars` from a file, where the environment has none, and `--var` gives a var in place of what the workflow writes for it:
 
 ```bash
 # The variables of an environment, kept in a file of NAME=value lines

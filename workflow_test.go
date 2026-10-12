@@ -1447,6 +1447,13 @@ func newOrderTestWorkflow(withIDs bool) *Workflow {
 // returns what reached stdout.
 func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	t.Helper()
+	return startCapturingWith(t, w, Config{Output: mode})
+}
+
+// startCapturingWith is startCapturing with the whole of the configuration
+// given.
+func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
+	t.Helper()
 
 	if w.printer == nil {
 		p := NewPrinter(false, nil)
@@ -1458,7 +1465,7 @@ func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	out := new(bytes.Buffer)
 	w.printer.outWriter = out
 
-	if err := w.Start(Config{Output: mode}); err != nil {
+	if err := w.Start(c); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
 
@@ -1803,6 +1810,43 @@ func TestWorkflow_Start_GivenVars(t *testing.T) {
 	}
 	if got := runner.Calls["hello"][0].With["url"]; got != "http://given/health" {
 		t.Errorf("with.url = %v, want it made of the vars given", got)
+	}
+}
+
+// The variables read from files are read by the vars as the environment
+// is, which comes before them, and a secret among them is hidden.
+func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
+	runner := NewMockActionRunner()
+	w := &Workflow{
+		Name:    "Env",
+		Secrets: []string{"FILE_TOKEN"},
+		Vars: map[string]any{
+			"url":   "{{FILE_URL ?? 'http://default'}}",
+			"both":  "{{BOTH}}",
+			"token": "{{FILE_TOKEN}}",
+		},
+		env: map[string]string{"BOTH": "from the environment"},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
+			Name: "S", Uses: "hello", actionRunner: runner,
+			With: map[string]any{"url": "{{vars.url}}", "both": "{{vars.both}}"},
+			Echo: "token is {{vars.token}}",
+		}}}},
+	}
+	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, Env: map[string]string{
+		"FILE_URL":   "http://from-a-file",
+		"BOTH":       "from a file",
+		"FILE_TOKEN": "s3cr3t-from-a-file",
+	}})
+
+	with := runner.Calls["hello"][0].With
+	if with["url"] != "http://from-a-file" {
+		t.Errorf("with.url = %v, want the variable of the file", with["url"])
+	}
+	if with["both"] != "from the environment" {
+		t.Errorf("with.both = %v, want the environment before the file", with["both"])
+	}
+	if strings.Contains(report, "s3cr3t-from-a-file") || !strings.Contains(report, "token is ") {
+		t.Errorf("the secret read from a file should be hidden:\n%s", report)
 	}
 }
 

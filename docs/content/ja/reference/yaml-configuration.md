@@ -106,7 +106,7 @@ vars:
     user: "{{API_USER}}"
 ```
 
-varは、`probe --var api_url=http://localhost:8080 workflow.yml`のようにワークフローの実行時に与えることもできます。与えた値はここに書いた値の代わりにそのまま使われ、それを読む他のvarもその値を読みます。[`--var`](/ja/reference/cli-reference#--var)と、環境変数をファイルから読む[`--env-file`](/ja/reference/cli-reference#--env-file)を参照してください。
+varは、`probe --var api_url=http://localhost:8080 workflow.yml`のようにワークフローの実行時に与えることもできます。与えた値はここに書いた値の代わりにそのまま使われ、それを読む他のvarもその値を読みます。[`--var`](/ja/reference/cli-reference#--var)と、環境にない変数をファイルから読む[`--env-file`](/ja/reference/cli-reference#--env-file)を参照してください。
 
 ステップの式から環境変数を直接読むことはできません。式のコンテキストに`env`は存在しないため、`vars`に置いて`vars.<name>`で参照します。
 

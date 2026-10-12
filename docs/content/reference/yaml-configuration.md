@@ -106,7 +106,7 @@ vars:
     user: "{{API_USER}}"
 ```
 
-A var can be given when the workflow is run, as `probe --var api_url=http://localhost:8080 workflow.yml`: the value is used as it is in place of what is written here, and the vars that read it see it. See [`--var`](/reference/cli-reference#--var), and [`--env-file`](/reference/cli-reference#--env-file) for reading the environment variables from a file.
+A var can be given when the workflow is run, as `probe --var api_url=http://localhost:8080 workflow.yml`: the value is used as it is in place of what is written here, and the vars that read it see it. See [`--var`](/reference/cli-reference#--var), and [`--env-file`](/reference/cli-reference#--env-file) for reading the variables the environment lacks from a file.
 
 Expressions inside a step cannot read environment variables directly - there is no `env` in the expression context. Put the variable in `vars` and read `vars.<name>`.
 
