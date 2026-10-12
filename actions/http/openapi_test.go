@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 	"github.com/pb33f/libopenapi"
 )
 

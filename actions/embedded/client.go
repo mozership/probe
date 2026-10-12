@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 	"io/fs"
 	"maps"
 	"os"
@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/goccy/go-yaml"
-	"github.com/linyows/probe"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe"
+	"github.com/mozership/probe/mapping"
 	"gopkg.in/go-playground/validator.v9"
 )
 

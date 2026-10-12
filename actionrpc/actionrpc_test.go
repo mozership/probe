@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/linyows/probe/pb"
+	"github.com/mozership/probe/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 )

@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/binary"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/mapping"
 )
 
 // DefaultTimeout bounds a request when the step does not set `timeout`. The

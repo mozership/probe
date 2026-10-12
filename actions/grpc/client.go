@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mapping"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

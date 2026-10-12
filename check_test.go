@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionref"
+	"github.com/mozership/probe/actionref"
 )
 
 // writeWorkflow writes content to a file named name in dir and returns its

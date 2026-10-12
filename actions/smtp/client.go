@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/binary"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/mapping"
 )
 
 type Req struct {

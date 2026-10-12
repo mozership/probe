@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/linyows/probe/dag"
+	"github.com/mozership/probe/dag"
 )
 
 type JobStatus int

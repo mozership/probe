@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/mask"
+	"github.com/mozership/probe/mask"
 )
 
 // newTestReport returns the report of a run with a job of every outcome: a

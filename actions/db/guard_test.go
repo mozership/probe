@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 func TestReqCheckGuard(t *testing.T) {

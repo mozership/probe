@@ -6,7 +6,7 @@ renderers that draw a workflow's jobs as a graph.
 ## Installation
 
 ```go
-import "github.com/linyows/probe/dag"
+import "github.com/mozership/probe/dag"
 ```
 
 ## Algorithms

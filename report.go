@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 )
 
 // BuildReport assembles a Report from the results of a run. Jobs are listed in

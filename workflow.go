@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 	"maps"
 	"slices"
 	"strings"
@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/expr"
-	"github.com/linyows/probe/mask"
-	"github.com/linyows/probe/procgroup"
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/procgroup"
+	"github.com/mozership/probe/report"
 )
 
 type Workflow struct {

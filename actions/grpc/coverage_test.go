@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/oas"
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/oas"
+	"github.com/mozership/probe/report"
 )
 
 func TestNewCoverage(t *testing.T) {

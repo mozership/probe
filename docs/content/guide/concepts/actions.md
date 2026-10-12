@@ -858,7 +858,7 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/linyows/probe/actionrpc"
+    "github.com/mozership/probe/actionrpc"
 )
 
 // Greet is served by an executable of its own.
@@ -934,9 +934,9 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/linyows/probe"
-    "github.com/linyows/probe/actionrpc"
-    "github.com/linyows/probe/actions"
+    "github.com/mozership/probe"
+    "github.com/mozership/probe/actionrpc"
+    "github.com/mozership/probe/actions"
 )
 
 // Greet is a custom action, used as `uses: greet`.

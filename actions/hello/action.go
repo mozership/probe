@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 type Action struct {

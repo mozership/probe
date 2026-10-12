@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 // readOnlyGetUser is the server's .proto file with GetUser declared free of

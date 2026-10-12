@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

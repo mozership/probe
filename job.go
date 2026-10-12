@@ -2,14 +2,14 @@ package probe
 
 import (
 	"fmt"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/linyows/probe/expr"
-	"github.com/linyows/probe/mask"
-	"github.com/linyows/probe/procgroup"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/procgroup"
 )
 
 type Job struct {

@@ -386,7 +386,7 @@ FROM alpine:latest
 
 # Probeをインストール
 RUN apk add --no-cache curl && \
-    curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
+    curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
 
 # デフォルト環境変数を設定
 ENV PROBE_OUTPUT=stream

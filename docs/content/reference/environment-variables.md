@@ -400,7 +400,7 @@ FROM alpine:latest
 
 # Install Probe
 RUN apk add --no-cache curl && \
-    curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
+    curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
 
 # Set default environment variables
 ENV PROBE_OUTPUT=stream

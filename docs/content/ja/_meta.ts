@@ -27,15 +27,15 @@ export default {
     items: {
       release: {
         title: 'Github Release',
-        href: 'https://github.com/linyows/probe/releases',
+        href: 'https://github.com/mozership/probe/releases',
       },
       godoc: {
         title: 'Go Docs',
-        href: 'https://pkg.go.dev/github.com/linyows/probe',
+        href: 'https://pkg.go.dev/github.com/mozership/probe',
       },
       deepwiki: {
         title: 'Deep Wiki',
-        href: 'https://deepwiki.com/linyows/probe',
+        href: 'https://deepwiki.com/mozership/probe',
       },
     },
   },

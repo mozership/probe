@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/linyows/probe/actions/grpc/testserver/pb"
+	"github.com/mozership/probe/actions/grpc/testserver/pb"
 )
 
 // connectUserServer serves GetUser of the user server with connect-go, as a

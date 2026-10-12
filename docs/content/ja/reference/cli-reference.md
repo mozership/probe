@@ -789,7 +789,7 @@ jobs:
       
       - name: Install Probe
         run: |
-          curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
       
@@ -814,7 +814,7 @@ probe-test:
   image: alpine:latest
   before_script:
     - apk add --no-cache curl
-    - curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
+    - curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz -C /usr/local/bin probe
     - chmod +x /usr/local/bin/probe
   script:
     - probe workflow.yml,$CI_ENVIRONMENT_NAME.yml
@@ -839,7 +839,7 @@ pipeline {
         stage('Install Probe') {
             steps {
                 sh '''
-                    curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+                    curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
                     chmod +x probe
                     sudo mv probe /usr/local/bin/
                 '''

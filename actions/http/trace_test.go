@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 func TestRequestStepSendsATraceHeader(t *testing.T) {

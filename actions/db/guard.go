@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/lib/pq"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 // defaultPorts are the ports of the servers a DSN without one connects to.

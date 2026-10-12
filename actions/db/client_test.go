@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 func TestParseParams(t *testing.T) {

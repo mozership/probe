@@ -16,7 +16,7 @@ Probeは単一のバイナリです。以下の3つから、他のツールの�
 
 Probeをインストールする最も簡単な方法は、GitHubのリリースページからプリビルドバイナリをダウンロードすることです。
 
-1. [Probeリリースページ](https://github.com/linyows/probe/releases)にアクセス
+1. [Probeリリースページ](https://github.com/mozership/probe/releases)にアクセス
 2. お使いのシステムに適したアーカイブをダウンロード：
    - **Linux amd64**: `probe_linux_x86_64.tar.gz`
    - **Linux arm64**: `probe_linux_arm64.tar.gz`
@@ -38,7 +38,7 @@ Probeをインストールする最も簡単な方法は、GitHubのリリース
 Go 1.26.6以降がインストールされている場合、Probeを直接インストールできます：
 
 ```bash
-go install github.com/linyows/probe/cmd/probe@latest
+go install github.com/mozership/probe/cmd/probe@latest
 ```
 
 これにより、`probe`バイナリが`$GOPATH/bin`ディレクトリにインストールされます。
@@ -48,7 +48,7 @@ go install github.com/linyows/probe/cmd/probe@latest
 Probeをソースからビルドするには：
 
 ```bash
-git clone https://github.com/linyows/probe.git
+git clone https://github.com/mozership/probe.git
 cd probe
 go build -o probe ./cmd/probe
 sudo mv probe /usr/local/bin/

@@ -6,8 +6,8 @@ import (
 
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
-	"github.com/linyows/probe/oas"
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/oas"
+	"github.com/mozership/probe/report"
 )
 
 // NewCoverage counts the steps of r that called each method the .proto

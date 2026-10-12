@@ -10,14 +10,14 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/linyows/probe"
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/actions"
-	"github.com/linyows/probe/actions/grpc"
-	"github.com/linyows/probe/envfile"
-	"github.com/linyows/probe/oas"
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/actions"
+	"github.com/mozership/probe/actions/grpc"
+	"github.com/mozership/probe/envfile"
+	"github.com/mozership/probe/oas"
+	"github.com/mozership/probe/report"
 )
 
 var (
@@ -246,7 +246,7 @@ func (c *Cmd) usage() {
 
 	desc := `
 Probe - A YAML-based workflow automation tool.
-https://github.com/linyows/probe (ver: %s, rev: %s)
+https://github.com/mozership/probe (ver: %s, rev: %s)
 `
 
 	head := `

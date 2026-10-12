@@ -12,8 +12,8 @@ import (
 
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/expr"
 )
 
 // Severities of a Finding.

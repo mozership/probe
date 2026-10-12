@@ -79,7 +79,7 @@ export async function DocsLayout({
   return (
     <Layout
       pageMap={pageMap}
-      docsRepositoryBase="https://github.com/linyows/probe/blob/main/docs"
+      docsRepositoryBase="https://github.com/mozership/probe/blob/main/docs"
       editLink={t.editLink}
       lastUpdated={<LastUpdated locale={locale}>{t.lastUpdated}</LastUpdated>}
       feedback={{ content: null }}
@@ -89,7 +89,7 @@ export async function DocsLayout({
         <Navbar
           logo={<Logo />}
           logoLink={rootRoute[locale]}
-          projectLink="https://github.com/linyows/probe"
+          projectLink="https://github.com/mozership/probe"
         >
           <LocaleSwitch current={locale} hrefs={hrefs} />
         </Navbar>
