@@ -596,6 +596,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
+			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,
 		}
 	}
@@ -1076,6 +1077,7 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFa
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
+			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,
 		}
 	}

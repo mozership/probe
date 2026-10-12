@@ -213,65 +213,72 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	ctx.Result.notifyJobDone(jobID)
 }
 
-// appendRepeatStepResults appends the final results of repeat step executions to buffer
+// appendRepeatStepResults appends the final results of repeat step executions to buffer.
+// The counters are kept by the index each step ran with, which counts every
+// entry of an iteration, so they are read in the order of those indexes
+// rather than by the steps the job is written with.
 func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 	jobID := e.job.ID
 
-	// Create StepResults for repeat steps and add them to Result
-	for i, step := range e.job.Steps {
-		ctx.countersMu.Lock()
-		counter, exists := ctx.StepCounters[i]
-
-		if exists {
-			// Ensure RepeatTotal is set (in case it wasn't set earlier)
-			if counter.RepeatTotal == 0 {
-				counter.RepeatTotal = ctx.RepeatTotal
-				// Update the map with the modified counter
-				ctx.StepCounters[i] = counter
-			}
+	ctx.countersMu.Lock()
+	indexes := make([]int, 0, len(ctx.StepCounters))
+	for i := range ctx.StepCounters {
+		indexes = append(indexes, i)
+	}
+	sort.Ints(indexes)
+	counters := make([]StepRepeatCounter, len(indexes))
+	for n, i := range indexes {
+		counter := ctx.StepCounters[i]
+		// Ensure RepeatTotal is set (in case it wasn't set earlier)
+		if counter.RepeatTotal == 0 {
+			counter.RepeatTotal = ctx.RepeatTotal
+			ctx.StepCounters[i] = counter
 		}
-		ctx.countersMu.Unlock()
+		counters[n] = counter
+	}
+	ctx.countersMu.Unlock()
 
-		if exists {
-			hasTest := step.Test != "" || counter.Checked
+	// Create StepResults for repeat steps and add them to Result
+	for n, i := range indexes {
+		counter := counters[n]
+		hasTest := counter.Test != "" || counter.Checked
 
-			// Determine status based on repeat counter results
-			var status StatusType
-			if counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0 {
-				// Never run - skipped in every run, after a step that failed
-				status = StatusSkipped
-			} else if counter.FailureCount == 0 {
-				// No failures - success
-				status = StatusSuccess
-			} else if counter.SuccessCount == 0 {
-				// All failures - error
-				status = StatusError
-			} else {
-				// Mixed results - warning
-				status = StatusWarning
-			}
+		// Determine status based on repeat counter results
+		var status StatusType
+		if counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0 {
+			// Never run - skipped in every run, after a step that failed
+			status = StatusSkipped
+		} else if counter.FailureCount == 0 {
+			// No failures - success
+			status = StatusSuccess
+		} else if counter.SuccessCount == 0 {
+			// All failures - error
+			status = StatusError
+		} else {
+			// Mixed results - warning
+			status = StatusWarning
+		}
 
-			// Create StepResult with repeat counter
-			stepResult := StepResult{
-				Index:         i,
-				Name:          step.Name,
-				Status:        status,
-				HasTest:       hasTest,
-				RepeatCounter: &counter,
-				Test:          step.Test,
-				Contract:      counter.Contract,
-			}
-			if counter.Failure != nil {
-				f := *counter.Failure
-				f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
-					counter.FailureCount, counter.SuccessCount+counter.FailureCount, f.Message)
-				stepResult.Failure = &f
-			}
+		// Create StepResult with repeat counter
+		stepResult := StepResult{
+			Index:         i,
+			Name:          counter.Name,
+			Status:        status,
+			HasTest:       hasTest,
+			RepeatCounter: &counter,
+			Test:          counter.Test,
+			Contract:      counter.Contract,
+		}
+		if counter.Failure != nil {
+			f := *counter.Failure
+			f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
+				counter.FailureCount, counter.SuccessCount+counter.FailureCount, f.Message)
+			stepResult.Failure = &f
+		}
 
-			// Add step result to workflow buffer
-			if ctx.Result != nil {
-				ctx.Result.AddStepResult(jobID, stepResult)
-			}
+		// Add step result to workflow buffer
+		if ctx.Result != nil {
+			ctx.Result.AddStepResult(jobID, stepResult)
 		}
 	}
 }

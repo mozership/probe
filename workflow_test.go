@@ -1795,8 +1795,8 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 		RepeatTotal: 3,
 		countersMu:  &sync.Mutex{},
 		StepCounters: map[int]StepRepeatCounter{
-			0: {Name: "Never run", SkippedCount: 3, RepeatTotal: 3},
-			1: {Name: "Run once", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+			0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
+			1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
 		},
 	}
 	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
@@ -1813,5 +1813,42 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	}
 	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
 		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
+	}
+}
+
+// A repeated job reports every entry of an iteration, and the steps after
+// it by their own counters: the counters are kept by the index a step ran
+// with, which is past the number of steps the job is written with.
+func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	ok := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Repeat",
+		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 2}, Steps: []*Step{
+			{Name: "Each {{vars.n}}", Uses: "hello", actionRunner: ok, Test: "true", Iteration: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}},
+			{Name: "Fails", Uses: "hello", actionRunner: failing},
+			{Name: "After", Uses: "hello", actionRunner: ok, Test: "true"},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	for _, want := range []string{
+		" 0. Each a (repeating 2 times)",
+		" 1. Each b (repeating 2 times)",
+		" 2. Each c (repeating 2 times)",
+		" 3. Fails (repeating 2 times)",
+		" 4. After (repeating 2 times)",
+		"skipped in 2/2 runs",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("the report lacks %q:\n%s", want, report)
+		}
+	}
+	if got := strings.Count(report, "2/2 success (100.0%)"); got != 3 {
+		t.Errorf("%d entries are reported as passed in both runs, want the three of the iteration:\n%s", got, report)
 	}
 }
