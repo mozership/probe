@@ -3,7 +3,7 @@ description: |
   A workflow reads its settings into vars, from the environment or as
   written. Both can be given when it is run, without changing the file:
 
-    probe --env-file examples/fixtures/example.env --var stage=e2e examples/vars.yml
+    probe --env-file examples/fixtures/env.example --var stage=e2e examples/vars.yml
 
   --env-file reads environment variables from a file of NAME=value lines,
   and --var gives a var in place of what the workflow writes for it.
