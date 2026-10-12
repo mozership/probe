@@ -439,9 +439,13 @@ func (c *Cmd) runProbe() int {
 
 	// The files are read before the workflow is, which reads the
 	// environment into its vars.
-	if err := loadEnvFiles(c.EnvFiles); err != nil {
+	ignored, err := loadEnvFiles(c.EnvFiles)
+	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --env-file: %v\n", err)
 		return probe.ExitConfigError
+	}
+	for _, name := range ignored {
+		_, _ = fmt.Fprintf(c.errWriter, "[WARN] --env-file: %s is a setting of Probe, which is not read from a file; set it in the environment\n", name)
 	}
 	p.Config.Vars = c.vars()
 
@@ -511,9 +515,14 @@ func (c *Cmd) vars() map[string]string {
 // the environment already has is left as it is, so that what is set on the
 // command line or by CI wins over a file; among the files, the last to give
 // a variable wins.
-func loadEnvFiles(paths []string) error {
+//
+// A variable whose name starts with PROBE_ is a setting of Probe itself,
+// such as the guard of the run, and is not set from a file: a file that
+// comes with a workflow must not loosen what the person running it set, or
+// left at its default. The names of those are returned, for a warning.
+func loadEnvFiles(paths []string) (ignored []string, err error) {
 	if len(paths) == 0 {
-		return nil
+		return nil, nil
 	}
 	fromEnv := map[string]bool{}
 	for _, kv := range os.Environ() {
@@ -523,18 +532,24 @@ func loadEnvFiles(paths []string) error {
 	for _, path := range paths {
 		vars, err := envfile.Read(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, v := range vars {
+			if strings.HasPrefix(v.Name, "PROBE_") {
+				if !slices.Contains(ignored, v.Name) {
+					ignored = append(ignored, v.Name)
+				}
+				continue
+			}
 			if fromEnv[v.Name] {
 				continue
 			}
 			if err := os.Setenv(v.Name, v.Value); err != nil {
-				return fmt.Errorf("%s: %s: %w", path, v.Name, err)
+				return nil, fmt.Errorf("%s: %s: %w", path, v.Name, err)
 			}
 		}
 	}
-	return nil
+	return ignored, nil
 }
 
 func (c *Cmd) markGuardFlag(name string) {

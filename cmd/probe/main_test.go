@@ -1021,39 +1021,48 @@ func TestLoadEnvFiles(t *testing.T) {
 	}
 	// Setenv restores each of them once the test is over; the ones the
 	// files set are unset first, as if the environment had none of them.
-	for _, name := range []string{"PROBE_TEST_ENVFILE_A", "PROBE_TEST_ENVFILE_B", "PROBE_TEST_ENVFILE_C"} {
+	for _, name := range []string{"ENVFILE_TEST_A", "ENVFILE_TEST_B", "ENVFILE_TEST_C", "PROBE_ALLOW_ACTIONS", "PROBE_READ_ONLY"} {
 		t.Setenv(name, "")
 		if err := os.Unsetenv(name); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("PROBE_TEST_ENVFILE_C", "from the environment")
+	t.Setenv("ENVFILE_TEST_C", "from the environment")
 
-	base := write("base.env", "PROBE_TEST_ENVFILE_A=base\nPROBE_TEST_ENVFILE_B=base\nPROBE_TEST_ENVFILE_C=base\n")
-	local := write("local.env", "PROBE_TEST_ENVFILE_B=local\n")
-	if err := loadEnvFiles([]string{base, local}); err != nil {
+	base := write("base.env", "ENVFILE_TEST_A=base\nENVFILE_TEST_B=base\nENVFILE_TEST_C=base\n")
+	local := write("local.env", "ENVFILE_TEST_B=local\n")
+	guard := write("guard.env", "PROBE_ALLOW_ACTIONS=shell\nPROBE_READ_ONLY=false\nPROBE_ALLOW_ACTIONS=http\n")
+	ignored, err := loadEnvFiles([]string{base, local, guard})
+	if err != nil {
 		t.Fatal(err)
 	}
+	// A setting of Probe is not read from a file, and is told once.
+	if want := []string{"PROBE_ALLOW_ACTIONS", "PROBE_READ_ONLY"}; !reflect.DeepEqual(ignored, want) {
+		t.Errorf("ignored = %q, want %q", ignored, want)
+	}
+	if _, set := os.LookupEnv("PROBE_ALLOW_ACTIONS"); set {
+		t.Error("PROBE_ALLOW_ACTIONS was set from a file")
+	}
 	for name, want := range map[string]string{
-		"PROBE_TEST_ENVFILE_A": "base",
+		"ENVFILE_TEST_A": "base",
 		// The file read last wins among the files.
-		"PROBE_TEST_ENVFILE_B": "local",
+		"ENVFILE_TEST_B": "local",
 		// What the environment has wins over every file.
-		"PROBE_TEST_ENVFILE_C": "from the environment",
+		"ENVFILE_TEST_C": "from the environment",
 	} {
 		if got := os.Getenv(name); got != want {
 			t.Errorf("%s = %q, want %q", name, got, want)
 		}
 	}
 
-	if err := loadEnvFiles(nil); err != nil {
+	if _, err := loadEnvFiles(nil); err != nil {
 		t.Errorf("loadEnvFiles(nil) = %v", err)
 	}
-	if err := loadEnvFiles([]string{filepath.Join(dir, "missing.env")}); err == nil {
+	if _, err := loadEnvFiles([]string{filepath.Join(dir, "missing.env")}); err == nil {
 		t.Error("loadEnvFiles() = nil, want an error for a file that does not exist")
 	}
 	bad := write("bad.env", "not a variable\n")
-	if err := loadEnvFiles([]string{bad}); err == nil || !strings.Contains(err.Error(), bad+":1: ") {
+	if _, err := loadEnvFiles([]string{bad}); err == nil || !strings.Contains(err.Error(), bad+":1: ") {
 		t.Errorf("loadEnvFiles() = %v, want the file and the line", err)
 	}
 }

@@ -252,6 +252,7 @@ PRIVATE_KEY='taken as it is, $ and \ included'
 - A variable the environment already has is left as it is, so that what a shell or CI sets wins over a file. Among the files, the last to give a variable wins.
 - A value without quotes has the spaces around it removed, and ends at a ` #` that starts a comment. In double quotes, `\n`, `\t`, `\"` and `\\` are escapes, and the value may go on over several lines. In single quotes nothing is.
 - Nothing is expanded: `$OTHER` in a value is those characters.
+- A variable whose name starts with `PROBE_` is a setting of Probe itself, such as `PROBE_ALLOW_ACTIONS` or `PROBE_REPORT`, and is not read from a file, with a warning: a file that comes with a workflow cannot loosen the guard of a run. Set those in the environment or by their flags.
 - A file that does not exist, or a line that is not `NAME=value`, stops Probe before the workflow is read, with exit status 2.
 
 A variable whose value must not be shown is named under [`secrets`](/reference/yaml-configuration#secrets) as usual; where the value comes from makes no difference.
