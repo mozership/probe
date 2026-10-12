@@ -64,13 +64,34 @@ steps:
       url: "{{vars.ANALYTICS_API}}/update"
     test: res.code == 200
 
-  - name: This runs only if analytics succeeds
-    uses: hello
-    echo: "Analytics updated successfully"
-
   - name: This runs regardless of analytics result
     uses: hello
     echo: "Workflow continues..."
+```
+
+A step runs whether or not the one before it failed, so every check gets its own line in the report. When the later steps only work on what an earlier one made, set [`fail_fast`](/reference/yaml-configuration#fail_fast) on the job: the steps after a failed one are then skipped, and the report shows the one failure rather than those that follow from it.
+
+```yaml
+jobs:
+- name: Checkout flow
+  fail_fast: true
+  steps:
+    - name: Log in
+      id: login
+      uses: http
+      with:
+        post: "{{vars.API}}/login"
+      test: res.code == 200
+      outputs:
+        token: res.body.token
+
+    - name: Place an order          # skipped when the login failed
+      uses: http
+      with:
+        post: "{{vars.API}}/orders"
+        headers:
+          authorization: "Bearer {{outputs.login.token}}"
+      test: res.code == 201
 ```
 
 ### Graceful Degradation

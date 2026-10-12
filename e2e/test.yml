@@ -91,6 +91,17 @@ jobs:
       cmd: ./probe examples/defaults.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: fail-fast-literal.yml (expected to fail, with the steps after the failure skipped)
+    uses: shell
+    with:
+      cmd: ./probe examples/fail-fast-literal.yml
+    test: |
+      res.code == 1 &&
+      res.stdout contains "Skipped: first (SKIPPED)" &&
+      res.stdout contains "Skipped: second (SKIPPED)" &&
+      res.stdout contains "The step after it still runs" &&
+      !(res.stdout contains "The step after it still runs (SKIPPED)")
+    echo: "{{res.stdout}}"
   - name: fail.yml (expected to fail)
     uses: shell
     with:

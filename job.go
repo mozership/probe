@@ -18,8 +18,11 @@ type Job struct {
 	Needs []string `yaml:"needs,omitempty"`
 	// Always runs the job once the jobs it needs are over, whether or not
 	// they succeeded, as a job that removes what they made has to.
-	Always   bool    `yaml:"always,omitempty"`
-	Steps    []*Step `yaml:"steps" validate:"required"`
+	Always bool    `yaml:"always,omitempty"`
+	Steps  []*Step `yaml:"steps" validate:"required"`
+	// FailFast skips the steps after one that failed, as steps that only
+	// work on what an earlier one made would fail for its reason.
+	FailFast bool    `yaml:"fail_fast,omitempty"`
 	Repeat   *Repeat `yaml:"repeat"`
 	Defaults any     `yaml:"defaults"`
 	SkipIf   string  `yaml:"skipif,omitempty"`
@@ -210,11 +213,16 @@ func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	}
 }
 
-// executeStep executes a single step without iterations
+// executeStep executes a single step without iterations. In a job with
+// fail_fast, a step after one that failed is reported as skipped instead.
 func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]any) {
 	st.Idx = *idx
 	*idx++
 	st.SetCtx(*ctx, vars)
+	if j.FailFast && ctx.Failed {
+		st.skipAfterFailure(ctx)
+		return
+	}
 	st.Do(ctx)
 }
 

@@ -24,6 +24,7 @@ jobs:                         # 必須: ジョブのリスト
     needs: [job-id, ...]      # 任意: 依存するジョブ
     always: boolean           # 任意: 依存先のジョブが失敗しても実行する
     skipif: expression        # 任意: 真ならジョブをスキップ
+    fail_fast: boolean        # 任意: 失敗したステップより後のステップをスキップ
     defaults:                 # 任意: アクションごとの with の既定値
       http:
         url: string
@@ -236,6 +237,7 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 | `always` | Boolean | 任意 | `needs`のジョブが失敗していても、それらが終わり次第実行する |
 | `steps` | Array | 必須 | 実行するステップ |
 | `skipif` | Expression | 任意 | 真ならジョブ全体をスキップ |
+| `fail_fast` | Boolean | 任意 | 失敗したステップより後のステップをスキップ |
 | `defaults` | Object | 任意 | アクション名をキーとした`with`の既定値 |
 | `repeat` | Object | 任意 | ジョブを繰り返す |
 
@@ -322,6 +324,35 @@ jobs:
           url: "{{vars.api_url}}/health"
           method: GET
 ```
+
+#### `fail_fast`
+
+ジョブのステップは順番に実行され、前のステップが失敗していても次のステップは実行されます。これは、それぞれが別のことを確かめていて、レポートに1行ずつ残す価値があるステップに向いています。一方、後のステップが前のステップの作ったものを使う場合、後のステップは前の失敗が原因で失敗し、本当に見るべき1つの失敗が、そこから派生した失敗に埋もれます。`fail_fast: true`を付けると、失敗したステップより後のステップは実行されず、スキップとして報告されます：
+
+```yaml
+jobs:
+  - name: Orders
+    fail_fast: true
+    steps:
+      - name: Create the table
+        uses: db
+        with:
+          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+        test: res.code == 0
+
+      - name: Insert an order          # テーブルを作れなかったときはスキップ
+        uses: db
+        with:
+          query: INSERT INTO orders (total) VALUES (?)
+          params: [100]
+        test: res.rows_affected == 1
+```
+
+- ステップが失敗するのは、`test`が偽のとき、アクションがエラーを返したとき、レスポンスが契約に違反したときです。`test`がなく何にも検査されないステップは失敗しないので、何も止めません。
+- スキップされたステップは`wait`を待たず、`outputs`も公開しません。
+- [`iteration`](#iteration)の残りのエントリも、どれかが失敗した時点でスキップされます。
+- [`repeat`](#repeat)を付けたジョブは、実行のたびにやり直します。失敗がスキップするのは、その回の残りだけです。ステップが実行されなかった回は、そのステップの成功にも失敗にも数えず、`1/3 success (33.3%), 2 skipped`のように別に示します。
+- 他のジョブには影響しません。失敗したジョブ一般と同じく、[`needs`](#needs)を通した影響だけがあります。後片付けのように失敗の後にも実行したいステップは、[`always`](#always)を付けたジョブに書きます。
 
 #### `defaults`
 
