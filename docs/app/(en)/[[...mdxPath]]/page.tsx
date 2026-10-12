@@ -12,6 +12,9 @@ export async function generateStaticParams() {
 export async function generateMetadata(props: { params: Promise<Params> }) {
   const params = await props.params
   const { metadata } = await importPage(params.mdxPath)
+  // The home page gives its whole title; the layout's template would put
+  // "| Probe" after one that already starts with the name.
+  if (!params.mdxPath?.length) return { ...metadata, title: { absolute: metadata.title } }
   return metadata
 }
 
