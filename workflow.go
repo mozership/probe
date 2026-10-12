@@ -105,6 +105,15 @@ func (w *Workflow) Start(c Config) error {
 		w.printer.SetBufferIDs(jobIDs)
 	}
 
+	// The variables read from files are those of the environment the
+	// vars read, and a secret may be among them, so they are in place
+	// before the masker is made. What the environment has comes first.
+	if len(c.Env) > 0 {
+		env := maps.Clone(c.Env)
+		maps.Copy(env, w.Env())
+		w.env = env
+	}
+
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
 

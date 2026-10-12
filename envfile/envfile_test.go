@@ -1,11 +1,14 @@
 package envfile
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 func TestParse(t *testing.T) {
@@ -29,6 +32,9 @@ func TestParse(t *testing.T) {
 		{"escapes in double quotes", `A="l1\nl2\t\"q\" \\ \$X \d"` + "\n", []Var{{"A", "l1\nl2\t\"q\" \\ $X \\d"}}},
 		{"a comment after double quotes", `A="1" # one` + "\n", []Var{{"A", "1"}}},
 		{"double quotes over several lines", "KEY=\"-----BEGIN\nabc\n-----END\"\nB=2\n", []Var{{"KEY", "-----BEGIN\nabc\n-----END"}, {"B", "2"}}},
+		{"spaces at the end of a quoted line", "A=\"first  \n  second  \"  \nB=' x '  \n", []Var{{"A", "first  \n  second  "}, {"B", " x "}}},
+		{"spaces around an unquoted value and its comment", "A =  a b  \t# c\n", []Var{{"A", "a b"}}},
+		{"an indented line", "  \texport   A=1\n", []Var{{"A", "1"}}},
 		{"single quotes", `A='a $B \n "c" # d' # e` + "\n", []Var{{"A", `a $B \n "c" # d`}}},
 		{"nothing is expanded", "A=1\nB=$A/${A}\n", []Var{{"A", "1"}, {"B", "$A/${A}"}}},
 		{"a name written twice", "A=1\nA=2\n", []Var{{"A", "1"}, {"A", "2"}}},
@@ -100,5 +106,22 @@ func TestRead(t *testing.T) {
 	}
 	if _, err := Read(bad); err == nil || !strings.HasPrefix(err.Error(), bad+":2: ") {
 		t.Errorf("Read() error = %v, want it to name the file and the line", err)
+	}
+}
+
+// A file that cannot be read to its end is told as that, also when it ends
+// inside a value that goes on over lines.
+func TestParse_ReadError(t *testing.T) {
+	boom := errors.New("boom")
+	for name, input := range map[string]string{
+		"between variables":    "A=1\n",
+		"inside double quotes": "A=1\nB=\"first\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(io.MultiReader(strings.NewReader(input), iotest.ErrReader(boom)))
+			if !errors.Is(err, boom) {
+				t.Errorf("Parse() error = %v, want the error of the reader", err)
+			}
+		})
 	}
 }

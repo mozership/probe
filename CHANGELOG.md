@@ -24,7 +24,8 @@ the step is reached, so the field holds either.
 `Iteration` reads and writes YAML as the field did: a list of maps, or a
 string that is one template.
 
-`Workflow.Defaults`, `Job.Always`, `Job.FailFast` and `Config.Vars` are new,
+`Workflow.Defaults`, `Job.Always`, `Job.FailFast`, `Config.Vars` and
+`Config.Env` are new,
 `mask.Masker` gains `Value`, and the `envfile` package reads files of
 environment variables.
 

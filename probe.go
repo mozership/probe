@@ -37,6 +37,12 @@ type Config struct {
 	// and only from some hosts. Each step's action is told it, and a step
 	// whose action does not keep to it is refused unless it is allowed.
 	Guard actionrpc.Guard
+	// Env are environment variables read from files, by name, for the vars
+	// of the workflow to read where the environment has none of the name.
+	// They are given to the vars alone: Probe reads none of its own
+	// settings from them, and the actions do not have them in their
+	// environment.
+	Env map[string]string
 	// Vars are values for the vars of the workflow, by name, given by the
 	// person running it. Each is taken as it is, in place of what the
 	// workflow writes for the var, and the other vars read it.

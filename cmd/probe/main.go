@@ -175,7 +175,11 @@ func (c *Cmd) parseArgs(args []string) error {
 					skipNext = true
 				}
 				if flagName == "env-file" {
-					c.EnvFiles = append(c.EnvFiles, splitList(flagValue)...)
+					files := splitList(flagValue)
+					if len(files) == 0 {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					c.EnvFiles = append(c.EnvFiles, files...)
 					break
 				}
 				if _, _, err := parseVar(flagValue); err != nil {
@@ -307,7 +311,7 @@ func (c *Cmd) printOptions() {
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
 		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
-		{"", "--env-file", "Read environment variables from files of NAME=value lines, as file,...; can be repeated"},
+		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -437,12 +441,14 @@ func (c *Cmd) runProbe() int {
 	}
 	p.Config.Guard = guard
 
-	// The files are read before the workflow is, which reads the
-	// environment into its vars.
-	if err := loadEnvFiles(c.EnvFiles); err != nil {
+	// The files give variables for the vars of the workflow to read, as
+	// they read the environment.
+	env, err := loadEnvFiles(c.EnvFiles)
+	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --env-file: %v\n", err)
 		return probe.ExitConfigError
 	}
+	p.Config.Env = env
 	p.Config.Vars = c.vars()
 
 	if err := p.Do(); err != nil {
@@ -506,35 +512,29 @@ func (c *Cmd) vars() map[string]string {
 	return vars
 }
 
-// loadEnvFiles sets the environment variables the files at paths give, for
-// the workflow to read into its vars and for the actions it runs. A variable
-// the environment already has is left as it is, so that what is set on the
-// command line or by CI wins over a file; among the files, the last to give
-// a variable wins.
-func loadEnvFiles(paths []string) error {
+// loadEnvFiles reads the variables the files at paths give, by name, for
+// the vars of the workflow to read as they read the environment. Among the
+// files, the last to give a variable wins.
+//
+// They are not set in the environment of this process: Probe's own
+// settings, such as the guard of the run, and the environment of the
+// actions it runs stay what the person running it set, whatever a file
+// says.
+func loadEnvFiles(paths []string) (map[string]string, error) {
 	if len(paths) == 0 {
-		return nil
+		return nil, nil
 	}
-	fromEnv := map[string]bool{}
-	for _, kv := range os.Environ() {
-		name, _, _ := strings.Cut(kv, "=")
-		fromEnv[name] = true
-	}
+	env := map[string]string{}
 	for _, path := range paths {
 		vars, err := envfile.Read(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, v := range vars {
-			if fromEnv[v.Name] {
-				continue
-			}
-			if err := os.Setenv(v.Name, v.Value); err != nil {
-				return fmt.Errorf("%s: %s: %w", path, v.Name, err)
-			}
+			env[v.Name] = v.Value
 		}
 	}
-	return nil
+	return env, nil
 }
 
 func (c *Cmd) markGuardFlag(name string) {
