@@ -641,6 +641,35 @@ jobs:
 				{SeverityError, 9, `defaults: no action is named "htp", so its defaults apply to no step; did you mean "http"?`},
 			},
 		},
+		{
+			name: "keys of the defaults of the workflow",
+			workflow: `name: defaults
+defaults:
+  http:
+    url: http://localhost
+    heders:
+      accept: application/json
+  htp:
+    url: http://localhost
+jobs:
+- name: J
+  defaults:
+    http:
+      timout: 5s
+  steps:
+  - uses: http
+    with:
+      get: /a
+      bdoy: x
+    test: res.code == 200
+`,
+			want: []want{
+				{SeverityError, 5, `defaults.http: unknown key "heders" for the http action; did you mean "headers"?`},
+				{SeverityError, 7, `defaults: no action is named "htp", so its defaults apply to no step; did you mean "http"?`},
+				{SeverityError, 13, `defaults.http: unknown key "timout" for the http action`},
+				{SeverityError, 18, `with: unknown key "bdoy" for the http action; did you mean "body"?`},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -71,3 +71,4 @@ jobs:
   defaults: null
 vars:
   host: http://localhost
+defaults: null

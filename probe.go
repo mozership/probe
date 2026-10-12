@@ -214,8 +214,11 @@ func (p *Probe) isYamlFile(f string) bool {
 }
 
 func (p *Probe) setDefaultsToSteps() {
+	// The job's defaults come first, as what is set is kept: the
+	// workflow's then set only what neither the step nor its job did.
 	for i := range p.workflow.Jobs {
 		p.workflow.Jobs[i].ApplyDefaults()
+		p.workflow.Jobs[i].applyDefaults(p.workflow.Defaults)
 	}
 }
 

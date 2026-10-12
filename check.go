@@ -355,7 +355,7 @@ func join(path, key string) string {
 
 func (c *checker) walkWorkflow(body ast.Node) {
 	c.keys(body, "", "", workflowKeys, func(key string, value ast.Node) {
-		if key == "vars" || key == "actions" {
+		if key == "vars" || key == "actions" || key == "defaults" {
 			c.noteLines(key, value)
 		}
 		if key != "jobs" {
@@ -479,20 +479,25 @@ func (c *checker) checkAliases(problems []aliasProblem) {
 			c.add(SeverityError, c.line("actions."+p.name), "", "%s", firstLine(p.msg))
 			continue
 		}
+		if p.job == workflowDefaults {
+			c.add(SeverityError, c.line("defaults."+p.action), "", "%s", firstLine(p.msg))
+			continue
+		}
 		c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d].defaults.%s", p.job, p.action)), c.jobWhere(p.job), "%s", firstLine(p.msg))
 	}
 }
 
 // defaultsPath returns the path of the defaults of action in the job at jp,
-// as the workflow writes them: by the action in full, or by a name its
-// actions give it.
+// or in the workflow when jp is empty, as the workflow writes them: by the
+// action in full, or by a name its actions give it.
 func (c *checker) defaultsPath(jp, action string) string {
-	path := jp + ".defaults." + action
+	at := join(jp, "defaults") + "."
+	path := at + action
 	if _, ok := c.lines[path]; ok {
 		return path
 	}
 	for _, name := range slices.Sorted(maps.Keys(c.wf.Actions)) {
-		named := jp + ".defaults." + name
+		named := at + name
 		if _, ok := c.lines[named]; ok && c.wf.Actions[name] == action {
 			return named
 		}
@@ -590,53 +595,71 @@ func (c *checker) readParams(uses string, line int, where string) {
 	}
 }
 
-// checkWith checks the keys of each step's with, and of each job's
-// defaults, against those the action takes. A key of a step's with that
-// came from its job's defaults is checked there, on the line it is
+// checkWith checks the keys of each step's with, and of the defaults of
+// each job and of the workflow, against those the action takes. A key of a
+// step's with that came from defaults is checked there, on the line it is
 // written on, and a key that holds a template, which names a key only when
 // it runs, is not checked.
 func (c *checker) checkWith() {
+	c.checkDefaults(c.wf.Defaults, "", "")
+	shared, _ := c.wf.Defaults.(map[string]any)
 	for i, job := range c.wf.Jobs {
 		jp := fmt.Sprintf("jobs[%d]", i)
-		if defaults, ok := job.Defaults.(map[string]any); ok {
-			for _, action := range slices.Sorted(maps.Keys(defaults)) {
-				path := c.defaultsPath(jp, action)
-				if _, named := c.wf.Actions[action]; named && !slices.Contains(c.opts.Actions, action) {
-					continue
-				}
-				if len(c.opts.Actions) > 0 && !slices.Contains(c.opts.Actions, action) && !actionref.IsExternal(action) {
-					msg := fmt.Sprintf("defaults: no action is named %q, so its defaults apply to no step", action)
-					if s := suggest(action, c.opts.Actions); s != "" {
-						msg += fmt.Sprintf("; did you mean %q?", s)
-					}
-					c.add(SeverityError, c.line(path), c.jobWhere(i), "%s", msg)
-					continue
-				}
-				if actionref.IsExternal(action) {
-					if _, err := actionref.Parse(action); err == nil {
-						c.readParams(action, c.line(path), c.jobWhere(i))
-					}
-				}
-				with, _ := defaults[action].(map[string]any)
-				c.withKeys(action, with, path, c.jobWhere(i), strings.TrimPrefix(path, jp+"."), func(string) bool { return true })
-			}
-		}
+		c.checkDefaults(job.Defaults, jp, c.jobWhere(i))
 		defaults, _ := job.Defaults.(map[string]any)
 		for j, st := range job.Steps {
 			sp := fmt.Sprintf("%s.steps[%d].with", jp, j)
-			// A key the step's with lacks comes from its job's defaults,
-			// where it is checked. A key the step writes, by itself or by a
-			// YAML alias or merge key, is checked here.
+			// A key the step's with lacks comes from the defaults of its
+			// job or of the workflow, where it is checked. A key the step
+			// writes, by itself or by a YAML alias or merge key, is checked
+			// here.
 			inherited, _ := defaults[st.Uses].(map[string]any)
+			fromWorkflow, _ := shared[st.Uses].(map[string]any)
 			own := func(key string) bool {
 				if _, written := c.lines[sp+"."+key]; written {
 					return true
 				}
-				_, fromDefaults := inherited[key]
-				return !fromDefaults
+				_, fromJob := inherited[key]
+				_, fromShared := fromWorkflow[key]
+				return !fromJob && !fromShared
 			}
 			c.withKeys(st.Uses, st.With, sp, c.stepWhere(i, j), "with", own)
 		}
+	}
+}
+
+// checkDefaults checks v, the defaults of the job at jp, or of the workflow
+// when jp is empty: that each names an action, and that its keys are ones
+// the action takes.
+func (c *checker) checkDefaults(v any, jp, where string) {
+	defaults, ok := v.(map[string]any)
+	if !ok {
+		return
+	}
+	for _, action := range slices.Sorted(maps.Keys(defaults)) {
+		path := c.defaultsPath(jp, action)
+		if _, named := c.wf.Actions[action]; named && !slices.Contains(c.opts.Actions, action) {
+			continue
+		}
+		if len(c.opts.Actions) > 0 && !slices.Contains(c.opts.Actions, action) && !actionref.IsExternal(action) {
+			msg := fmt.Sprintf("defaults: no action is named %q, so its defaults apply to no step", action)
+			if s := suggest(action, c.opts.Actions); s != "" {
+				msg += fmt.Sprintf("; did you mean %q?", s)
+			}
+			c.add(SeverityError, c.line(path), where, "%s", msg)
+			continue
+		}
+		if actionref.IsExternal(action) {
+			if _, err := actionref.Parse(action); err == nil {
+				c.readParams(action, c.line(path), where)
+			}
+		}
+		with, _ := defaults[action].(map[string]any)
+		field := path
+		if jp != "" {
+			field = strings.TrimPrefix(path, jp+".")
+		}
+		c.withKeys(action, with, path, where, field, func(string) bool { return true })
 	}
 }
 
