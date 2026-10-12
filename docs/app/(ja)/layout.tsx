@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     template: '%s | Probe',
   },
   description:
-    'Probeは、実験・テスト・監視・自動化タスクなど、様々な宣言的ワークフローのために設計されたYAMLベースのワークフロー自動化ツールです。',
+    'Probeは、ソフトウェアが動くことをEnd-to-endで確かめるツールです。HTTP、gRPC、データベース、メール、SSH、シェルにまたがる手順を1つのYAMLワークフローに書けます。AIエージェントが書くコードのために作られており、エージェントが書いたワークフローを検査し、安全に実行します。',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

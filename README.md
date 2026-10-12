@@ -9,7 +9,7 @@
 <br><br><br><br>
 
 <p align="center">
-  <strong>Probe</strong> is a powerful YAML-based workflow automation tool designed for testing, monitoring, and automation tasks.
+  <strong>Probe</strong> produces proof that AI-written code works: one YAML workflow calls the API, queries the row it wrote and reads the mail it sent, and the report is the evidence.
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
   </a>
 </p>
 
-Write a workflow across HTTP, gRPC, databases, mail, SSH and shell in readable YAML, and Probe runs its jobs in parallel; a new protocol can be added as an action. Probe is a single binary that runs the same on your machine, in CI and from cron, with the result in its exit status. A workflow an AI coding agent wrote can be checked before it runs, and run without the writes and connections you did not allow. Documentation: [probe.linyo.ws](https://probe.linyo.ws/)
+When an AI coding agent changes a service, something other than the code and the unit tests it wrote has to show that the change works. A Probe workflow shows it from outside: readable YAML that drives the running service over HTTP, gRPC, databases, mail, SSH and shell, with jobs in parallel, and checks every response. The agent learns to write one from `probe skill`, `probe check` finds its mistakes before anything runs, and `--read-only` and `--allow-host` refuse the writes and connections you did not allow. Probe is a single binary that runs the same on your machine, in CI and from cron, with the result in its exit status. Documentation: [probe.linyo.ws](https://probe.linyo.ws/)
 
 ![Architecture](/misc/probe-architecture.svg)
 
@@ -33,9 +33,9 @@ Features
 
 Probe was made for reproducible experiments in computer science: a workflow that drives many protocols is written down in YAML, short enough to read, and run again the same way. The same workflows serve as end-to-end tests that keep software reliable, which matters more now that AI agents, not people, write much of the code.
 
+- **Ready for AI coding agents.** `probe skill` teaches an agent to write workflows for the version installed, and `probe check` finds its mistakes before anything runs. `--read-only` and `--allow-host` refuse writes, and connections to hosts you did not list, before they are sent, so a workflow the agent wrote can be run safely. A step can also check responses against your OpenAPI document or `.proto` files, not only against the agent's own `test`.
 - **Flexible.** HTTP, gRPC, MySQL, PostgreSQL, SQLite, SMTP, IMAP, DNS, SSH and shell are built in, external actions add a browser, GraphQL and JMAP, and a new protocol can be added as an action of its own. Jobs run in parallel unless `needs` orders them, so one run can call an endpoint, query the row it wrote and read the mail it sent, and `repeat` runs the same workflow on an interval as a monitor.
 - **Easy to run and keep.** A workflow is YAML you can read, and steps several scenarios share, such as a login, live in one job file that `uses: embedded` runs. Probe is a single binary with nothing to install alongside it, so it runs the same on your machine, in CI and from cron, and `probe dag` prints the jobs as a flowchart in ASCII or Mermaid. Results show in the terminal job by job, with the reason a step failed, and `--report` also writes them as JSON, JUnit XML, Markdown or a GitHub Actions job summary.
-- **Ready for AI coding agents.** `probe skill` teaches an agent to write workflows for the version installed, and `probe check` finds its mistakes before anything runs. `--read-only` and `--allow-host` refuse writes, and connections to hosts you did not list, before they are sent, so a workflow the agent wrote can be run safely. A step can also check responses against your OpenAPI document or `.proto` files, not only against the agent's own `test`.
 
 Beyond that, a workflow has `outputs` to pass data between steps and jobs, `test` to assert on any response and say which condition did not hold, `retry`, `skipif`, `wait` and `timeout`, `iteration` over a list written in the workflow or read from a file, `defaults` for settings shared across steps and jobs, `fail_fast` to stop a job at its first failure and `always` for a cleanup that runs after one, and merging of several YAML files on one command line, where `--var` and `--env-file` give the values that differ from run to run.
 
@@ -44,11 +44,13 @@ Beyond that, a workflow has `outputs` to pass data between steps and jobs, `test
 Quick Start
 -----------
 
-Install the binary:
+Install the binary with Homebrew:
 
 ```bash
-go install github.com/mozership/probe/cmd/probe@latest
+brew install mozership/tap/probe
 ```
+
+With Go, `go install github.com/mozership/probe/cmd/probe@latest` does the same, and in GitHub Actions [`mozership/probe-action`](https://github.com/mozership/probe-action) installs and runs it. [Installation](https://probe.linyo.ws/guide/introduction/installation) has the rest, with the commands that download a release and verify its checksum where neither is at hand.
 
 Write a workflow:
 
@@ -83,6 +85,30 @@ Total workflow time: 0.02s ✓ All jobs succeeded
 
 [Quickstart](https://probe.linyo.ws/guide/introduction/quickstart) goes through this step by step, and [Your First Workflow](https://probe.linyo.ws/guide/introduction/your-first-workflow) grows it into something you can leave running.
 
+With a Coding Agent
+-------------------
+
+Install the skill in the project, so that the agent knows how to write, check and debug a workflow for the version of Probe installed:
+
+```bash
+probe skill install                        # .claude/skills/probe/SKILL.md, for Claude Code
+probe skill install .agents/skills/probe   # any other directory an agent reads skills from
+```
+
+Then say when to use it, in `AGENTS.md`, `CLAUDE.md` or whatever file your agent reads its instructions from:
+
+```markdown
+## End-to-end checks
+
+- After changing what the service does over the network (an endpoint, a query, a mail it sends), add or update a Probe workflow under `probe/` that exercises the change against the running service.
+- Read `probe guide` before writing YAML, and do not guess parameters.
+- Run `probe check <file>` and fix every error, then run `probe --report markdown=probe-report.md <file>`.
+- The change is done when the workflow passes. Put `probe-report.md` in the pull request.
+- If `probe` is not installed: `brew install mozership/tap/probe`, or `go install github.com/mozership/probe/cmd/probe@latest`
+```
+
+[Working with coding agents](https://probe.linyo.ws/guide/how-tos/coding-agents) covers running what the agent wrote under `--read-only`, checking responses against your OpenAPI document, and the same run in CI.
+
 Built-in Actions
 ----------------
 
@@ -115,7 +141,7 @@ Documentation
 -------------
 
 - [Guide](https://probe.linyo.ws/guide) — installation, the CLI, and the concepts behind workflows, jobs, steps and data flow
-- [How-tos](https://probe.linyo.ws/guide/how-tos/api-testing) — API testing, monitoring, performance, environments and error handling
+- [How-tos](https://probe.linyo.ws/guide/how-tos/coding-agents) — working with coding agents, API testing, monitoring, performance, environments and error handling
 - [Tutorials](https://probe.linyo.ws/guide/tutorials/first-monitoring-system) — building a monitoring system, an API test pipeline, and multi-environment tests
 - [Reference](https://probe.linyo.ws/reference) — YAML configuration, CLI options, built-in functions and environment variables
 
