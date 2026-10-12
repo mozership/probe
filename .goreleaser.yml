@@ -23,6 +23,33 @@ archives:
       - none*
 checksum:
   name_template: 'checksums.txt'
+# The cask is pushed to mozership/homebrew-tap, which is what
+# `brew install mozership/tap/probe` reads. Pushing to another repository
+# needs a token of its own; a release made without one skips the cask.
+homebrew_casks:
+  - name: probe
+    binaries:
+      - probe
+    repository:
+      owner: mozership
+      name: homebrew-tap
+      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    homepage: https://probe.linyo.ws
+    description: End-to-end checks over HTTP, gRPC, SQL, mail and SSH from one YAML workflow
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    # The binary is not notarized, so macOS would refuse to run it as
+    # downloaded. Homebrew reads {{staged_path}} itself, so it is written here
+    # as a string for GoReleaser to leave alone.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-d", "com.apple.quarantine", "{{ "{{staged_path}}" }}/probe"], must_succeed: false
+        end
+      end
 snapshot:
   version_template: "{{ .Tag }}-next"
 changelog:
