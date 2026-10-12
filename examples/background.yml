@@ -1,0 +1,40 @@
+name: Background Server Example
+description: |
+  A shell step with background starts a command and leaves it running for
+  the steps after it, so a workflow can start the server it tests. With
+  ready, the step returns once the command has written the text that says
+  it is up. Probe stops the command when the workflow is over.
+
+vars:
+  port: "{{BACKGROUND_PORT ?? '18765'}}"
+
+jobs:
+- name: A server for the steps after it
+  fail_fast: true
+  steps:
+  - name: Start the server
+    id: server
+    uses: shell
+    with:
+      # -u writes the line ready waits for as soon as the server listens
+      cmd: python3 -u -m http.server {{vars.port}} --bind 127.0.0.1 --directory examples/fixtures
+      background: true
+      ready:
+        log: Serving HTTP on
+      timeout: 20s
+    test: res.pid > 0
+    outputs:
+      log: res.log
+
+  - name: Ask it for a file
+    uses: http
+    with:
+      url: "http://127.0.0.1:{{vars.port}}"
+      get: /user.json
+    test: res.code == 200 && res.body.name == "alice"
+
+  - name: Read what the server logged
+    uses: shell
+    with:
+      cmd: cat {{outputs.server.log}}
+    test: res.stdout contains "GET /user.json"
