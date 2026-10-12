@@ -113,7 +113,7 @@ func (st *Step) prepare(jCtx *JobContext) (string, bool) {
 
 	// Check if step should be skipped BEFORE waiting
 	if st.shouldSkip(jCtx) {
-		st.handleSkip(name, "Skip condition: "+st.SkipIf, jCtx)
+		st.handleSkip(name, "Skip condition: "+st.SkipIf, false, jCtx)
 		return name, false
 	}
 
@@ -596,6 +596,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
+			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,
 		}
 	}
@@ -1026,13 +1027,14 @@ func (st *Step) shouldSkip(jCtx *JobContext) bool {
 // skipAfterFailure reports the step as skipped without running it, as a job
 // with fail_fast does each step after one that failed.
 func (st *Step) skipAfterFailure(jCtx *JobContext) {
-	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", jCtx)
+	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", true, jCtx)
 }
 
 // skipWithoutRun reports the step as skipped for reason without running any
-// of it. Its name is the only thing of it that is evaluated.
-func (st *Step) skipWithoutRun(reason string, jCtx *JobContext) {
-	st.handleSkip(st.nameWithoutRun(), reason, jCtx)
+// of it. Its name is the only thing of it that is evaluated. afterFailure
+// is whether it is skipped for a step that failed before it.
+func (st *Step) skipWithoutRun(reason string, afterFailure bool, jCtx *JobContext) {
+	st.handleSkip(st.nameWithoutRun(), reason, afterFailure, jCtx)
 }
 
 // failBeforeRun reports the step as failed with err before any of it ran,
@@ -1060,18 +1062,20 @@ func (st *Step) nameWithoutRun() string {
 }
 
 // handleSkip handles the skipped step logic. reason says why it is skipped,
-// for the verbose log.
-func (st *Step) handleSkip(name, reason string, jCtx *JobContext) {
+// for the verbose log, and afterFailure whether it is for a step that failed
+// before it, rather than for its own skipif.
+func (st *Step) handleSkip(name, reason string, afterFailure bool, jCtx *JobContext) {
+	// The step is logged and then recorded: a verbose run reports the
+	// steps it skipped as any other run does.
 	if jCtx.Verbose {
 		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.Idx, name))
 		jCtx.Printer.LogDebug("%s", reason)
 		jCtx.Printer.PrintSeparator()
-		return
 	}
 
 	// Handle repeat execution for skipped steps
 	if jCtx.IsRepeating {
-		st.handleSkipRepeatExecution(jCtx, name)
+		st.handleSkipRepeatExecution(jCtx, name, afterFailure)
 		return
 	}
 
@@ -1084,21 +1088,29 @@ func (st *Step) handleSkip(name, reason string, jCtx *JobContext) {
 	}
 }
 
-// handleSkipRepeatExecution handles skipped step in repeat mode
-func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string) {
+// handleSkipRepeatExecution handles skipped step in repeat mode. A step
+// skipped by its own skipif did what it was written to do, and the run
+// counts as a success of it. One skipped after a failure was not run at
+// all, and the run counts as neither a success nor a failure of it.
+func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, afterFailure bool) {
 	// Update counter atomically with lock held throughout
 	jCtx.countersMu.Lock()
 	counter, exists := jCtx.StepCounters[st.Idx]
 	if !exists {
 		counter = StepRepeatCounter{
 			Name:        name,
+			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,
 		}
 	}
 
-	// Count as successful (skipped is not a failure)
-	counter.SuccessCount++
-	counter.LastResult = true
+	if afterFailure {
+		counter.SkippedCount++
+	} else {
+		// Count as successful (skipped is not a failure)
+		counter.SuccessCount++
+		counter.LastResult = true
+	}
 
 	// Store updated counter back to map. The step's result is made from the
 	// counter once every run is done (Executor.appendRepeatStepResults).

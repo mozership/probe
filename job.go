@@ -261,7 +261,7 @@ func (j *Job) executeStepWithIterationExpr(st *Step, idx *int, ctx *JobContext) 
 		st.failBeforeRun(&expr.FieldError{Path: "iteration", Err: err}, ctx)
 		return
 	}
-	st.skipWithoutRun("The iteration has no entry", ctx)
+	st.skipWithoutRun("The iteration has no entry", false, ctx)
 }
 
 // validateSteps validates step configurations in the job

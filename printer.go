@@ -233,6 +233,20 @@ func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount
 func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool, output *strings.Builder) {
 	totalCount := counter.RepeatTotal
 
+	// The runs in which the step was not run, after one that failed, are
+	// told beside the count, of which they are no part.
+	skipped := ""
+	if counter.SkippedCount > 0 {
+		skipped = fmt.Sprintf(", %d skipped", counter.SkippedCount)
+	}
+	if counter.SuccessCount == 0 && counter.FailureCount == 0 && counter.SkippedCount > 0 {
+		p.Fprintf(output, "    %s skipped in %d/%d runs\n",
+			colorInfo().Sprintf(IconSkip),
+			counter.SkippedCount,
+			totalCount)
+		return
+	}
+
 	if hasTest {
 		successRate := float64(counter.SuccessCount) / float64(totalCount) * 100
 		statusIcon := colorSuccess().Sprintf(IconSuccess)
@@ -244,21 +258,23 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 			}
 		}
 
-		p.Fprintf(output, "    %s %d/%d success (%.1f%%)\n",
+		p.Fprintf(output, "    %s %d/%d success (%.1f%%)%s\n",
 			statusIcon,
 			counter.SuccessCount,
 			totalCount,
-			successRate)
+			successRate,
+			skipped)
 	} else {
 		// For no test cases, show success count (completed without errors)
 		statusIcon := colorNoTest().Sprintf(IconTriangle)
 		if counter.FailureCount > 0 {
 			statusIcon = colorError().Sprintf(IconError)
 		}
-		p.Fprintf(output, "    %s %d/%d completed (no test)\n",
+		p.Fprintf(output, "    %s %d/%d completed (no test)%s\n",
 			statusIcon,
 			counter.SuccessCount,
-			totalCount)
+			totalCount,
+			skipped)
 	}
 }
 
@@ -444,7 +460,7 @@ func (p *Printer) generateJobResultsFromStepResults(stepResults []StepResult) st
 	for _, stepResult := range stepResults {
 		// Handle repeat steps
 		if stepResult.RepeatCounter != nil {
-			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount, &output)
+			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, &output)
 			p.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")
