@@ -53,6 +53,9 @@ type Workflow struct {
 	printer *Printer
 	// runID names this run, for actions to tell where a request comes from
 	runID string
+	// given are the vars the person running the workflow gave, by name,
+	// each in place of what the workflow writes for it
+	given map[string]string
 }
 
 // RunID returns the ID of the run Start began, which every action of the run
@@ -102,6 +105,15 @@ func (w *Workflow) Start(c Config) error {
 		w.printer.SetBufferIDs(jobIDs)
 	}
 
+	// The variables read from files are those of the environment the
+	// vars read, and a secret may be among them, so they are in place
+	// before the masker is made. What the environment has comes first.
+	if len(c.Env) > 0 {
+		env := maps.Clone(c.Env)
+		maps.Copy(env, w.Env())
+		w.env = env
+	}
+
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
 
@@ -118,6 +130,7 @@ func (w *Workflow) Start(c Config) error {
 		w.outputs = NewOutputs()
 	}
 
+	w.given = c.Vars
 	vars, err := w.evalVars()
 	if err != nil {
 		// The caller prints this error itself, and a template's error can
@@ -310,8 +323,23 @@ func (w *Workflow) Env() map[string]string {
 // and every var that reads it sees the same value. A var whose template
 // cannot be evaluated is an error, which stops the workflow before any job
 // starts.
+//
+// A var the person running the workflow gave is not evaluated: it is the
+// text given, whatever the workflow writes for it, and the vars that read it
+// see that text.
 func (w *Workflow) evalVars() (map[string]any, error) {
-	order, err := varsOrder(w.Vars)
+	written := w.Vars
+	if len(w.given) > 0 {
+		written = maps.Clone(w.Vars)
+		if written == nil {
+			written = make(map[string]any, len(w.given))
+		}
+		for name, value := range w.given {
+			written[name] = givenVar(value)
+		}
+	}
+
+	order, err := varsOrder(written)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +362,12 @@ func (w *Workflow) evalVars() (map[string]any, error) {
 		if done[k] || failed[k] || cycle != nil {
 			return
 		}
-		v := w.Vars[k]
+		v := written[k]
+		if given, ok := v.(givenVar); ok {
+			vars[k] = string(given)
+			done[k] = true
+			return
+		}
 
 		// A var that reads one that failed is not evaluated: its error
 		// would only repeat that one.
@@ -347,7 +380,7 @@ func (w *Workflow) evalVars() (map[string]any, error) {
 		ev := &expr.Expr{BeforeTemplate: func(text string) error {
 			keys, dynamic := expr.Refs(text, "vars")
 			for _, d := range keys {
-				if _, ok := w.Vars[d]; ok && !done[d] {
+				if _, ok := written[d]; ok && !done[d] {
 					return &pendingVarError{name: d}
 				}
 			}
@@ -410,6 +443,11 @@ func (w *Workflow) evalVars() (map[string]any, error) {
 
 	return vars, nil
 }
+
+// givenVar is the value of a var the person running the workflow gave. It
+// is a type of its own so that it is told from a string the workflow
+// writes, whose templates are evaluated.
+type givenVar string
 
 // pendingVarError stops the evaluation of a var whose template reads the var
 // name, which has not been evaluated yet.

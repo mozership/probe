@@ -1447,6 +1447,13 @@ func newOrderTestWorkflow(withIDs bool) *Workflow {
 // returns what reached stdout.
 func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	t.Helper()
+	return startCapturingWith(t, w, Config{Output: mode})
+}
+
+// startCapturingWith is startCapturing with the whole of the configuration
+// given.
+func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
+	t.Helper()
 
 	if w.printer == nil {
 		p := NewPrinter(false, nil)
@@ -1458,7 +1465,7 @@ func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	out := new(bytes.Buffer)
 	w.printer.outWriter = out
 
-	if err := w.Start(Config{Output: mode}); err != nil {
+	if err := w.Start(c); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
 
@@ -1728,6 +1735,118 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 	}
 	if got := len(after.Calls["hello"]); got != 1 {
 		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
+	}
+}
+
+// A var the person running the workflow gave is the text given, in place of
+// what the workflow writes for it, and the other vars read that text.
+func Test_evalVarsGiven(t *testing.T) {
+	wf := &Workflow{
+		Name: "Test",
+		Vars: map[string]any{
+			"host":    "{{HOST ?? 'localhost'}}",
+			"url":     "http://{{vars.host}}:{{vars.port}}",
+			"port":    8080,
+			"nested":  map[string]any{"a": 1},
+			"literal": "kept",
+		},
+		env: map[string]string{"HOST": "from-env"},
+		given: map[string]string{
+			"host":     "given.example.com",
+			"nested":   "flat",
+			"template": "{{ 1 + 1 }}",
+			"new":      "",
+		},
+	}
+	got, err := wf.evalVars()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"host":    "given.example.com",
+		"url":     "http://given.example.com:8080",
+		"port":    8080,
+		"nested":  "flat",
+		"literal": "kept",
+		// A template in what is given is text: it is not evaluated.
+		"template": "{{ 1 + 1 }}",
+		// A var the workflow does not write is defined by being given.
+		"new": "",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("evalVars() = %#v, want %#v", got, want)
+	}
+	if _, ok := wf.Vars["new"]; ok || wf.Vars["host"] != "{{HOST ?? 'localhost'}}" {
+		t.Errorf("the vars of the workflow were changed: %#v", wf.Vars)
+	}
+
+	// A workflow that writes no vars takes those given.
+	bare := &Workflow{Name: "Test", given: map[string]string{"a": "1"}}
+	if got, err := bare.evalVars(); err != nil || !reflect.DeepEqual(got, map[string]any{"a": "1"}) {
+		t.Errorf("evalVars() = %#v, %v, want the var given", got, err)
+	}
+
+	// A var that read itself no longer does once it is given.
+	cyclic := &Workflow{Name: "Test", Vars: map[string]any{"a": "{{vars.b}}", "b": "{{vars.a}}"}, given: map[string]string{"a": "x"}}
+	if got, err := cyclic.evalVars(); err != nil || got["b"] != "x" {
+		t.Errorf("evalVars() = %#v, %v, want b to read the var given", got, err)
+	}
+}
+
+func TestWorkflow_Start_GivenVars(t *testing.T) {
+	runner := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Given",
+		Vars: map[string]any{"url": "http://localhost"},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", actionRunner: runner, With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
+	}
+	p := NewPrinter(false, nil)
+	p.spinner = nil
+	p.outWriter = new(bytes.Buffer)
+	p.errWriter = new(bytes.Buffer)
+	w.printer = p
+	if err := w.Start(Config{Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.Calls["hello"][0].With["url"]; got != "http://given/health" {
+		t.Errorf("with.url = %v, want it made of the vars given", got)
+	}
+}
+
+// The variables read from files are read by the vars as the environment
+// is, which comes before them, and a secret among them is hidden.
+func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
+	runner := NewMockActionRunner()
+	w := &Workflow{
+		Name:    "Env",
+		Secrets: []string{"FILE_TOKEN"},
+		Vars: map[string]any{
+			"url":   "{{FILE_URL ?? 'http://default'}}",
+			"both":  "{{BOTH}}",
+			"token": "{{FILE_TOKEN}}",
+		},
+		env: map[string]string{"BOTH": "from the environment"},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
+			Name: "S", Uses: "hello", actionRunner: runner,
+			With: map[string]any{"url": "{{vars.url}}", "both": "{{vars.both}}"},
+			Echo: "token is {{vars.token}}",
+		}}}},
+	}
+	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, Env: map[string]string{
+		"FILE_URL":   "http://from-a-file",
+		"BOTH":       "from a file",
+		"FILE_TOKEN": "s3cr3t-from-a-file",
+	}})
+
+	with := runner.Calls["hello"][0].With
+	if with["url"] != "http://from-a-file" {
+		t.Errorf("with.url = %v, want the variable of the file", with["url"])
+	}
+	if with["both"] != "from the environment" {
+		t.Errorf("with.both = %v, want the environment before the file", with["both"])
+	}
+	if strings.Contains(report, "s3cr3t-from-a-file") || !strings.Contains(report, "token is ") {
+		t.Errorf("the secret read from a file should be hidden:\n%s", report)
 	}
 }
 

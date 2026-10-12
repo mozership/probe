@@ -108,7 +108,7 @@ func TestCmd_usage(t *testing.T) {
 }
 
 func TestCmd_start(t *testing.T) {
-	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/linyows/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>\n       probe gen <openapi-file>\n       probe dag [--mermaid] <workflow-file>\n       probe check <workflow-file>\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to YAML workflow file(s). Multiple files can be\n                   specified with comma-separated paths (e.g., \"base.yml,override.yml\")\n                   to merge configurations.\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>       Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format\n  check <file>     Find what is wrong or weak in a workflow without running it\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n"
+	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/linyows/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>\n       probe gen <openapi-file>\n       probe dag [--mermaid] <workflow-file>\n       probe check <workflow-file>\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to YAML workflow file(s). Multiple files can be\n                   specified with comma-separated paths (e.g., \"base.yml,override.yml\")\n                   to merge configurations.\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>       Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format\n  check <file>     Find what is wrong or weak in a workflow without running it\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n"
 
 	tests := []struct {
 		name           string
@@ -292,7 +292,7 @@ func TestCmd_start(t *testing.T) {
 			}
 
 			// Check validFlags
-			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action"}
+			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"}
 			if len(c.validFlags) != len(expectedFlags) {
 				t.Errorf("start(%v) validFlags length = %d, want %d", tt.args, len(c.validFlags), len(expectedFlags))
 			}
@@ -963,5 +963,96 @@ func TestCmd_guardFlagsNeedAnArgument(t *testing.T) {
 		if err := c.parseArgs([]string{"w.yml", flag}); err == nil || !strings.Contains(err.Error(), "flag needs an argument") {
 			t.Errorf("parseArgs(%s) = %v, want an error", flag, err)
 		}
+	}
+}
+
+func TestCmd_parseArgs_var(t *testing.T) {
+	c := newBufferCmd()
+	err := c.parseArgs([]string{"--var", "url=http://localhost:8080", "w.yml", "--var=token=a=b", "--var", "empty=", "--var", "url=http://other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WorkflowPath != "w.yml" {
+		t.Errorf("WorkflowPath = %q, want w.yml", c.WorkflowPath)
+	}
+	want := map[string]string{"url": "http://other", "token": "a=b", "empty": ""}
+	if got := c.vars(); !reflect.DeepEqual(got, want) {
+		t.Errorf("vars() = %#v, want %#v", got, want)
+	}
+	if got := newBufferCmd().vars(); got != nil {
+		t.Errorf("vars() = %#v, want nil when no --var is given", got)
+	}
+
+	for _, args := range [][]string{
+		{"--var", "novalue", "w.yml"},
+		{"--var", "=value", "w.yml"},
+		{"--var= =value", "w.yml"},
+		{"w.yml", "--var"},
+		{"--var", "--verbose", "w.yml"},
+	} {
+		if err := newBufferCmd().parseArgs(args); err == nil {
+			t.Errorf("parseArgs(%q) = nil, want an error", args)
+		}
+	}
+}
+
+func TestCmd_parseArgs_envFile(t *testing.T) {
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"--env-file", "a.env, b.env", "w.yml", "--env-file=c.env"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a.env", "b.env", "c.env"}; !reflect.DeepEqual(c.EnvFiles, want) {
+		t.Errorf("EnvFiles = %q, want %q", c.EnvFiles, want)
+	}
+	for _, args := range [][]string{
+		{"w.yml", "--env-file"},
+		{"--env-file=", "w.yml"},
+		{"--env-file", " , ", "w.yml"},
+	} {
+		if err := newBufferCmd().parseArgs(args); err == nil {
+			t.Errorf("parseArgs(%q) = nil, want --env-file to need a file", args)
+		}
+	}
+}
+
+func TestLoadEnvFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	base := write("base.env", "ENVFILE_TEST_A=base\nENVFILE_TEST_B=base\nPROBE_ALLOW_ACTIONS=shell\n")
+	local := write("local.env", "ENVFILE_TEST_B=local\n")
+	env, err := loadEnvFiles([]string{base, local})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The file read last wins among the files.
+	want := map[string]string{"ENVFILE_TEST_A": "base", "ENVFILE_TEST_B": "local", "PROBE_ALLOW_ACTIONS": "shell"}
+	if !reflect.DeepEqual(env, want) {
+		t.Errorf("loadEnvFiles() = %#v, want %#v", env, want)
+	}
+	// Nothing is set in the environment of the process, so that a setting
+	// of Probe, or what an action runs with, is not what a file says.
+	for name := range want {
+		if _, set := os.LookupEnv(name); set {
+			t.Errorf("%s was set in the environment", name)
+		}
+	}
+
+	if env, err := loadEnvFiles(nil); err != nil || env != nil {
+		t.Errorf("loadEnvFiles(nil) = %v, %v", env, err)
+	}
+	if _, err := loadEnvFiles([]string{filepath.Join(dir, "missing.env")}); err == nil {
+		t.Error("loadEnvFiles() = nil, want an error for a file that does not exist")
+	}
+	bad := write("bad.env", "not a variable\n")
+	if _, err := loadEnvFiles([]string{bad}); err == nil || !strings.Contains(err.Error(), bad+":1: ") {
+		t.Errorf("loadEnvFiles() = %v, want the file and the line", err)
 	}
 }

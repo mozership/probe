@@ -247,6 +247,18 @@ probe base-workflow.yml,staging.yml
 probe base-workflow.yml,production.yml
 ```
 
+環境ごとの違いがいくつかの値だけなら、ワークフローは1ファイルのままにして、値を実行時に与えられます。`--env-file`はワークフローが`vars`に読み込む変数を、環境にない場合にファイルから読み、`--var`はワークフローが書いた値の代わりにvarを与えます：
+
+```bash
+# 環境ごとの変数を NAME=value の行で書いたファイルに置く
+probe --env-file staging.env workflow.yml
+
+# 1回の実行だけ、1つの値を変える
+probe --env-file staging.env --var api_url=http://localhost:8080 workflow.yml
+```
+
+詳しくは[`--var`](/ja/reference/cli-reference#--var)と[`--env-file`](/ja/reference/cli-reference#--env-file)を参照してください。
+
 ## 高度な環境管理
 
 環境ごとに異なるのは接続先だけではありません。有効になっている機能、認証情報の取得元、そして環境自体が正しく設定されているかも異なります。
