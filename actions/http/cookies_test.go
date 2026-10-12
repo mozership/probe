@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 // newLoginServer serves /login, which sets a session cookie and redirects to

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/expr"
 )
 
 // newReportResult builds a Result covering every status a report has to map.

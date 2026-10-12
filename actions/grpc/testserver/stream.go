@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/linyows/probe/actions/grpc/testserver/pb"
+	"github.com/mozership/probe/actions/grpc/testserver/pb"
 	"google.golang.org/grpc"
 )
 

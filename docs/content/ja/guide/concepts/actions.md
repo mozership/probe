@@ -1072,7 +1072,7 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/linyows/probe/actionrpc"
+    "github.com/mozership/probe/actionrpc"
 )
 
 // Greet は専用の実行ファイルで提供されるアクションです。
@@ -1148,9 +1148,9 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/linyows/probe"
-    "github.com/linyows/probe/actionrpc"
-    "github.com/linyows/probe/actions"
+    "github.com/mozership/probe"
+    "github.com/mozership/probe/actionrpc"
+    "github.com/mozership/probe/actions"
 )
 
 // Greet は `uses: greet` で使うカスタムアクション

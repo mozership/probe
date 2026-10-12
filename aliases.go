@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/expr"
 )
 
 // aliasName is a name a workflow can give an external action: one that

@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/mapping"
 )
 
 type Req struct {

@@ -601,7 +601,7 @@ jobs:
       
       - name: Install Probe
         run: |
-          curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
       
@@ -620,7 +620,7 @@ jobs:
       
       - name: Install Probe
         run: |
-          curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
       
@@ -647,7 +647,7 @@ jobs:
       
       - name: Install Probe
         run: |
-          curl -L https://github.com/linyows/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
       

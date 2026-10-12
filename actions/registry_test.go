@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 func TestKeepingAreBuiltin(t *testing.T) {

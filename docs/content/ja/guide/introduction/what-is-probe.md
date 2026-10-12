@@ -88,7 +88,7 @@ jobs:
   - name: Check Repo API
     uses: http
     with:
-      get: /repos/linyows/probe
+      get: /repos/mozership/probe
     test: res.code == "200 OK" && res.body.language == "Go"
 
   - name: Check User API
@@ -193,16 +193,16 @@ Probeの使用中に問題が発生した場合や質問がある場合の、サ
 このウェブサイトには包括的なドキュメントが用意されています。基本的な使い方から高度な機能まで、すべてカバーしています。
 
 ### コミュニティサポート
-質問、フィードバック、アイデアの議論には[GitHub Discussions](https://github.com/linyows/probe/discussions)をご利用ください。お気軽にディスカッションを始めてください。
+質問、フィードバック、アイデアの議論には[GitHub Discussions](https://github.com/mozership/probe/discussions)をご利用ください。お気軽にディスカッションを始めてください。
 
 ### バグ報告
-バグを発見した場合は、[GitHub Issues](https://github.com/linyows/probe/issues)で報告してください。
+バグを発見した場合は、[GitHub Issues](https://github.com/mozership/probe/issues)で報告してください。
 
 ## プロジェクトを応援してください
 
 このプロジェクトが役に立ったら、ぜひ応援してください！皆様のご支援が開発者にとって大きな励みとなります。
 
-- [GitHubでスター](https://github.com/linyows/probe)を付ける
+- [GitHubでスター](https://github.com/mozership/probe)を付ける
 - Xでツイートして友人に紹介
 - ブログや記事で紹介
 - 機能改善のアイデアを提案

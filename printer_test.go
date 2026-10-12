@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/linyows/probe/expr"
-	"github.com/linyows/probe/mask"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 )
 
 // Color function tests

@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/expr"
 )
 
 func TestMockActionRunner(t *testing.T) {

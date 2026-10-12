@@ -216,8 +216,8 @@ export const agentCheck: ReportLine[] = [
   { text: '3 errors, 1 warning', tone: 'total' },
 ]
 
-export const installCommand = 'go install github.com/linyows/probe/cmd/probe@latest'
+export const installCommand = 'go install github.com/mozership/probe/cmd/probe@latest'
 
-export const sourceCommands = `git clone https://github.com/linyows/probe.git
+export const sourceCommands = `git clone https://github.com/mozership/probe.git
 cd probe
 go build -o probe ./cmd/probe`

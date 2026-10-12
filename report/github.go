@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/linyows/probe/safefile"
+	"github.com/mozership/probe/safefile"
 )
 
 // maxStepSummaryBytes is the most GitHub accepts in one step's job summary.

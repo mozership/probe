@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
 	"github.com/miekg/dns"
+	"github.com/mozership/probe/actionrpc"
 )
 
 // zone is what the test server answers from, by name and type.

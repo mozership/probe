@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/expr"
-	"github.com/linyows/probe/jsonutil"
-	"github.com/linyows/probe/mask"
-	"github.com/linyows/probe/procgroup"
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/jsonutil"
+	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/procgroup"
+	"github.com/mozership/probe/report"
 )
 
 const (

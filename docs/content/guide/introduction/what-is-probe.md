@@ -191,16 +191,16 @@ Here are the support resources available when you encounter problems or have que
 This website provides comprehensive documentation covering everything from basic usage to advanced features.
 
 ### Community Support
-Use [GitHub Discussions](https://github.com/linyows/probe/discussions) for questions, feedback, and idea discussions. Feel free to start a discussion.
+Use [GitHub Discussions](https://github.com/mozership/probe/discussions) for questions, feedback, and idea discussions. Feel free to start a discussion.
 
 ### Bug Reports
-If you discover bugs, please report them at [GitHub Issues](https://github.com/linyows/probe/issues).
+If you discover bugs, please report them at [GitHub Issues](https://github.com/mozership/probe/issues).
 
 ## Support the Project
 
 If this project has been helpful, please consider supporting it! Your support provides great encouragement to the developers.
 
-- Give a [star on GitHub](https://github.com/linyows/probe)
+- Give a [star on GitHub](https://github.com/mozership/probe)
 - Tweet about it on X and introduce it to friends
 - Write about it in blogs or articles
 - Suggest ideas for feature improvements

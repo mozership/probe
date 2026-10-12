@@ -13,9 +13,9 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
-	"github.com/linyows/probe/mask"
-	"github.com/linyows/probe/pb"
-	"github.com/linyows/probe/truncate"
+	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/pb"
+	"github.com/mozership/probe/truncate"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 )

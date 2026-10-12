@@ -11,6 +11,22 @@ importing probe as a library.
 This release breaks the Go API in a minor version. Workflow files are not
 affected: an `iteration` written as a list is read as it was.
 
+#### The module path
+
+The module is now `github.com/mozership/probe`, after the organization the
+repository moved to. Code that imports probe, as an external action does for
+`actionrpc`, replaces the path in its imports and in its `go.mod`:
+
+| Before | After |
+|---|---|
+| `import "github.com/linyows/probe/actionrpc"` | `import "github.com/mozership/probe/actionrpc"` |
+| `go install github.com/linyows/probe/cmd/probe@latest` | `go install github.com/mozership/probe/cmd/probe@latest` |
+
+Versions up to v1.25.0 stay under `github.com/linyows/probe`, which gets no
+later one: `go get -u` on the old path does not find this release.
+
+#### `Step.Iteration`
+
 `Step.Iteration` was the list of entries a step runs once for each of. A
 workflow can now give a template in its place, which comes to the list when
 the step is reached, so the field holds either.

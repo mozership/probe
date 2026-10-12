@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mapping"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"

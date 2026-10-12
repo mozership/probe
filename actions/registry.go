@@ -10,18 +10,18 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 
-	"github.com/linyows/probe/actions/db"
-	"github.com/linyows/probe/actions/dns"
-	"github.com/linyows/probe/actions/embedded"
-	"github.com/linyows/probe/actions/grpc"
-	"github.com/linyows/probe/actions/hello"
-	"github.com/linyows/probe/actions/http"
-	"github.com/linyows/probe/actions/imap"
-	"github.com/linyows/probe/actions/shell"
-	"github.com/linyows/probe/actions/smtp"
-	"github.com/linyows/probe/actions/ssh"
+	"github.com/mozership/probe/actions/db"
+	"github.com/mozership/probe/actions/dns"
+	"github.com/mozership/probe/actions/embedded"
+	"github.com/mozership/probe/actions/grpc"
+	"github.com/mozership/probe/actions/hello"
+	"github.com/mozership/probe/actions/http"
+	"github.com/mozership/probe/actions/imap"
+	"github.com/mozership/probe/actions/shell"
+	"github.com/mozership/probe/actions/smtp"
+	"github.com/mozership/probe/actions/ssh"
 )
 
 // builtin maps an action name to the function that serves it. Each value

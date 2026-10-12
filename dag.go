@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/goccy/go-yaml"
-	"github.com/linyows/probe/dag"
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/dag"
+	"github.com/mozership/probe/expr"
 )
 
 // graphBuilder resolves the files that embedded steps run, for Workflow.Graph.

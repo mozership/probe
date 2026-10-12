@@ -3,7 +3,7 @@ package probe
 import (
 	"testing"
 
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/expr"
 )
 
 func TestResponseTimeExpressions(t *testing.T) {

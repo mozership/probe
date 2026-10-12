@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/linyows/probe/pb"
+	"github.com/mozership/probe/pb"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

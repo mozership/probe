@@ -3,7 +3,7 @@ package probe
 import (
 	"sync"
 
-	"github.com/linyows/probe/procgroup"
+	"github.com/mozership/probe/procgroup"
 )
 
 // ResponseTime provides response time information for expressions

@@ -3,7 +3,7 @@ package probe
 import (
 	"bytes"
 	"fmt"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/linyows/probe/dag"
-	"github.com/linyows/probe/report"
 	"github.com/mattn/go-isatty"
+	"github.com/mozership/probe/dag"
+	"github.com/mozership/probe/report"
 )
 
 type Probe struct {

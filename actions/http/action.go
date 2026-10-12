@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mapping"
 )
 
 type Action struct {

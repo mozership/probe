@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actions/grpc/testserver/pb"
+	"github.com/mozership/probe/actions/grpc/testserver/pb"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"

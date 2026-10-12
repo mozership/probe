@@ -15,7 +15,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/jarcoal/httpmock"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 func TestNewReq(t *testing.T) {

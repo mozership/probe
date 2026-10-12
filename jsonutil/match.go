@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/linyows/probe/mapping"
+	"github.com/mozership/probe/mapping"
 )
 
 // Match compares two `map[string]any` objects strictly.

@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 
 	"github.com/fatih/color"
-	"github.com/linyows/probe/expr"
-	"github.com/linyows/probe/mask"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 )
 
 func TestWorkflowExecutor_DependencyManagement(t *testing.T) {

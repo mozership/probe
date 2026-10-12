@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/mask"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mask"
 )
 
 // RunOptions controls how a single action invocation is run and logged.

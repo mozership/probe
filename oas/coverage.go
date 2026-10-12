@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 	"github.com/pb33f/libopenapi"
 )
 

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/linyows/probe/actions/grpc/testserver/pb"
+	"github.com/mozership/probe/actions/grpc/testserver/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

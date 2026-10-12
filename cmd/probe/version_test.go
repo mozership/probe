@@ -7,7 +7,7 @@ import (
 
 func TestResolveVersion(t *testing.T) {
 	info := func(version string, settings ...debug.BuildSetting) *debug.BuildInfo {
-		return &debug.BuildInfo{Main: debug.Module{Path: "github.com/linyows/probe", Version: version}, Settings: settings}
+		return &debug.BuildInfo{Main: debug.Module{Path: "github.com/mozership/probe", Version: version}, Settings: settings}
 	}
 	rev := debug.BuildSetting{Key: "vcs.revision", Value: "f7352a519c79335bfd19e2c70f20da8230be16fa"}
 	dirty := debug.BuildSetting{Key: "vcs.modified", Value: "true"}

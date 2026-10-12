@@ -22,7 +22,7 @@ Probe is a single binary. Pick whichever of the three methods below fits how the
 
 The easiest way to install Probe is to download a pre-built binary from the GitHub releases page.
 
-1. Visit the [Probe releases page](https://github.com/linyows/probe/releases)
+1. Visit the [Probe releases page](https://github.com/mozership/probe/releases)
 2. Download the archive for your system:
    - **Linux amd64**: `probe_linux_x86_64.tar.gz`
    - **Linux arm64**: `probe_linux_arm64.tar.gz`
@@ -44,7 +44,7 @@ The easiest way to install Probe is to download a pre-built binary from the GitH
 If you have Go 1.26.6 or later installed, you can install Probe directly:
 
 ```bash
-go install github.com/linyows/probe/cmd/probe@latest
+go install github.com/mozership/probe/cmd/probe@latest
 ```
 
 This will install the `probe` binary to your `$GOPATH/bin` directory.
@@ -54,7 +54,7 @@ This will install the `probe` binary to your `$GOPATH/bin` directory.
 To build Probe from source:
 
 ```bash
-git clone https://github.com/linyows/probe.git
+git clone https://github.com/mozership/probe.git
 cd probe
 go build -o probe ./cmd/probe
 sudo mv probe /usr/local/bin/

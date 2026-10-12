@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionref"
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/actionrpc"
 )
 
 const aliasSHA = "0123456789abcdef0123456789abcdef01234567"

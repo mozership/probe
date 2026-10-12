@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/expr"
 )
 
 func TestJob_validateSteps(t *testing.T) {

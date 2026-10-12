@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/linyows/probe/actionrpc"
+	"github.com/mozership/probe/actionrpc"
 )
 
 // DefaultTraceHeader is the header trace_header: true sends.

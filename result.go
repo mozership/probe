@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/linyows/probe/report"
+	"github.com/mozership/probe/report"
 )
 
 // StatusType represents the status of execution

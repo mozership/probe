@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linyows/probe/actionrpc"
-	"github.com/linyows/probe/mapping"
 	"github.com/miekg/dns"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mapping"
 )
 
 const (

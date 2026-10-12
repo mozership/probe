@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/linyows/probe/expr"
+	"github.com/mozership/probe/expr"
 )
 
 // Iteration is what a step runs once for each entry of, with the entry's

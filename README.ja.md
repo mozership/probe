@@ -19,7 +19,7 @@
   <a href="https://github.com/mozership/probe/releases">
     <img src="http://img.shields.io/github/release/mozership/probe.svg?style=for-the-badge&labelColor=666666&color=DDDDDD" alt="GitHub Release">
   </a>
-  <a href="http://godoc.org/github.com/linyows/probe">
+  <a href="http://godoc.org/github.com/mozership/probe">
     <img src="http://img.shields.io/badge/go-docs-blue.svg?style=for-the-badge&labelColor=666666&color=DDDDDD" alt="Go Documentation">
   </a>
 </p>
@@ -47,7 +47,7 @@ Probeは、情報工学の実験を再現できるようにするために作ら
 バイナリをインストールします。
 
 ```bash
-go install github.com/linyows/probe/cmd/probe@latest
+go install github.com/mozership/probe/cmd/probe@latest
 ```
 
 ワークフローを書きます。
