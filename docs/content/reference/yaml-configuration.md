@@ -46,8 +46,8 @@ jobs:                         # Required: a list of jobs
         skipif: expression    # Optional: skip the step when true
         wait: duration        # Optional: wait before running the step
         timeout: duration     # Optional: step timeout
-        iteration:            # Optional: run the step once per entry
-          - key: value
+        iteration:            # Optional: run the step once per entry;
+          - key: value        # a list, or a template that comes to one
         retry:                # Optional: retry on failure
           max_attempts: integer
           interval: duration
@@ -433,7 +433,7 @@ A step definition takes the properties below.
 | `skipif` | Expression | No | Skip the step when true |
 | `wait` | Duration | No | Wait before running the step |
 | `timeout` | Duration | No | Step timeout (default 5m) |
-| `iteration` | Array | No | Run the step once per entry, exposed as `vars` |
+| `iteration` | Array or template | No | Run the step once per entry, exposed as `vars` |
 | `retry` | Object | No | Retry the step on failure |
 
 The key is `uses`, not `action`, and the conditional key is `skipif`, not `if`.
@@ -512,6 +512,45 @@ steps:
       url: "{{vars.api_url}}{{vars.path}}"
     test: res.code == 200
 ```
+
+In place of a list written in the workflow, `iteration` takes one template that comes to a list of objects. It is evaluated when the step is reached, with the workflow's and the step's `vars` and the `outputs` published so far, so the entries can be cases kept in a file or what an earlier step found:
+
+```yaml
+steps:
+  # one run for each case of the file, which can grow without the workflow
+  - name: "{{vars.name}} can sign in"
+    uses: http
+    iteration: "{{ parse_json(file('testdata/users.json')) }}"
+    with:
+      post: /login
+      body:
+        user: "{{vars.name}}"
+        password: "{{vars.password}}"
+    test: res.code == 200
+
+  - name: List orders
+    id: orders
+    uses: db
+    with:
+      query: SELECT id, total FROM orders WHERE status = 'open'
+    test: res.code == 0
+    outputs:
+      rows: res.rows
+
+  # one run for each row the step above read
+  - name: "Order {{vars.id}} has a total"
+    uses: http
+    iteration: "{{ outputs.orders.rows }}"
+    with:
+      get: "/orders/{{vars.id}}"
+    test: res.body.total == vars.total
+```
+
+- The value is one `{{ }}` template and nothing else; text around it, or two templates, would come to text, and the workflow fails to load.
+- Each entry is an object, whose keys the step reads as `vars`. A list of anything else, such as strings, fails the step; turn it into objects with `map`, as `"{{ map(vars.paths, ({path: #})) }}"`.
+- A template that cannot be evaluated, or that does not come to a list, fails the step without running it.
+- A list without entries skips the step, which is reported as skipped: there is nothing to run it with. An `iteration` written as an empty list, `[]`, runs the step once, as a step without `iteration` does.
+- The entries are taken as they are: a `{{ }}` in a value of an entry is not evaluated.
 
 ## The Expression Context
 

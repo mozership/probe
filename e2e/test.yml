@@ -172,6 +172,16 @@ jobs:
       cmd: ./probe examples/iteration-literal.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: iteration-data.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/iteration-data.yml
+    test: |
+      res.code == 0 &&
+      res.stdout contains "linus is guest" &&
+      res.stdout contains "Greet grace" &&
+      res.stdout contains "Nobody to greet (SKIPPED)"
+    echo: "{{res.stdout}}"
   - name: repeat-literal.yml (expected to fail)
     uses: shell
     with:

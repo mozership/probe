@@ -33,7 +33,7 @@ type Step struct {
 	Test         string            `yaml:"test"`
 	Echo         string            `yaml:"echo"`
 	Vars         map[string]any    `yaml:"vars"`
-	Iteration    []map[string]any  `yaml:"iteration"`
+	Iteration    Iteration         `yaml:"iteration"`
 	Wait         string            `yaml:"wait,omitempty"`
 	SkipIf       string            `yaml:"skipif,omitempty"`
 	Outputs      map[string]string `yaml:"outputs,omitempty"`
@@ -1024,9 +1024,30 @@ func (st *Step) shouldSkip(jCtx *JobContext) bool {
 }
 
 // skipAfterFailure reports the step as skipped without running it, as a job
-// with fail_fast does each step after one that failed. Its name is the only
-// thing of it that is evaluated.
+// with fail_fast does each step after one that failed.
 func (st *Step) skipAfterFailure(jCtx *JobContext) {
+	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", jCtx)
+}
+
+// skipWithoutRun reports the step as skipped for reason without running any
+// of it. Its name is the only thing of it that is evaluated.
+func (st *Step) skipWithoutRun(reason string, jCtx *JobContext) {
+	st.handleSkip(st.nameWithoutRun(), reason, jCtx)
+}
+
+// failBeforeRun reports the step as failed with err before any of it ran,
+// as when what it would run with cannot be worked out.
+func (st *Step) failBeforeRun(err error, jCtx *JobContext) {
+	st.startedAt = time.Time{}
+	st.retryAttempt = 0
+	name := st.nameWithoutRun()
+	jCtx.Printer.StepStart(jCtx.CurrentJobID, name)
+	st.handleActionError(err, name, jCtx)
+}
+
+// nameWithoutRun evaluates and returns the name of a step that is reported
+// without being run. A name that cannot be evaluated is shown as written.
+func (st *Step) nameWithoutRun() string {
 	if st.Name == "" {
 		st.Name = "Unknown Step"
 	}
@@ -1035,7 +1056,7 @@ func (st *Step) skipAfterFailure(jCtx *JobContext) {
 		name = st.Name
 	}
 	st.expandedName = name
-	st.handleSkip(name, "An earlier step of the job failed, and the job has fail_fast", jCtx)
+	return name
 }
 
 // handleSkip handles the skipped step logic. reason says why it is skipped,

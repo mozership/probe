@@ -46,8 +46,8 @@ jobs:                         # 必須: ジョブのリスト
         skipif: expression    # 任意: 真ならステップをスキップ
         wait: duration        # 任意: 実行前の待機
         timeout: duration     # 任意: ステップのタイムアウト
-        iteration:            # 任意: 要素ごとにステップを繰り返す
-          - key: value
+        iteration:            # 任意: 要素ごとにステップを繰り返す。
+          - key: value        # リスト、またはリストになるテンプレート
         retry:                # 任意: 失敗時のリトライ
           max_attempts: integer
           interval: duration
@@ -433,7 +433,7 @@ jobs:
 | `skipif` | Expression | 任意 | 真ならステップをスキップ |
 | `wait` | Duration | 任意 | 実行前の待機時間 |
 | `timeout` | Duration | 任意 | ステップのタイムアウト（既定5m） |
-| `iteration` | Array | 任意 | 要素ごとにステップを繰り返す。値は`vars`から参照します |
+| `iteration` | Array またはテンプレート | 任意 | 要素ごとにステップを繰り返す。値は`vars`から参照します |
 | `retry` | Object | 任意 | 失敗時のリトライ |
 
 キーは`action`ではなく`uses`、条件は`if`ではなく`skipif`です。
@@ -512,6 +512,45 @@ steps:
       method: GET
     test: res.code == 200
 ```
+
+`iteration`には、ワークフローに書いたリストの代わりに、オブジェクトのリストになるテンプレートを1つ書けます。テンプレートはステップに到達した時点で、ワークフローとステップの`vars`、それまでに公開された`outputs`を使って評価されます。そのため、ファイルに置いたケースや、前のステップが見つけたものを要素にできます：
+
+```yaml
+steps:
+  # ファイルのケースごとに1回実行。ケースはワークフローを変えずに増やせる
+  - name: "{{vars.name}} can sign in"
+    uses: http
+    iteration: "{{ parse_json(file('testdata/users.json')) }}"
+    with:
+      post: /login
+      body:
+        user: "{{vars.name}}"
+        password: "{{vars.password}}"
+    test: res.code == 200
+
+  - name: List orders
+    id: orders
+    uses: db
+    with:
+      query: SELECT id, total FROM orders WHERE status = 'open'
+    test: res.code == 0
+    outputs:
+      rows: res.rows
+
+  # 上のステップが読んだ行ごとに1回実行
+  - name: "Order {{vars.id}} has a total"
+    uses: http
+    iteration: "{{ outputs.orders.rows }}"
+    with:
+      get: "/orders/{{vars.id}}"
+    test: res.body.total == vars.total
+```
+
+- 値は`{{ }}`のテンプレート1つだけです。前後に文字があるもの、テンプレートが2つあるものは文字列になってしまうため、ワークフローの読み込みに失敗します。
+- 各要素はオブジェクトで、そのキーをステップが`vars`として読みます。文字列のリストなど、それ以外のリストはステップを失敗させます。`"{{ map(vars.paths, ({path: #})) }}"`のように`map`でオブジェクトに変換してください。
+- 評価できないテンプレート、リストにならないテンプレートは、ステップを実行せずに失敗させます。
+- 要素のないリストはステップをスキップし、スキップとして報告します。実行に使う値がないためです。空のリスト`[]`として書いた`iteration`は、`iteration`のないステップと同じく1回実行します。
+- 要素はそのまま使われます。要素の値に書いた`{{ }}`は評価されません。
 
 ## 式のコンテキスト
 

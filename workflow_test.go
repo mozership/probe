@@ -1663,7 +1663,7 @@ func TestWorkflow_Start_FailFast(t *testing.T) {
 					{ID: "work", Name: "Work", FailFast: failFast, Steps: []*Step{
 						{Name: "Before", Uses: "hello", actionRunner: before},
 						{Name: "Fails", Uses: "hello", actionRunner: failing},
-						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: []map[string]any{{"n": 1}, {"n": 2}}},
+						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
 						{Name: "Last", Uses: "hello", actionRunner: after, Wait: "10ms"},
 					}},
 					// Another job is not held back by it.
