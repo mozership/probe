@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/linyows/probe/expr"
 	"github.com/linyows/probe/mask"
 )
 
@@ -1443,5 +1444,97 @@ func TestIndentDetail(t *testing.T) {
 				t.Errorf("indentDetail() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrinter_generateFalseClause(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	printer := NewPrinter(false, []string{})
+	printer.SetMasker(mask.New(nil, nil))
+	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": "Bearer s3cr3t-token"}})
+
+	tests := []struct {
+		name   string
+		clause expr.Clause
+		want   string
+	}{
+		{
+			name: "a comparison and what it read",
+			clause: expr.Clause{Expr: `res.code == 200`, Operands: []expr.Operand{
+				{Expr: "res.code", Value: 500},
+			}},
+			want: "       failed: res.code == 200\n         res.code = 500\n",
+		},
+		{
+			name:   "a condition with nothing to show",
+			clause: expr.Clause{Expr: `res.code == 200 || res.code == 201`},
+			want:   "       failed: res.code == 200 || res.code == 201\n",
+		},
+		{
+			name: "a secret a value holds is hidden",
+			clause: expr.Clause{Expr: `res.body.token == vars.token`, Operands: []expr.Operand{
+				{Expr: "res.body.token", Value: "Bearer s3cr3t-token"},
+			}},
+			want: "       failed: res.body.token == vars.token\n         res.body.token = \"" + printer.Masker().String("Bearer s3cr3t-token") + "\"\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := printer.generateFalseClause(tt.clause); got != tt.want {
+				t.Errorf("generateFalseClause() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+	if strings.Contains(tests[2].want, "s3cr3t-token") {
+		t.Fatalf("the masker did not hide the secret: %q", tests[2].want)
+	}
+}
+
+func TestOperandText(t *testing.T) {
+	tests := []struct {
+		name    string
+		operand expr.Operand
+		want    string
+	}{
+		{"nil", expr.Operand{Expr: "res.body.id", Value: nil}, "res.body.id = nil"},
+		{"a string is quoted", expr.Operand{Expr: "res.stdout", Value: "ok\n"}, `res.stdout = "ok\n"`},
+		{"an empty string", expr.Operand{Expr: "vars.name", Value: ""}, `vars.name = ""`},
+		{"a number", expr.Operand{Expr: "rt.sec", Value: 0.25}, "rt.sec = 0.25"},
+		{"a bool", expr.Operand{Expr: "res.complete", Value: false}, "res.complete = false"},
+		{"a list", expr.Operand{Expr: "res.values", Value: []any{"a", 1}}, `res.values = ["a",1]`},
+		{"a map", expr.Operand{Expr: "res.body", Value: map[string]any{"ok": true}}, `res.body = {"ok":true}`},
+		{"a long value is cut", expr.Operand{Expr: "res.body", Value: strings.Repeat("x", 300)}, `res.body = "` + strings.Repeat("x", maxOperandLength-1) + "..."},
+		{"a value JSON cannot hold", expr.Operand{Expr: "f", Value: func() {}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := operandText(tt.operand)
+			if tt.want == "" {
+				if !strings.HasPrefix(got, "f = 0x") {
+					t.Errorf("operandText() = %q, want the value as %%v writes it", got)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("operandText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClauseSummary(t *testing.T) {
+	got := clauseSummary(expr.Clause{Expr: `res.body.name == vars.name`, Operands: []expr.Operand{
+		{Expr: "res.body.name", Value: "alice"},
+		{Expr: "vars.name", Value: "bob"},
+	}})
+	if want := `res.body.name == vars.name (res.body.name = "alice", vars.name = "bob")`; got != want {
+		t.Errorf("clauseSummary() = %q, want %q", got, want)
+	}
+	if got := clauseSummary(expr.Clause{Expr: "1 == 2"}); got != "1 == 2" {
+		t.Errorf("clauseSummary() = %q, want the condition alone", got)
 	}
 }

@@ -354,8 +354,10 @@ Monitoring application health
 
 ⏺ Frontend Check (Failed in 1.23s)
   ⎿ 0. ✘  Check Homepage (1.23s)
+              failed: res.code == 200
+                res.code = 500
               request: map[string]interface {}{"method":"GET", "url":"https://example.com"}
-              response: map[string]interface {}{"status":500, "body":"Internal Server Error"}
+              response: map[string]interface {}{"code":500, "body":"Internal Server Error"}
      1. ⏭  Check API Health (skipped)
 
 Total workflow time: 1.23s ✘ 1 job(s) failed

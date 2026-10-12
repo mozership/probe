@@ -763,8 +763,19 @@ func (st *Step) DoTest(printer *Printer) (string, bool) {
 	}
 
 	if !boolOutput {
-		st.failure = st.newFailure(FailureAssertion, "test evaluated to false")
-		return printer.generateTestFailure(st.Test, exprOut, st.ctx.Req, st.ctx.Res), false
+		// Which condition of the test is false is told with what it
+		// compared, unless the action keeps its response out of the report.
+		message := "test evaluated to false"
+		var detail string
+		if clause, ok := st.Expr.FalseClause(st.Test, st.ctx); ok {
+			if dump, isBool := st.ctx.Res["dump"].(bool); isBool && !dump {
+				clause.Operands = nil
+			}
+			message += ": " + clauseSummary(clause)
+			detail = printer.generateFalseClause(clause)
+		}
+		st.failure = st.newFailure(FailureAssertion, message)
+		return detail + printer.generateTestFailure(st.Test, exprOut, st.ctx.Req, st.ctx.Res), false
 	}
 
 	return "", true

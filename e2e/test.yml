@@ -257,10 +257,10 @@ jobs:
     test: |
       res.code == 0 &&
       res.stdout contains `<testsuites name="Report Files" tests="9" failures="2" errors="3" skipped="2"` &&
-      res.stdout contains `<failure message="test evaluated to false" type="assertion">` &&
+      res.stdout contains `<failure message="test evaluated to false: res.code == 1 (res.code = 0)" type="assertion">` &&
       res.stdout contains `type="action">` &&
       res.stdout contains `<skipped message="job skipped">` &&
-      res.stdout contains `<failure message="1 of 3 iterations failed; the first: test evaluated to false" type="assertion">`
+      res.stdout contains `<failure message="1 of 3 iterations failed; the first: test evaluated to false: repeat_index != 1 (repeat_index = 1)" type="assertion">`
   - name: Markdown lists the jobs and every failed step
     uses: shell
     with:

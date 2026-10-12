@@ -21,6 +21,27 @@ Probeのすべてのステップには、アクションの結果を検証する
 
 テスト式はレスポンス（`res`）を評価し、成功にはtrue、失敗にはfalseを返します。
 
+### 失敗したテストが示すもの
+
+テストは通常、複数の条件を`&&`でつなげて書きます。テストが偽になると、レポートはリクエストとレスポンスの前に、成立しなかった最初の条件と、その両辺が評価された値を示します：
+
+```yaml
+test: |
+  res.code == 200 &&
+  res.body.status == "healthy"
+```
+
+```
+⏺ Health (Failed in 0.12s)
+  ⎿ 0. ✗  API Health Check
+           failed: res.body.status == "healthy"
+             res.body.status = "degraded"
+           request: ...
+           response: ...
+```
+
+条件はProbeが読み取った形で表示されるため、空白や引用符がワークフローの記述と異なることがあります。値が表示されるのは、`==`、`<`、`in`、`contains`などの比較と、`!`が否定する対象です。`"healthy"`のようにテスト自体に書かれた値は繰り返しません。`||`でつないだ条件は1つの条件として、まとめて表示されます。同じ内容は`--report`が書き出すファイルの失敗メッセージにも、`test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`の形で入ります。
+
 ### テスト式のコンテキスト
 
 テスト式は包括的なレスポンスデータにアクセスできます：

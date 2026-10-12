@@ -2,15 +2,18 @@ package probe
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
+	"github.com/linyows/probe/expr"
 	"github.com/linyows/probe/mask"
 )
 
@@ -634,6 +637,60 @@ func (p *Printer) generateTestFailure(testExpr string, result any, req, res map[
 	output := fmt.Sprintf("       %s %#v\n", colorInfo().Sprintf("request:"), p.masker.Map(req))
 	output += fmt.Sprintf("       %s %#v\n", colorInfo().Sprintf("response:"), p.masker.Map(res))
 	return output
+}
+
+// generateFalseClause formats the condition of a test that is false, and
+// under it what each thing it compares evaluated to:
+//
+//	failed: res.code == 200
+//	  res.code = 500
+func (p *Printer) generateFalseClause(c expr.Clause) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "       %s %s\n", colorInfo().Sprintf("failed:"), p.masker.String(c.Expr))
+	for _, o := range c.Operands {
+		fmt.Fprintf(&b, "         %s\n", p.masker.String(operandText(o)))
+	}
+	return b.String()
+}
+
+// maxOperandLength is how much of a value a false condition compared is
+// shown, as a whole response body may be one.
+const maxOperandLength = 200
+
+// operandText is an operand and its value on one line, as res.code = 500.
+// A string is quoted, so that an empty one and one that ends with a newline
+// can be seen, and anything else is written as JSON.
+func operandText(o expr.Operand) string {
+	var value string
+	switch v := o.Value.(type) {
+	case nil:
+		value = "nil"
+	case string:
+		value = strconv.Quote(v)
+	default:
+		if data, err := json.Marshal(v); err == nil {
+			value = string(data)
+		} else {
+			value = fmt.Sprintf("%v", v)
+		}
+	}
+	if r := []rune(value); len(r) > maxOperandLength {
+		value = string(r[:maxOperandLength]) + "..."
+	}
+	return o.Expr + " = " + value
+}
+
+// clauseSummary is a false condition on one line, for the message of a
+// failure: res.code == 200 (res.code = 500).
+func clauseSummary(c expr.Clause) string {
+	if len(c.Operands) == 0 {
+		return c.Expr
+	}
+	parts := make([]string, len(c.Operands))
+	for i, o := range c.Operands {
+		parts[i] = operandText(o)
+	}
+	return fmt.Sprintf("%s (%s)", c.Expr, strings.Join(parts, ", "))
 }
 
 // generateContractFailure formats a response that breaks its contract: each
