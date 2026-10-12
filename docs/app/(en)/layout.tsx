@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     template: '%s | Probe',
   },
   description:
-    'A powerful YAML-based workflow automation tool designed for testing, monitoring, and automation tasks. Probe uses plugin-based actions to execute workflows, making it highly flexible and extensible.',
+    'Probe checks that software works end to end, from one YAML workflow across HTTP, gRPC, databases, mail, SSH and shell. Made for the code AI agents write: they write the workflow, and Probe checks it and runs it safely.',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {

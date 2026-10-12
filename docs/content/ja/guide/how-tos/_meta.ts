@@ -1,6 +1,7 @@
 import type { MetaRecord } from 'nextra'
 
 export default {
+  'coding-agents': 'コーディングエージェントと使う',
   'api-testing': 'APIテスト',
   'environment-management': '環境管理',
   'error-handling-strategies': 'エラーハンドリング戦略',

@@ -6,7 +6,7 @@ weight: 10
 
 # Installation
 
-Probe is a lightweight, single-binary tool that can be installed in several ways. Choose the method that works best for your environment.
+Probe is a single binary with no runtime dependencies. Homebrew is the shortest way to get it; where there is no Homebrew, such as in a container or in the sandbox of a coding agent, Go or a few commands that download a release do the same.
 
 ## System Requirements
 
@@ -16,28 +16,15 @@ Probe is a lightweight, single-binary tool that can be installed in several ways
 
 ## Installation Methods
 
-Probe is a single binary. Pick whichever of the three methods below fits how the rest of your tooling is installed.
+Pick whichever of the methods below fits how the rest of your tooling is installed.
 
-### 1. Download Pre-built Binaries
+### 1. Homebrew
 
-The easiest way to install Probe is to download a pre-built binary from the GitHub releases page.
+```bash
+brew install mozership/tap/probe
+```
 
-1. Visit the [Probe releases page](https://github.com/mozership/probe/releases)
-2. Download the archive for your system:
-   - **Linux amd64**: `probe_linux_x86_64.tar.gz`
-   - **Linux arm64**: `probe_linux_arm64.tar.gz`
-   - **macOS amd64**: `probe_darwin_x86_64.tar.gz`
-   - **macOS arm64**: `probe_darwin_arm64.tar.gz`
-
-3. Extract the `probe` binary from it:
-   ```bash
-   tar -xzf probe_linux_x86_64.tar.gz
-   ```
-
-4. Move it to a directory in your PATH:
-   ```bash
-   sudo mv probe /usr/local/bin/probe
-   ```
+The cask is in [mozership/homebrew-tap](https://github.com/mozership/homebrew-tap), written by each release with the SHA-256 of its archives, which Homebrew verifies before installing. `brew upgrade` brings Probe up to date.
 
 ### 2. Install with Go
 
@@ -49,7 +36,42 @@ go install github.com/mozership/probe/cmd/probe@latest
 
 This will install the `probe` binary to your `$GOPATH/bin` directory.
 
-### 3. Build from Source
+### 3. Download a Release
+
+The archives are on the [releases page](https://github.com/mozership/probe/releases), with `checksums.txt` beside them:
+
+- **Linux amd64**: `probe_linux_x86_64.tar.gz`
+- **Linux arm64**: `probe_linux_arm64.tar.gz`
+- **macOS amd64**: `probe_darwin_x86_64.tar.gz`
+- **macOS arm64**: `probe_darwin_arm64.tar.gz`
+
+These commands download the latest one, verify it against `checksums.txt`, and put `probe` in a directory in your PATH. They ask nothing, so they can go into a Dockerfile or the setup script of a sandbox as they are:
+
+```bash
+curl -fsSLO https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz
+curl -fsSLO https://github.com/mozership/probe/releases/latest/download/checksums.txt
+sha256sum -c --ignore-missing checksums.txt
+tar -xzf probe_linux_x86_64.tar.gz probe
+sudo mv probe /usr/local/bin/probe
+```
+
+On macOS, `shasum -a 256 -c --ignore-missing checksums.txt` verifies it. For a release other than the latest, replace `latest/download` with `download/v1.26.0`.
+
+### 4. GitHub Actions
+
+[`mozership/probe-action`](https://github.com/mozership/probe-action) downloads Probe, verifies its checksum, caches it, and runs your workflows:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: mozership/probe-action@v1.3.0
+  with:
+    path: probe/api.yml
+    options: --report github-summary
+```
+
+With `install-only: true` it only puts `probe` in `PATH`, for later steps to run themselves.
+
+### 5. Build from Source
 
 To build Probe from source:
 
@@ -70,8 +92,18 @@ probe --version
 
 You should see output similar to:
 ```
-Probe Version 1.13.0 (commit: 2d9d511ce7b4c9eec32ea85e2a25337e40a5e40c)
+Probe Version 1.26.0 (commit: 77d72480c9bbc97cf32e202e69d9af6fdd9d1098)
 ```
+
+## For a Coding Agent
+
+An agent that works in a fresh sandbox has to install Probe itself. Put one of the install commands above in the file it reads its instructions from, such as `AGENTS.md` or `CLAUDE.md`, and install the skill in the project so that it knows how to write a workflow:
+
+```bash
+probe skill install
+```
+
+[Working with coding agents](/guide/how-tos/coding-agents) has the instructions to give the agent.
 
 ## Next Steps
 
@@ -104,4 +136,4 @@ which probe
 
 ### ARM64 on Apple Silicon
 
-For Apple Silicon Macs (M1/M2), use `probe_darwin_arm64.tar.gz` for better performance.
+Homebrew picks the arm64 archive on an Apple Silicon Mac. When downloading by hand, pick `probe_darwin_arm64.tar.gz` rather than the x86_64 archive.
