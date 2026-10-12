@@ -18,9 +18,9 @@ Probe is made to be that check, and to be written by the agent itself:
 - `--read-only` and `--allow-host` refuse writes, and connections to hosts you did not list, before they are sent.
 - The report says, step by step, what the service did, for the person who reviews the change.
 
-Here a workflow an agent wrote is checked, then run against a sign-up API and its database, then run again under `--read-only`:
+Here an end-to-end test that an AI agent wrote as a workflow is checked, then run against a sign-up API and its database, then run again under `--read-only`:
 
-<img class="diagram" src="/demo.svg" alt="A terminal in three scenes: probe check reports the mistakes in a workflow an agent wrote, the fixed workflow calls an API and queries the row it wrote, and under --read-only its POST is refused." />
+<img class="diagram" src="/demo.svg" alt="A terminal in three scenes: probe check reports the mistakes in an end-to-end test an AI agent wrote, the fixed test calls an API and queries the row it wrote, and under --read-only its POST is refused." />
 
 [Working with coding agents](/guide/how-tos/coding-agents) sets a project up this way.
 
