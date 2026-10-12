@@ -22,6 +22,7 @@ jobs:                         # 必須: ジョブのリスト
   - name: string              # 必須: ジョブ名
     id: string                # 任意: ジョブ ID。needs から参照する
     needs: [job-id, ...]      # 任意: 依存するジョブ
+    always: boolean           # 任意: 依存先のジョブが失敗しても実行する
     skipif: expression        # 任意: 真ならジョブをスキップ
     defaults:                 # 任意: アクションごとの with の既定値
       http:
@@ -232,12 +233,13 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 | `name` | String | 必須 | ジョブ名。テンプレート式が使えます |
 | `id` | String | 任意 | 他ジョブの`needs`から参照する識別子。省略時は自動採番されます |
 | `needs` | Array | 任意 | 先に完了している必要があるジョブのID |
+| `always` | Boolean | 任意 | `needs`のジョブが失敗していても、それらが終わり次第実行する |
 | `steps` | Array | 必須 | 実行するステップ |
 | `skipif` | Expression | 任意 | 真ならジョブ全体をスキップ |
 | `defaults` | Object | 任意 | アクション名をキーとした`with`の既定値 |
 | `repeat` | Object | 任意 | ジョブを繰り返す |
 
-ジョブに`if`、`continue_on_error`、`timeout`はありません。
+ジョブに`if`、`continue_on_error`、`timeout`はありません。失敗の後にも実行したいジョブには[`always`](#always)を付けます。
 
 #### `needs`
 
@@ -259,6 +261,51 @@ jobs:
         uses: hello
         echo: "testing"
 ```
+
+#### `always`
+
+ジョブは、`needs`に書いたジョブが失敗したとき、または同じ理由でスキップされたときにスキップされます。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます。他のジョブが作ったものを片付けるジョブに必要な動作です。これがないと、失敗した実行はテスト用のデータベースやファイルを残し、次の実行がそれにぶつかります。
+
+```yaml
+jobs:
+  - id: setup
+    name: Setup
+    steps:
+      - name: Create the test database
+        uses: db
+        with:
+          dsn: "{{vars.admin_dsn}}"
+          query: CREATE DATABASE probe_test
+        test: res.code == 0
+
+  - id: tests
+    name: Tests
+    needs: [setup]
+    steps:
+      - name: Count users
+        uses: db
+        with:
+          dsn: "{{vars.test_dsn}}"
+          query: SELECT count(*) AS n FROM users
+        test: res.rows[0].n > 0
+
+  - name: Cleanup
+    needs: [setup, tests]
+    always: true
+    steps:
+      - name: Drop the test database
+        uses: db
+        with:
+          dsn: "{{vars.admin_dsn}}"
+          query: DROP DATABASE IF EXISTS probe_test
+        test: res.code == 0
+```
+
+- このジョブも`needs`のすべてのジョブを待ちます。繰り返すジョブは全回の実行を待ちます。片付ける対象を作るジョブはすべて`needs`に書き、それらと並行して走らないようにします。
+- 実行全体の成否は変わりません。`always`が変えるのはどのジョブが走るかであり、終了ステータスではありません。
+- 失敗またはスキップされたジョブが公開しなかったoutputはnilとして読まれます。`DROP DATABASE IF EXISTS`のように、それがなくても動くステップを書きます。
+- `always`を付けたジョブを`needs`に書いたジョブは、他のジョブに対してと同じく、そのジョブの結果に従います。
+- `skipif`は引き続き有効です。両方を書いたジョブは、式が真ならスキップされます。
 
 #### `skipif`
 

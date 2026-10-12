@@ -183,9 +183,39 @@ jobs:
           
 ```
 
+### Cleaning Up After a Failure
+
+A job that removes what the others made has to run when they fail too. `always: true` runs a job once every job in its `needs` is over, however each ended:
+
+```yaml
+jobs:
+- id: tests
+  name: Tests
+  steps:
+    - name: Create a user
+      uses: http
+      with:
+        post: "{{vars.API_URL}}/users"
+        body:
+          name: probe-test
+      test: res.code == 201
+
+- name: Cleanup
+  needs: [tests]
+  always: true
+  steps:
+    - name: Delete the test users
+      uses: http
+      with:
+        delete: "{{vars.API_URL}}/users?name=probe-test"
+      test: res.code == 200 || res.code == 404
+```
+
+The run still fails when `tests` did. See [`always`](/reference/yaml-configuration#always) for what the job can rely on.
+
 ### Conditional Job Execution
 
-There is no way to branch on whether another job failed - a failing job skips everything that depends on it. To act on an outcome, publish it as an output and let the next job decide with `skipif`.
+Apart from `always`, there is no way to branch on whether another job failed - a failing job skips everything that depends on it. To act on an outcome, publish it as an output and let the next job decide with `skipif`.
 
 ```yaml
 jobs:

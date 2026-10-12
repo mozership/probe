@@ -183,9 +183,39 @@ jobs:
           
 ```
 
+### 失敗後の後片付け
+
+他のジョブが作ったものを片付けるジョブは、それらが失敗したときにも実行する必要があります。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます：
+
+```yaml
+jobs:
+- id: tests
+  name: Tests
+  steps:
+    - name: Create a user
+      uses: http
+      with:
+        post: "{{vars.API_URL}}/users"
+        body:
+          name: probe-test
+      test: res.code == 201
+
+- name: Cleanup
+  needs: [tests]
+  always: true
+  steps:
+    - name: Delete the test users
+      uses: http
+      with:
+        delete: "{{vars.API_URL}}/users?name=probe-test"
+      test: res.code == 200 || res.code == 404
+```
+
+`tests`が失敗していれば、実行全体は失敗のままです。このジョブが前提にできることは[`always`](/ja/reference/yaml-configuration#always)を参照してください。
+
 ### 条件付きジョブ実行
 
-他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブが`skipif`で判断します。
+`always`を除けば、他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブが`skipif`で判断します。
 
 ```yaml
 jobs:

@@ -22,6 +22,7 @@ jobs:                         # Required: a list of jobs
   - name: string              # Required: job name
     id: string                # Optional: job id, used by needs
     needs: [job-id, ...]      # Optional: job dependencies
+    always: boolean           # Optional: run even when a needed job failed
     skipif: expression        # Optional: skip the job when true
     defaults:                 # Optional: default `with` values per action
       http:
@@ -232,12 +233,13 @@ A job definition takes the properties below.
 | `name` | String | Yes | Job name, shown in the report. Supports template expressions |
 | `id` | String | No | Identifier used by another job's `needs`. Generated automatically when omitted |
 | `needs` | Array | No | Ids of jobs that must finish first |
+| `always` | Boolean | No | Run once the jobs in `needs` are over, even when one of them failed |
 | `steps` | Array | Yes | The steps to run |
 | `skipif` | Expression | No | Skip the whole job when the expression is true |
 | `defaults` | Object | No | Default `with` values, keyed by action name |
 | `repeat` | Object | No | Run the job repeatedly |
 
-There is no `if`, `continue_on_error` or `timeout` at the job level.
+There is no `if`, `continue_on_error` or `timeout` at the job level. A job that has to run after a failure is one with [`always`](#always).
 
 #### `needs`
 
@@ -259,6 +261,51 @@ jobs:
         uses: hello
         echo: "testing"
 ```
+
+#### `always`
+
+A job is skipped when a job it `needs` failed or was skipped for the same reason. With `always: true`, it runs once every job in `needs` is over, however each ended. That is what a job that removes what the others made needs: left without it, a failed run leaves its test database or its files behind, and the next run finds them.
+
+```yaml
+jobs:
+  - id: setup
+    name: Setup
+    steps:
+      - name: Create the test database
+        uses: db
+        with:
+          dsn: "{{vars.admin_dsn}}"
+          query: CREATE DATABASE probe_test
+        test: res.code == 0
+
+  - id: tests
+    name: Tests
+    needs: [setup]
+    steps:
+      - name: Count users
+        uses: db
+        with:
+          dsn: "{{vars.test_dsn}}"
+          query: SELECT count(*) AS n FROM users
+        test: res.rows[0].n > 0
+
+  - name: Cleanup
+    needs: [setup, tests]
+    always: true
+    steps:
+      - name: Drop the test database
+        uses: db
+        with:
+          dsn: "{{vars.admin_dsn}}"
+          query: DROP DATABASE IF EXISTS probe_test
+        test: res.code == 0
+```
+
+- The job still waits for every job in `needs`, a repeated one for all of its runs. List every job whose work it undoes, so that it does not run beside one of them.
+- The run fails as it would have without it: `always` changes which jobs run, not the exit status.
+- An output a failed or skipped job did not publish reads as nil, so write the steps to work without it, as `DROP DATABASE IF EXISTS` does.
+- A job that needs the one with `always` is held to how that one ends, as it is to any other job.
+- `skipif` still applies: a job with both is skipped when its expression is true.
 
 #### `skipif`
 
