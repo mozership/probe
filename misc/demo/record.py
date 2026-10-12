@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Record the demo in the README: misc/demo.svg and misc/demo-ja.svg.
+"""Record the demo in the README and the docs: demo.svg and demo-ja.svg, in
+misc for the README and in docs/public for the site.
 
     python3 misc/demo/record.py
 
@@ -396,9 +397,12 @@ def main():
         print(path)
         return
     for lang, name in (("en", "demo.svg"), ("ja", "demo-ja.svg")):
-        path = os.path.join(ROOT, "misc", name)
-        open(path, "w").write(build(lang, outputs).render())
-        print(path)
+        picture = build(lang, outputs).render()
+        # The site is built from docs/ alone, so it has a copy of its own.
+        for directory in ("misc", os.path.join("docs", "public")):
+            path = os.path.join(ROOT, directory, name)
+            open(path, "w").write(picture)
+            print(path)
 
 
 if __name__ == "__main__":
