@@ -237,7 +237,10 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 
 			// Determine status based on repeat counter results
 			var status StatusType
-			if counter.FailureCount == 0 {
+			if counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0 {
+				// Never run - skipped in every run, after a step that failed
+				status = StatusSkipped
+			} else if counter.FailureCount == 0 {
 				// No failures - success
 				status = StatusSuccess
 			} else if counter.SuccessCount == 0 {

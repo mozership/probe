@@ -351,7 +351,7 @@ jobs:
 - A step fails when its `test` is false, its action returns an error, or a response breaks its contract. A step without a `test` that nothing checks does not fail, so it stops nothing.
 - A skipped step does not wait for its `wait`, and its `outputs` are not published.
 - The remaining entries of an [`iteration`](#iteration) are skipped as well, once one of them fails.
-- Each run of a job with [`repeat`](#repeat) starts over: a failure skips the rest of that run only.
+- Each run of a job with [`repeat`](#repeat) starts over: a failure skips the rest of that run only. A run in which a step was not run counts as neither a success nor a failure of it, and is told beside them, as `1/3 success (33.3%), 2 skipped`.
 - Other jobs are not affected, except through [`needs`](#needs), as by any failed job. Steps that must run after a failure, such as a cleanup, belong in a job with [`always`](#always).
 
 #### `defaults`

@@ -17,6 +17,7 @@ import (
 
 	"github.com/linyows/probe/report"
 
+	"github.com/fatih/color"
 	"github.com/linyows/probe/expr"
 	"github.com/linyows/probe/mask"
 )
@@ -1727,5 +1728,90 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 	}
 	if got := len(after.Calls["hello"]); got != 1 {
 		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
+	}
+}
+
+// In a repeated job with fail_fast, a run in which a step was not run is
+// neither a success nor a failure of the step: it is counted on its own,
+// and a step that was never run is reported as skipped.
+func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	after := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Fail fast",
+		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 3}, Steps: []*Step{
+			// Fails in the first two runs, and is skipped in the last.
+			{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 2"},
+			{Name: "Sometimes", Uses: "hello", actionRunner: after, Test: "true"},
+			// Reached in the last run alone, where its own skipif skips it,
+			// which is a success of it.
+			{Name: "Own skipif", Uses: "hello", actionRunner: after, SkipIf: "repeat_index == 2", Test: "true"},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if got := len(after.Calls["hello"]); got != 1 {
+		t.Errorf("the steps after the failure ran %d times, want once, in the run without it:\n%s", got, report)
+	}
+	if got := strings.Count(report, "1/3 success (33.3%), 2 skipped"); got != 2 {
+		t.Errorf("%d steps are reported as run once and skipped twice, want both after the failure:\n%s", got, report)
+	}
+}
+
+func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+	printer := NewPrinter(false, nil)
+
+	tests := []struct {
+		name    string
+		counter StepRepeatCounter
+		hasTest bool
+		want    string
+	}{
+		{"never run", StepRepeatCounter{SkippedCount: 3, RepeatTotal: 3}, true, "skipped in 3/3 runs"},
+		{"run in some", StepRepeatCounter{SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3}, true, "1/3 success (33.3%), 2 skipped"},
+		{"without a test", StepRepeatCounter{SuccessCount: 2, SkippedCount: 1, RepeatTotal: 3}, false, "2/3 completed (no test), 1 skipped"},
+		{"none skipped", StepRepeatCounter{SuccessCount: 3, RepeatTotal: 3}, true, "3/3 success (100.0%)\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			printer.printStepRepeatResult(&tt.counter, tt.hasTest, &out)
+			if !strings.Contains(out.String(), tt.want) {
+				t.Errorf("printStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
+	job := &Job{ID: "work", Name: "Work", Steps: []*Step{{Name: "Never run", Test: "true"}, {Name: "Run once", Test: "true"}}}
+	result := NewResult()
+	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx := &JobContext{
+		Result:      result,
+		RepeatTotal: 3,
+		countersMu:  &sync.Mutex{},
+		StepCounters: map[int]StepRepeatCounter{
+			0: {Name: "Never run", SkippedCount: 3, RepeatTotal: 3},
+			1: {Name: "Run once", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+		},
+	}
+	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+
+	steps := result.Jobs[job.ID].StepResults
+	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
+		t.Fatalf("statuses = %+v, want skipped then success", steps)
+	}
+
+	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
+	got := r.Jobs[0].Steps
+	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
+		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)
+	}
+	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
+		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
 	}
 }
