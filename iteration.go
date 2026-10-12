@@ -65,18 +65,30 @@ func isOneTemplate(s string) bool {
 	return len(expr.TemplateExprs(s)) == 1 && expr.ReplaceTemplates(s, "") == ""
 }
 
+// maxIterationEntries is how many entries an iteration takes. A step runs
+// once for each, one after another, so a list this long is a mistake, such
+// as a file read whole where a part of it was meant, rather than a test.
+const maxIterationEntries = 1 << 20
+
 // iterationEntries returns v, a list of maps, as the entries of an
 // iteration. Anything else is an error that says what v is: a step cannot
-// run once for each of something that gives it no vars.
+// run once for each of something that gives it no vars. So is a list of
+// more than maxIterationEntries.
 func iterationEntries(v any) ([]map[string]any, error) {
 	var items []any
 	switch list := v.(type) {
 	case []map[string]any:
+		if len(list) > maxIterationEntries {
+			return nil, tooManyEntries(len(list))
+		}
 		return list, nil
 	case []any:
 		items = list
 	default:
 		return nil, fmt.Errorf("want a list of maps, got %s", kindOf(v))
+	}
+	if len(items) > maxIterationEntries {
+		return nil, tooManyEntries(len(items))
 	}
 
 	entries := make([]map[string]any, len(items))
@@ -88,6 +100,10 @@ func iterationEntries(v any) ([]map[string]any, error) {
 		entries[i] = entry
 	}
 	return entries, nil
+}
+
+func tooManyEntries(n int) error {
+	return fmt.Errorf("%d entries are more than the %d an iteration takes", n, maxIterationEntries)
 }
 
 // kindOf names what v is, for an error a workflow's author reads.

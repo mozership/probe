@@ -84,15 +84,18 @@ func buildStepReport(sr StepResult) report.Step {
 	if c := sr.RepeatCounter; c != nil {
 		step.Name = c.Name
 		step.Repeat = &report.Repeat{
-			Total:   c.SuccessCount + c.FailureCount,
+			Total:   c.SuccessCount + c.FailureCount + c.SkippedCount,
 			Success: c.SuccessCount,
 			Failure: c.FailureCount,
+			Skipped: c.SkippedCount,
 		}
 		// The terminal report marks a mix of passing and failing iterations as
 		// a warning. Any failing iteration fails the job, so it fails the step.
 		switch {
 		case c.FailureCount > 0:
 			step.Status = report.Failed
+		case c.SuccessCount == 0 && c.SkippedCount > 0:
+			step.Status = report.Skipped
 		case sr.HasTest:
 			step.Status = report.Passed
 		default:

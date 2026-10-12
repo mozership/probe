@@ -2553,3 +2553,24 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 		})
 	}
 }
+
+// A verbose run records the steps it skips as any other run does, for the
+// report: by their own skipif, and after a failure in a job with fail_fast.
+func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
+	for _, afterFailure := range []bool{false, true} {
+		printer := newBufferPrinter()
+		printer.verbose = true
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs["job"] = &JobResult{JobID: "job"}
+		jCtx := &JobContext{Printer: printer, Result: result, CurrentJobID: "job", Config: Config{Verbose: true}}
+
+		st := &Step{Name: "Skipped", Expr: &expr.Expr{}, SkipIf: "true"}
+		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
+
+		steps := result.Jobs["job"].StepResults
+		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped (SKIPPED)" {
+			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
+		}
+	}
+}
