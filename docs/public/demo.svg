@@ -1,66 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 397" width="760" height="397" role="img">
-<title>An AI agent wrote this E2E test, signup.yml. Find its mistakes before it runs. Fixed. The test calls the API, then queries the row the API wrote. On a system it must not change, refuse writes before they are sent.</title>
+<title>An AI agent wrote this E2E test. Find its mistakes before it runs. Fixed. The test calls the API, then queries the row the API wrote. On a system it must not change, refuse writes before they are sent.</title>
 <style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono','Hiragino Sans','Noto Sans JP',monospace;font-size:13px;fill:#d8e6f3;white-space:pre}
-@keyframes s1195_3167{0%,11.95%{opacity:0}11.96%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1195_3167{opacity:0;animation:s1195_3167 30s linear infinite}
-@keyframes s1295_3167{0%,12.95%{opacity:0}12.96%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1295_3167{opacity:0;animation:s1295_3167 30s linear infinite}
-@keyframes s1310_3167{0%,13.10%{opacity:0}13.11%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1310_3167{opacity:0;animation:s1310_3167 30s linear infinite}
-@keyframes s1325_3167{0%,13.25%{opacity:0}13.26%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1325_3167{opacity:0;animation:s1325_3167 30s linear infinite}
+@keyframes s1083_3167{0%,10.83%{opacity:0}10.84%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1083_3167{opacity:0;animation:s1083_3167 30s linear infinite}
+@keyframes s1183_3167{0%,11.83%{opacity:0}11.84%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1183_3167{opacity:0;animation:s1183_3167 30s linear infinite}
+@keyframes s1198_3167{0%,11.98%{opacity:0}11.99%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1198_3167{opacity:0;animation:s1198_3167 30s linear infinite}
+@keyframes s1213_3167{0%,12.13%{opacity:0}12.14%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1213_3167{opacity:0;animation:s1213_3167 30s linear infinite}
+@keyframes s1228_3167{0%,12.28%{opacity:0}12.29%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1228_3167{opacity:0;animation:s1228_3167 30s linear infinite}
+@keyframes s1243_3167{0%,12.43%{opacity:0}12.44%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1243_3167{opacity:0;animation:s1243_3167 30s linear infinite}
+@keyframes s1258_3167{0%,12.58%{opacity:0}12.59%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1258_3167{opacity:0;animation:s1258_3167 30s linear infinite}
+@keyframes s1273_3167{0%,12.73%{opacity:0}12.74%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1273_3167{opacity:0;animation:s1273_3167 30s linear infinite}
+@keyframes s1288_3167{0%,12.88%{opacity:0}12.89%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1288_3167{opacity:0;animation:s1288_3167 30s linear infinite}
+@keyframes s1303_3167{0%,13.03%{opacity:0}13.04%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1303_3167{opacity:0;animation:s1303_3167 30s linear infinite}
+@keyframes s1318_3167{0%,13.18%{opacity:0}13.19%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1318_3167{opacity:0;animation:s1318_3167 30s linear infinite}
+@keyframes s1333_3167{0%,13.33%{opacity:0}13.34%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1333_3167{opacity:0;animation:s1333_3167 30s linear infinite}
 @keyframes s133_3167{0%,1.33%{opacity:0}1.34%,31.67%{opacity:1}31.68%,100%{opacity:0}}
 .s133_3167{opacity:0;animation:s133_3167 30s linear infinite}
-@keyframes s1340_3167{0%,13.40%{opacity:0}13.41%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1340_3167{opacity:0;animation:s1340_3167 30s linear infinite}
-@keyframes s1355_3167{0%,13.55%{opacity:0}13.56%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1355_3167{opacity:0;animation:s1355_3167 30s linear infinite}
-@keyframes s1370_3167{0%,13.70%{opacity:0}13.71%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1370_3167{opacity:0;animation:s1370_3167 30s linear infinite}
-@keyframes s1385_3167{0%,13.85%{opacity:0}13.86%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1385_3167{opacity:0;animation:s1385_3167 30s linear infinite}
-@keyframes s1400_3167{0%,14.00%{opacity:0}14.01%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1400_3167{opacity:0;animation:s1400_3167 30s linear infinite}
-@keyframes s1415_3167{0%,14.15%{opacity:0}14.16%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1415_3167{opacity:0;animation:s1415_3167 30s linear infinite}
-@keyframes s1430_3167{0%,14.30%{opacity:0}14.31%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1430_3167{opacity:0;animation:s1430_3167 30s linear infinite}
-@keyframes s1445_3167{0%,14.45%{opacity:0}14.46%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1445_3167{opacity:0;animation:s1445_3167 30s linear infinite}
-@keyframes s1460_3167{0%,14.60%{opacity:0}14.61%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1460_3167{opacity:0;animation:s1460_3167 30s linear infinite}
-@keyframes s1475_3167{0%,14.75%{opacity:0}14.76%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1475_3167{opacity:0;animation:s1475_3167 30s linear infinite}
-@keyframes s1490_3167{0%,14.90%{opacity:0}14.91%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1490_3167{opacity:0;animation:s1490_3167 30s linear infinite}
-@keyframes s1505_3167{0%,15.05%{opacity:0}15.06%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1505_3167{opacity:0;animation:s1505_3167 30s linear infinite}
-@keyframes s1520_3167{0%,15.20%{opacity:0}15.21%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1520_3167{opacity:0;animation:s1520_3167 30s linear infinite}
-@keyframes s1535_3167{0%,15.35%{opacity:0}15.36%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1535_3167{opacity:0;animation:s1535_3167 30s linear infinite}
-@keyframes s1550_3167{0%,15.50%{opacity:0}15.51%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1550_3167{opacity:0;animation:s1550_3167 30s linear infinite}
-@keyframes s1565_3167{0%,15.65%{opacity:0}15.66%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1565_3167{opacity:0;animation:s1565_3167 30s linear infinite}
-@keyframes s1580_3167{0%,15.80%{opacity:0}15.81%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1580_3167{opacity:0;animation:s1580_3167 30s linear infinite}
-@keyframes s1595_3167{0%,15.95%{opacity:0}15.96%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1595_3167{opacity:0;animation:s1595_3167 30s linear infinite}
-@keyframes s1610_3167{0%,16.10%{opacity:0}16.11%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1610_3167{opacity:0;animation:s1610_3167 30s linear infinite}
-@keyframes s1791_3167{0%,17.91%{opacity:0}17.92%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1791_3167{opacity:0;animation:s1791_3167 30s linear infinite}
-@keyframes s1831_3167{0%,18.31%{opacity:0}18.32%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1831_3167{opacity:0;animation:s1831_3167 30s linear infinite}
-@keyframes s1871_3167{0%,18.71%{opacity:0}18.72%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1871_3167{opacity:0;animation:s1871_3167 30s linear infinite}
-@keyframes s1911_3167{0%,19.11%{opacity:0}19.12%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1911_3167{opacity:0;animation:s1911_3167 30s linear infinite}
-@keyframes s1951_3167{0%,19.51%{opacity:0}19.52%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1951_3167{opacity:0;animation:s1951_3167 30s linear infinite}
-@keyframes s1991_3167{0%,19.91%{opacity:0}19.92%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s1991_3167{opacity:0;animation:s1991_3167 30s linear infinite}
+@keyframes s1348_3167{0%,13.48%{opacity:0}13.49%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1348_3167{opacity:0;animation:s1348_3167 30s linear infinite}
+@keyframes s1363_3167{0%,13.63%{opacity:0}13.64%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1363_3167{opacity:0;animation:s1363_3167 30s linear infinite}
+@keyframes s1378_3167{0%,13.78%{opacity:0}13.79%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1378_3167{opacity:0;animation:s1378_3167 30s linear infinite}
+@keyframes s1393_3167{0%,13.93%{opacity:0}13.94%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1393_3167{opacity:0;animation:s1393_3167 30s linear infinite}
+@keyframes s1408_3167{0%,14.08%{opacity:0}14.09%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1408_3167{opacity:0;animation:s1408_3167 30s linear infinite}
+@keyframes s1423_3167{0%,14.23%{opacity:0}14.24%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1423_3167{opacity:0;animation:s1423_3167 30s linear infinite}
+@keyframes s1438_3167{0%,14.38%{opacity:0}14.39%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1438_3167{opacity:0;animation:s1438_3167 30s linear infinite}
+@keyframes s1453_3167{0%,14.53%{opacity:0}14.54%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1453_3167{opacity:0;animation:s1453_3167 30s linear infinite}
+@keyframes s1468_3167{0%,14.68%{opacity:0}14.69%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1468_3167{opacity:0;animation:s1468_3167 30s linear infinite}
+@keyframes s1483_3167{0%,14.83%{opacity:0}14.84%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1483_3167{opacity:0;animation:s1483_3167 30s linear infinite}
+@keyframes s1498_3167{0%,14.98%{opacity:0}14.99%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1498_3167{opacity:0;animation:s1498_3167 30s linear infinite}
+@keyframes s1679_3167{0%,16.79%{opacity:0}16.80%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1679_3167{opacity:0;animation:s1679_3167 30s linear infinite}
+@keyframes s1719_3167{0%,17.19%{opacity:0}17.20%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1719_3167{opacity:0;animation:s1719_3167 30s linear infinite}
+@keyframes s1759_3167{0%,17.59%{opacity:0}17.60%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1759_3167{opacity:0;animation:s1759_3167 30s linear infinite}
+@keyframes s1799_3167{0%,17.99%{opacity:0}18.00%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1799_3167{opacity:0;animation:s1799_3167 30s linear infinite}
+@keyframes s1839_3167{0%,18.39%{opacity:0}18.40%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1839_3167{opacity:0;animation:s1839_3167 30s linear infinite}
+@keyframes s1879_3167{0%,18.79%{opacity:0}18.80%,31.67%{opacity:1}31.68%,100%{opacity:0}}
+.s1879_3167{opacity:0;animation:s1879_3167 30s linear infinite}
 @keyframes s233_3167{0%,2.33%{opacity:0}2.34%,31.67%{opacity:1}31.68%,100%{opacity:0}}
 .s233_3167{opacity:0;animation:s233_3167 30s linear infinite}
 @keyframes s243_3167{0%,2.43%{opacity:0}2.44%,31.67%{opacity:1}31.68%,100%{opacity:0}}
@@ -637,8 +637,6 @@
 .s8475_10000{opacity:0;animation:s8475_10000 30s linear infinite}
 @keyframes s8490_10000{0%,84.90%{opacity:0}84.91%,100.00%{opacity:1}}
 .s8490_10000{opacity:0;animation:s8490_10000 30s linear infinite}
-@keyframes s849_3167{0%,8.49%{opacity:0}8.50%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s849_3167{opacity:0;animation:s849_3167 30s linear infinite}
 @keyframes s8505_10000{0%,85.05%{opacity:0}85.06%,100.00%{opacity:1}}
 .s8505_10000{opacity:0;animation:s8505_10000 30s linear infinite}
 @keyframes s8520_10000{0%,85.20%{opacity:0}85.21%,100.00%{opacity:1}}
@@ -653,52 +651,30 @@
 .s8580_10000{opacity:0;animation:s8580_10000 30s linear infinite}
 @keyframes s8595_10000{0%,85.95%{opacity:0}85.96%,100.00%{opacity:1}}
 .s8595_10000{opacity:0;animation:s8595_10000 30s linear infinite}
-@keyframes s859_3167{0%,8.59%{opacity:0}8.60%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s859_3167{opacity:0;animation:s859_3167 30s linear infinite}
 @keyframes s8610_10000{0%,86.10%{opacity:0}86.11%,100.00%{opacity:1}}
 .s8610_10000{opacity:0;animation:s8610_10000 30s linear infinite}
-@keyframes s868_3167{0%,8.68%{opacity:0}8.69%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s868_3167{opacity:0;animation:s868_3167 30s linear infinite}
-@keyframes s877_3167{0%,8.77%{opacity:0}8.78%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s877_3167{opacity:0;animation:s877_3167 30s linear infinite}
 @keyframes s8792_10000{0%,87.92%{opacity:0}87.93%,100.00%{opacity:1}}
 .s8792_10000{opacity:0;animation:s8792_10000 30s linear infinite}
 @keyframes s8832_10000{0%,88.32%{opacity:0}88.33%,100.00%{opacity:1}}
 .s8832_10000{opacity:0;animation:s8832_10000 30s linear infinite}
 @keyframes s8872_10000{0%,88.72%{opacity:0}88.73%,100.00%{opacity:1}}
 .s8872_10000{opacity:0;animation:s8872_10000 30s linear infinite}
-@keyframes s887_3167{0%,8.87%{opacity:0}8.88%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s887_3167{opacity:0;animation:s887_3167 30s linear infinite}
 @keyframes s8912_10000{0%,89.12%{opacity:0}89.13%,100.00%{opacity:1}}
 .s8912_10000{opacity:0;animation:s8912_10000 30s linear infinite}
 @keyframes s8952_10000{0%,89.52%{opacity:0}89.53%,100.00%{opacity:1}}
 .s8952_10000{opacity:0;animation:s8952_10000 30s linear infinite}
-@keyframes s896_3167{0%,8.96%{opacity:0}8.97%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s896_3167{opacity:0;animation:s896_3167 30s linear infinite}
 @keyframes s8992_10000{0%,89.92%{opacity:0}89.93%,100.00%{opacity:1}}
 .s8992_10000{opacity:0;animation:s8992_10000 30s linear infinite}
 @keyframes s9032_10000{0%,90.32%{opacity:0}90.33%,100.00%{opacity:1}}
 .s9032_10000{opacity:0;animation:s9032_10000 30s linear infinite}
-@keyframes s905_3167{0%,9.05%{opacity:0}9.06%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s905_3167{opacity:0;animation:s905_3167 30s linear infinite}
 @keyframes s9072_10000{0%,90.72%{opacity:0}90.73%,100.00%{opacity:1}}
 .s9072_10000{opacity:0;animation:s9072_10000 30s linear infinite}
 @keyframes s9112_10000{0%,91.12%{opacity:0}91.13%,100.00%{opacity:1}}
 .s9112_10000{opacity:0;animation:s9112_10000 30s linear infinite}
 @keyframes s9152_10000{0%,91.52%{opacity:0}91.53%,100.00%{opacity:1}}
 .s9152_10000{opacity:0;animation:s9152_10000 30s linear infinite}
-@keyframes s915_3167{0%,9.15%{opacity:0}9.16%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s915_3167{opacity:0;animation:s915_3167 30s linear infinite}
 @keyframes s9192_10000{0%,91.92%{opacity:0}91.93%,100.00%{opacity:1}}
-.s9192_10000{opacity:0;animation:s9192_10000 30s linear infinite}
-@keyframes s924_3167{0%,9.24%{opacity:0}9.25%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s924_3167{opacity:0;animation:s924_3167 30s linear infinite}
-@keyframes s933_3167{0%,9.33%{opacity:0}9.34%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s933_3167{opacity:0;animation:s933_3167 30s linear infinite}
-@keyframes s943_3167{0%,9.43%{opacity:0}9.44%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s943_3167{opacity:0;animation:s943_3167 30s linear infinite}
-@keyframes s952_3167{0%,9.52%{opacity:0}9.53%,31.67%{opacity:1}31.68%,100%{opacity:0}}
-.s952_3167{opacity:0;animation:s952_3167 30s linear infinite}</style>
+.s9192_10000{opacity:0;animation:s9192_10000 30s linear infinite}</style>
 <rect x="0.5" y="0.5" width="759" height="396" rx="8" fill="#17222c" stroke="#2f4355"/>
 <circle cx="20" cy="17" r="5.5" fill="#ff5f57" opacity="0.85"/>
 <circle cx="38" cy="17" r="5.5" fill="#febc2e" opacity="0.85"/>
@@ -729,77 +705,66 @@
 <text y="65.0" class="s495_3167"><tspan x="254.9" fill="#a9c4dc">e</tspan></text>
 <text y="65.0" class="s504_3167"><tspan x="262.7" fill="#a9c4dc">s</tspan></text>
 <text y="65.0" class="s513_3167"><tspan x="270.6" fill="#a9c4dc">t</tspan></text>
-<text y="65.0" class="s523_3167"><tspan x="278.4" fill="#a9c4dc">,</tspan></text>
-<text y="65.0" class="s541_3167"><tspan x="294.1" fill="#a9c4dc">s</tspan></text>
+<text y="65.0" class="s523_3167"><tspan x="278.4" fill="#a9c4dc">.</tspan></text>
+<text y="65.0" class="s541_3167"><tspan x="294.1" fill="#a9c4dc">F</tspan></text>
 <text y="65.0" class="s551_3167"><tspan x="301.9" fill="#a9c4dc">i</tspan></text>
-<text y="65.0" class="s560_3167"><tspan x="309.7" fill="#a9c4dc">g</tspan></text>
-<text y="65.0" class="s569_3167"><tspan x="317.5" fill="#a9c4dc">n</tspan></text>
-<text y="65.0" class="s579_3167"><tspan x="325.4" fill="#a9c4dc">u</tspan></text>
-<text y="65.0" class="s588_3167"><tspan x="333.2" fill="#a9c4dc">p</tspan></text>
-<text y="65.0" class="s597_3167"><tspan x="341.0" fill="#a9c4dc">.</tspan></text>
-<text y="65.0" class="s607_3167"><tspan x="348.9" fill="#a9c4dc">y</tspan></text>
-<text y="65.0" class="s616_3167"><tspan x="356.7" fill="#a9c4dc">m</tspan></text>
-<text y="65.0" class="s625_3167"><tspan x="364.5" fill="#a9c4dc">l</tspan></text>
-<text y="65.0" class="s635_3167"><tspan x="372.4" fill="#a9c4dc">.</tspan></text>
-<text y="65.0" class="s653_3167"><tspan x="388.0" fill="#a9c4dc">F</tspan></text>
-<text y="65.0" class="s663_3167"><tspan x="395.8" fill="#a9c4dc">i</tspan></text>
-<text y="65.0" class="s672_3167"><tspan x="403.7" fill="#a9c4dc">n</tspan></text>
-<text y="65.0" class="s681_3167"><tspan x="411.5" fill="#a9c4dc">d</tspan></text>
-<text y="65.0" class="s700_3167"><tspan x="427.2" fill="#a9c4dc">i</tspan></text>
-<text y="65.0" class="s709_3167"><tspan x="435.0" fill="#a9c4dc">t</tspan></text>
-<text y="65.0" class="s719_3167"><tspan x="442.8" fill="#a9c4dc">s</tspan></text>
-<text y="65.0" class="s737_3167"><tspan x="458.5" fill="#a9c4dc">m</tspan></text>
-<text y="65.0" class="s747_3167"><tspan x="466.3" fill="#a9c4dc">i</tspan></text>
-<text y="65.0" class="s756_3167"><tspan x="474.1" fill="#a9c4dc">s</tspan></text>
-<text y="65.0" class="s765_3167"><tspan x="482.0" fill="#a9c4dc">t</tspan></text>
-<text y="65.0" class="s775_3167"><tspan x="489.8" fill="#a9c4dc">a</tspan></text>
-<text y="65.0" class="s784_3167"><tspan x="497.6" fill="#a9c4dc">k</tspan></text>
-<text y="65.0" class="s793_3167"><tspan x="505.5" fill="#a9c4dc">e</tspan></text>
-<text y="65.0" class="s803_3167"><tspan x="513.3" fill="#a9c4dc">s</tspan></text>
-<text y="65.0" class="s821_3167"><tspan x="529.0" fill="#a9c4dc">b</tspan></text>
-<text y="65.0" class="s831_3167"><tspan x="536.8" fill="#a9c4dc">e</tspan></text>
-<text y="65.0" class="s840_3167"><tspan x="544.6" fill="#a9c4dc">f</tspan></text>
-<text y="65.0" class="s849_3167"><tspan x="552.4" fill="#a9c4dc">o</tspan></text>
-<text y="65.0" class="s859_3167"><tspan x="560.3" fill="#a9c4dc">r</tspan></text>
-<text y="65.0" class="s868_3167"><tspan x="568.1" fill="#a9c4dc">e</tspan></text>
-<text y="65.0" class="s887_3167"><tspan x="583.8" fill="#a9c4dc">i</tspan></text>
-<text y="65.0" class="s896_3167"><tspan x="591.6" fill="#a9c4dc">t</tspan></text>
-<text y="65.0" class="s915_3167"><tspan x="607.2" fill="#a9c4dc">r</tspan></text>
-<text y="65.0" class="s924_3167"><tspan x="615.1" fill="#a9c4dc">u</tspan></text>
-<text y="65.0" class="s933_3167"><tspan x="622.9" fill="#a9c4dc">n</tspan></text>
-<text y="65.0" class="s943_3167"><tspan x="630.7" fill="#a9c4dc">s</tspan></text>
-<text y="65.0" class="s952_3167"><tspan x="638.6" fill="#a9c4dc">.</tspan></text>
-<text y="84.0" class="s1195_3167"><tspan x="20.0" fill="#7f95a8">$</tspan></text>
-<text y="84.0" class="s1295_3167"><tspan x="35.7" fill="#d8e6f3" font-weight="700">p</tspan></text>
-<text y="84.0" class="s1310_3167"><tspan x="43.5" fill="#d8e6f3" font-weight="700">r</tspan></text>
-<text y="84.0" class="s1325_3167"><tspan x="51.3" fill="#d8e6f3" font-weight="700">o</tspan></text>
-<text y="84.0" class="s1340_3167"><tspan x="59.1" fill="#d8e6f3" font-weight="700">b</tspan></text>
-<text y="84.0" class="s1355_3167"><tspan x="67.0" fill="#d8e6f3" font-weight="700">e</tspan></text>
-<text y="84.0" class="s1385_3167"><tspan x="82.6" fill="#d8e6f3" font-weight="700">c</tspan></text>
-<text y="84.0" class="s1400_3167"><tspan x="90.5" fill="#d8e6f3" font-weight="700">h</tspan></text>
-<text y="84.0" class="s1415_3167"><tspan x="98.3" fill="#d8e6f3" font-weight="700">e</tspan></text>
-<text y="84.0" class="s1430_3167"><tspan x="106.1" fill="#d8e6f3" font-weight="700">c</tspan></text>
-<text y="84.0" class="s1445_3167"><tspan x="114.0" fill="#d8e6f3" font-weight="700">k</tspan></text>
-<text y="84.0" class="s1475_3167"><tspan x="129.6" fill="#d8e6f3" font-weight="700">s</tspan></text>
-<text y="84.0" class="s1490_3167"><tspan x="137.4" fill="#d8e6f3" font-weight="700">i</tspan></text>
-<text y="84.0" class="s1505_3167"><tspan x="145.3" fill="#d8e6f3" font-weight="700">g</tspan></text>
-<text y="84.0" class="s1520_3167"><tspan x="153.1" fill="#d8e6f3" font-weight="700">n</tspan></text>
-<text y="84.0" class="s1535_3167"><tspan x="160.9" fill="#d8e6f3" font-weight="700">u</tspan></text>
-<text y="84.0" class="s1550_3167"><tspan x="168.8" fill="#d8e6f3" font-weight="700">p</tspan></text>
-<text y="84.0" class="s1565_3167"><tspan x="176.6" fill="#d8e6f3" font-weight="700">.</tspan></text>
-<text y="84.0" class="s1580_3167"><tspan x="184.4" fill="#d8e6f3" font-weight="700">y</tspan></text>
-<text y="84.0" class="s1595_3167"><tspan x="192.3" fill="#d8e6f3" font-weight="700">m</tspan></text>
-<text y="84.0" class="s1610_3167"><tspan x="200.1" fill="#d8e6f3" font-weight="700">l</tspan></text>
-<text y="103.0" class="s1791_3167"><tspan x="20.0">signup.yml:14:</tspan><tspan x="137.4" fill="#e3b341" font-weight="700">warning</tspan><tspan x="192.3">:</tspan><tspan x="207.9">job</tspan><tspan x="239.2">0</tspan><tspan x="254.9">&quot;Create</tspan><tspan x="317.5">account&quot;,</tspan><tspan x="395.8">step</tspan><tspan x="435.0">0</tspan><tspan x="450.6">&quot;Post</tspan><tspan x="497.6">the</tspan><tspan x="529.0">form&quot;:</tspan><tspan x="583.8">nothing</tspan><tspan x="646.4">checks</tspan><tspan x="701.2">this</tspan></text>
-<text y="122.0" class="s1791_3167"><tspan x="20.0">step:</tspan><tspan x="67.0">it</tspan><tspan x="90.5">has</tspan><tspan x="121.8">no</tspan><tspan x="145.3">test</tspan></text>
-<text y="141.0" class="s1831_3167"><tspan x="20.0">signup.yml:19:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">0</tspan><tspan x="239.2">&quot;Create</tspan><tspan x="301.9">account&quot;,</tspan><tspan x="380.2">step</tspan><tspan x="419.3">0</tspan><tspan x="435.0">&quot;Post</tspan><tspan x="482.0">the</tspan><tspan x="513.3">form&quot;:</tspan><tspan x="568.1">with:</tspan><tspan x="615.1">unknown</tspan><tspan x="677.7">key</tspan><tspan x="709.0">&quot;bdo</tspan></text>
-<text y="160.0" class="s1831_3167"><tspan x="20.0">y&quot;</tspan><tspan x="43.5">for</tspan><tspan x="74.8">the</tspan><tspan x="106.1">http</tspan><tspan x="145.3">action;</tspan><tspan x="207.9">did</tspan><tspan x="239.2">you</tspan><tspan x="270.6">mean</tspan><tspan x="309.7">&quot;body&quot;?</tspan></text>
-<text y="179.0" class="s1871_3167"><tspan x="20.0">signup.yml:21:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">0</tspan><tspan x="239.2">&quot;Create</tspan><tspan x="301.9">account&quot;,</tspan><tspan x="380.2">step</tspan><tspan x="419.3">0</tspan><tspan x="435.0">&quot;Post</tspan><tspan x="482.0">the</tspan><tspan x="513.3">form&quot;:</tspan><tspan x="568.1">unknown</tspan><tspan x="630.7">key</tspan><tspan x="662.1">&quot;tset&quot;;</tspan><tspan x="724.7">di</tspan></text>
-<text y="198.0" class="s1871_3167"><tspan x="20.0">d</tspan><tspan x="35.7">you</tspan><tspan x="67.0">mean</tspan><tspan x="106.1">&quot;test&quot;?</tspan></text>
-<text y="217.0" class="s1911_3167"><tspan x="20.0">signup.yml:54:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">2</tspan><tspan x="239.2">&quot;Activate&quot;,</tspan><tspan x="333.2">step</tspan><tspan x="372.4">1</tspan><tspan x="388.0">&quot;Row</tspan><tspan x="427.2">is</tspan><tspan x="450.6">active&quot;:</tspan><tspan x="521.1">with:</tspan><tspan x="568.1">outputs.create.userid</tspan></text>
-<text y="236.0" class="s1911_3167"><tspan x="20.0">is</tspan><tspan x="43.5">not</tspan><tspan x="74.8">published:</tspan><tspan x="160.9">step</tspan><tspan x="200.1">&quot;create&quot;</tspan><tspan x="270.6">publishes</tspan><tspan x="348.9">user_id</tspan></text>
-<text y="255.0" class="s1951_3167"></text>
-<text y="274.0" class="s1991_3167"><tspan x="20.0">3</tspan><tspan x="35.7">errors,</tspan><tspan x="98.3">1</tspan><tspan x="114.0">warning</tspan></text>
+<text y="65.0" class="s560_3167"><tspan x="309.7" fill="#a9c4dc">n</tspan></text>
+<text y="65.0" class="s569_3167"><tspan x="317.5" fill="#a9c4dc">d</tspan></text>
+<text y="65.0" class="s588_3167"><tspan x="333.2" fill="#a9c4dc">i</tspan></text>
+<text y="65.0" class="s597_3167"><tspan x="341.0" fill="#a9c4dc">t</tspan></text>
+<text y="65.0" class="s607_3167"><tspan x="348.9" fill="#a9c4dc">s</tspan></text>
+<text y="65.0" class="s625_3167"><tspan x="364.5" fill="#a9c4dc">m</tspan></text>
+<text y="65.0" class="s635_3167"><tspan x="372.4" fill="#a9c4dc">i</tspan></text>
+<text y="65.0" class="s644_3167"><tspan x="380.2" fill="#a9c4dc">s</tspan></text>
+<text y="65.0" class="s653_3167"><tspan x="388.0" fill="#a9c4dc">t</tspan></text>
+<text y="65.0" class="s663_3167"><tspan x="395.8" fill="#a9c4dc">a</tspan></text>
+<text y="65.0" class="s672_3167"><tspan x="403.7" fill="#a9c4dc">k</tspan></text>
+<text y="65.0" class="s681_3167"><tspan x="411.5" fill="#a9c4dc">e</tspan></text>
+<text y="65.0" class="s691_3167"><tspan x="419.3" fill="#a9c4dc">s</tspan></text>
+<text y="65.0" class="s709_3167"><tspan x="435.0" fill="#a9c4dc">b</tspan></text>
+<text y="65.0" class="s719_3167"><tspan x="442.8" fill="#a9c4dc">e</tspan></text>
+<text y="65.0" class="s728_3167"><tspan x="450.6" fill="#a9c4dc">f</tspan></text>
+<text y="65.0" class="s737_3167"><tspan x="458.5" fill="#a9c4dc">o</tspan></text>
+<text y="65.0" class="s747_3167"><tspan x="466.3" fill="#a9c4dc">r</tspan></text>
+<text y="65.0" class="s756_3167"><tspan x="474.1" fill="#a9c4dc">e</tspan></text>
+<text y="65.0" class="s775_3167"><tspan x="489.8" fill="#a9c4dc">i</tspan></text>
+<text y="65.0" class="s784_3167"><tspan x="497.6" fill="#a9c4dc">t</tspan></text>
+<text y="65.0" class="s803_3167"><tspan x="513.3" fill="#a9c4dc">r</tspan></text>
+<text y="65.0" class="s812_3167"><tspan x="521.1" fill="#a9c4dc">u</tspan></text>
+<text y="65.0" class="s821_3167"><tspan x="529.0" fill="#a9c4dc">n</tspan></text>
+<text y="65.0" class="s831_3167"><tspan x="536.8" fill="#a9c4dc">s</tspan></text>
+<text y="65.0" class="s840_3167"><tspan x="544.6" fill="#a9c4dc">.</tspan></text>
+<text y="84.0" class="s1083_3167"><tspan x="20.0" fill="#7f95a8">$</tspan></text>
+<text y="84.0" class="s1183_3167"><tspan x="35.7" fill="#d8e6f3" font-weight="700">p</tspan></text>
+<text y="84.0" class="s1198_3167"><tspan x="43.5" fill="#d8e6f3" font-weight="700">r</tspan></text>
+<text y="84.0" class="s1213_3167"><tspan x="51.3" fill="#d8e6f3" font-weight="700">o</tspan></text>
+<text y="84.0" class="s1228_3167"><tspan x="59.1" fill="#d8e6f3" font-weight="700">b</tspan></text>
+<text y="84.0" class="s1243_3167"><tspan x="67.0" fill="#d8e6f3" font-weight="700">e</tspan></text>
+<text y="84.0" class="s1273_3167"><tspan x="82.6" fill="#d8e6f3" font-weight="700">c</tspan></text>
+<text y="84.0" class="s1288_3167"><tspan x="90.5" fill="#d8e6f3" font-weight="700">h</tspan></text>
+<text y="84.0" class="s1303_3167"><tspan x="98.3" fill="#d8e6f3" font-weight="700">e</tspan></text>
+<text y="84.0" class="s1318_3167"><tspan x="106.1" fill="#d8e6f3" font-weight="700">c</tspan></text>
+<text y="84.0" class="s1333_3167"><tspan x="114.0" fill="#d8e6f3" font-weight="700">k</tspan></text>
+<text y="84.0" class="s1363_3167"><tspan x="129.6" fill="#d8e6f3" font-weight="700">s</tspan></text>
+<text y="84.0" class="s1378_3167"><tspan x="137.4" fill="#d8e6f3" font-weight="700">i</tspan></text>
+<text y="84.0" class="s1393_3167"><tspan x="145.3" fill="#d8e6f3" font-weight="700">g</tspan></text>
+<text y="84.0" class="s1408_3167"><tspan x="153.1" fill="#d8e6f3" font-weight="700">n</tspan></text>
+<text y="84.0" class="s1423_3167"><tspan x="160.9" fill="#d8e6f3" font-weight="700">u</tspan></text>
+<text y="84.0" class="s1438_3167"><tspan x="168.8" fill="#d8e6f3" font-weight="700">p</tspan></text>
+<text y="84.0" class="s1453_3167"><tspan x="176.6" fill="#d8e6f3" font-weight="700">.</tspan></text>
+<text y="84.0" class="s1468_3167"><tspan x="184.4" fill="#d8e6f3" font-weight="700">y</tspan></text>
+<text y="84.0" class="s1483_3167"><tspan x="192.3" fill="#d8e6f3" font-weight="700">m</tspan></text>
+<text y="84.0" class="s1498_3167"><tspan x="200.1" fill="#d8e6f3" font-weight="700">l</tspan></text>
+<text y="103.0" class="s1679_3167"><tspan x="20.0">signup.yml:14:</tspan><tspan x="137.4" fill="#e3b341" font-weight="700">warning</tspan><tspan x="192.3">:</tspan><tspan x="207.9">job</tspan><tspan x="239.2">0</tspan><tspan x="254.9">&quot;Create</tspan><tspan x="317.5">account&quot;,</tspan><tspan x="395.8">step</tspan><tspan x="435.0">0</tspan><tspan x="450.6">&quot;Post</tspan><tspan x="497.6">the</tspan><tspan x="529.0">form&quot;:</tspan><tspan x="583.8">nothing</tspan><tspan x="646.4">checks</tspan><tspan x="701.2">this</tspan></text>
+<text y="122.0" class="s1679_3167"><tspan x="20.0">step:</tspan><tspan x="67.0">it</tspan><tspan x="90.5">has</tspan><tspan x="121.8">no</tspan><tspan x="145.3">test</tspan></text>
+<text y="141.0" class="s1719_3167"><tspan x="20.0">signup.yml:19:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">0</tspan><tspan x="239.2">&quot;Create</tspan><tspan x="301.9">account&quot;,</tspan><tspan x="380.2">step</tspan><tspan x="419.3">0</tspan><tspan x="435.0">&quot;Post</tspan><tspan x="482.0">the</tspan><tspan x="513.3">form&quot;:</tspan><tspan x="568.1">with:</tspan><tspan x="615.1">unknown</tspan><tspan x="677.7">key</tspan><tspan x="709.0">&quot;bdo</tspan></text>
+<text y="160.0" class="s1719_3167"><tspan x="20.0">y&quot;</tspan><tspan x="43.5">for</tspan><tspan x="74.8">the</tspan><tspan x="106.1">http</tspan><tspan x="145.3">action;</tspan><tspan x="207.9">did</tspan><tspan x="239.2">you</tspan><tspan x="270.6">mean</tspan><tspan x="309.7">&quot;body&quot;?</tspan></text>
+<text y="179.0" class="s1759_3167"><tspan x="20.0">signup.yml:21:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">0</tspan><tspan x="239.2">&quot;Create</tspan><tspan x="301.9">account&quot;,</tspan><tspan x="380.2">step</tspan><tspan x="419.3">0</tspan><tspan x="435.0">&quot;Post</tspan><tspan x="482.0">the</tspan><tspan x="513.3">form&quot;:</tspan><tspan x="568.1">unknown</tspan><tspan x="630.7">key</tspan><tspan x="662.1">&quot;tset&quot;;</tspan><tspan x="724.7">di</tspan></text>
+<text y="198.0" class="s1759_3167"><tspan x="20.0">d</tspan><tspan x="35.7">you</tspan><tspan x="67.0">mean</tspan><tspan x="106.1">&quot;test&quot;?</tspan></text>
+<text y="217.0" class="s1799_3167"><tspan x="20.0">signup.yml:54:</tspan><tspan x="137.4" fill="#ff7b72" font-weight="700">error</tspan><tspan x="176.6">:</tspan><tspan x="192.3">job</tspan><tspan x="223.6">2</tspan><tspan x="239.2">&quot;Activate&quot;,</tspan><tspan x="333.2">step</tspan><tspan x="372.4">1</tspan><tspan x="388.0">&quot;Row</tspan><tspan x="427.2">is</tspan><tspan x="450.6">active&quot;:</tspan><tspan x="521.1">with:</tspan><tspan x="568.1">outputs.create.userid</tspan></text>
+<text y="236.0" class="s1799_3167"><tspan x="20.0">is</tspan><tspan x="43.5">not</tspan><tspan x="74.8">published:</tspan><tspan x="160.9">step</tspan><tspan x="200.1">&quot;create&quot;</tspan><tspan x="270.6">publishes</tspan><tspan x="348.9">user_id</tspan></text>
+<text y="255.0" class="s1839_3167"></text>
+<text y="274.0" class="s1879_3167"><tspan x="20.0">3</tspan><tspan x="35.7">errors,</tspan><tspan x="98.3">1</tspan><tspan x="114.0">warning</tspan></text>
 <text y="65.0" class="s3300_6833"><tspan x="20.0" fill="#7f95a8">#</tspan></text>
 <text y="65.0" class="s3400_6833"><tspan x="35.7" fill="#a9c4dc">F</tspan></text>
 <text y="65.0" class="s3409_6833"><tspan x="43.5" fill="#a9c4dc">i</tspan></text>
@@ -898,7 +863,7 @@
 <text y="179.0" class="s5673_6833"><tspan x="20.0" fill="#56d364">⏺</tspan><tspan x="35.7">Create</tspan><tspan x="90.5">account</tspan><tspan x="153.1">(Completed</tspan><tspan x="239.2">in</tspan><tspan x="262.7">0.03s)</tspan></text>
 <text y="198.0" class="s5713_6833"><tspan x="35.7">⎿</tspan><tspan x="59.1" fill="#7f95a8">0.</tspan><tspan x="82.6" fill="#56d364">✓</tspan><tspan x="106.1">Post</tspan><tspan x="145.3">the</tspan><tspan x="176.6">form</tspan></text>
 <text y="217.0" class="s5753_6833"></text>
-<text y="236.0" class="s5793_6833"><tspan x="20.0" fill="#56d364">⏺</tspan><tspan x="35.7">Database</tspan><tspan x="106.1">(Completed</tspan><tspan x="192.3">in</tspan><tspan x="215.8">0.02s)</tspan></text>
+<text y="236.0" class="s5793_6833"><tspan x="20.0" fill="#56d364">⏺</tspan><tspan x="35.7">Database</tspan><tspan x="106.1">(Completed</tspan><tspan x="192.3">in</tspan><tspan x="215.8">0.03s)</tspan></text>
 <text y="255.0" class="s5833_6833"><tspan x="35.7">⎿</tspan><tspan x="59.1" fill="#7f95a8">0.</tspan><tspan x="82.6" fill="#56d364">✓</tspan><tspan x="106.1">Row</tspan><tspan x="137.4">is</tspan><tspan x="160.9">pending</tspan></text>
 <text y="274.0" class="s5873_6833"></text>
 <text y="293.0" class="s5913_6833"><tspan x="20.0" fill="#56d364">⏺</tspan><tspan x="35.7">Activate</tspan><tspan x="106.1">(Completed</tspan><tspan x="192.3">in</tspan><tspan x="215.8">0.05s)</tspan></text>

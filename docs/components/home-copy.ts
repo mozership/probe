@@ -198,7 +198,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
   },
   ja: {
     headline: ['AIが書いたコードに', '動く証拠を'],
-    lede: 'AIエージェントがサービスを変更したとき、その変更が動くことは、エージェント自身が書いたコードやテストとは別のもので示す必要があります。ProbeはGitHub ActionsのようなYAMLで定義したWorkflowを実行し、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作して、結果を検証します。Workflowはエージェントが書き、Probeが実行前に検査し、許可していない書き込みや接続を防いで実行します。',
+    lede: 'AIエージェントがサービスを変更したとき、その変更が動くことは、AIエージェント自身が書いたコードやテストとは別のもので示す必要があります。ProbeはGitHub ActionsのようなYAMLで定義したWorkflowを実行し、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作して、結果を検証します。WorkflowはAIエージェントが書き、Probeが実行前に検査し、許可していない書き込みや接続を防いで実行します。',
     primaryCta: { label: 'Probeをインストール', href: '/ja/guide/introduction/installation' },
     secondaryCta: { label: 'クイックスタートを読む', href: '/ja/guide/introduction/quickstart' },
     heroWorkflowLabel: 'signup-flow.yml',
@@ -276,8 +276,8 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       ],
     },
     agents: {
-      heading: 'コーディングエージェントのために',
-      body: 'エージェントがコードとテストを書くなら、その両方を確かめる仕組みが要ります。Probeは動いているバージョンの使い方をエージェントに教え、Workflowの誤りを実行前に見つけ、レスポンスの正しさをエージェント自身のtestではなく仕様で判定し、書き込みや許可していないホストへの接続を送信前に拒否します。',
+      heading: 'AIエージェントのために',
+      body: 'AIエージェントがコードとテストを書くなら、その両方を確かめる仕組みが要ります。Probeは動いているバージョンの使い方をAIエージェントに教え、Workflowの誤りを実行前に見つけ、レスポンスの正しさをAIエージェント自身のtestではなく仕様で判定し、書き込みや許可していないホストへの接続を送信前に拒否します。',
       workflowLabel: 'agent-workflow.yml',
       reportLabel: '$ probe check agent-workflow.yml',
       checkNote: 'probe checkはWorkflowを実行せずに読みます。Stepやwithのキーの綴りを間違えると、実行時には無視されて別の理由で通ってしまうことがあります。outputsの名前の誤りは、実行してそのStepに来るまでわかりません。ここではどれも何かを送る前に行番号つきのエラーになり、何も確かめていないStepは警告になります。',
@@ -285,13 +285,13 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         {
           name: 'skill',
           label: 'shell',
-          description: 'Workflowの書き方、実行、失敗の読み方を教えるスキルを入れます。エージェントはバイナリに組み込まれたリファレンスをprobe guideで読むので、動いているバージョンに合ったYAMLを書きます。',
+          description: 'Workflowの書き方、実行、失敗の読み方を教えるスキルを入れます。AIエージェントはバイナリに組み込まれたリファレンスをprobe guideで読むので、動いているバージョンに合ったYAMLを書きます。',
           code: 'probe skill install\nprobe guide http',
         },
         {
           name: 'openapi',
           label: 'yaml',
-          description: 'リクエストとレスポンスをOpenAPIのドキュメントと照合します。正しさを決めるのはエージェントが書いたtestではなく仕様なので、間違ったtestが間違ったレスポンスを通すことはありません。',
+          description: 'リクエストとレスポンスをOpenAPIのドキュメントと照合します。正しさを決めるのはAIエージェントが書いたtestではなく仕様なので、間違ったtestが間違ったレスポンスを通すことはありません。',
           code: 'uses: http\nwith:\n  get: /users/1\n  openapi:\n    spec: ./openapi.yml',
         },
         {
@@ -309,7 +309,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         {
           name: '--read-only',
           label: 'shell',
-          description: 'エージェントが書いたWorkflowを、書き込ませずに走らせます。読み取り以外の操作と、許可していないホストへの接続は、送る前に拒否します。',
+          description: 'AIエージェントが書いたWorkflowを、書き込ませずに走らせます。読み取り以外の操作と、許可していないホストへの接続は、送る前に拒否します。',
           code: 'probe --read-only \\\n  --allow-host api.staging.example.com \\\n  workflow.yml',
         },
         {
@@ -319,7 +319,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
           code: 'probe workflow.yml\necho $?  # 1 test, 2 workflow, 3 action',
         },
       ],
-      link: { label: 'エージェント向けにプロジェクトを設定する', href: '/ja/guide/how-tos/coding-agents' },
+      link: { label: 'AIエージェント向けにプロジェクトを設定する', href: '/ja/guide/how-tos/coding-agents' },
     },
     install: {
       heading: 'インストール',

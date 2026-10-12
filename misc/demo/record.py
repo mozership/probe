@@ -54,12 +54,12 @@ NOTE = "#a9c4dc"  # the comment that says what a scene is about
 # eye stays where the command and its output are.
 CAPTIONS = {
     "en": [
-        "An AI agent wrote this E2E test, signup.yml. Find its mistakes before it runs.",
+        "An AI agent wrote this E2E test. Find its mistakes before it runs.",
         "Fixed. The test calls the API, then queries the row the API wrote.",
         "On a system it must not change, refuse writes before they are sent.",
     ],
     "ja": [
-        "AIエージェントが書いたE2Eテスト(signup.yml)の誤りを、実行前に見つける",
+        "AIエージェントが書いたE2Eテストの誤りを、実行前に見つける",
         "直したテストは、APIを呼び、DBに書き込まれた行を問い合わせる",
         "変更されては困る環境では、書き込みを送信前に拒否する",
     ],

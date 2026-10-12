@@ -24,7 +24,7 @@
   </a>
 </p>
 
-AIエージェントがサービスを変更したとき、その変更が動くことは、エージェント自身が書いたコードやユニットテストとは別のもので示す必要があります。Probeのワークフローは、それを外側から示します。読みやすいYAMLで、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作し、ジョブを並行して実行しながら、応答を1つずつ検証します。エージェントは`probe skill`でワークフローの書き方を学び、`probe check`は実行する前に書き間違いを見つけ、`--read-only`と`--allow-host`は許可していない書き込みと接続を拒否します。Probeは単体のバイナリで、手元でも、CIでも、cronからでも同じように動き、結果は終了コードに反映されます。ドキュメント: [probe.linyo.ws/ja](https://probe.linyo.ws/ja)
+AIエージェントがサービスを変更したとき、その変更が動くことは、AIエージェント自身が書いたコードやユニットテストとは別のもので示す必要があります。Probeのワークフローは、それを外側から示します。読みやすいYAMLで、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作し、ジョブを並行して実行しながら、応答を1つずつ検証します。AIエージェントは`probe skill`でワークフローの書き方を学び、`probe check`は実行する前に書き間違いを見つけ、`--read-only`と`--allow-host`は許可していない書き込みと接続を拒否します。Probeは単体のバイナリで、手元でも、CIでも、cronからでも同じように動き、結果は終了コードに反映されます。ドキュメント: [probe.linyo.ws/ja](https://probe.linyo.ws/ja)
 
 <p align="center">
   <img src="misc/demo-ja.svg" alt="デモ: probe checkがAIエージェントの書いたE2Eテストの誤りを見つけ、直したテストがAPIを呼んで書き込まれた行を問い合わせ、--read-onlyが書き込みを拒否する">
@@ -37,7 +37,7 @@ AIエージェントがサービスを変更したとき、その変更が動く
 
 Probeは、情報工学の実験を再現できるようにするために作られました。さまざまなプロトコルを使う複雑なワークフローを、読みやすいYAMLで簡潔に書き、同じ手順で何度でも実行できます。同じワークフローは、ソフトウェアの信頼性を確かめるEnd-to-endテストにも使えます。コードを書くのが人ではなくAIエージェントになりつつある今、その重要性は増しています。
 
-- **AIコーディングへの対応**: `probe skill`は、インストールしたバージョンに合うワークフローの書き方をAIエージェントに教えます。`probe check`は、実行する前に書き間違いを見つけます。`--read-only`と`--allow-host`は、書き込みと、指定していないホストへの接続を、送る前に拒否します。そのため、エージェントが書いたワークフローを安全に実行できます。ステップは、エージェントが書いた`test`だけでなく、OpenAPIドキュメントや`.proto`ファイルの仕様とも照合できます。
+- **AIコーディングへの対応**: `probe skill`は、インストールしたバージョンに合うワークフローの書き方をAIエージェントに教えます。`probe check`は、実行する前に書き間違いを見つけます。`--read-only`と`--allow-host`は、書き込みと、指定していないホストへの接続を、送る前に拒否します。そのため、AIエージェントが書いたワークフローを安全に実行できます。ステップは、AIエージェントが書いた`test`だけでなく、OpenAPIドキュメントや`.proto`ファイルの仕様とも照合できます。
 - **柔軟性**: HTTP、gRPC、MySQL、PostgreSQL、SQLite、SMTP、IMAP、DNS、SSH、シェルが組み込みで、ブラウザ、GraphQL、JMAPは外部アクションで扱えます。新しいプロトコルも、独立したアクションとして追加できます。ジョブは`needs`で順序を決めない限り並行して動くため、エンドポイントを呼び、書き込まれた行を問い合わせ、送信されたメールを読む処理を1回の実行で行えます。`repeat`を加えれば、同じワークフローを一定の間隔で動かす監視にもなります。
 - **運用性**: ワークフローは読みやすいYAMLで定義します。ログインのように複数のシナリオで共通する手順は1つのジョブファイルにまとめ、`uses: embedded`で呼び出せます。Probeは単体のバイナリで、併せて入れるものはありません。手元でも、CIでも、cronからでも同じように動きます。ジョブの構造は`probe dag`でASCIIまたはMermaidのフローチャートとして出力できます。結果は端末にジョブごとに表示され、失敗したステップには理由が添えられます。`--report`を使えば、JSON、JUnit XML、Markdown、GitHub Actionsのジョブサマリーとしても書き出せます。
 
@@ -89,17 +89,17 @@ Total workflow time: 0.02s ✓ All jobs succeeded
 
 [クイックスタート](https://probe.linyo.ws/ja/guide/introduction/quickstart)では同じ手順を順に追い、[最初のワークフロー](https://probe.linyo.ws/ja/guide/introduction/your-first-workflow)では動かし続けられる形まで広げます。
 
-コーディングエージェントと使う
+AIエージェントと使う
 ------------------------------
 
-プロジェクトにスキルを入れます。エージェントは、インストールされているバージョンに合うワークフローの書き方、検査の仕方、失敗の読み方をスキルから学びます。
+プロジェクトにスキルを入れます。AIエージェントは、インストールされているバージョンに合うワークフローの書き方、検査の仕方、失敗の読み方をスキルから学びます。
 
 ```bash
 probe skill install                        # .claude/skills/probe/SKILL.md（Claude Code向け）
-probe skill install .agents/skills/probe   # エージェントがスキルを読む、ほかのディレクトリ
+probe skill install .agents/skills/probe   # AIエージェントがスキルを読む、ほかのディレクトリ
 ```
 
-次に、いつ使うのかを`AGENTS.md`や`CLAUDE.md`など、エージェントが指示を読むファイルに書きます。
+次に、いつ使うのかを`AGENTS.md`や`CLAUDE.md`など、AIエージェントが指示を読むファイルに書きます。
 
 ```markdown
 ## End-to-endの確認
@@ -111,7 +111,7 @@ probe skill install .agents/skills/probe   # エージェントがスキルを�
 - `probe`が入っていなければ、`brew install mozership/tap/probe`か`go install github.com/mozership/probe/cmd/probe@latest`で入れる。
 ```
 
-エージェントが書いたワークフローを`--read-only`で実行する方法、応答をOpenAPIドキュメントと照合する方法、同じ実行をCIで行う方法は、[コーディングエージェントと使う](https://probe.linyo.ws/ja/guide/how-tos/coding-agents)で説明しています。
+AIエージェントが書いたワークフローを`--read-only`で実行する方法、応答をOpenAPIドキュメントと照合する方法、同じ実行をCIで行う方法は、[AIエージェントと使う](https://probe.linyo.ws/ja/guide/how-tos/coding-agents)で説明しています。
 
 組み込みアクション
 ------------------
@@ -145,7 +145,7 @@ probe skill install .agents/skills/probe   # エージェントがスキルを�
 ------------
 
 - [ガイド](https://probe.linyo.ws/ja/guide): インストール、CLI、そしてワークフロー、ジョブ、ステップ、データフローの考え方
-- [How-to](https://probe.linyo.ws/ja/guide/how-tos/coding-agents): コーディングエージェントとの併用、APIテスト、監視、パフォーマンス、環境管理、エラーハンドリング
+- [How-to](https://probe.linyo.ws/ja/guide/how-tos/coding-agents): AIエージェントとの併用、APIテスト、監視、パフォーマンス、環境管理、エラーハンドリング
 - [チュートリアル](https://probe.linyo.ws/ja/guide/tutorials/first-monitoring-system): 監視システム、APIテストパイプライン、マルチ環境テストの構築
 - [リファレンス](https://probe.linyo.ws/ja/reference): YAMLの設定、CLIのオプション、組み込み関数、環境変数
 
