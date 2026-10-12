@@ -1029,9 +1029,10 @@ func (st *Step) shouldSkip(jCtx *JobContext) bool {
 	return boolResult
 }
 
-// counterEntries is how many entries of an iteration a step's counters of a
-// repeated job are told apart for.
-const counterEntries = 1 << 20
+// counterEntries is how many entries of an iteration the counters of a step
+// in a repeated job have keys for. An iteration takes no more entries than
+// that (maxIterationEntries), so each entry has a key of its own.
+const counterEntries = maxIterationEntries
 
 // counterKey is what the counter of the step is kept by in a repeated job:
 // where the step is written in the job, and which entry of its iteration it
@@ -1043,9 +1044,7 @@ func (st *Step) counterKey() int {
 	if !st.placed {
 		return st.Idx
 	}
-	// The entries past that many are counted with the last of them, so
-	// that none is counted as an entry of the step written after.
-	return st.pos*counterEntries + min(st.ordinal, counterEntries-1)
+	return st.pos*counterEntries + st.ordinal
 }
 
 // skipAfterFailure reports the step as skipped without running it, as a job

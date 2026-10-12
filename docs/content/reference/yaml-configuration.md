@@ -550,7 +550,8 @@ steps:
 - Each entry is an object, whose keys the step reads as `vars`. A list of anything else, such as strings, fails the step; turn it into objects with `map`, as `"{{ map(vars.paths, ({path: #})) }}"`.
 - A template that cannot be evaluated, or that does not come to a list, fails the step without running it.
 - A list without entries skips the step, which is reported as skipped: there is nothing to run it with. An `iteration` written as an empty list, `[]`, runs the step once, as a step without `iteration` does.
-- The entries are taken as they are: a `{{ }}` in a value of an entry is not evaluated.
+- The entries are taken as they are: a `{{ }}` in a value of an entry is not evaluated. The step's own `vars` are evaluated for the template, and again for each entry, as they are for each entry of a list written in the workflow; a var that calls `random_str` is another value each time.
+- An iteration takes up to 1,048,576 entries; a longer list fails the step.
 - In a job with [`repeat`](#repeat), the template is evaluated in each run and may come to another number of entries in each. Each entry is counted by its place in the list, and the steps after it as themselves. A run in which the list has no entry counts as neither a success nor a failure of the step, as a run a [`fail_fast`](#fail_fast) job did not run it in does.
 
 ## The Expression Context

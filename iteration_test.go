@@ -126,6 +126,12 @@ func TestIterationEntries(t *testing.T) {
 	if entries, err := iterationEntries([]any{}); err != nil || len(entries) != 0 {
 		t.Errorf("iterationEntries(an empty list) = %v, %v", entries, err)
 	}
+	if _, err := iterationEntries(make([]any, maxIterationEntries+1)); err == nil || !strings.Contains(err.Error(), "more than the 1048576 an iteration takes") {
+		t.Errorf("iterationEntries(a list too long) error = %v, want it refused", err)
+	}
+	if _, err := iterationEntries(make([]map[string]any, maxIterationEntries+1)); err == nil {
+		t.Error("iterationEntries(a list of maps too long) = nil, want it refused")
+	}
 	for _, tt := range []struct {
 		v    any
 		want string
@@ -377,10 +383,10 @@ func TestStep_counterKey(t *testing.T) {
 	if a.counterKey() >= c.counterKey() || c.counterKey() >= b.counterKey() {
 		t.Errorf("keys = %d, %d, %d, want them in the order the steps run in", a.counterKey(), c.counterKey(), b.counterKey())
 	}
-	// An entry past those told apart is not taken for the next step's.
-	far := &Step{pos: 1, ordinal: counterEntries, placed: true}
-	if far.counterKey() == b.counterKey() || far.counterKey() <= c.counterKey() {
-		t.Errorf("key = %d, want it before that of the next step, %d", far.counterKey(), b.counterKey())
+	// The last entry an iteration takes is not taken for the next step's.
+	last := &Step{pos: 1, ordinal: maxIterationEntries - 1, placed: true}
+	if last.counterKey() >= b.counterKey() || last.counterKey() <= c.counterKey() {
+		t.Errorf("key = %d, want it before that of the next step, %d", last.counterKey(), b.counterKey())
 	}
 }
 
