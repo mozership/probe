@@ -24,6 +24,7 @@ jobs:                         # Required: a list of jobs
     needs: [job-id, ...]      # Optional: job dependencies
     always: boolean           # Optional: run even when a needed job failed
     skipif: expression        # Optional: skip the job when true
+    fail_fast: boolean        # Optional: skip the steps after one that failed
     defaults:                 # Optional: default `with` values per action
       http:
         url: string
@@ -236,6 +237,7 @@ A job definition takes the properties below.
 | `always` | Boolean | No | Run once the jobs in `needs` are over, even when one of them failed |
 | `steps` | Array | Yes | The steps to run |
 | `skipif` | Expression | No | Skip the whole job when the expression is true |
+| `fail_fast` | Boolean | No | Skip the steps after one that failed |
 | `defaults` | Object | No | Default `with` values, keyed by action name |
 | `repeat` | Object | No | Run the job repeatedly |
 
@@ -322,6 +324,35 @@ jobs:
           method: GET
           url: "{{vars.api_url}}/health"
 ```
+
+#### `fail_fast`
+
+The steps of a job run one after another, and a step runs whether or not the one before it failed. That suits steps that check separate things, each of which is worth its own line in the report. When the later steps work on what an earlier one made, they fail because it did, and the one failure that matters is buried under those that follow from it. With `fail_fast: true`, the steps after a failed one are not run, and are reported as skipped:
+
+```yaml
+jobs:
+  - name: Orders
+    fail_fast: true
+    steps:
+      - name: Create the table
+        uses: db
+        with:
+          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+        test: res.code == 0
+
+      - name: Insert an order          # skipped when the table was not created
+        uses: db
+        with:
+          query: INSERT INTO orders (total) VALUES (?)
+          params: [100]
+        test: res.rows_affected == 1
+```
+
+- A step fails when its `test` is false, its action returns an error, or a response breaks its contract. A step without a `test` that nothing checks does not fail, so it stops nothing.
+- A skipped step does not wait for its `wait`, and its `outputs` are not published.
+- The remaining entries of an [`iteration`](#iteration) are skipped as well, once one of them fails.
+- Each run of a job with [`repeat`](#repeat) starts over: a failure skips the rest of that run only.
+- Other jobs are not affected, except through [`needs`](#needs), as by any failed job. Steps that must run after a failure, such as a cleanup, belong in a job with [`always`](#always).
 
 #### `defaults`
 

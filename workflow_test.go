@@ -18,6 +18,7 @@ import (
 	"github.com/linyows/probe/report"
 
 	"github.com/linyows/probe/expr"
+	"github.com/linyows/probe/mask"
 )
 
 func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
@@ -1642,5 +1643,89 @@ func TestWorkflow_Start_AlwaysJob(t *testing.T) {
 	}
 	if !strings.Contains(report, "Removes") {
 		t.Errorf("the report lacks the step of the job that always runs:\n%s", report)
+	}
+}
+
+// In a job with fail_fast, the steps after one that failed are not run and
+// are reported as skipped; without it they run, as they always have.
+func TestWorkflow_Start_FailFast(t *testing.T) {
+	for _, failFast := range []bool{true, false} {
+		t.Run(fmt.Sprintf("fail_fast %v", failFast), func(t *testing.T) {
+			before := NewMockActionRunner()
+			failing := NewMockActionRunner()
+			failing.SetError("hello", errors.New("boom"))
+			after := NewMockActionRunner()
+			other := NewMockActionRunner()
+
+			w := &Workflow{
+				Name: "Fail fast",
+				Jobs: []Job{
+					{ID: "work", Name: "Work", FailFast: failFast, Steps: []*Step{
+						{Name: "Before", Uses: "hello", actionRunner: before},
+						{Name: "Fails", Uses: "hello", actionRunner: failing},
+						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: []map[string]any{{"n": 1}, {"n": 2}}},
+						{Name: "Last", Uses: "hello", actionRunner: after, Wait: "10ms"},
+					}},
+					// Another job is not held back by it.
+					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: other}}},
+				},
+			}
+			report := startCapturing(t, w, OutputModeSpinner)
+
+			if len(before.Calls["hello"]) != 1 || len(other.Calls["hello"]) != 1 {
+				t.Errorf("the step before the failure and the other job should run:\n%s", report)
+			}
+			wantAfter, wantSkipped := 3, 0
+			if failFast {
+				wantAfter, wantSkipped = 0, 3
+			}
+			if got := len(after.Calls["hello"]); got != wantAfter {
+				t.Errorf("the steps after the failure ran %d times, want %d:\n%s", got, wantAfter, report)
+			}
+			if got := strings.Count(report, "(SKIPPED)"); got != wantSkipped {
+				t.Errorf("%d steps are reported as skipped, want %d:\n%s", got, wantSkipped, report)
+			}
+			if failFast && !strings.Contains(report, "After 2 (SKIPPED)") {
+				t.Errorf("a skipped step should keep its name, with its templates evaluated:\n%s", report)
+			}
+			if w.exitStatus == 0 {
+				t.Errorf("exit status = 0, want the run failed:\n%s", report)
+			}
+		})
+	}
+}
+
+// Each run of a repeated job with fail_fast starts over: a failure in one
+// run does not skip the steps of the next.
+func TestJob_FailFastStartsOverEachRun(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	after := NewMockActionRunner()
+	job := &Job{ID: "work", Name: "Work", FailFast: true, Steps: []*Step{
+		{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 1"},
+		{Name: "After", Uses: "hello", actionRunner: after},
+	}}
+
+	for i := range 2 {
+		printer := newBufferPrinter()
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		failed, err := job.run(JobContext{
+			Printer:       printer,
+			Result:        result,
+			Outputs:       NewOutputs(),
+			RepeatCurrent: i,
+			countersMu:    &sync.Mutex{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := i == 0; failed != want {
+			t.Errorf("run %d: failed = %v, want %v", i, failed, want)
+		}
+	}
+	if got := len(after.Calls["hello"]); got != 1 {
+		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
 	}
 }

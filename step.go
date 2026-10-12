@@ -113,7 +113,7 @@ func (st *Step) prepare(jCtx *JobContext) (string, bool) {
 
 	// Check if step should be skipped BEFORE waiting
 	if st.shouldSkip(jCtx) {
-		st.handleSkip(name, jCtx)
+		st.handleSkip(name, "Skip condition: "+st.SkipIf, jCtx)
 		return name, false
 	}
 
@@ -1023,11 +1023,27 @@ func (st *Step) shouldSkip(jCtx *JobContext) bool {
 	return boolResult
 }
 
-// handleSkip handles the skipped step logic
-func (st *Step) handleSkip(name string, jCtx *JobContext) {
+// skipAfterFailure reports the step as skipped without running it, as a job
+// with fail_fast does each step after one that failed. Its name is the only
+// thing of it that is evaluated.
+func (st *Step) skipAfterFailure(jCtx *JobContext) {
+	if st.Name == "" {
+		st.Name = "Unknown Step"
+	}
+	name, err := st.Expr.EvalTemplate(st.Name, st.ctx)
+	if err != nil {
+		name = st.Name
+	}
+	st.expandedName = name
+	st.handleSkip(name, "An earlier step of the job failed, and the job has fail_fast", jCtx)
+}
+
+// handleSkip handles the skipped step logic. reason says why it is skipped,
+// for the verbose log.
+func (st *Step) handleSkip(name, reason string, jCtx *JobContext) {
 	if jCtx.Verbose {
 		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.Idx, name))
-		jCtx.Printer.LogDebug("Skip condition: %s", st.SkipIf)
+		jCtx.Printer.LogDebug("%s", reason)
 		jCtx.Printer.PrintSeparator()
 		return
 	}

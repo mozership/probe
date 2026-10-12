@@ -64,13 +64,34 @@ steps:
       url: "{{vars.ANALYTICS_API}}/update"
     test: res.code == 200
 
-  - name: This runs only if analytics succeeds
-    uses: hello
-    echo: "Analytics updated successfully"
-
   - name: This runs regardless of analytics result
     uses: hello
     echo: "Workflow continues..."
+```
+
+ステップは前のステップが失敗していても実行されるので、どの検査もレポートに1行ずつ残ります。後のステップが前のステップの作ったものを使うだけの場合は、ジョブに[`fail_fast`](/ja/reference/yaml-configuration#fail_fast)を付けます。失敗したステップより後のステップはスキップされ、レポートにはそこから派生した失敗ではなく、原因の1件だけが残ります。
+
+```yaml
+jobs:
+- name: Checkout flow
+  fail_fast: true
+  steps:
+    - name: Log in
+      id: login
+      uses: http
+      with:
+        post: "{{vars.API}}/login"
+      test: res.code == 200
+      outputs:
+        token: res.body.token
+
+    - name: Place an order          # ログインに失敗したときはスキップ
+      uses: http
+      with:
+        post: "{{vars.API}}/orders"
+        headers:
+          authorization: "Bearer {{outputs.login.token}}"
+      test: res.code == 201
 ```
 
 ### グレースフル・デグラデーション
