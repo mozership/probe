@@ -182,6 +182,17 @@ jobs:
       res.stdout contains "Greet grace" &&
       res.stdout contains "Nobody to greet (SKIPPED)"
     echo: "{{res.stdout}}"
+  - name: vars.yml, with an env file and a var given
+    uses: shell
+    with:
+      cmd: ./probe --env-file examples/fixtures/example.env --var stage=e2e examples/vars.yml
+    test: res.code == 0 && res.stdout contains "good morning, the team (e2e)"
+    echo: "{{res.stdout}}"
+  - name: vars.yml, with what the environment has before the file
+    uses: shell
+    with:
+      cmd: GREETING=hi ./probe --env-file examples/fixtures/example.env examples/vars.yml
+    test: res.code == 0 && res.stdout contains "hi, the team (local)"
   - name: repeat-literal.yml (expected to fail)
     uses: shell
     with:

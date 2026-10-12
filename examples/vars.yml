@@ -1,0 +1,32 @@
+name: Vars From the Command Line
+description: |
+  A workflow reads its settings into vars, from the environment or as
+  written. Both can be given when it is run, without changing the file:
+
+    probe --env-file examples/fixtures/example.env --var stage=e2e examples/vars.yml
+
+  --env-file reads environment variables from a file of NAME=value lines,
+  and --var gives a var in place of what the workflow writes for it.
+
+vars:
+  greeting: "{{GREETING ?? 'hello'}}"
+  target: "{{TARGET ?? 'world'}}"
+  stage: local
+  # a var that reads another sees what was given for it
+  message: "{{vars.greeting}}, {{vars.target}} ({{vars.stage}})"
+
+jobs:
+- name: What the workflow was given
+  steps:
+  - name: "{{vars.message}}"
+    uses: shell
+    with:
+      cmd: echo "{{vars.message}}"
+    test: trim(res.stdout) == vars.message
+
+  # the variables of the file are in the environment of the actions too
+  - name: An action reads the same environment
+    uses: shell
+    with:
+      cmd: echo "${GREETING:-hello}"
+    test: trim(res.stdout) == vars.greeting

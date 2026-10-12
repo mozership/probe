@@ -15,6 +15,7 @@ import (
 	"github.com/linyows/probe/actionrpc"
 	"github.com/linyows/probe/actions"
 	"github.com/linyows/probe/actions/grpc"
+	"github.com/linyows/probe/envfile"
 	"github.com/linyows/probe/oas"
 	"github.com/linyows/probe/report"
 )
@@ -47,6 +48,10 @@ type Cmd struct {
 	ReadOnly       bool
 	AllowHosts     string
 	AllowActions   string
+	// Vars are the --var flags given, each as name=value, in their order.
+	Vars []string
+	// EnvFiles are the files the --env-file flags name, in their order.
+	EnvFiles []string
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
@@ -62,7 +67,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"},
 		ver:        ver,
 		rev:        rev,
 		outWriter:  os.Stdout,
@@ -160,6 +165,23 @@ func (c *Cmd) parseArgs(args []string) error {
 					c.AllowActions = flagValue
 				}
 				c.markGuardFlag(flagName)
+			case "var", "env-file":
+				// Both can be given more than once.
+				if !hasValue {
+					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					flagValue = args[i+1]
+					skipNext = true
+				}
+				if flagName == "env-file" {
+					c.EnvFiles = append(c.EnvFiles, splitList(flagValue)...)
+					break
+				}
+				if _, _, err := parseVar(flagValue); err != nil {
+					return err
+				}
+				c.Vars = append(c.Vars, flagValue)
 			case "report":
 				// Accept both --report=junit and --report junit
 				if !hasValue {
@@ -284,6 +306,8 @@ func (c *Cmd) printOptions() {
 		{"", "--read-only", "Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)"},
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
+		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
+		{"", "--env-file", "Read environment variables from files of NAME=value lines, as file,...; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -413,6 +437,14 @@ func (c *Cmd) runProbe() int {
 	}
 	p.Config.Guard = guard
 
+	// The files are read before the workflow is, which reads the
+	// environment into its vars.
+	if err := loadEnvFiles(c.EnvFiles); err != nil {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --env-file: %v\n", err)
+		return probe.ExitConfigError
+	}
+	p.Config.Vars = c.vars()
+
 	if err := p.Do(); err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
@@ -446,6 +478,63 @@ func (c *Cmd) runDag() int {
 	}
 	_, _ = fmt.Fprint(c.outWriter, graph)
 	return 0
+}
+
+// parseVar reads a --var, name=value. The value is all that comes after the
+// first =, and may be empty.
+func parseVar(s string) (name, value string, err error) {
+	name, value, ok := strings.Cut(s, "=")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return "", "", fmt.Errorf("--var must be name=value, not %q", s)
+	}
+	return name, value, nil
+}
+
+// vars returns the vars the --var flags give, by name. A name given more
+// than once has the value given last.
+func (c *Cmd) vars() map[string]string {
+	if len(c.Vars) == 0 {
+		return nil
+	}
+	vars := make(map[string]string, len(c.Vars))
+	for _, v := range c.Vars {
+		// Each was checked as it was parsed.
+		name, value, _ := parseVar(v)
+		vars[name] = value
+	}
+	return vars
+}
+
+// loadEnvFiles sets the environment variables the files at paths give, for
+// the workflow to read into its vars and for the actions it runs. A variable
+// the environment already has is left as it is, so that what is set on the
+// command line or by CI wins over a file; among the files, the last to give
+// a variable wins.
+func loadEnvFiles(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	fromEnv := map[string]bool{}
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		fromEnv[name] = true
+	}
+	for _, path := range paths {
+		vars, err := envfile.Read(path)
+		if err != nil {
+			return err
+		}
+		for _, v := range vars {
+			if fromEnv[v.Name] {
+				continue
+			}
+			if err := os.Setenv(v.Name, v.Value); err != nil {
+				return fmt.Errorf("%s: %s: %w", path, v.Name, err)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Cmd) markGuardFlag(name string) {

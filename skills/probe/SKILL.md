@@ -86,6 +86,8 @@ jobs:
 ```bash
 probe workflow.yml                    # run; the report goes to stdout
 probe base.yml,staging.yml            # merge files, later ones override
+probe --env-file .env workflow.yml    # read environment variables from a file
+probe --var url=http://localhost:8080 workflow.yml  # give a var in place of the one written
 probe check workflow.yml              # find what is wrong or weak without running
 probe dag workflow.yml                # check the job graph without running
 probe -v workflow.yml                 # also print every request and response

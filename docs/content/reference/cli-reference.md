@@ -213,6 +213,49 @@ The value can also come from the `PROBE_ALLOW_ACTIONS` environment variable, and
 probe --read-only --allow-action shell workflow.yml
 ```
 
+### `--var`
+
+**Type:** String, can be repeated  
+**Values:** `name=value`  
+**Description:** Give a var of the workflow, in place of what the workflow writes for it under [`vars`](/reference/yaml-configuration#vars). The value is everything after the first `=`, and may be empty.
+
+```bash
+probe --var url=https://staging.example.com --var retries=5 workflow.yml
+```
+
+- The value is taken as it is: a `{{ }}` in it is text, not a template, and the var is a string, as one read from the environment is.
+- A var that reads the one given, as `base: "{{vars.url}}/api"`, sees the value given.
+- A name the workflow does not write is defined by being given, so a step can read `vars.<name>` and the workflow leave its value to whoever runs it.
+- A name given more than once has the value given last. The name is that of a top-level var: `--var auth.user=x` gives a var named `auth.user`, not the `user` of `auth`.
+
+A value given this way is not hidden from the report as one named under [`secrets`](/reference/yaml-configuration#secrets) is, and a command line can be read by other users of the machine. Give a credential through the environment or `--env-file`.
+
+### `--env-file`
+
+**Type:** String, can be repeated  
+**Values:** a comma separated list of files  
+**Description:** Read environment variables from files of `NAME=value` lines, as the `.env` files many tools keep beside a project, before the workflow is read. The workflow reads them into its `vars` as it reads any environment variable, and the actions it runs have them in their environment.
+
+```bash
+probe --env-file .env workflow.yml
+probe --env-file .env,.env.local workflow.yml
+```
+
+```bash
+# .env
+API_URL=https://staging.example.com
+API_TOKEN="a value with spaces, \n for a newline"   # a comment
+export REGION=tokyo
+PRIVATE_KEY='taken as it is, $ and \ included'
+```
+
+- A variable the environment already has is left as it is, so that what a shell or CI sets wins over a file. Among the files, the last to give a variable wins.
+- A value without quotes has the spaces around it removed, and ends at a ` #` that starts a comment. In double quotes, `\n`, `\t`, `\"` and `\\` are escapes, and the value may go on over several lines. In single quotes nothing is.
+- Nothing is expanded: `$OTHER` in a value is those characters.
+- A file that does not exist, or a line that is not `NAME=value`, stops Probe before the workflow is read, with exit status 2.
+
+A variable whose value must not be shown is named under [`secrets`](/reference/yaml-configuration#secrets) as usual; where the value comes from makes no difference.
+
 ## Subcommands
 
 A subcommand replaces the run with something else: `gen` writes a starting workflow, `dag` prints the dependency graph a workflow describes, `check` finds what is wrong or weak in a workflow without running it, `coverage` tells how much of an OpenAPI document a run checked, `guide` prints this documentation, `skill` sets up a coding agent to use Probe, and `manifest` writes the `action.yml` of a release of an external action.

@@ -213,6 +213,49 @@ probe --read-only --allow-host api.staging.example.com workflow.yml
 probe --read-only --allow-action shell workflow.yml
 ```
 
+### `--var`
+
+**型:** String（繰り返し指定可）  
+**値:** `name=value`  
+**説明:** ワークフローのvarを、ワークフローが[`vars`](/ja/reference/yaml-configuration#vars)に書いた値の代わりに与えます。値は最初の`=`より後ろのすべてで、空でも構いません。
+
+```bash
+probe --var url=https://staging.example.com --var retries=5 workflow.yml
+```
+
+- 値はそのまま使われます。値の中の`{{ }}`はテンプレートではなく文字です。varは、環境変数から読んだ値と同じく文字列になります。
+- `base: "{{vars.url}}/api"`のように、与えたvarを読む別のvarは、与えた値を読みます。
+- ワークフローが書いていない名前も、与えることで定義されます。ステップで`vars.<name>`を読み、値は実行する人に任せるワークフローが書けます。
+- 同じ名前を複数回与えた場合は、最後の値になります。名前はトップレベルのvarの名前です。`--var auth.user=x`は`auth`の`user`ではなく、`auth.user`という名前のvarを与えます。
+
+この方法で与えた値は、[`secrets`](/ja/reference/yaml-configuration#secrets)に書いた値のようにレポートで伏せられることはなく、コマンドラインは同じマシンの他のユーザーから見えます。認証情報は環境変数か`--env-file`で渡してください。
+
+### `--env-file`
+
+**型:** String（繰り返し指定可）  
+**値:** ファイルのカンマ区切りのリスト  
+**説明:** ワークフローを読む前に、`NAME=value`の行が並んだファイルから環境変数を読みます。多くのツールがプロジェクトに置く`.env`ファイルの形式です。ワークフローはこれらを他の環境変数と同じく`vars`に読み込み、実行するアクションの環境にも渡ります。
+
+```bash
+probe --env-file .env workflow.yml
+probe --env-file .env,.env.local workflow.yml
+```
+
+```bash
+# .env
+API_URL=https://staging.example.com
+API_TOKEN="a value with spaces, \n for a newline"   # コメント
+export REGION=tokyo
+PRIVATE_KEY='taken as it is, $ and \ included'
+```
+
+- 環境にすでにある変数は変更しません。シェルやCIが設定した値がファイルより優先されます。ファイル同士では、後から読んだファイルの値が優先されます。
+- 引用符のない値は前後の空白を取り除き、コメントを始める` #`で終わります。二重引用符の中では`\n`、`\t`、`\"`、`\\`がエスケープになり、値は複数行にわたれます。単一引用符の中では何も解釈しません。
+- 展開は行いません。値の中の`$OTHER`はその文字のままです。
+- 存在しないファイルや`NAME=value`でない行があると、Probeはワークフローを読む前に終了ステータス2で停止します。
+
+表示してはいけない値を持つ変数は、通常どおり[`secrets`](/ja/reference/yaml-configuration#secrets)に書きます。値の出どころは関係ありません。
+
 ## サブコマンド
 
 サブコマンドを指定すると、ワークフローの実行の代わりに別の処理を行います。`gen`は雛形のワークフローを生成し、`dag`はワークフローが表す依存関係のグラフを出力し、`check`はワークフローを実行せずに誤りや弱点を見つけ、`coverage`は実行がOpenAPIドキュメントのどこまでを検証したかを示し、`guide`はこのドキュメントを出力し、`skill`はコーディングエージェントがProbeを使えるように準備し、`manifest`は外部アクションのリリースの`action.yml`を出力します。
