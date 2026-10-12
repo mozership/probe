@@ -104,6 +104,22 @@ func TestFalseClause(t *testing.T) {
 			found: true,
 		},
 		{
+			name:  "what let declares is read by each condition",
+			input: "let body = res.body;\nlet n = len(body.items);\nbody.ok &&\nn == 3 &&\nres.code == 200",
+			want:  Clause{Expr: `n == 3`, Operands: []Operand{{Expr: "n", Value: 2}}},
+			found: true,
+		},
+		{
+			name:  "a let that reads an earlier one",
+			input: `let a = res.code; let b = a + 1; b == a`,
+			want:  Clause{Expr: `b == a`, Operands: []Operand{{Expr: "b", Value: 501}, {Expr: "a", Value: 500}}},
+			found: true,
+		},
+		{
+			name:  "a let that calls a function whose value changes",
+			input: `let n = random_int(5); n == 9`,
+		},
+		{
 			name:  "a condition that is nil",
 			input: `res.body.ok && res.body.missing`,
 			want:  Clause{Expr: `res.body.missing`},

@@ -49,18 +49,35 @@ func (e *Expr) FalseClause(input string, env any) (Clause, bool) {
 	if callsAny(tree.Node, changing) {
 		return Clause{}, false
 	}
-	for _, node := range conjuncts(tree.Node) {
+	// What the expression declares with let is declared again before each
+	// condition, which is evaluated on its own, and left out of what is
+	// told: the condition is the part that is false.
+	lets, body := declarations(tree.Node)
+	for _, node := range conjuncts(body) {
 		src := node.String()
-		out, err := e.Eval(src, env)
+		out, err := e.Eval(lets+src, env)
 		if err != nil {
 			return Clause{}, false
 		}
 		if out == true {
 			continue
 		}
-		return Clause{Expr: src, Operands: e.operands(node, env)}, true
+		return Clause{Expr: src, Operands: e.operands(node, lets, env)}, true
 	}
 	return Clause{}, false
+}
+
+// declarations returns what n declares with let before its expression, as
+// source that declares it again, and the expression.
+func declarations(n ast.Node) (lets string, body ast.Node) {
+	for {
+		d, ok := n.(*ast.VariableDeclaratorNode)
+		if !ok {
+			return lets, n
+		}
+		lets += "let " + d.Name + " = " + d.Value.String() + "; "
+		n = d.Expr
+	}
 }
 
 // changing are the functions that return another value each time they are
@@ -104,9 +121,10 @@ func conjuncts(n ast.Node) []ast.Node {
 }
 
 // operands returns what the condition n compares, with what each evaluates
-// to against env: both sides of a comparison, and what a ! negates. An
-// operand that cannot be evaluated on its own is left out.
-func (e *Expr) operands(n ast.Node, env any) []Operand {
+// to against env: both sides of a comparison, and what a ! negates. lets
+// declares what the expression n is a condition of declares. An operand
+// that cannot be evaluated on its own is left out.
+func (e *Expr) operands(n ast.Node, lets string, env any) []Operand {
 	var parts []ast.Node
 	switch v := n.(type) {
 	case *ast.BinaryNode:
@@ -125,7 +143,7 @@ func (e *Expr) operands(n ast.Node, env any) []Operand {
 			continue
 		}
 		src := p.String()
-		value, err := e.Eval(src, env)
+		value, err := e.Eval(lets+src, env)
 		if err != nil {
 			continue
 		}
