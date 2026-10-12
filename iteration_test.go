@@ -319,8 +319,10 @@ jobs:
 // each run. The steps after it are then run with another index in each, and
 // are still counted as themselves, by where they are written.
 func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
+	// The colors are put back as they were, for the tests after this one.
+	noColor := color.NoColor
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
+	defer func() { color.NoColor = noColor }()
 
 	each := NewMockActionRunner()
 	after := NewMockActionRunner()

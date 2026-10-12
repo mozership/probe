@@ -1760,8 +1760,10 @@ func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
 }
 
 func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
+	// The colors are put back as they were, for the tests after this one.
+	noColor := color.NoColor
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
+	defer func() { color.NoColor = noColor }()
 	printer := NewPrinter(false, nil)
 
 	tests := []struct {
@@ -1832,8 +1834,10 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 // it by their own counters: the counters are kept by the index a step ran
 // with, which is past the number of steps the job is written with.
 func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
+	// The colors are put back as they were, for the tests after this one.
+	noColor := color.NoColor
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
+	defer func() { color.NoColor = noColor }()
 
 	failing := NewMockActionRunner()
 	failing.SetError("hello", errors.New("boom"))
