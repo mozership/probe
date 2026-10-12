@@ -1,0 +1,44 @@
+name: Fail Fast Literal Example
+description: |
+  The steps of a job run one after another, and go on after one that failed.
+  With fail_fast, the steps after it are skipped instead, so that the report
+  shows the one failure and not those that follow from it.
+  This workflow is expected to fail.
+
+jobs:
+- name: With fail_fast
+  fail_fast: true
+  steps:
+  - name: A step that passes
+    uses: shell
+    with:
+      cmd: echo ready
+    test: trim(res.stdout) == "ready"
+
+  - name: A step that fails
+    uses: shell
+    with:
+      cmd: echo ready
+    test: trim(res.stdout) == "not ready"
+
+  # these would work on what the failed step checked, and are not run
+  - name: "Skipped: {{vars.what}}"
+    uses: shell
+    with:
+      cmd: echo "{{vars.what}}"
+    test: res.code == 0
+    iteration:
+    - {what: first}
+    - {what: second}
+
+- name: Without fail_fast
+  steps:
+  - name: A step that fails
+    uses: hello
+    test: 1 == 2
+
+  - name: The step after it still runs
+    uses: shell
+    with:
+      cmd: echo still here
+    test: trim(res.stdout) == "still here"

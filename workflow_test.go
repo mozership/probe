@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,9 @@ import (
 
 	"github.com/linyows/probe/report"
 
+	"github.com/fatih/color"
 	"github.com/linyows/probe/expr"
+	"github.com/linyows/probe/mask"
 )
 
 func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
@@ -1444,6 +1447,13 @@ func newOrderTestWorkflow(withIDs bool) *Workflow {
 // returns what reached stdout.
 func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	t.Helper()
+	return startCapturingWith(t, w, Config{Output: mode})
+}
+
+// startCapturingWith is startCapturing with the whole of the configuration
+// given.
+func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
+	t.Helper()
 
 	if w.printer == nil {
 		p := NewPrinter(false, nil)
@@ -1455,7 +1465,7 @@ func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
 	out := new(bytes.Buffer)
 	w.printer.outWriter = out
 
-	if err := w.Start(Config{Output: mode}); err != nil {
+	if err := w.Start(c); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
 
@@ -1610,4 +1620,370 @@ func (r *recordingRunner) RunActions(name string, with map[string]any, opts RunO
 	r.with = with
 	r.opts = opts
 	return r.result, nil
+}
+
+// A job that always runs does so after a job it needs failed, where a job
+// that does not is skipped, and the run still fails.
+func TestWorkflow_Start_AlwaysJob(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	cleanup := NewMockActionRunner()
+	skipped := NewMockActionRunner()
+
+	w := &Workflow{
+		Name: "Always",
+		Jobs: []Job{
+			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
+			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello", actionRunner: skipped}}},
+			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
+		},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if len(cleanup.Calls["hello"]) != 1 {
+		t.Errorf("the job that always runs ran %d times, want once:\n%s", len(cleanup.Calls["hello"]), report)
+	}
+	if len(skipped.Calls["hello"]) != 0 {
+		t.Errorf("the job that needs the failed one ran:\n%s", report)
+	}
+	if w.exitStatus == 0 {
+		t.Errorf("exit status = 0, want the run failed:\n%s", report)
+	}
+	if !strings.Contains(report, "Removes") {
+		t.Errorf("the report lacks the step of the job that always runs:\n%s", report)
+	}
+}
+
+// In a job with fail_fast, the steps after one that failed are not run and
+// are reported as skipped; without it they run, as they always have.
+func TestWorkflow_Start_FailFast(t *testing.T) {
+	for _, failFast := range []bool{true, false} {
+		t.Run(fmt.Sprintf("fail_fast %v", failFast), func(t *testing.T) {
+			before := NewMockActionRunner()
+			failing := NewMockActionRunner()
+			failing.SetError("hello", errors.New("boom"))
+			after := NewMockActionRunner()
+			other := NewMockActionRunner()
+
+			w := &Workflow{
+				Name: "Fail fast",
+				Jobs: []Job{
+					{ID: "work", Name: "Work", FailFast: failFast, Steps: []*Step{
+						{Name: "Before", Uses: "hello", actionRunner: before},
+						{Name: "Fails", Uses: "hello", actionRunner: failing},
+						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
+						{Name: "Last", Uses: "hello", actionRunner: after, Wait: "10ms"},
+					}},
+					// Another job is not held back by it.
+					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: other}}},
+				},
+			}
+			report := startCapturing(t, w, OutputModeSpinner)
+
+			if len(before.Calls["hello"]) != 1 || len(other.Calls["hello"]) != 1 {
+				t.Errorf("the step before the failure and the other job should run:\n%s", report)
+			}
+			wantAfter, wantSkipped := 3, 0
+			if failFast {
+				wantAfter, wantSkipped = 0, 3
+			}
+			if got := len(after.Calls["hello"]); got != wantAfter {
+				t.Errorf("the steps after the failure ran %d times, want %d:\n%s", got, wantAfter, report)
+			}
+			if got := strings.Count(report, "(SKIPPED)"); got != wantSkipped {
+				t.Errorf("%d steps are reported as skipped, want %d:\n%s", got, wantSkipped, report)
+			}
+			if failFast && !strings.Contains(report, "After 2 (SKIPPED)") {
+				t.Errorf("a skipped step should keep its name, with its templates evaluated:\n%s", report)
+			}
+			if w.exitStatus == 0 {
+				t.Errorf("exit status = 0, want the run failed:\n%s", report)
+			}
+		})
+	}
+}
+
+// Each run of a repeated job with fail_fast starts over: a failure in one
+// run does not skip the steps of the next.
+func TestJob_FailFastStartsOverEachRun(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	after := NewMockActionRunner()
+	job := &Job{ID: "work", Name: "Work", FailFast: true, Steps: []*Step{
+		{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 1"},
+		{Name: "After", Uses: "hello", actionRunner: after},
+	}}
+
+	for i := range 2 {
+		printer := newBufferPrinter()
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		failed, err := job.run(JobContext{
+			Printer:       printer,
+			Result:        result,
+			Outputs:       NewOutputs(),
+			RepeatCurrent: i,
+			countersMu:    &sync.Mutex{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := i == 0; failed != want {
+			t.Errorf("run %d: failed = %v, want %v", i, failed, want)
+		}
+	}
+	if got := len(after.Calls["hello"]); got != 1 {
+		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
+	}
+}
+
+// A var the person running the workflow gave is the text given, in place of
+// what the workflow writes for it, and the other vars read that text.
+func Test_evalVarsGiven(t *testing.T) {
+	wf := &Workflow{
+		Name: "Test",
+		Vars: map[string]any{
+			"host":    "{{HOST ?? 'localhost'}}",
+			"url":     "http://{{vars.host}}:{{vars.port}}",
+			"port":    8080,
+			"nested":  map[string]any{"a": 1},
+			"literal": "kept",
+		},
+		env: map[string]string{"HOST": "from-env"},
+		given: map[string]string{
+			"host":     "given.example.com",
+			"nested":   "flat",
+			"template": "{{ 1 + 1 }}",
+			"new":      "",
+		},
+	}
+	got, err := wf.evalVars()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"host":    "given.example.com",
+		"url":     "http://given.example.com:8080",
+		"port":    8080,
+		"nested":  "flat",
+		"literal": "kept",
+		// A template in what is given is text: it is not evaluated.
+		"template": "{{ 1 + 1 }}",
+		// A var the workflow does not write is defined by being given.
+		"new": "",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("evalVars() = %#v, want %#v", got, want)
+	}
+	if _, ok := wf.Vars["new"]; ok || wf.Vars["host"] != "{{HOST ?? 'localhost'}}" {
+		t.Errorf("the vars of the workflow were changed: %#v", wf.Vars)
+	}
+
+	// A workflow that writes no vars takes those given.
+	bare := &Workflow{Name: "Test", given: map[string]string{"a": "1"}}
+	if got, err := bare.evalVars(); err != nil || !reflect.DeepEqual(got, map[string]any{"a": "1"}) {
+		t.Errorf("evalVars() = %#v, %v, want the var given", got, err)
+	}
+
+	// A var that read itself no longer does once it is given.
+	cyclic := &Workflow{Name: "Test", Vars: map[string]any{"a": "{{vars.b}}", "b": "{{vars.a}}"}, given: map[string]string{"a": "x"}}
+	if got, err := cyclic.evalVars(); err != nil || got["b"] != "x" {
+		t.Errorf("evalVars() = %#v, %v, want b to read the var given", got, err)
+	}
+}
+
+func TestWorkflow_Start_GivenVars(t *testing.T) {
+	runner := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Given",
+		Vars: map[string]any{"url": "http://localhost"},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", actionRunner: runner, With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
+	}
+	p := NewPrinter(false, nil)
+	p.spinner = nil
+	p.outWriter = new(bytes.Buffer)
+	p.errWriter = new(bytes.Buffer)
+	w.printer = p
+	if err := w.Start(Config{Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.Calls["hello"][0].With["url"]; got != "http://given/health" {
+		t.Errorf("with.url = %v, want it made of the vars given", got)
+	}
+}
+
+// The variables read from files are read by the vars as the environment
+// is, which comes before them, and a secret among them is hidden.
+func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
+	runner := NewMockActionRunner()
+	w := &Workflow{
+		Name:    "Env",
+		Secrets: []string{"FILE_TOKEN"},
+		Vars: map[string]any{
+			"url":   "{{FILE_URL ?? 'http://default'}}",
+			"both":  "{{BOTH}}",
+			"token": "{{FILE_TOKEN}}",
+		},
+		env: map[string]string{"BOTH": "from the environment"},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
+			Name: "S", Uses: "hello", actionRunner: runner,
+			With: map[string]any{"url": "{{vars.url}}", "both": "{{vars.both}}"},
+			Echo: "token is {{vars.token}}",
+		}}}},
+	}
+	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, Env: map[string]string{
+		"FILE_URL":   "http://from-a-file",
+		"BOTH":       "from a file",
+		"FILE_TOKEN": "s3cr3t-from-a-file",
+	}})
+
+	with := runner.Calls["hello"][0].With
+	if with["url"] != "http://from-a-file" {
+		t.Errorf("with.url = %v, want the variable of the file", with["url"])
+	}
+	if with["both"] != "from the environment" {
+		t.Errorf("with.both = %v, want the environment before the file", with["both"])
+	}
+	if strings.Contains(report, "s3cr3t-from-a-file") || !strings.Contains(report, "token is ") {
+		t.Errorf("the secret read from a file should be hidden:\n%s", report)
+	}
+}
+
+// In a repeated job with fail_fast, a run in which a step was not run is
+// neither a success nor a failure of the step: it is counted on its own,
+// and a step that was never run is reported as skipped.
+func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	after := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Fail fast",
+		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 3}, Steps: []*Step{
+			// Fails in the first two runs, and is skipped in the last.
+			{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 2"},
+			{Name: "Sometimes", Uses: "hello", actionRunner: after, Test: "true"},
+			// Reached in the last run alone, where its own skipif skips it,
+			// which is a success of it.
+			{Name: "Own skipif", Uses: "hello", actionRunner: after, SkipIf: "repeat_index == 2", Test: "true"},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if got := len(after.Calls["hello"]); got != 1 {
+		t.Errorf("the steps after the failure ran %d times, want once, in the run without it:\n%s", got, report)
+	}
+	if got := strings.Count(report, "1/3 success (33.3%), 2 skipped"); got != 2 {
+		t.Errorf("%d steps are reported as run once and skipped twice, want both after the failure:\n%s", got, report)
+	}
+}
+
+func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
+	// The colors are put back as they were, for the tests after this one.
+	noColor := color.NoColor
+	color.NoColor = true
+	defer func() { color.NoColor = noColor }()
+	printer := NewPrinter(false, nil)
+
+	tests := []struct {
+		name    string
+		counter StepRepeatCounter
+		hasTest bool
+		want    string
+	}{
+		{"never run", StepRepeatCounter{SkippedCount: 3, RepeatTotal: 3}, true, "skipped in 3/3 runs"},
+		{"run in some", StepRepeatCounter{SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3}, true, "1/3 success (33.3%), 2 skipped"},
+		{"without a test", StepRepeatCounter{SuccessCount: 2, SkippedCount: 1, RepeatTotal: 3}, false, "2/3 completed (no test), 1 skipped"},
+		{"none skipped", StepRepeatCounter{SuccessCount: 3, RepeatTotal: 3}, true, "3/3 success (100.0%)\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			printer.printStepRepeatResult(&tt.counter, tt.hasTest, &out)
+			if !strings.Contains(out.String(), tt.want) {
+				t.Errorf("printStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
+	job := &Job{ID: "work", Name: "Work", Steps: []*Step{{Name: "Never run", Test: "true"}, {Name: "Run once", Test: "true"}}}
+	result := NewResult()
+	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx := &JobContext{
+		Result:      result,
+		RepeatTotal: 3,
+		countersMu:  &sync.Mutex{},
+		StepCounters: map[int]StepRepeatCounter{
+			0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
+			1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+		},
+	}
+	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+
+	steps := result.Jobs[job.ID].StepResults
+	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
+		t.Fatalf("statuses = %+v, want skipped then success", steps)
+	}
+
+	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
+	got := r.Jobs[0].Steps
+	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
+		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)
+	}
+	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
+		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
+	}
+	// The message of a failure counts the runs the step was not run in
+	// among the runs, as the count of the report does.
+	failed := NewResult()
+	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx.Result = failed
+	ctx.StepCounters = map[int]StepRepeatCounter{
+		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
+	}
+	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {
+		t.Errorf("message = %q, want the three runs counted", got)
+	}
+}
+
+// A repeated job reports every entry of an iteration, and the steps after
+// it by their own counters: the counters are kept by the index a step ran
+// with, which is past the number of steps the job is written with.
+func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
+	// The colors are put back as they were, for the tests after this one.
+	noColor := color.NoColor
+	color.NoColor = true
+	defer func() { color.NoColor = noColor }()
+
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	ok := NewMockActionRunner()
+	w := &Workflow{
+		Name: "Repeat",
+		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 2}, Steps: []*Step{
+			{Name: "Each {{vars.n}}", Uses: "hello", actionRunner: ok, Test: "true", Iteration: Iteration{Entries: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}}},
+			{Name: "Fails", Uses: "hello", actionRunner: failing},
+			{Name: "After", Uses: "hello", actionRunner: ok, Test: "true"},
+		}}},
+	}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	for _, want := range []string{
+		" 0. Each a (repeating 2 times)",
+		" 1. Each b (repeating 2 times)",
+		" 2. Each c (repeating 2 times)",
+		" 3. Fails (repeating 2 times)",
+		" 4. After (repeating 2 times)",
+		"skipped in 2/2 runs",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("the report lacks %q:\n%s", want, report)
+		}
+	}
+	if got := strings.Count(report, "2/2 success (100.0%)"); got != 3 {
+		t.Errorf("%d entries are reported as passed in both runs, want the three of the iteration:\n%s", got, report)
+	}
 }

@@ -21,6 +21,27 @@ A test is one expression on the step, and the step passes when it evaluates to t
 
 The test expression evaluates the response (`res`) and returns true for success or false for failure.
 
+### What a Failed Test Shows
+
+A test usually joins several conditions with `&&`. When it is false, the report names the first condition that did not hold, and what each side of it evaluated to, before the request and the response:
+
+```yaml
+test: |
+  res.code == 200 &&
+  res.body.status == "healthy"
+```
+
+```
+⏺ Health (Failed in 0.12s)
+  ⎿ 0. ✗  API Health Check
+           failed: res.body.status == "healthy"
+             res.body.status = "degraded"
+           request: ...
+           response: ...
+```
+
+The condition is shown as Probe read it, so its spacing and quotes may differ from the workflow's. The values are shown for a comparison, such as `==`, `<`, `in` or `contains`, and for what a `!` negates; a value written in the test itself, such as `"healthy"`, is not repeated. Conditions joined with `||` are one condition, and are shown together. A test that starts with `let` is taken apart after what it declares, and each condition reads it. A test that calls a function whose value changes from one call to the next, `random_int`, `random_str`, `unixtime` or `now`, is not taken apart, as evaluating it again could name another condition; it shows the request and the response only. The same line is the message of the failure in the files `--report` writes, as `test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`.
+
 ### Test Expression Context
 
 Test expressions have access to comprehensive response data:

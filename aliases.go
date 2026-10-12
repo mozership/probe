@@ -21,11 +21,16 @@ type aliasProblem struct {
 	// name is the name under actions, or empty when job is set.
 	name string
 	// job is the index of the job whose defaults are wrong, with action the
-	// key of them that is.
+	// key of them that is, or workflowDefaults for the defaults of the
+	// workflow.
 	job    int
 	action string
 	msg    string
 }
+
+// workflowDefaults is the job of an aliasProblem in the defaults of the
+// workflow, which belong to no job.
+const workflowDefaults = -1
 
 func (a aliasProblem) Error() string {
 	return a.msg
@@ -64,7 +69,7 @@ func (w *Workflow) checkAliases(builtin []string) []aliasProblem {
 
 // resolveAliases writes, in place of each name the workflow's actions give,
 // the external action it names: in the uses of the steps and in the keys of
-// the defaults of the jobs. What runs the workflow, the guard included, then
+// the defaults of the jobs and of the workflow. What runs the workflow, the guard included, then
 // sees the action as if the workflow had named it in full, so that a name
 // lets nothing run that the action it stands for would not.
 //
@@ -81,10 +86,14 @@ func (w *Workflow) resolveAliases(wrong []aliasProblem) []aliasProblem {
 	}
 
 	var problems []aliasProblem
-	for i := range w.Jobs {
-		for _, action := range w.Jobs[i].useNames(names) {
-			problems = append(problems, aliasProblem{job: i, action: action, msg: fmt.Sprintf("defaults: %s and %s are the same action, whose defaults can be written once", action, names[action])})
+	twice := func(job int, actions []string) {
+		for _, action := range actions {
+			problems = append(problems, aliasProblem{job: job, action: action, msg: fmt.Sprintf("defaults: %s and %s are the same action, whose defaults can be written once", action, names[action])})
 		}
+	}
+	twice(workflowDefaults, renameDefaults(w.Defaults, names))
+	for i := range w.Jobs {
+		twice(i, w.Jobs[i].useNames(names))
 	}
 	return problems
 }
@@ -102,7 +111,15 @@ func (j *Job) useNames(names map[string]string) []string {
 			st.Uses = ref
 		}
 	}
-	defaults, ok := j.Defaults.(map[string]any)
+	return renameDefaults(j.Defaults, names)
+}
+
+// renameDefaults writes, in place of each key of defaults that is one of
+// names, the action it stands for. It returns the names the defaults are
+// written by when they are written for the action in full as well, and
+// leaves those as they are.
+func renameDefaults(v any, names map[string]string) []string {
+	defaults, ok := v.(map[string]any)
 	if !ok {
 		return nil
 	}

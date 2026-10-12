@@ -361,7 +361,7 @@ func TestStep_DoTestRecordsFailure(t *testing.T) {
 		wantMsg  string
 	}{
 		{"passes", "res.code == 200", "", ""},
-		{"false", "res.code == 201", FailureAssertion, "test evaluated to false"},
+		{"false", "res.code == 201", FailureAssertion, "test evaluated to false: res.code == 201 (res.code = 200)"},
 		{"not a boolean", "res.code", FailureTestType, "test evaluated to 200 (int), not a boolean"},
 		{"cannot evaluate", "res.code ==", FailureTestError, ""},
 	}

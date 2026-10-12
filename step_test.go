@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/linyows/probe/actionrpc"
 	"github.com/linyows/probe/expr"
+	"github.com/linyows/probe/mask"
 	"github.com/linyows/probe/procgroup"
 	"github.com/linyows/probe/report"
 )
@@ -2497,5 +2498,79 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 func TestFailureKindOf_Refused(t *testing.T) {
 	if got := failureKindOf(fmt.Errorf("step: %w", actionrpc.Refuse("no"))); got != FailureRefused {
 		t.Errorf("failureKindOf = %q, want %q", got, FailureRefused)
+	}
+}
+
+func TestStep_DoTest_FalseClause(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	tests := []struct {
+		name        string
+		test        string
+		res         map[string]any
+		wantMessage string
+		wantOutput  string
+		notInOutput string
+	}{
+		{
+			name:        "the first false condition and what it read",
+			test:        "res.code == 200 &&\nres.body.name == \"alice\"",
+			res:         map[string]any{"code": 200, "body": map[string]any{"name": "bob"}},
+			wantMessage: `test evaluated to false: res.body.name == "alice" (res.body.name = "bob")`,
+			wantOutput:  "       failed: res.body.name == \"alice\"\n         res.body.name = \"bob\"\n       request: ",
+		},
+		{
+			name:        "an action that keeps its response out of the report",
+			test:        "res.code == 200",
+			res:         map[string]any{"code": 500, "dump": false},
+			wantMessage: "test evaluated to false: res.code == 200",
+			wantOutput:  "       failed: res.code == 200\n",
+			notInOutput: "500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := NewPrinter(false, []string{})
+			printer.SetMasker(mask.New(nil, nil))
+			st := &Step{Test: tt.test, Expr: &expr.Expr{}}
+			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}
+
+			out, ok := st.DoTest(printer)
+			if ok {
+				t.Fatal("DoTest() passed, want it to fail")
+			}
+			if st.failure == nil || st.failure.Message != tt.wantMessage {
+				t.Errorf("failure = %+v, want the message %q", st.failure, tt.wantMessage)
+			}
+			if !strings.HasPrefix(out, tt.wantOutput) {
+				t.Errorf("output = %q, want it to start with %q", out, tt.wantOutput)
+			}
+			if tt.notInOutput != "" && strings.Contains(out, tt.notInOutput) {
+				t.Errorf("output = %q, want it without %q", out, tt.notInOutput)
+			}
+		})
+	}
+}
+
+// A verbose run records the steps it skips as any other run does, for the
+// report: by their own skipif, and after a failure in a job with fail_fast.
+func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
+	for _, afterFailure := range []bool{false, true} {
+		printer := newBufferPrinter()
+		printer.verbose = true
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs["job"] = &JobResult{JobID: "job"}
+		jCtx := &JobContext{Printer: printer, Result: result, CurrentJobID: "job", Config: Config{Verbose: true}}
+
+		st := &Step{Name: "Skipped", Expr: &expr.Expr{}, SkipIf: "true"}
+		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
+
+		steps := result.Jobs["job"].StepResults
+		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped (SKIPPED)" {
+			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
+		}
 	}
 }

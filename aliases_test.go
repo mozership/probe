@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -658,5 +659,109 @@ jobs:
 				t.Errorf("a step ran before the run was stopped\n%s", out)
 			}
 		})
+	}
+}
+
+// The defaults of the workflow reach the steps of every job, after those of
+// the step's own job, and are written by the names of the actions too.
+func TestLoad_WorkflowDefaults(t *testing.T) {
+	redis := "github.com/mozership/probe-redis@" + aliasSHA
+	p, err := loadWorkflow(t, `name: defaults
+actions:
+  redis: `+redis+`
+defaults:
+  http:
+    url: http://shared
+    headers:
+      accept: application/json
+      x-from: workflow
+  redis:
+    url: redis://shared
+jobs:
+- name: J
+  defaults:
+    http:
+      headers:
+        x-from: job
+        x-job: "1"
+  steps:
+  - uses: http
+    with:
+      get: /a
+      headers:
+        x-step: "1"
+  - uses: http
+    with:
+      url: http://own
+  - uses: redis
+- name: K
+  steps:
+  - uses: http
+  - uses: hello
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := p.workflow.Jobs[0].Steps
+	if got := steps[0].With["url"]; got != "http://shared" {
+		t.Errorf("jobs[0].steps[0].with.url = %v, want that of the workflow", got)
+	}
+	want := map[string]any{"accept": "application/json", "x-from": "job", "x-job": "1", "x-step": "1"}
+	if got := steps[0].With["headers"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("jobs[0].steps[0].with.headers = %v, want %v", got, want)
+	}
+	if got := steps[1].With["url"]; got != "http://own" {
+		t.Errorf("jobs[0].steps[1].with.url = %v, want the step's own", got)
+	}
+	if got := steps[2].With["url"]; got != "redis://shared" {
+		t.Errorf("jobs[0].steps[2].with.url = %v, want that of the workflow, written by the name", got)
+	}
+
+	// A job without defaults is given those of the workflow as they are
+	// written: what another job merged into its own is not among them.
+	other := p.workflow.Jobs[1].Steps
+	want = map[string]any{"accept": "application/json", "x-from": "workflow"}
+	if got := other[0].With["headers"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("jobs[1].steps[0].with.headers = %v, want %v", got, want)
+	}
+	if len(other[1].With) != 0 {
+		t.Errorf("jobs[1].steps[1].with = %v, want none of the defaults of another action", other[1].With)
+	}
+	shared, _ := p.workflow.Defaults.(map[string]any)
+	if _, ok := shared[redis]; !ok || len(shared) != 2 {
+		t.Errorf("defaults = %v, want them keyed by the action", shared)
+	}
+}
+
+func TestLoad_WorkflowDefaultsWrittenTwice(t *testing.T) {
+	_, err := loadWorkflow(t, `name: defaults
+actions:
+  greet: ./greet
+defaults:
+  greet: {name: a}
+  ./greet: {name: b}
+jobs:
+- name: J
+  steps:
+  - uses: greet
+`)
+	if err == nil || !strings.Contains(err.Error(), "defaults: greet and ./greet are the same action") {
+		t.Errorf("Load() = %v, want the defaults refused", err)
+	}
+}
+
+// A step that is given the same default as another keeps a copy of its own.
+func TestApplyDefaults_CopiesWhatItGives(t *testing.T) {
+	job := &Job{
+		Defaults: map[string]any{"http": map[string]any{"headers": map[string]any{"a": "1"}}},
+		Steps:    []*Step{{Uses: "http"}, {Uses: "http"}},
+	}
+	job.ApplyDefaults()
+	job.Steps[0].With["headers"].(map[string]any)["b"] = "2"
+	if got := job.Steps[1].With["headers"].(map[string]any); len(got) != 1 {
+		t.Errorf("steps[1].with.headers = %v, want it apart from that of steps[0]", got)
+	}
+	if got := job.Defaults.(map[string]any)["http"].(map[string]any)["headers"].(map[string]any); len(got) != 1 {
+		t.Errorf("defaults.http.headers = %v, want it as it was written", got)
 	}
 }

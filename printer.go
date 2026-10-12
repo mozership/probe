@@ -2,15 +2,18 @@ package probe
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
+	"github.com/linyows/probe/expr"
 	"github.com/linyows/probe/mask"
 )
 
@@ -230,6 +233,20 @@ func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount
 func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool, output *strings.Builder) {
 	totalCount := counter.RepeatTotal
 
+	// The runs in which the step was not run, after one that failed, are
+	// told beside the count, of which they are no part.
+	skipped := ""
+	if counter.SkippedCount > 0 {
+		skipped = fmt.Sprintf(", %d skipped", counter.SkippedCount)
+	}
+	if counter.SuccessCount == 0 && counter.FailureCount == 0 && counter.SkippedCount > 0 {
+		p.Fprintf(output, "    %s skipped in %d/%d runs\n",
+			colorInfo().Sprintf(IconSkip),
+			counter.SkippedCount,
+			totalCount)
+		return
+	}
+
 	if hasTest {
 		successRate := float64(counter.SuccessCount) / float64(totalCount) * 100
 		statusIcon := colorSuccess().Sprintf(IconSuccess)
@@ -241,21 +258,23 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 			}
 		}
 
-		p.Fprintf(output, "    %s %d/%d success (%.1f%%)\n",
+		p.Fprintf(output, "    %s %d/%d success (%.1f%%)%s\n",
 			statusIcon,
 			counter.SuccessCount,
 			totalCount,
-			successRate)
+			successRate,
+			skipped)
 	} else {
 		// For no test cases, show success count (completed without errors)
 		statusIcon := colorNoTest().Sprintf(IconTriangle)
 		if counter.FailureCount > 0 {
 			statusIcon = colorError().Sprintf(IconError)
 		}
-		p.Fprintf(output, "    %s %d/%d completed (no test)\n",
+		p.Fprintf(output, "    %s %d/%d completed (no test)%s\n",
 			statusIcon,
 			counter.SuccessCount,
-			totalCount)
+			totalCount,
+			skipped)
 	}
 }
 
@@ -441,7 +460,7 @@ func (p *Printer) generateJobResultsFromStepResults(stepResults []StepResult) st
 	for _, stepResult := range stepResults {
 		// Handle repeat steps
 		if stepResult.RepeatCounter != nil {
-			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount, &output)
+			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, &output)
 			p.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")
@@ -634,6 +653,74 @@ func (p *Printer) generateTestFailure(testExpr string, result any, req, res map[
 	output := fmt.Sprintf("       %s %#v\n", colorInfo().Sprintf("request:"), p.masker.Map(req))
 	output += fmt.Sprintf("       %s %#v\n", colorInfo().Sprintf("response:"), p.masker.Map(res))
 	return output
+}
+
+// generateFalseClause formats the condition of a test that is false, and
+// under it what each thing it compares evaluated to:
+//
+//	failed: res.code == 200
+//	  res.code = 500
+//
+// c is a condition maskClause has hidden the secrets of.
+func (p *Printer) generateFalseClause(c expr.Clause) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "       %s %s\n", colorInfo().Sprintf("failed:"), c.Expr)
+	for _, o := range c.Operands {
+		fmt.Fprintf(&b, "         %s\n", operandText(o))
+	}
+	return b.String()
+}
+
+// maskClause returns c with the secrets hidden in the condition and in what
+// its operands evaluated to. The values are masked as data, before they are
+// written out and cut: a secret that is cut, or whose quotes are escaped, is
+// no longer the text the masker knows.
+func (p *Printer) maskClause(c expr.Clause) expr.Clause {
+	out := expr.Clause{Expr: p.masker.String(c.Expr)}
+	for _, o := range c.Operands {
+		out.Operands = append(out.Operands, expr.Operand{Expr: p.masker.String(o.Expr), Value: p.masker.Value(o.Value)})
+	}
+	return out
+}
+
+// maxOperandLength is how much of a value a false condition compared is
+// shown, as a whole response body may be one.
+const maxOperandLength = 200
+
+// operandText is an operand and its value on one line, as res.code = 500.
+// A string is quoted, so that an empty one and one that ends with a newline
+// can be seen, and anything else is written as JSON.
+func operandText(o expr.Operand) string {
+	var value string
+	switch v := o.Value.(type) {
+	case nil:
+		value = "nil"
+	case string:
+		value = strconv.Quote(v)
+	default:
+		if data, err := json.Marshal(v); err == nil {
+			value = string(data)
+		} else {
+			value = fmt.Sprintf("%v", v)
+		}
+	}
+	if r := []rune(value); len(r) > maxOperandLength {
+		value = string(r[:maxOperandLength]) + "..."
+	}
+	return o.Expr + " = " + value
+}
+
+// clauseSummary is a false condition on one line, for the message of a
+// failure: res.code == 200 (res.code = 500).
+func clauseSummary(c expr.Clause) string {
+	if len(c.Operands) == 0 {
+		return c.Expr
+	}
+	parts := make([]string, len(c.Operands))
+	for i, o := range c.Operands {
+		parts[i] = operandText(o)
+	}
+	return fmt.Sprintf("%s (%s)", c.Expr, strings.Join(parts, ", "))
 }
 
 // generateContractFailure formats a response that breaks its contract: each

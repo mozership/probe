@@ -114,7 +114,7 @@ jobs:
       max_attempts: 5
       interval: "500ms"
     test: |
-      res.code == 0 && match_json(parse_json(res.stdout), vars.expected)
+      res.code == 0 && match_json(res.json, vars.expected)
     vars:
       expected:
         ready: true

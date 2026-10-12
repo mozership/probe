@@ -37,7 +37,7 @@ Probeは、情報工学の実験を再現できるようにするために作ら
 - **運用性**: ワークフローは読みやすいYAMLで定義します。ログインのように複数のシナリオで共通する手順は1つのジョブファイルにまとめ、`uses: embedded`で呼び出せます。Probeは単体のバイナリで、併せて入れるものはありません。手元でも、CIでも、cronからでも同じように動きます。ジョブの構造は`probe dag`でASCIIまたはMermaidのフローチャートとして出力できます。結果は端末にジョブごとに表示され、失敗したステップには理由が添えられます。`--report`を使えば、JSON、JUnit XML、Markdown、GitHub Actionsのジョブサマリーとしても書き出せます。
 - **AIコーディングへの対応**: `probe skill`は、インストールしたバージョンに合うワークフローの書き方をAIエージェントに教えます。`probe check`は、実行する前に書き間違いを見つけます。`--read-only`と`--allow-host`は、書き込みと、指定していないホストへの接続を、送る前に拒否します。そのため、エージェントが書いたワークフローを安全に実行できます。ステップは、エージェントが書いた`test`だけでなく、OpenAPIドキュメントや`.proto`ファイルの仕様とも照合できます。
 
-このほかワークフローには、ステップやジョブの間でデータを渡す`outputs`、任意の応答を検証する`test`、`retry`、`skipif`、`iteration`、`wait`、`timeout`、ステップ間で共通する設定をまとめる`defaults`、そしてコマンドラインで複数のYAMLをマージする機能があります。
+このほかワークフローには、ステップやジョブの間でデータを渡す`outputs`、任意の応答を検証し、成立しなかった条件を示す`test`、`retry`、`skipif`、`wait`、`timeout`、ワークフローに書いたリストやファイルから読んだリストを繰り返す`iteration`、ステップやジョブの間で共通する設定をまとめる`defaults`、最初の失敗でジョブを止める`fail_fast`、失敗の後にも実行する後片付けのための`always`、そしてコマンドラインで複数のYAMLをマージする機能があり、実行のたびに変わる値は`--var`と`--env-file`で与えられます。
 
 これらの関係は[Probeの理解](https://probe.linyo.ws/ja/guide/introduction/understanding-probe)で、k6、Hurl、Venom、runn、Blackbox exporter、GitHub Actionsのいずれを選んだほうがよいかは[比較](https://probe.linyo.ws/ja/guide/introduction/comparison)で説明しています。
 

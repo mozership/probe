@@ -159,14 +159,35 @@ func (js *JobScheduler) canRunJobLocked(jobID string) bool {
 		return false
 	}
 
-	// Check if all dependencies are fully completed (all repeats done)
+	// Check if all dependencies are fully completed (all repeats done). A
+	// job that always runs waits for them to be over, however they ended.
 	for _, dep := range job.Needs {
+		if job.Always {
+			if !js.isJobOverLocked(dep) {
+				return false
+			}
+			continue
+		}
 		if !js.isJobFullyCompletedLocked(dep) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isJobOverLocked is the lock-free check for whether a job is over: it ran
+// all of its repeat executions, whether or not they succeeded, or it was
+// marked as failed because a job it needs did not succeed. Callers must
+// already hold js.mutex.
+func (js *JobScheduler) isJobOverLocked(jobID string) bool {
+	switch js.status[jobID] {
+	case JobFailed:
+		return true
+	case JobCompleted:
+		return js.repeatCounters[jobID] >= js.repeatTargets[jobID]
+	}
+	return false
 }
 
 // isJobFullyCompletedLocked is the lock-free check for whether a job has
@@ -247,7 +268,8 @@ func (js *JobScheduler) AllJobsCompleted() bool {
 	return true
 }
 
-// MarkJobsWithFailedDependencies marks jobs as failed if their dependencies have failed.
+// MarkJobsWithFailedDependencies marks jobs as failed if their dependencies have failed,
+// except those that always run.
 // It iterates until no more jobs are newly marked, propagating failures transitively
 // through multi-level dependency chains.
 func (js *JobScheduler) MarkJobsWithFailedDependencies() []string {
@@ -260,6 +282,12 @@ func (js *JobScheduler) MarkJobsWithFailedDependencies() []string {
 		changed := false
 		for jobID, job := range js.jobs {
 			if js.status[jobID] != JobPending {
+				continue
+			}
+
+			// A job that always runs is not held back by a dependency that
+			// failed: it runs once they are all over.
+			if job.Always {
 				continue
 			}
 

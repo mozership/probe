@@ -7,7 +7,7 @@ steps:
   with:
     cmd: echo "prodbar"
   outputs:
-    myid: replace(res.stdout, '\n', '')
+    myid: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
 
@@ -17,7 +17,7 @@ steps:
   with:
     cmd: echo "secret!!!!!"
   outputs:
-    mytoken: replace(res.stdout, '\n', '')
+    mytoken: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
 

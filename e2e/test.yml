@@ -79,6 +79,35 @@ jobs:
       cmd: ./probe examples/shell.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: always-literal.yml (expected to fail, with the cleanup run)
+    uses: shell
+    with:
+      cmd: ./probe examples/always-literal.yml; code=$?; test ! -e /tmp/probe-always-example || exit 99; exit $code
+    test: res.code == 1 && res.stdout contains "Remove what the setup made"
+    echo: "{{res.stdout}}"
+  - name: background.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/background.yml
+    test: res.code == 0
+    echo: "{{res.stdout}}"
+  - name: defaults.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/defaults.yml
+    test: res.code == 0
+    echo: "{{res.stdout}}"
+  - name: fail-fast-literal.yml (expected to fail, with the steps after the failure skipped)
+    uses: shell
+    with:
+      cmd: ./probe examples/fail-fast-literal.yml
+    test: |
+      res.code == 1 &&
+      res.stdout contains "Skipped: first (SKIPPED)" &&
+      res.stdout contains "Skipped: second (SKIPPED)" &&
+      res.stdout contains "The step after it still runs" &&
+      !(res.stdout contains "The step after it still runs (SKIPPED)")
+    echo: "{{res.stdout}}"
   - name: fail.yml (expected to fail)
     uses: shell
     with:
@@ -150,6 +179,27 @@ jobs:
       cmd: ./probe examples/iteration-literal.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: iteration-data.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/iteration-data.yml
+    test: |
+      res.code == 0 &&
+      res.stdout contains "linus is guest" &&
+      res.stdout contains "Greet grace" &&
+      res.stdout contains "Nobody to greet (SKIPPED)"
+    echo: "{{res.stdout}}"
+  - name: vars.yml, with an env file and a var given
+    uses: shell
+    with:
+      cmd: ./probe --env-file examples/fixtures/env.example --var stage=e2e examples/vars.yml
+    test: res.code == 0 && res.stdout contains "good morning, the team (e2e)"
+    echo: "{{res.stdout}}"
+  - name: vars.yml, with what the environment has before the file
+    uses: shell
+    with:
+      cmd: GREETING=hi ./probe --env-file examples/fixtures/env.example examples/vars.yml
+    test: res.code == 0 && res.stdout contains "hi, the team (local)"
   - name: repeat-literal.yml (expected to fail)
     uses: shell
     with:
@@ -257,10 +307,10 @@ jobs:
     test: |
       res.code == 0 &&
       res.stdout contains `<testsuites name="Report Files" tests="9" failures="2" errors="3" skipped="2"` &&
-      res.stdout contains `<failure message="test evaluated to false" type="assertion">` &&
+      res.stdout contains `<failure message="test evaluated to false: res.code == 1 (res.code = 0)" type="assertion">` &&
       res.stdout contains `type="action">` &&
       res.stdout contains `<skipped message="job skipped">` &&
-      res.stdout contains `<failure message="1 of 3 iterations failed; the first: test evaluated to false" type="assertion">`
+      res.stdout contains `<failure message="1 of 3 iterations failed; the first: test evaluated to false: repeat_index != 1 (repeat_index = 1)" type="assertion">`
   - name: Markdown lists the jobs and every failed step
     uses: shell
     with:

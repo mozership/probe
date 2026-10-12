@@ -64,13 +64,34 @@ steps:
       url: "{{vars.ANALYTICS_API}}/update"
     test: res.code == 200
 
-  - name: This runs only if analytics succeeds
-    uses: hello
-    echo: "Analytics updated successfully"
-
   - name: This runs regardless of analytics result
     uses: hello
     echo: "Workflow continues..."
+```
+
+ステップは前のステップが失敗していても実行されるので、どの検査もレポートに1行ずつ残ります。後のステップが前のステップの作ったものを使うだけの場合は、ジョブに[`fail_fast`](/ja/reference/yaml-configuration#fail_fast)を付けます。失敗したステップより後のステップはスキップされ、レポートにはそこから派生した失敗ではなく、原因の1件だけが残ります。
+
+```yaml
+jobs:
+- name: Checkout flow
+  fail_fast: true
+  steps:
+    - name: Log in
+      id: login
+      uses: http
+      with:
+        post: "{{vars.API}}/login"
+      test: res.code == 200
+      outputs:
+        token: res.body.token
+
+    - name: Place an order          # ログインに失敗したときはスキップ
+      uses: http
+      with:
+        post: "{{vars.API}}/orders"
+        headers:
+          authorization: "Bearer {{outputs.login.token}}"
+      test: res.code == 201
 ```
 
 ### グレースフル・デグラデーション
@@ -183,9 +204,39 @@ jobs:
           
 ```
 
+### 失敗後の後片付け
+
+他のジョブが作ったものを片付けるジョブは、それらが失敗したときにも実行する必要があります。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます：
+
+```yaml
+jobs:
+- id: tests
+  name: Tests
+  steps:
+    - name: Create a user
+      uses: http
+      with:
+        post: "{{vars.API_URL}}/users"
+        body:
+          name: probe-test
+      test: res.code == 201
+
+- name: Cleanup
+  needs: [tests]
+  always: true
+  steps:
+    - name: Delete the test users
+      uses: http
+      with:
+        delete: "{{vars.API_URL}}/users?name=probe-test"
+      test: res.code == 200 || res.code == 404
+```
+
+`tests`が失敗していれば、実行全体は失敗のままです。このジョブが前提にできることは[`always`](/ja/reference/yaml-configuration#always)を参照してください。
+
 ### 条件付きジョブ実行
 
-他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブが`skipif`で判断します。
+`always`を除けば、他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブが`skipif`で判断します。
 
 ```yaml
 jobs:

@@ -64,13 +64,34 @@ steps:
       url: "{{vars.ANALYTICS_API}}/update"
     test: res.code == 200
 
-  - name: This runs only if analytics succeeds
-    uses: hello
-    echo: "Analytics updated successfully"
-
   - name: This runs regardless of analytics result
     uses: hello
     echo: "Workflow continues..."
+```
+
+A step runs whether or not the one before it failed, so every check gets its own line in the report. When the later steps only work on what an earlier one made, set [`fail_fast`](/reference/yaml-configuration#fail_fast) on the job: the steps after a failed one are then skipped, and the report shows the one failure rather than those that follow from it.
+
+```yaml
+jobs:
+- name: Checkout flow
+  fail_fast: true
+  steps:
+    - name: Log in
+      id: login
+      uses: http
+      with:
+        post: "{{vars.API}}/login"
+      test: res.code == 200
+      outputs:
+        token: res.body.token
+
+    - name: Place an order          # skipped when the login failed
+      uses: http
+      with:
+        post: "{{vars.API}}/orders"
+        headers:
+          authorization: "Bearer {{outputs.login.token}}"
+      test: res.code == 201
 ```
 
 ### Graceful Degradation
@@ -183,9 +204,39 @@ jobs:
           
 ```
 
+### Cleaning Up After a Failure
+
+A job that removes what the others made has to run when they fail too. `always: true` runs a job once every job in its `needs` is over, however each ended:
+
+```yaml
+jobs:
+- id: tests
+  name: Tests
+  steps:
+    - name: Create a user
+      uses: http
+      with:
+        post: "{{vars.API_URL}}/users"
+        body:
+          name: probe-test
+      test: res.code == 201
+
+- name: Cleanup
+  needs: [tests]
+  always: true
+  steps:
+    - name: Delete the test users
+      uses: http
+      with:
+        delete: "{{vars.API_URL}}/users?name=probe-test"
+      test: res.code == 200 || res.code == 404
+```
+
+The run still fails when `tests` did. See [`always`](/reference/yaml-configuration#always) for what the job can rely on.
+
 ### Conditional Job Execution
 
-There is no way to branch on whether another job failed - a failing job skips everything that depends on it. To act on an outcome, publish it as an output and let the next job decide with `skipif`.
+Apart from `always`, there is no way to branch on whether another job failed - a failing job skips everything that depends on it. To act on an outcome, publish it as an output and let the next job decide with `skipif`.
 
 ```yaml
 jobs:

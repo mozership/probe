@@ -253,6 +253,18 @@ probe base-workflow.yml,staging.yml
 probe base-workflow.yml,production.yml
 ```
 
+When the environments differ only in a few values, the workflow can stay one file, and the values be given as it is run. `--env-file` reads the variables the workflow reads into its `vars` from a file, where the environment has none, and `--var` gives a var in place of what the workflow writes for it:
+
+```bash
+# The variables of an environment, kept in a file of NAME=value lines
+probe --env-file staging.env workflow.yml
+
+# One value changed for one run
+probe --env-file staging.env --var api_url=http://localhost:8080 workflow.yml
+```
+
+See [`--var`](/reference/cli-reference#--var) and [`--env-file`](/reference/cli-reference#--env-file).
+
 ## Advanced Environment Management
 
 Environments differ in more than their addresses: which features are enabled, where the credentials come from, and whether the environment is configured correctly at all.

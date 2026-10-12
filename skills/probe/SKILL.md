@@ -73,7 +73,10 @@ jobs:
 - `outputs` need the step's `id`. Read them as `outputs.<step-id>.<name>`; an id with a hyphen needs brackets: `outputs['create-user'].user_id`.
 - Templates are evaluated in keys as well as values, at any depth of `with` and of a map under `vars`: `"{{vars.header}}": x` sends the key it comes to. Two keys that come to the same key fail the step. The name of a var itself is not evaluated: `vars: {"{{vars.name}}": x}` defines a var named as written.
 - A template ends at the `}}` that closes it: braces of a map literal nest, and `}}` inside a quoted string does not end it. Start a template that begins with a map literal with a space, `{{ {'a': 1} }}`, since `{{{` is read as a literal `{` followed by a template. A `{{` that is never closed is left as text.
-- Defaults shared by the steps of a job go in that job's `defaults`, keyed by action name. There is no top-level `defaults` or `env`.
+- Defaults shared by the steps of a job go in that job's `defaults`, keyed by action name; those every job shares, such as a base URL or a DSN, go in a top-level `defaults`, which a job's own come before. There is no top-level `env`.
+- The steps of a job all run, also after one that failed. When later steps only work on what an earlier one made, set `fail_fast: true` on the job, and the steps after a failed one are skipped.
+- `iteration` runs a step once per entry of a list of objects, read as `vars`. In place of the list it takes one template that comes to one when the step is reached: cases kept in a file, `"{{ parse_json(file('cases.json')) }}"`, or what an earlier step published, `"{{ outputs.users.rows }}"`.
+- A job that removes what others made, such as a test database, lists them in `needs` and sets `always: true`: it then runs when one of them failed too, where any other job is skipped.
 - An external action, `github.com/<owner>/<repo>@<commit SHA>`, used in more than one step is given a name once under the top-level `actions`, as `actions: {graphql: github.com/…@<SHA>}`, and `uses` and `defaults` then take the name. A name cannot be that of a built-in action. A job file run by `embedded` uses the names of the workflow that embeds it.
 - List secrets under `secrets` by environment variable name. Never write a credential into the YAML.
 - Do not guess parameters. If a field is not on the action's `probe guide <action>` page, it does not exist.
@@ -83,6 +86,8 @@ jobs:
 ```bash
 probe workflow.yml                    # run; the report goes to stdout
 probe base.yml,staging.yml            # merge files, later ones override
+probe --env-file .env workflow.yml    # variables for vars to read, where the environment has none
+probe --var url=http://localhost:8080 workflow.yml  # give a var in place of the one written
 probe check workflow.yml              # find what is wrong or weak without running
 probe dag workflow.yml                # check the job graph without running
 probe -v workflow.yml                 # also print every request and response

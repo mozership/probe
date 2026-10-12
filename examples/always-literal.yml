@@ -1,0 +1,48 @@
+name: Always Literal Example
+description: |
+  A job with always runs once the jobs it needs are over, whether or not
+  they succeeded, so that what a workflow made is removed when it fails too.
+  This workflow is expected to fail: the cleanup still runs.
+
+vars:
+  dir: /tmp/probe-always-example
+
+jobs:
+- name: Setup
+  id: setup
+  steps:
+  - name: Make what the tests work on
+    uses: shell
+    with:
+      cmd: mkdir -p {{vars.dir}} && echo data > {{vars.dir}}/file
+    test: res.code == 0
+
+- name: Tests (expected to fail)
+  id: tests
+  needs: [setup]
+  steps:
+  - name: A test that does not hold
+    uses: shell
+    with:
+      cmd: cat {{vars.dir}}/file
+    test: trim(res.stdout) == "other data"
+
+# skipped, as any job that needs a failed one is
+- name: Report (should not run)
+  id: report
+  needs: [tests]
+  steps:
+  - name: Never runs
+    uses: hello
+    test: 1 == 1
+
+# runs although tests failed and report was skipped
+- name: Cleanup
+  needs: [setup, tests, report]
+  always: true
+  steps:
+  - name: Remove what the setup made
+    uses: shell
+    with:
+      cmd: rm -rf {{vars.dir}} && test ! -e {{vars.dir}}
+    test: res.code == 0

@@ -42,14 +42,19 @@ jobs:
     uses: db
     with:
       query: SELECT * FROM users
-    test: res.code == 0 && res.rows_affected > 0
+    # the rows a SELECT read are in res.rows, each a map by column
+    test: |
+      res.code == 0 &&
+      len(res.rows) == 1 &&
+      res.rows[0].name == "John Doe" &&
+      res.rows[0].email == "john@example.com"
 
   - name: Select user by ID
     uses: db
     with:
       query: SELECT * FROM users WHERE id = ?
       params: [1]
-    test: res.code == 0 && res.rows_affected == 1
+    test: res.code == 0 && res.rows_affected == 1 && res.rows[0].id == 1
 
   - name: Update user
     uses: db
@@ -66,6 +71,12 @@ jobs:
       query: DELETE FROM users WHERE id = ?
       params: [1]
     test: res.code == 0 && res.rows_affected == 1
+
+  - name: The user is gone
+    uses: db
+    with:
+      query: SELECT count(*) AS n FROM users
+    test: res.code == 0 && res.rows[0].n == 0
 
   - name: Drop table
     uses: db

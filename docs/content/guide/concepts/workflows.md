@@ -57,7 +57,7 @@ vars:
   MAX_RETRY_COUNT: 3
 ```
 
-**Defaults**: Set common `with` values for the steps of a job, keyed by action name. `defaults` belongs to a job, not to the workflow.
+**Defaults**: Set common `with` values for the steps of a job, keyed by action name. A top-level `defaults` sets them for every job, and a job's own come before it.
 
 ```yaml
 jobs:

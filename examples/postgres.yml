@@ -8,6 +8,13 @@ vars:
   postgres_pass: "{{POSTGRES_PASS ?? ''}}"
   postgres_database: probe_test
 
+# every job asks the test database, so the DSN is written once; the steps
+# that create and drop it name the postgres database instead. The user is
+# read when a step runs, from what the setup job published
+defaults:
+  db:
+    dsn: "postgres://{{outputs.user}}:{{vars.postgres_pass}}@{{vars.postgres_host}}:{{vars.postgres_port}}/{{vars.postgres_database}}?sslmode=disable"
+
 jobs:
 - name: Setup Database
   id: setup
@@ -24,7 +31,7 @@ jobs:
       cmd: whoami
     test: res.code == 0
     outputs:
-      user: replace(res.stdout, '\n', '')
+      user: trim(res.stdout)
   - name: Create Test Database
     uses: db
     with:
@@ -35,9 +42,6 @@ jobs:
 - name: PostgreSQL Basic Operations
   id: basic-ops
   needs: [setup]
-  defaults:
-    db:
-      dsn: "postgres://{{outputs.user}}:{{vars.postgres_pass}}@{{vars.postgres_host}}:{{vars.postgres_port}}/{{vars.postgres_database}}?sslmode=disable"
   steps:
   - name: Test PostgreSQL Connection
     uses: db
@@ -45,7 +49,7 @@ jobs:
       query: "SELECT 1 as connection_test, NOW() as server_time, version() as pg_version"
     test: res.code == 0
     outputs:
-      server_time: res.rows__0__server_time
+      server_time: res.rows[0].server_time
 
   - name: Create Test Table
     uses: db
@@ -201,7 +205,6 @@ jobs:
   - name: Show PostgreSQL Version and Settings
     uses: db
     with:
-      dsn: "postgres://{{outputs.user}}:{{vars.postgres_pass}}@{{vars.postgres_host}}:{{vars.postgres_port}}/{{vars.postgres_database}}?sslmode=disable"
       query: "SELECT version() as pg_version, current_database() as current_db"
     test: res.code == 0
 
@@ -212,7 +215,6 @@ jobs:
   - name: Drop Test Objects
     uses: db
     with:
-      dsn: "postgres://{{outputs.user}}:{{vars.postgres_pass}}@{{vars.postgres_host}}:{{vars.postgres_port}}/{{vars.postgres_database}}?sslmode=disable"
       query: |
         DROP TABLE IF EXISTS products;
         DROP TYPE IF EXISTS product_status;

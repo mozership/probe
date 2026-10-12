@@ -13,13 +13,19 @@ import (
 )
 
 type Job struct {
-	Name     string   `yaml:"name" validate:"required"`
-	ID       string   `yaml:"id,omitempty"`
-	Needs    []string `yaml:"needs,omitempty"`
-	Steps    []*Step  `yaml:"steps" validate:"required"`
-	Repeat   *Repeat  `yaml:"repeat"`
-	Defaults any      `yaml:"defaults"`
-	SkipIf   string   `yaml:"skipif,omitempty"`
+	Name  string   `yaml:"name" validate:"required"`
+	ID    string   `yaml:"id,omitempty"`
+	Needs []string `yaml:"needs,omitempty"`
+	// Always runs the job once the jobs it needs are over, whether or not
+	// they succeeded, as a job that removes what they made has to.
+	Always bool    `yaml:"always,omitempty"`
+	Steps  []*Step `yaml:"steps" validate:"required"`
+	// FailFast skips the steps after one that failed, as steps that only
+	// work on what an earlier one made would fail for its reason.
+	FailFast bool    `yaml:"fail_fast,omitempty"`
+	Repeat   *Repeat `yaml:"repeat"`
+	Defaults any     `yaml:"defaults"`
+	SkipIf   string  `yaml:"skipif,omitempty"`
 }
 
 func (j *Job) Start(ctx JobContext) error {
@@ -81,7 +87,15 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 // uses the action they are keyed by. A value the step sets itself wins, and
 // nested objects are merged key by key.
 func (j *Job) ApplyDefaults() {
-	byAction, ok := j.Defaults.(map[string]any)
+	j.applyDefaults(j.Defaults)
+}
+
+// applyDefaults merges defaults, the with of each action by its uses, into
+// the with of every step of the job that uses the action, as ApplyDefaults
+// does the job's own. A workflow's defaults are applied with it after the
+// job's, so that they set only what neither the step nor the job did.
+func (j *Job) applyDefaults(defaults any) {
+	byAction, ok := defaults.(map[string]any)
 	if !ok {
 		return
 	}
@@ -91,7 +105,7 @@ func (j *Job) ApplyDefaults() {
 			continue
 		}
 		for _, s := range j.Steps {
-			if s.Uses != uses {
+			if s == nil || s.Uses != uses {
 				continue
 			}
 			if s.With == nil {
@@ -107,7 +121,10 @@ func (j *Job) ApplyDefaults() {
 func mergeDefaults(data, defaults map[string]any) {
 	for key, defaultValue := range defaults {
 		if _, exists := data[key]; !exists {
-			data[key] = defaultValue
+			// A step keeps a copy of its own: what is merged into it
+			// later, from the defaults further out, must not reach the
+			// other steps the value was given to.
+			data[key] = cloneValue(defaultValue)
 			continue
 		}
 		if nestedDefault, ok := defaultValue.(map[string]any); ok {
@@ -116,6 +133,25 @@ func mergeDefaults(data, defaults map[string]any) {
 			}
 		}
 	}
+}
+
+// cloneValue returns v with its maps and lists copied, at any depth.
+func cloneValue(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[k] = cloneValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = cloneValue(item)
+		}
+		return out
+	}
+	return v
 }
 
 // expandJobName evaluates and sets the job name, printing it if appropriate
@@ -166,30 +202,68 @@ func (j *Job) cloneForAsync() *Job {
 // executeSteps runs all steps in the job, handling iterations appropriately
 func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	idx := 0
-	for _, st := range j.Steps {
+	for pos, st := range j.Steps {
 		st.Expr = ev
+		st.pos, st.ordinal, st.placed = pos, 0, true
 
-		if len(st.Iteration) == 0 {
+		switch {
+		case st.Iteration.Expr != "":
+			j.executeStepWithIterationExpr(st, &idx, ctx)
+		case len(st.Iteration.Entries) == 0:
 			j.executeStep(st, &idx, ctx, nil)
-		} else {
-			j.executeStepWithIterations(st, &idx, ctx)
+		default:
+			j.executeStepWithIterations(st, st.Iteration.Entries, &idx, ctx)
 		}
 	}
 }
 
-// executeStep executes a single step without iterations
+// executeStep executes a single step without iterations. In a job with
+// fail_fast, a step after one that failed is reported as skipped instead.
 func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]any) {
 	st.Idx = *idx
 	*idx++
 	st.SetCtx(*ctx, vars)
+	if j.FailFast && ctx.Failed {
+		st.skipAfterFailure(ctx)
+		return
+	}
 	st.Do(ctx)
 }
 
 // executeStepWithIterations executes a step multiple times with different variable sets
-func (j *Job) executeStepWithIterations(st *Step, idx *int, ctx *JobContext) {
-	for _, vars := range st.Iteration {
+func (j *Job) executeStepWithIterations(st *Step, entries []map[string]any, idx *int, ctx *JobContext) {
+	for ordinal, vars := range entries {
+		st.ordinal = ordinal
 		j.executeStep(st, idx, ctx, vars)
 	}
+}
+
+// executeStepWithIterationExpr executes a step once for each entry its
+// iteration comes to now, with the outputs published so far. A template
+// that cannot be evaluated, or that does not come to a list of maps, fails
+// the step, and a list without entries skips it: there is nothing to run
+// it with. Neither is found out in a job with fail_fast after a step that
+// failed, where the step is skipped as any other is.
+func (j *Job) executeStepWithIterationExpr(st *Step, idx *int, ctx *JobContext) {
+	if j.FailFast && ctx.Failed {
+		j.executeStep(st, idx, ctx, nil)
+		return
+	}
+
+	st.SetCtx(*ctx, nil)
+	entries, err := st.iterationEntries()
+	if err == nil && len(entries) > 0 {
+		j.executeStepWithIterations(st, entries, idx, ctx)
+		return
+	}
+
+	st.Idx = *idx
+	*idx++
+	if err != nil {
+		st.failBeforeRun(&expr.FieldError{Path: "iteration", Err: err}, ctx)
+		return
+	}
+	st.skipWithoutRun("The iteration has no entry", ctx)
 }
 
 // validateSteps validates step configurations in the job

@@ -15,6 +15,7 @@ import (
 	"github.com/linyows/probe/actionrpc"
 	"github.com/linyows/probe/actions"
 	"github.com/linyows/probe/actions/grpc"
+	"github.com/linyows/probe/envfile"
 	"github.com/linyows/probe/oas"
 	"github.com/linyows/probe/report"
 )
@@ -47,6 +48,10 @@ type Cmd struct {
 	ReadOnly       bool
 	AllowHosts     string
 	AllowActions   string
+	// Vars are the --var flags given, each as name=value, in their order.
+	Vars []string
+	// EnvFiles are the files the --env-file flags name, in their order.
+	EnvFiles []string
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
@@ -62,7 +67,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"},
 		ver:        ver,
 		rev:        rev,
 		outWriter:  os.Stdout,
@@ -160,6 +165,27 @@ func (c *Cmd) parseArgs(args []string) error {
 					c.AllowActions = flagValue
 				}
 				c.markGuardFlag(flagName)
+			case "var", "env-file":
+				// Both can be given more than once.
+				if !hasValue {
+					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					flagValue = args[i+1]
+					skipNext = true
+				}
+				if flagName == "env-file" {
+					files := splitList(flagValue)
+					if len(files) == 0 {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					c.EnvFiles = append(c.EnvFiles, files...)
+					break
+				}
+				if _, _, err := parseVar(flagValue); err != nil {
+					return err
+				}
+				c.Vars = append(c.Vars, flagValue)
 			case "report":
 				// Accept both --report=junit and --report junit
 				if !hasValue {
@@ -284,6 +310,8 @@ func (c *Cmd) printOptions() {
 		{"", "--read-only", "Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)"},
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
+		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
+		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -413,6 +441,16 @@ func (c *Cmd) runProbe() int {
 	}
 	p.Config.Guard = guard
 
+	// The files give variables for the vars of the workflow to read, as
+	// they read the environment.
+	env, err := loadEnvFiles(c.EnvFiles)
+	if err != nil {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --env-file: %v\n", err)
+		return probe.ExitConfigError
+	}
+	p.Config.Env = env
+	p.Config.Vars = c.vars()
+
 	if err := p.Do(); err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
@@ -446,6 +484,57 @@ func (c *Cmd) runDag() int {
 	}
 	_, _ = fmt.Fprint(c.outWriter, graph)
 	return 0
+}
+
+// parseVar reads a --var, name=value. The value is all that comes after the
+// first =, and may be empty.
+func parseVar(s string) (name, value string, err error) {
+	name, value, ok := strings.Cut(s, "=")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return "", "", fmt.Errorf("--var must be name=value, not %q", s)
+	}
+	return name, value, nil
+}
+
+// vars returns the vars the --var flags give, by name. A name given more
+// than once has the value given last.
+func (c *Cmd) vars() map[string]string {
+	if len(c.Vars) == 0 {
+		return nil
+	}
+	vars := make(map[string]string, len(c.Vars))
+	for _, v := range c.Vars {
+		// Each was checked as it was parsed.
+		name, value, _ := parseVar(v)
+		vars[name] = value
+	}
+	return vars
+}
+
+// loadEnvFiles reads the variables the files at paths give, by name, for
+// the vars of the workflow to read as they read the environment. Among the
+// files, the last to give a variable wins.
+//
+// They are not set in the environment of this process: Probe's own
+// settings, such as the guard of the run, and the environment of the
+// actions it runs stay what the person running it set, whatever a file
+// says.
+func loadEnvFiles(paths []string) (map[string]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	env := map[string]string{}
+	for _, path := range paths {
+		vars, err := envfile.Read(path)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range vars {
+			env[v.Name] = v.Value
+		}
+	}
+	return env, nil
 }
 
 func (c *Cmd) markGuardFlag(name string) {
