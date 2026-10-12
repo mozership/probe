@@ -1,0 +1,55 @@
+name: Sign-up
+vars:
+  api: "{{API_URL ?? 'http://127.0.0.1:8080'}}"
+
+jobs:
+- name: Create account
+  id: signup
+  defaults:
+    http:
+      url: "{{vars.api}}"
+      headers:
+        content-type: application/json
+  steps:
+  - name: Post the form
+    id: create
+    uses: http
+    with:
+      post: /signup
+      body:
+        email: alice@example.com
+    test: res.code == 201 && res.body.status == "pending"
+    outputs:
+      user_id: res.body.id
+
+- name: Database
+  id: db
+  needs: [signup]
+  steps:
+  - name: Row is pending
+    uses: db
+    with:
+      dsn: file:./app.db
+      query: SELECT status FROM users WHERE id = ?
+      params: ["{{outputs.create.user_id}}"]
+    test: res.code == 0 && res.rows[0].status == "pending"
+
+- name: Activate
+  needs: [db]
+  fail_fast: true
+  defaults:
+    http:
+      url: "{{vars.api}}"
+  steps:
+  - name: Activate the account
+    uses: http
+    with:
+      post: "/users/{{outputs.create.user_id}}/activate"
+    test: res.code == 200 && res.body.status == "active"
+  - name: Row is active
+    uses: db
+    with:
+      dsn: file:./app.db
+      query: SELECT status FROM users WHERE id = ?
+      params: ["{{outputs.create.user_id}}"]
+    test: res.rows[0].status == "active"

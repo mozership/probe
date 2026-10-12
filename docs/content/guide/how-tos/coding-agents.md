@@ -2,7 +2,9 @@
 
 When a coding agent changes a service, it also writes the unit tests that say the change is right. Code and tests then come from the same reading of the task, and a wrong reading passes both. A Probe workflow checks the change from outside: it drives the running service over the protocols its clients use, and looks at what comes back, the row that was written and the mail that was sent.
 
-This guide sets a project up so that an agent writes and runs such a workflow as part of every change, and so that you can trust the result.
+This guide sets a project up so that an agent writes and runs such a workflow as part of every change, and so that you can trust the result. These are the three things it comes to: the workflow is checked before it runs, it is run against the service and its database, and it can be run where it must not write.
+
+<img class="diagram" src="/demo.svg" alt="A terminal in three scenes: probe check reports the mistakes in a workflow an agent wrote, the fixed workflow calls an API and queries the row it wrote, and under --read-only its POST is refused." />
 
 ## Install Probe Where the Agent Works
 
