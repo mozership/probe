@@ -81,7 +81,15 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 // uses the action they are keyed by. A value the step sets itself wins, and
 // nested objects are merged key by key.
 func (j *Job) ApplyDefaults() {
-	byAction, ok := j.Defaults.(map[string]any)
+	j.applyDefaults(j.Defaults)
+}
+
+// applyDefaults merges defaults, the with of each action by its uses, into
+// the with of every step of the job that uses the action, as ApplyDefaults
+// does the job's own. A workflow's defaults are applied with it after the
+// job's, so that they set only what neither the step nor the job did.
+func (j *Job) applyDefaults(defaults any) {
+	byAction, ok := defaults.(map[string]any)
 	if !ok {
 		return
 	}
@@ -91,7 +99,7 @@ func (j *Job) ApplyDefaults() {
 			continue
 		}
 		for _, s := range j.Steps {
-			if s.Uses != uses {
+			if s == nil || s.Uses != uses {
 				continue
 			}
 			if s.With == nil {
@@ -107,7 +115,10 @@ func (j *Job) ApplyDefaults() {
 func mergeDefaults(data, defaults map[string]any) {
 	for key, defaultValue := range defaults {
 		if _, exists := data[key]; !exists {
-			data[key] = defaultValue
+			// A step keeps a copy of its own: what is merged into it
+			// later, from the defaults further out, must not reach the
+			// other steps the value was given to.
+			data[key] = cloneValue(defaultValue)
 			continue
 		}
 		if nestedDefault, ok := defaultValue.(map[string]any); ok {
@@ -116,6 +127,25 @@ func mergeDefaults(data, defaults map[string]any) {
 			}
 		}
 	}
+}
+
+// cloneValue returns v with its maps and lists copied, at any depth.
+func cloneValue(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[k] = cloneValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = cloneValue(item)
+		}
+		return out
+	}
+	return v
 }
 
 // expandJobName evaluates and sets the job name, printing it if appropriate

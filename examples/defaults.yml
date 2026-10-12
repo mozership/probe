@@ -1,0 +1,49 @@
+name: Defaults Example
+description: |
+  The with of an action is written once for every job under the top-level
+  defaults. A job's own defaults come before them, and what a step writes
+  before both.
+
+defaults:
+  shell:
+    env:
+      STAGE: workflow
+      REGION: tokyo
+
+jobs:
+- name: The defaults of the workflow
+  steps:
+  - name: A step is given them
+    uses: shell
+    with:
+      cmd: echo "$STAGE $REGION"
+    test: trim(res.stdout) == "workflow tokyo"
+
+  - name: What a step writes comes first, key by key
+    uses: shell
+    with:
+      cmd: echo "$STAGE $REGION"
+      env:
+        STAGE: step
+    test: trim(res.stdout) == "step tokyo"
+
+- name: The defaults of a job come before them
+  defaults:
+    shell:
+      env:
+        STAGE: job
+  steps:
+  - name: The job's value, and the workflow's where the job has none
+    uses: shell
+    with:
+      cmd: echo "$STAGE $REGION"
+    test: trim(res.stdout) == "job tokyo"
+
+  - name: The step's value before both
+    uses: shell
+    with:
+      cmd: echo "$STAGE $REGION"
+      env:
+        STAGE: step
+        REGION: osaka
+    test: trim(res.stdout) == "step osaka"

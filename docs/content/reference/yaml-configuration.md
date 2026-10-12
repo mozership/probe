@@ -13,6 +13,9 @@ vars:                         # Optional: workflow variables
   key: value
 secrets:                      # Optional: environment variables to hide in output
   - NAME
+defaults:                     # Optional: default `with` values per action, for every job
+  http:
+    url: string
 actions:                      # Optional: names for external actions
   name: string
 jobs:                         # Required: a list of jobs
@@ -51,11 +54,11 @@ jobs:                         # Required: a list of jobs
 
 `jobs` is a **list**, not a mapping. A workflow that writes `jobs:` as a mapping of job ids fails to load.
 
-There is no top-level `env` key and no top-level `defaults` key. Environment variables are read through `vars`, and `defaults` belongs to a job.
+There is no top-level `env` key. Environment variables are read through `vars`.
 
 ## Top-Level Properties
 
-Five properties sit at the root of a workflow file alongside `jobs`: what to call it, what it does, the values it starts with, which of those values must not be shown, and the names it gives to external actions.
+Six properties sit at the root of a workflow file alongside `jobs`: what to call it, what it does, the values it starts with, which of those values must not be shown, the `with` values its steps share, and the names it gives to external actions.
 
 ### `name`
 
@@ -141,10 +144,52 @@ Independently of `secrets`, the values of the `Authorization`, `Proxy-Authorizat
 
 The same goes for credentials passed to an action: the value of any `password`, `key_passphrase`, `secret_access_key` or `session_token` field, at any depth of `with`, is shown as `<redacted>`, and so is the password in a `dsn` or a `url`, such as `redis://user:password@host`, while the rest of the URL stays visible. A password written straight into a step therefore does not appear in `--verbose` output or an action's log records, even though it is not listed in `secrets`. When the template of such a value cannot be evaluated, the error names the value, as `with.password`, but does not say why, since the template and the error may each quote the credential. A `url` is treated so only when the template is in its user info, as in `redis://app:{{vars.pw}}@host`; the error of a template elsewhere in a `url` is shown.
 
+### `defaults`
+
+**Type:** Object (optional)  
+**Description:** Default `with` values for the steps of every job, keyed by action as a job's [`defaults`](#defaults-1) are.
+
+A connection that every job uses, such as a base URL or a DSN, is written once here rather than in each job:
+
+```yaml
+defaults:
+  db:
+    dsn: "postgres://{{vars.user}}@{{vars.host}}/app"
+  http:
+    url: "{{vars.api_url}}"
+    headers:
+      accept: application/json
+
+jobs:
+  - name: Rows
+    steps:
+      - name: Count users
+        uses: db
+        with:
+          query: SELECT count(*) AS n FROM users
+        test: res.rows[0].n > 0
+
+  - name: API
+    defaults:
+      http:
+        headers:
+          authorization: "Bearer {{vars.token}}"
+    steps:
+      - name: List users          # sent to the default url, with both headers
+        uses: http
+        with:
+          get: /users
+        test: res.code == 200
+```
+
+The closest value wins: what a step writes in `with`, then the `defaults` of its job, then those of the workflow. Objects are merged key by key, so the step above sends the `accept` header of the workflow and the `authorization` header of its job. A template in a default is evaluated when the step runs, with the step's own `vars` and `outputs`.
+
+The defaults of a workflow do not reach a job file run by the [embedded](/reference/actions/embedded) action, which is a file of its own with its own `defaults`.
+
 ### `actions`
 
 **Type:** Object of strings (optional)  
-**Description:** Names for the [external actions](/guide/concepts/actions#external-actions) the workflow uses. A step's `uses` and a key of a job's `defaults` can then be the name in place of the repository and commit.
+**Description:** Names for the [external actions](/guide/concepts/actions#external-actions) the workflow uses. A step's `uses` and a key of `defaults`, of a job or of the workflow, can then be the name in place of the repository and commit.
 
 ```yaml
 actions:
@@ -168,7 +213,7 @@ The commit an action is pinned to is written once, so a newer release is a chang
 - A name is letters, digits, `_` and `-`, and starts with a letter or a digit.
 - A name cannot be that of an action of Probe, such as `http` or `shell`: what `uses: http` runs does not depend on the workflow. A workflow that gives such a name fails to load.
 - The value names an external action as `uses` does: `github.com/<owner>/<repo>[/<dir>]@<commit>` with a full 40-character commit SHA, or a local path starting with `./`, `../` or `/`. It is not a template, and it cannot be another name.
-- A step can still name an action in full, and the `defaults` written by the name apply to it too. A job's `defaults` cannot hold both the name and the action it stands for.
+- A step can still name an action in full, and the `defaults` written by the name apply to it too. One `defaults` cannot hold both the name and the action it stands for.
 
 Probe replaces each name by its action as it loads the workflow, so everything else sees the action in full. In particular, `--allow-action` takes the action, not the name: a workflow cannot choose what a name the person running Probe has allowed stands for.
 
@@ -233,7 +278,7 @@ jobs:
 
 #### `defaults`
 
-Default parameters merged into the `with` of every step in the job that uses the matching action. A value set on the step wins. The key is what a step writes in `uses`: the name of a built-in action, an external action in full, or a name given under [`actions`](#actions).
+Default parameters merged into the `with` of every step in the job that uses the matching action. A value set on the step wins, and a value set here wins over the [`defaults` of the workflow](#defaults), which every job shares. The key is what a step writes in `uses`: the name of a built-in action, an external action in full, or a name given under [`actions`](#actions).
 
 ```yaml
 jobs:

@@ -8,6 +8,12 @@ vars:
   mysql_pass: "{{MYSQL_PASS ?? ''}}"
   mysql_database: probe_test
 
+# every job asks the test database, so the DSN is written once; the steps
+# that create and drop it name the server instead
+defaults:
+  db:
+    dsn: mysql://{{vars.mysql_user}}:{{vars.mysql_pass}}@{{vars.mysql_host}}:{{vars.mysql_port}}/{{vars.mysql_database}}
+
 jobs:
 - name: Setup Database
   id: setup
@@ -23,9 +29,6 @@ jobs:
 - name: MySQL Basic Operations
   id: basic-ops
   needs: [setup]
-  defaults:
-    db:
-      dsn: mysql://{{vars.mysql_user}}:{{vars.mysql_pass}}@{{vars.mysql_host}}:{{vars.mysql_port}}/{{vars.mysql_database}}
   steps:
   - name: Test MySQL Connection
     uses: db
@@ -156,7 +159,6 @@ jobs:
   - name: Show MySQL Version and Status
     uses: db
     with:
-      dsn: mysql://{{vars.mysql_user}}:{{vars.mysql_pass}}@{{vars.mysql_host}}:{{vars.mysql_port}}/{{vars.mysql_database}}
       query: SELECT VERSION() as mysql_version, CONNECTION_ID() as connection_id
     test: res.code == 0
 

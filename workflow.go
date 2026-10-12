@@ -25,6 +25,10 @@ type Workflow struct {
 	Description string         `yaml:"description,omitempty"`
 	Jobs        []Job          `yaml:"jobs" validate:"required"`
 	Vars        map[string]any `yaml:"vars"`
+	// Defaults are the with of each action, by its uses, for the steps of
+	// every job. A job's own defaults come before them, and a step's with
+	// before both.
+	Defaults any `yaml:"defaults"`
 	// Actions gives names to external actions, for the steps and the
 	// defaults of the jobs to name them by. Load writes the action in place
 	// of each name, so nothing that runs the workflow sees one.
