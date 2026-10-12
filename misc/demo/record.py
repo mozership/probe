@@ -6,8 +6,8 @@ misc for the README and in docs/public for the site.
 
 It builds probe and the sign-up service in misc/demo/server, runs the commands
 of the demo in a terminal of their own, and draws what they printed as an
-animated SVG. Nothing in the picture is written by hand but the captions and
-the comment lines: the commands are the ones that ran, and the output is theirs.
+animated SVG. Nothing in the picture is written by hand but the comment
+lines above the commands: the commands are the ones that ran, and the output is theirs.
 
     python3 misc/demo/record.py --freeze 12
 
@@ -28,6 +28,7 @@ import sys
 import tempfile
 import termios
 import time
+import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -38,7 +39,6 @@ CHAR = 7.83  # the advance of one character of the monospace font, at FONT
 LINE = 19
 PAD = 20
 BAR = 34  # the title bar of the terminal
-CAPTION = 44  # the room above the terminal that the caption takes
 
 FG = "#d8e6f3"
 DIM = "#7f95a8"
@@ -48,17 +48,20 @@ RED = "#ff7b72"
 GREEN = "#56d364"
 YELLOW = "#e3b341"
 BLUE = "#79c0ff"
+NOTE = "#a9c4dc"  # the comment that says what a scene is about
 
+# What each scene is about, typed as a comment above its command, so that the
+# eye stays where the command and its output are.
 CAPTIONS = {
     "en": [
-        "An agent wrote the workflow. probe check finds its mistakes before anything runs.",
-        "Fixed, it calls the API, then queries the row the API wrote.",
-        "Against a system it must not change, writes are refused before they are sent.",
+        "An agent wrote signup.yml. Find its mistakes before anything runs.",
+        "Fixed. Call the API, then query the row it wrote.",
+        "On a system it must not change, refuse writes before they are sent.",
     ],
     "ja": [
-        "エージェントが書いたワークフローの誤りを、probe checkが実行前に見つけます。",
-        "直したワークフローは、APIを呼び、APIが書き込んだ行を問い合わせます。",
-        "変更されては困るシステムに対しては、書き込みを送信前に拒否します。",
+        "エージェントが書いたsignup.ymlの誤りを、実行前に見つける",
+        "直したら、APIを呼び、書き込まれた行を問い合わせる",
+        "変更されては困る環境では、書き込みを送信前に拒否する",
     ],
 }
 
@@ -179,7 +182,15 @@ def wrap(line):
 
 
 def plain(text, colour=None, bold=False):
-    return [(c, colour, bold) for c in text]
+    """The cells of text. A character a terminal draws two columns wide, as it
+    does kana and kanji, is followed by an empty cell that holds its second
+    column."""
+    cells = []
+    for c in text:
+        cells.append((c, colour, bold))
+        if unicodedata.east_asian_width(c) in "WF":
+            cells.append(("", colour, bold))
+    return cells
 
 
 def mark_check(line):
@@ -197,30 +208,29 @@ def mark_check(line):
 class Picture:
     def __init__(self, total):
         self.total = total
-        self.items = []  # (row, cells, start, end, typed)
-        self.captions = []  # (text, start, end)
+        self.items = []  # (row, cells, start, end, seconds a character or None)
+        self.captions = []
 
     def scene(self, start, end, caption, steps):
-        """steps are (kind, cells) in the order they appear: a command is typed
-        a character at a time, and the output of a command comes a line at a
-        time after it."""
-        self.captions.append((caption, start, end))
-        t = start + 0.6
+        """steps are (kind, cells) in the order they appear: a comment and a
+        command are typed a character at a time, the comment faster, and the
+        output of a command comes a line at a time after it."""
+        self.captions.append(caption)
+        t = start + 0.4
         row = 0
         for kind, lines in steps:
-            if kind == "command":
+            if kind in ("command", "comment"):
                 cells = lines[0]
-                self.items.append((row, cells, t, end, True))
-                t += 0.045 * (len(cells) - 2) + 0.5
-                row += 1
-            elif kind == "comment":
-                self.items.append((row, lines[0], t, end, False))
-                t += 0.9
+                if len(cells) > COLS:
+                    sys.exit("record.py: a typed line is longer than the terminal is wide: %r" % "".join(c for c, _, _ in cells))
+                pace = 0.045 if kind == "command" else 0.028
+                self.items.append((row, cells, t, end, pace))
+                t += 0.3 + pace * (len(cells) - 2) + (0.5 if kind == "command" else 0.7)
                 row += 1
             else:
                 for line in lines:
                     for part in wrap(line):
-                        self.items.append((row, part, t, end, False))
+                        self.items.append((row, part, t, end, None))
                         row += 1
                     t += 0.12
                 t += 0.6
@@ -231,7 +241,7 @@ class Picture:
 
     def render(self, freeze=None):
         width = round(COLS * CHAR + 2 * PAD)
-        height = CAPTION + BAR + self.rows() * LINE + 2 * PAD
+        height = BAR + self.rows() * LINE + 2 * PAD
         frames = {}
 
         def show(start, end):
@@ -252,13 +262,18 @@ class Picture:
             follows it."""
             runs = []
             for k, (ch, colour, bold) in enumerate(cells):
-                if runs and runs[-1][1:] == (colour, bold) and ch != " " and runs[-1][3] == k:
-                    runs[-1] = (runs[-1][0] + ch, colour, bold, k + 1, runs[-1][4])
-                elif ch != " ":
-                    runs.append((ch, colour, bold, k + 1, k))
+                if ch in ("", " "):
+                    continue
+                wide = unicodedata.east_asian_width(ch) in "WF"
+                if runs and not wide and runs[-1][1:4] == (colour, bold, k):
+                    runs[-1] = (runs[-1][0] + ch, colour, bold, k + 1, runs[-1][4], 0)
+                else:
+                    # A wide character stands alone, in the middle of its two
+                    # columns, and nothing is joined to it: next is never k.
+                    runs.append((ch, colour, bold, -1 if wide else k + 1, k, (2 * CHAR - FONT) / 2 if wide else 0))
             spans = []
-            for s, colour, bold, _, at in runs:
-                attrs = ' x="%.1f"' % (x + at * CHAR)
+            for s, colour, bold, _, at, shift in runs:
+                attrs = ' x="%.1f"' % (x + at * CHAR + shift)
                 if colour:
                     attrs += ' fill="%s"' % colour
                 if bold:
@@ -267,40 +282,31 @@ class Picture:
             cls = ' class="%s"' % cls if cls else ""
             out.append('<text y="%.1f"%s%s>%s</text>' % (y, cls, extra, "".join(spans)))
 
-        top = CAPTION
-        for caption, start, end in self.captions:
-            cls = show(start, end)
-            if cls == "off":
-                continue
-            out.append(
-                '<text x="%d" y="26" class="caption%s">%s</text>'
-                % (width // 2, " " + cls if cls else "", html.escape(caption))
-            )
+        top = 0
         out.append('<rect x="0.5" y="%.1f" width="%d" height="%d" rx="8" fill="%s" stroke="%s"/>' % (top + 0.5, width - 1, height - top - 1, BG, FRAME))
         for k, colour in enumerate(("#ff5f57", "#febc2e", "#28c840")):
             out.append('<circle cx="%d" cy="%d" r="5.5" fill="%s" opacity="0.85"/>' % (PAD + k * 18, top + BAR // 2, colour))
 
         base = top + BAR + PAD + FONT - 2
-        for row, cells, start, end, typed in self.items:
+        for row, cells, start, end, pace in self.items:
             y = base + row * LINE
-            if not typed:
+            if pace is None:
                 cls = show(start, end)
                 if cls != "off":
                     text(PAD, y, cells, cls)
                 continue
-            # The prompt comes at once, and the command after it a character at
-            # a time.
+            # The first two cells, "$ " or "# ", come at once, and the rest a
+            # character at a time.
             cls = show(start, end)
             if cls != "off":
                 text(PAD, y, cells[:2], cls)
             for k in range(2, len(cells)):
-                cls = show(start + 0.3 + 0.045 * (k - 2), end)
-                if cls != "off" and cells[k][0] != " ":
+                cls = show(start + 0.3 + pace * (k - 2), end)
+                if cls != "off" and cells[k][0] not in ("", " "):
                     text(PAD + k * CHAR, y, [cells[k]], cls)
 
         style = [
-            "text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;font-size:%dpx;fill:%s;white-space:pre}" % (FONT, FG),
-            ".caption{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Noto Sans JP',sans-serif;font-size:15px;font-weight:600;fill:#6b7f91;text-anchor:middle}",
+            "text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono','Hiragino Sans','Noto Sans JP',monospace;font-size:%dpx;fill:%s;white-space:pre}" % (FONT, FG),
         ]
         for name, (a, b) in sorted(frames.items()):
             # Seen from a to b, and not before or after. The two stops a hair
@@ -316,7 +322,7 @@ class Picture:
         return (
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" role="img">\n'
             "<title>%s</title>\n<style>%s</style>\n%s\n</svg>\n"
-            % (width, height, width, height, html.escape(" ".join(c for c, _, _ in self.captions)), "\n".join(style), "\n".join(out))
+            % (width, height, width, height, html.escape(" ".join(self.captions)), "\n".join(style), "\n".join(out))
         )
 
 
@@ -361,21 +367,26 @@ def build(lang, outputs):
         return ("command", [plain("$ ", DIM) + plain(line, FG, True)])
 
     def comment(line):
-        return ("comment", [plain("# " + line, DIM)])
+        return ("comment", [plain("# ", DIM) + plain(line, NOTE)])
 
     def output(text, mark=None):
         lines = screen(text)
         return ("output", [mark(line) for line in lines] if mark else lines)
 
     picture = Picture(total=30)
-    picture.scene(0, 9.5, captions[0], [command("probe check signup.yml"), output(check, mark_check)])
+    picture.scene(0, 9.5, captions[0], [comment(captions[0]), command("probe check signup.yml"), output(check, mark_check)])
     picture.scene(
         9.5,
         20.5,
         captions[1],
-        [command("probe check signup.yml"), output(check_fixed), command("probe signup.yml"), output(run)],
+        [comment(captions[1]), command("probe check signup.yml"), output(check_fixed), command("probe signup.yml"), output(run)],
     )
-    picture.scene(20.5, 30, captions[2], [command("probe --read-only signup.yml 2>/dev/null"), output(refused)])
+    picture.scene(
+        20.5,
+        30,
+        captions[2],
+        [comment(captions[2]), command("probe --read-only signup.yml 2>/dev/null"), output(refused)],
+    )
     return picture
 
 

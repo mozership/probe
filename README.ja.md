@@ -26,7 +26,9 @@
 
 AIエージェントがサービスを変更したとき、その変更が動くことは、エージェント自身が書いたコードやユニットテストとは別のもので示す必要があります。Probeのワークフローは、それを外側から示します。読みやすいYAMLで、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作し、ジョブを並行して実行しながら、応答を1つずつ検証します。エージェントは`probe skill`でワークフローの書き方を学び、`probe check`は実行する前に書き間違いを見つけ、`--read-only`と`--allow-host`は許可していない書き込みと接続を拒否します。Probeは単体のバイナリで、手元でも、CIでも、cronからでも同じように動き、結果は終了コードに反映されます。ドキュメント: [probe.linyo.ws/ja](https://probe.linyo.ws/ja)
 
-![デモ: probe checkがエージェントの書いたワークフローの誤りを見つけ、直したワークフローがAPIを呼んで書き込まれた行を問い合わせ、--read-onlyが書き込みを拒否する](/misc/demo-ja.svg)
+<p align="center">
+  <img src="misc/demo-ja.svg" alt="デモ: probe checkがエージェントの書いたワークフローの誤りを見つけ、直したワークフローがAPIを呼んで書き込まれた行を問い合わせ、--read-onlyが書き込みを拒否する">
+</p>
 
 ![Architecture](/misc/probe-architecture.svg)
 
