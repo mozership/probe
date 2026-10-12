@@ -7,7 +7,7 @@ steps:
   with:
     cmd: echo "foobar"
   outputs:
-    myid: replace(res.stdout, '\n', '')
+    myid: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
   test: res.code == 0
@@ -18,7 +18,7 @@ steps:
   with:
     cmd: echo "0123456789"
   outputs:
-    mytoken: replace(res.stdout, '\n', '')
+    mytoken: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
 

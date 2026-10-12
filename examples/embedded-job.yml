@@ -13,7 +13,7 @@ jobs:
       cmd: whoami
     test: res.code == 0
     outputs:
-      login: replace(res.stdout, '\n', '')
+      login: trim(res.stdout)
 
   - name: Authentication(Embedded Job)
     id: auth

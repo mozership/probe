@@ -10,7 +10,7 @@ jobs:
     with:
       cmd: echo "test-identifier-12345"
     outputs:
-      token: replace(res.stdout, '\n', '')
+      token: trim(res.stdout)
 
   - name: Use outputs identifier
     uses: shell
@@ -20,7 +20,7 @@ jobs:
       foo:
         bar: "{{outputs.step1.token}}"
     echo: |
-      Identifier from stdout: {{replace(res.stdout, '\n', '')}}
+      Identifier from stdout: {{trim(res.stdout)}}
       bar from vars:{{vars.foo.bar}}
 
 - name: Test Job 2

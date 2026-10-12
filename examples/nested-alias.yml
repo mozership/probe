@@ -34,11 +34,11 @@ jobs:
       config: *default_config
     test: |
       res.code == 0 &&
-      replace(res.stdout, '\n', '') == "hello"
+      trim(res.stdout) == "hello"
     echo: |
       Base value: {{vars.base}}
     outputs:
-      result: replace(res.stdout, '\n', '')
+      result: trim(res.stdout)
 
   - name: Verify mergekey list
     uses: shell
