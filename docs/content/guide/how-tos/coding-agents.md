@@ -4,7 +4,7 @@ When a coding agent changes a service, it also writes the unit tests that say th
 
 This guide sets a project up so that an agent writes and runs such a workflow as part of every change, and so that you can trust the result. These are the three things it comes to: the workflow is checked before it runs, it is run against the service and its database, and it can be run where it must not write.
 
-<img class="diagram" src="/demo.svg" alt="A terminal in three scenes: probe check reports the mistakes in a workflow an agent wrote, the fixed workflow calls an API and queries the row it wrote, and under --read-only its POST is refused." />
+<img class="diagram" src="/demo.svg" alt="A terminal in three scenes: probe check reports the mistakes in an end-to-end test an AI agent wrote, the fixed test calls an API and queries the row it wrote, and under --read-only its POST is refused." />
 
 ## Install Probe Where the Agent Works
 
