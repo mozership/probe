@@ -4,6 +4,29 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## Unreleased
+
+### Breaking Changes
+
+This release breaks the Go API in a minor version. Workflow files are not
+affected: an `iteration` written as a list is read as it was.
+
+`Step.Iteration` was the list of entries a step runs once for each of. A
+workflow can now give a template in its place, which comes to the list when
+the step is reached, so the field holds either.
+
+| Before | After |
+|---|---|
+| `Step.Iteration []map[string]any` | `Step.Iteration Iteration`, with the list in `Iteration.Entries` and the template in `Iteration.Expr` |
+| `Step{Iteration: []map[string]any{...}}` | `Step{Iteration: Iteration{Entries: []map[string]any{...}}}` |
+| `len(step.Iteration)`, `range step.Iteration` | `len(step.Iteration.Entries)`, `range step.Iteration.Entries`; a step whose `Iteration.Expr` is set has its entries only when it runs |
+
+`Iteration` reads and writes YAML as the field did: a list of maps, or a
+string that is one template.
+
+`Workflow.Defaults`, `Job.Always` and `Job.FailFast` are new, and
+`mask.Masker` gains `Value`.
+
 ## v1.22.0 (2026-10-09)
 
 ### Breaking Changes

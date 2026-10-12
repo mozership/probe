@@ -772,6 +772,7 @@ func (c *checker) checkExpressions() {
 			c.templates(sp+".with", where, "with", st.With)
 			c.templates(sp+".vars", where, "vars", st.Vars)
 			c.templates(sp+".echo", where, "echo", st.Echo)
+			c.templates(sp+".iteration", where, "iteration", st.Iteration.Expr)
 			c.expression(sp+".test", where, "test", st.Test)
 			c.expression(sp+".skipif", where, "skipif", st.SkipIf)
 			for _, k := range slices.Sorted(maps.Keys(st.Outputs)) {
@@ -852,6 +853,7 @@ func (c *checker) checkOutputs() {
 			readTemplates(sp+".name", where, "name", i, j, false, st.Name)
 			readTemplates(sp+".with", where, "with", i, j, false, st.With)
 			readTemplates(sp+".vars", where, "vars", i, j, false, st.Vars)
+			readTemplates(sp+".iteration", where, "iteration", i, j, false, st.Iteration.Expr)
 			read(sp+".skipif", where, "skipif", i, j, false, st.SkipIf)
 			for _, k := range slices.Sorted(maps.Keys(st.Outputs)) {
 				read(sp+".outputs."+k, where, "outputs."+k, i, j, false, st.Outputs[k])

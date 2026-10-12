@@ -214,9 +214,11 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 }
 
 // appendRepeatStepResults appends the final results of repeat step executions to buffer.
-// The counters are kept by the index each step ran with, which counts every
-// entry of an iteration, so they are read in the order of those indexes
-// rather than by the steps the job is written with.
+// The counters are kept by where each step is written and which entry of
+// its iteration it ran with (Step.counterKey), so that a run does not count
+// for another step when an iteration comes to another number of entries in
+// each run. They are read in the order of those keys, which is the order the
+// steps ran in, and numbered from there as the steps of any job are.
 func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 	jobID := e.job.ID
 
@@ -239,7 +241,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 	ctx.countersMu.Unlock()
 
 	// Create StepResults for repeat steps and add them to Result
-	for n, i := range indexes {
+	for n := range indexes {
 		counter := counters[n]
 		hasTest := counter.Test != "" || counter.Checked
 
@@ -261,7 +263,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 
 		// Create StepResult with repeat counter
 		stepResult := StepResult{
-			Index:         i,
+			Index:         n,
 			Name:          counter.Name,
 			Status:        status,
 			HasTest:       hasTest,

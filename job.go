@@ -202,13 +202,17 @@ func (j *Job) cloneForAsync() *Job {
 // executeSteps runs all steps in the job, handling iterations appropriately
 func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	idx := 0
-	for _, st := range j.Steps {
+	for pos, st := range j.Steps {
 		st.Expr = ev
+		st.pos, st.ordinal, st.placed = pos, 0, true
 
-		if len(st.Iteration) == 0 {
+		switch {
+		case st.Iteration.Expr != "":
+			j.executeStepWithIterationExpr(st, &idx, ctx)
+		case len(st.Iteration.Entries) == 0:
 			j.executeStep(st, &idx, ctx, nil)
-		} else {
-			j.executeStepWithIterations(st, &idx, ctx)
+		default:
+			j.executeStepWithIterations(st, st.Iteration.Entries, &idx, ctx)
 		}
 	}
 }
@@ -227,10 +231,39 @@ func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]a
 }
 
 // executeStepWithIterations executes a step multiple times with different variable sets
-func (j *Job) executeStepWithIterations(st *Step, idx *int, ctx *JobContext) {
-	for _, vars := range st.Iteration {
+func (j *Job) executeStepWithIterations(st *Step, entries []map[string]any, idx *int, ctx *JobContext) {
+	for ordinal, vars := range entries {
+		st.ordinal = ordinal
 		j.executeStep(st, idx, ctx, vars)
 	}
+}
+
+// executeStepWithIterationExpr executes a step once for each entry its
+// iteration comes to now, with the outputs published so far. A template
+// that cannot be evaluated, or that does not come to a list of maps, fails
+// the step, and a list without entries skips it: there is nothing to run
+// it with. Neither is found out in a job with fail_fast after a step that
+// failed, where the step is skipped as any other is.
+func (j *Job) executeStepWithIterationExpr(st *Step, idx *int, ctx *JobContext) {
+	if j.FailFast && ctx.Failed {
+		j.executeStep(st, idx, ctx, nil)
+		return
+	}
+
+	st.SetCtx(*ctx, nil)
+	entries, err := st.iterationEntries()
+	if err == nil && len(entries) > 0 {
+		j.executeStepWithIterations(st, entries, idx, ctx)
+		return
+	}
+
+	st.Idx = *idx
+	*idx++
+	if err != nil {
+		st.failBeforeRun(&expr.FieldError{Path: "iteration", Err: err}, ctx)
+		return
+	}
+	st.skipWithoutRun("The iteration has no entry", ctx)
 }
 
 // validateSteps validates step configurations in the job

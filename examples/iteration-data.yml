@@ -1,0 +1,43 @@
+name: Iteration From Data Example
+description: |
+  iteration takes a template in place of a list written in the workflow. It
+  is evaluated when the step is reached, and the step runs once for each
+  entry of the list it comes to, with the entry's keys as vars.
+
+jobs:
+# the cases are kept in a file, where they can grow without the workflow
+- name: Cases kept in a file
+  steps:
+  - name: "{{vars.name}} is {{vars.role}}"
+    uses: shell
+    with:
+      cmd: echo "{{vars.name}}:{{vars.role}}"
+    test: trim(res.stdout) == vars.name + ":" + vars.role
+    iteration: "{{ parse_json(file('examples/fixtures/cases.json')) }}"
+
+# the list is what an earlier step published
+- name: What an earlier step found
+  steps:
+  - name: List users
+    id: users
+    uses: shell
+    with:
+      cmd: echo '[{"id":1,"name":"ada"},{"id":2,"name":"grace"}]'
+    test: len(res.json) == 2
+    outputs:
+      list: res.json
+
+  - name: "Greet {{vars.name}}"
+    uses: shell
+    with:
+      cmd: echo "hello {{vars.name}} ({{vars.id}})"
+    test: trim(res.stdout) == "hello " + vars.name + " (" + string(vars.id) + ")"
+    iteration: "{{ outputs.users.list }}"
+
+  # a list without entries skips the step: there is nothing to run it with
+  - name: Nobody to greet
+    uses: shell
+    with:
+      cmd: echo "hello {{vars.name}}"
+    test: res.code == 0
+    iteration: "{{ filter(outputs.users.list, #.id > 2) }}"

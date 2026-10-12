@@ -21,9 +21,10 @@ const (
 type StepRepeatCounter struct {
 	SuccessCount int
 	FailureCount int
-	// SkippedCount is the runs in which the step was not run, because an
-	// earlier step of the run failed in a job with fail_fast. They are
-	// neither successes nor failures of the step.
+	// SkippedCount is the runs in which the step was not run: an earlier
+	// step of the run failed in a job with fail_fast, or its iteration
+	// came to no entry. They are neither successes nor failures of the
+	// step.
 	SkippedCount int
 	Name         string
 	// Test is the test of the step the counter is of, empty when it has

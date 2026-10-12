@@ -206,8 +206,9 @@ type Repeat struct {
 	Total   int `json:"total"`
 	Success int `json:"success"`
 	Failure int `json:"failure"`
-	// Skipped is the iterations in which the step was not run, after a
-	// step that failed in a job with fail_fast.
+	// Skipped is the iterations in which the step was not run: after a
+	// step that failed in a job with fail_fast, or for an iteration that
+	// came to no entry.
 	Skipped int `json:"skipped,omitempty"`
 }
 
