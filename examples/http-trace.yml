@@ -1,4 +1,5 @@
 name: Trace Header Example
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 
@@ -24,7 +25,6 @@ jobs:
       res.body.headers["X-Probe-Trace"] startsWith "run=" &&
       res.body.headers["X-Probe-Trace"] contains "job=traced; step=first;"
     echo: "{{ res.body.headers['X-Probe-Trace'] }}"
-
   # a header name sends the trace in that header instead, such as one the
   # server already logs; a step without an id is named by the one probe
   # gives it, step_<index>

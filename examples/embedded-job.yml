@@ -14,7 +14,6 @@ jobs:
     test: res.code == 0
     outputs:
       login: trim(res.stdout)
-
   - name: Authentication(Embedded Job)
     id: auth
     uses: embedded
@@ -28,7 +27,6 @@ jobs:
     outputs:
       id: res.outputs.myid
       token: res.outputs.mytoken
-
   - name: Echo with outputs of embedded job
     uses: shell
     with:

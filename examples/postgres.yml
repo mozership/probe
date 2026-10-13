@@ -50,7 +50,6 @@ jobs:
     test: res.code == 0
     outputs:
       server_time: res.rows[0].server_time
-
   - name: Create Test Table
     uses: db
     with:
@@ -68,7 +67,6 @@ jobs:
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
     test: res.code == 0
-
   - name: Insert Sample Products
     uses: db
     with:
@@ -76,14 +74,13 @@ jobs:
         INSERT INTO products (name, description, category, price, stock_quantity, tags) 
         VALUES ($1, $2, $3, $4, $5, $6)
       params:
-        - "Wireless Headphones"
-        - "High-quality wireless headphones with noise cancellation"
-        - "Electronics"
-        - "199.99"
-        - "50"
-        - '{"features": ["wireless", "noise-cancellation", "bluetooth"], "brand": "TechCorp"}'
+      - "Wireless Headphones"
+      - "High-quality wireless headphones with noise cancellation"
+      - "Electronics"
+      - "199.99"
+      - "50"
+      - '{"features": ["wireless", "noise-cancellation", "bluetooth"], "brand": "TechCorp"}'
     test: res.code == 0 && res.rows_affected == 1
-
   - name: Bulk Insert Products
     uses: db
     with:
@@ -94,7 +91,6 @@ jobs:
         ('Mechanical Keyboard', 'RGB mechanical gaming keyboard', 'Gaming', 149.99, 25, '{"switches": "cherry-mx", "rgb": true}'),
         ('Webcam HD', '1080p HD webcam for video calls', 'Electronics', 89.99, 75, '{"resolution": "1080p", "autofocus": true}')
     test: res.code == 0 && res.rows_affected == 4
-
   - name: Query Products with JSON Operations
     uses: db
     with:
@@ -110,7 +106,6 @@ jobs:
         WHERE tags ? 'features'
         ORDER BY price DESC
     test: res.code == 0
-
   - name: Update Product with JSONB
     uses: db
     with:
@@ -121,9 +116,8 @@ jobs:
           updated_at = NOW()
         WHERE category = $1
       params:
-        - "Electronics"
+      - "Electronics"
     test: res.code == 0
-
   - name: Complex Query with Window Functions
     uses: db
     with:
@@ -142,7 +136,6 @@ jobs:
         FROM products
         ORDER BY category, price DESC
     test: res.code == 0
-
   - name: Array and Text Search
     uses: db
     with:
@@ -156,9 +149,8 @@ jobs:
         WHERE to_tsvector('english', name || ' ' || description) @@ query
         ORDER BY relevance DESC
       params:
-        - "wireless & headphones"
+      - "wireless & headphones"
     test: res.code == 0
-
   # PostgreSQL specific features
   - name: Create and Use Custom Types
     uses: db
@@ -171,7 +163,6 @@ jobs:
           END IF;
         END$$;
     test: res.code == 0
-
   - name: Generate Series and Random Data
     uses: db
     with:
@@ -182,7 +173,6 @@ jobs:
           random() * 100 as random_price,
           current_date + (random() * 365)::int as random_date
     test: res.code == 0
-
   - name: Database Statistics
     uses: db
     with:
@@ -219,7 +209,6 @@ jobs:
         DROP TABLE IF EXISTS products;
         DROP TYPE IF EXISTS product_status;
     test: res.code == 0
-
   - name: Drop Test Database
     uses: db
     with:

@@ -1,4 +1,5 @@
 name: OpenAPI Contract Example
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 
@@ -21,7 +22,6 @@ jobs:
     with:
       get: /uuid
     test: res.body.uuid != ""
-
   # the request is checked too: a body without a name would fail the step
   - name: Create a user
     uses: http
@@ -32,7 +32,6 @@ jobs:
       body:
         name: alice
     test: res.body.json.name == "alice"
-
   # a step can leave out the check for an endpoint the document does not cover
   - name: Echo a request
     uses: http

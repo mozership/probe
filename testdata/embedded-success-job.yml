@@ -11,11 +11,10 @@ steps:
     message: replace(res.stdout, '\n', '')
   echo: |
     Output: {{res.stdout}}
-
 - name: Another success step
   uses: shell
   with:
     cmd: echo "Test completed successfully"
   test: res.code == 0
-  echo: |
+  echo: |-
     Final output: {{res.stdout}}

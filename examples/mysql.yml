@@ -17,7 +17,6 @@ defaults:
 jobs:
 - name: Setup Database
   id: setup
-
   steps:
   - name: Create Test Database
     uses: db
@@ -37,7 +36,6 @@ jobs:
     test: res.code == 0
     outputs:
       server_time: res.rows[0].server_time
-
   - name: Create Test Table
     uses: db
     with:
@@ -52,7 +50,6 @@ jobs:
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     test: res.code == 0
-
   - name: Insert Sample Data
     uses: db
     with:
@@ -60,15 +57,14 @@ jobs:
         INSERT INTO employees (name, email, department, salary, hire_date) 
         VALUES (?, ?, ?, ?, ?)
       params:
-        - Alice Johnson
-        - alice.johnson@company.com
-        - Engineering
-        - 75000.00
-        - 2023-01-15
+      - Alice Johnson
+      - alice.johnson@company.com
+      - Engineering
+      - 75000.00
+      - 2023-01-15
     test: res.code == 0 && res.rows_affected == 1
     outputs:
       employee_id: res.rows_affected
-
   - name: Insert Multiple Employees
     uses: db
     with:
@@ -79,30 +75,26 @@ jobs:
         ('Carol Davis', 'carol.davis@company.com', 'Engineering', 80000.00, '2023-01-20'),
         ('David Wilson', 'david.wilson@company.com', 'Sales', 55000.00, '2023-03-10')
     test: res.code == 0 && res.rows_affected == 3
-
   - name: Query All Employees
     uses: db
     with:
       query: SELECT id, name, email, department, salary FROM employees ORDER BY hire_date
     test: res.code == 0 && res.rows_affected >= 4
-
   - name: Query with WHERE Clause
     uses: db
     with:
       query: SELECT * FROM employees WHERE department = ? AND salary > ?
       params:
-        - Engineering
-        - 70000
+      - Engineering
+      - 70000
     test: res.code == 0
-
   - name: Update Employee Salary
     uses: db
     with:
       query: UPDATE employees SET salary = salary * 1.1 WHERE department = ?
       params:
-        - Engineering
+      - Engineering
     test: res.code == 0 && res.rows_affected >= 1
-
   - name: Count Employees by Department
     uses: db
     with:
@@ -112,13 +104,11 @@ jobs:
         GROUP BY department 
         ORDER BY employee_count DESC
     test: res.code == 0
-
   - name: Show Table Info
     uses: db
     with:
       query: DESCRIBE employees
     test: res.code == 0
-
   - name: Create Stored Procedure
     uses: db
     with:
@@ -131,21 +121,18 @@ jobs:
           ORDER BY salary DESC;
         END
     test: res.code == 0
-
   - name: Call Stored Procedure
     uses: db
     with:
       query: CALL GetEmployeesByDepartment(?)
       params:
-        - Engineering
+      - Engineering
     test: res.code == 0
-
   - name: Cleanup Procedure
     uses: db
     with:
       query: DROP PROCEDURE IF EXISTS GetEmployeesByDepartment
     test: res.code == 0
-
   - name: Drop Test Table
     uses: db
     with:

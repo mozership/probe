@@ -391,6 +391,66 @@ It reports as a **warning**:
 
 It exits with status 2 when it finds an error, and with 0 when it finds only warnings or nothing.
 
+### `fmt`
+
+Format workflow files, as `gofmt` formats Go: there is one way a workflow is laid out, and nothing to configure. It changes only blank lines, indentation, the spaces of a line and comments, never what a file says: a value is left as it is written, quotes and all.
+
+**Usage:**
+```bash
+probe fmt workflow.yml           # format a file in place
+probe fmt probe/ base.yml        # every YAML file under a directory, and a file
+probe fmt --check probe/         # change nothing, and tell what is not formatted
+probe fmt - < workflow.yml       # format the standard input to the standard output
+```
+
+It prints the path of each file it changed, and nothing for a file that was formatted already. A directory is every `.yml` and `.yaml` file under it, apart from those under a directory whose name starts with a dot. A file given by its path is formatted whatever its name.
+
+A formatted workflow:
+
+```yaml
+name: Users API
+description: Creates a user and reads it back
+
+vars:
+  url: "{{URL ?? 'http://localhost:8080'}}"
+
+jobs:
+- name: Create
+  id: create
+  steps:
+  - name: Post a user
+    uses: http
+    with:
+      post: "{{vars.url}}/users" # the body is sent as JSON
+      body:
+        name: probe
+    test: res.code == 201
+  # the list is read after the user is there
+  - name: List users
+    uses: http
+    with:
+      get: "{{vars.url}}/users"
+    test: res.code == 200
+
+- name: Report
+  needs: [create]
+  steps:
+  - uses: hello
+```
+
+The rules:
+
+- **Blank lines.** One blank line separates the keys at the top of the file when either of two that meet holds a mapping or a sequence written on the lines under it, so `name` and `description` stay together, and one separates each job from the next. A scalar, however many lines it takes, and a collection written in brackets, such as `secrets: [API_TOKEN]`, are not such. There is no other blank line: none between steps, and none at the start or the end of the file. The blank lines of a scalar, such as those of a `|` block, are part of it and are kept.
+- **Indentation.** Two spaces for each level, and a sequence is not indented under its key: the `-` of a job is at the column of `jobs`, and that of a step at the column of `steps`. The lines of a `|` or `>` block start two spaces in from their key.
+- **Comments.** A comment on a line of its own is indented as the line it comes before, or as the block it ends when it is written deeper than what follows it. A comment at the end of a line is a single space from it. Each has a space after its `#`, so `#note` becomes `# note`; a `#!` on the first line is kept.
+- **Spaces.** A key is a single space from its value, and a `-` from its entry. No line ends in a space, and the file ends in a single newline.
+
+A file that ended in a `|` block without a newline ended in a value without one. So that the value stays the same once the file ends in a newline, the header of the block becomes `|-`.
+
+With `--check`, no file is written. It prints the path of each file that is not formatted and exits with status 1 when there is one, which makes it a check for CI. For the standard input it prints nothing.
+
+It exits with status 2 for a file that is not YAML, which is left as it is while the others are still formatted, and for a path that does not exist.
+
 ### `coverage`
 
 Tell which operations and responses of an OpenAPI document, or which methods of a `.proto` file, the steps of a run checked, from the report the run wrote with `--report json`. A step counts when the http action checked its response against the document with `openapi`, or the grpc action checked its call against the file with `proto`, whether the step passed or not.

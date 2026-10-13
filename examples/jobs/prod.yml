@@ -10,7 +10,6 @@ steps:
     myid: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
-
 - name: Get token
   id: get_token
   uses: shell
@@ -20,7 +19,6 @@ steps:
     mytoken: trim(res.stdout)
   echo: |
     STDOUT: {{res.stdout}}
-
 - name: Hello
   uses: shell
   with:

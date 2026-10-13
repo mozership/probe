@@ -2,11 +2,13 @@ name: SSH Refused Environment Variable
 description: |
   Sends an environment variable no sshd_config allows with AcceptEnv, so that
   e2e/test.yml can check Probe warns about it and the command still runs.
+
 vars:
   host: "{{SSH_HOST ?? ''}}"
   port: "{{SSH_PORT ?? 22}}"
   user: "{{SSH_USER ?? ''}}"
   key_file: "{{SSH_KEY_FILE ?? '~/.ssh/id_rsa'}}"
+
 jobs:
 - name: Refused variable
   steps:

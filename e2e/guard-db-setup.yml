@@ -1,4 +1,5 @@
 name: Tables for the guard
+
 vars:
   dsn: "{{DSN}}"
 

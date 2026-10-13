@@ -39,7 +39,6 @@ jobs:
       Base value: {{vars.base}}
     outputs:
       result: trim(res.stdout)
-
   - name: Verify mergekey list
     uses: shell
     with:
@@ -54,7 +53,6 @@ jobs:
       vars.config["x-foo"] == "foo"
     echo: |
       Config: {{vars.config}}
-
   - name: Verify double mergekey
     uses: shell
     with:

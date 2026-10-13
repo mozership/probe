@@ -45,7 +45,6 @@ jobs:
     uses: hello
     skipif: vars.mail_setup == ''
     wait: 1s
-
   - name: List
     uses: imap
     with:
@@ -56,7 +55,6 @@ jobs:
     test: status == 0
     echo: |
       List: {{res.data.list.mailboxes}}
-
   - name: Select to INBOX
     uses: imap
     with:
@@ -66,7 +64,6 @@ jobs:
     test: status == 0
     echo: |
       INBOX Count: {{res.data.select.exists}}
-
   # The two steps below change the mailbox, so they run only against the
   # test mail server that the setup step filled, never against a real inbox.
   - name: Flag the first message
@@ -86,7 +83,6 @@ jobs:
     test: res.code == 0 && "\\Flagged" in res.data.fetch.messages[0].flags
     echo: |
       Flags: {{res.data.fetch.messages[0].flags}}
-
   - name: Copy two messages into a new mailbox
     uses: imap
     skipif: vars.mail_setup == ''
@@ -108,7 +104,6 @@ jobs:
     test: res.code == 0 && res.data.examine.exists == 2
     echo: |
       Copied: {{res.data.examine.exists}}
-
   - name: UID Search on INBOX
     uses: imap
     with:
@@ -117,14 +112,13 @@ jobs:
         mailbox: INBOX
       - name: uid search
         criteria:
-          #before: 2025-01-01
+          # before: 2025-01-01
           flags: [seen]
-          #not_flags: [seen]
+          # not_flags: [seen]
     skipif: vars.skip_search_tests != ''
     test: status == 0
     echo: |
       Search: {{res.data.search}}
-
   - name: UID Fetch after UID Search
     uses: imap
     with:
@@ -143,7 +137,6 @@ jobs:
       To: {{res.data.fetch.messages[0].to}}
       Flags: {{res.data.fetch.messages[0].flags}}
       Size: {{res.data.fetch.messages[0].size}}
-
   - name: UID Fetch Return-Path Header after UID Search
     uses: imap
     with:
@@ -159,7 +152,6 @@ jobs:
     test: status == 0 && len(res.data.fetch.messages) > 0
     echo: |
       Headers: {{res.data.fetch.messages[0].headers}}
-
   - name: Get error
     uses: imap
     with:

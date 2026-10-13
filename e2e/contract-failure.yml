@@ -1,4 +1,5 @@
 name: Contract Failure
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 

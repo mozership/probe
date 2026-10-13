@@ -16,7 +16,6 @@ jobs:
   defaults:
     db:
       dsn: file:./e2e/sqlite.db
-
   steps:
   - name: Create SQLite table
     uses: db
@@ -28,7 +27,6 @@ jobs:
           email TEXT UNIQUE
         )
     test: res.code == 0
-
   - name: Insert test data
     uses: db
     with:
@@ -37,7 +35,6 @@ jobs:
       - John Doe
       - john@example.com
     test: res.code == 0 && res.rows_affected == 1
-
   - name: Select all users
     uses: db
     with:
@@ -48,14 +45,12 @@ jobs:
       len(res.rows) == 1 &&
       res.rows[0].name == "John Doe" &&
       res.rows[0].email == "john@example.com"
-
   - name: Select user by ID
     uses: db
     with:
       query: SELECT * FROM users WHERE id = ?
       params: [1]
     test: res.code == 0 && res.rows_affected == 1 && res.rows[0].id == 1
-
   - name: Update user
     uses: db
     with:
@@ -64,20 +59,17 @@ jobs:
       - john.doe@example.com
       - 1
     test: res.code == 0 && res.rows_affected == 1
-
   - name: Delete user
     uses: db
     with:
       query: DELETE FROM users WHERE id = ?
       params: [1]
     test: res.code == 0 && res.rows_affected == 1
-
   - name: The user is gone
     uses: db
     with:
       query: SELECT count(*) AS n FROM users
     test: res.code == 0 && res.rows[0].n == 0
-
   - name: Drop table
     uses: db
     with:

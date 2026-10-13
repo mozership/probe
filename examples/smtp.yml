@@ -27,7 +27,6 @@ jobs:
       Sent: {{res.sent}}
       Failed: {{res.failed}}
       Total: {{res.total}}
-
   - name: Send email with custom content
     uses: smtp
     with:
@@ -45,7 +44,6 @@ jobs:
       Custom email sent!
       Mail data length: {{len(res.maildata)}} characters
       File path: {{res.filepath}}
-
   - name: Send bulk emails
     uses: smtp
     with:
@@ -55,11 +53,11 @@ jobs:
       subject: Bulk Email Test
       myhostname: probe-client.local
       session: 3
-      message: 3  # Send 3 messages
+      message: 3 # Send 3 messages
       length: 750
     test: |
       res.code == 0 && res.sent == 3
-    echo: |
+    echo: |-
       Bulk emails sent!
       Messages sent: {{res.sent}}
       Total messages: {{res.total}}

@@ -1,7 +1,9 @@
 name: Failure Workflow
 description: Simple workflow that should fail
+
 vars:
   server_url: "{{TEST_SERVER_URL ?? 'https://httpbin.org'}}"
+
 jobs:
 - name: test-job
   steps:

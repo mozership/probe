@@ -1,7 +1,9 @@
 name: Success Workflow
 description: Simple workflow that should succeed
+
 vars:
   server_url: "{{TEST_SERVER_URL ?? 'https://httpbin.org'}}"
+
 jobs:
 - name: test-job
   steps:

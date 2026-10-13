@@ -1,5 +1,6 @@
 name: Success Workflow (Hello Action)
 description: Simple workflow that should succeed using hello action
+
 jobs:
 - name: test-job
   steps:

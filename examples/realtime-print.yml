@@ -2,38 +2,38 @@ name: Real-time Output Example
 description: Test TeeBuffer with faster wait commands
 
 jobs:
-  - name: fast-job-1
-    id: job1
-    steps:
-      - name: Starting process with longer description text
-        uses: hello
-        wait: 1
-      - name: Processing data and performing complex calculations
-        uses: hello
-        wait: 1
-      - name: Finalizing and cleaning up resources
-        uses: hello
-        wait: 1
+- name: fast-job-1
+  id: job1
+  steps:
+  - name: Starting process with longer description text
+    uses: hello
+    wait: 1
+  - name: Processing data and performing complex calculations
+    uses: hello
+    wait: 1
+  - name: Finalizing and cleaning up resources
+    uses: hello
+    wait: 1
 
-  - name: fast-job-2
-    id: job2
-    needs: [job1]
-    steps:
-      - name: Loading configuration from remote server
-        uses: hello
-        wait: 1
-      - name: Connecting to database with authentication
-        uses: hello
-        wait: 1
-      - name: Running SQL queries and processing results
-        uses: hello
-        wait: 1
-      - name: Cleanup and closing connections
-        uses: hello
-        wait: 1
+- name: fast-job-2
+  id: job2
+  needs: [job1]
+  steps:
+  - name: Loading configuration from remote server
+    uses: hello
+    wait: 1
+  - name: Connecting to database with authentication
+    uses: hello
+    wait: 1
+  - name: Running SQL queries and processing results
+    uses: hello
+    wait: 1
+  - name: Cleanup and closing connections
+    uses: hello
+    wait: 1
 
-  - name: instant-job
-    needs: [job2]
-    steps:
-      - name: Quick task without delays
-        uses: hello
+- name: instant-job
+  needs: [job2]
+  steps:
+  - name: Quick task without delays
+    uses: hello

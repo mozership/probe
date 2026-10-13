@@ -1,6 +1,8 @@
 name: Send queue congestion experiment
+
 vars:
   host: http://localhost
+
 jobs:
 - name: Normal sender
   repeat:
@@ -17,6 +19,7 @@ jobs:
       session: 10
       message: 10
       length: 800
+
 - name: Bulk mails sender
   repeat:
     count: 60
@@ -32,6 +35,7 @@ jobs:
       session: 1000
       message: 1000
       length: 800
+
 - name: Throttled mail sender
   repeat:
     count: 60

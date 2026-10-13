@@ -1,4 +1,5 @@
 name: REST API Example
+
 vars:
   token: "{{TOKEN ?? 'secret'}}"
   url: "{{URL ?? 'http://localhost:8080'}}"

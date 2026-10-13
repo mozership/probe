@@ -464,7 +464,7 @@ jobs:
     uses: shell
     with:
       background: true
-      #cmd: go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@latest -host 127.0.0.1 -port 8080
+      # cmd: go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@latest -host 127.0.0.1 -port 8080
       cmd: "docker run --rm -p 8080:80 --name probe-httpbin kennethreitz/httpbin:latest"
     test: status == -1
     outputs:
