@@ -30,8 +30,6 @@ AIエージェントがサービスを変更したとき、その変更が動く
   <img src="misc/demo-ja.svg" alt="デモ: probe checkがAIエージェントの書いたE2Eテストの誤りを見つけ、直したテストがAPIを呼んで書き込まれた行を問い合わせ、--read-onlyが書き込みを拒否する">
 </p>
 
-![Architecture](/misc/probe-architecture.svg)
-
 特徴
 ----
 
@@ -44,6 +42,8 @@ Probeは、情報工学の実験を再現できるようにするために作ら
 このほかワークフローには、ステップやジョブの間でデータを渡す`outputs`、任意の応答を検証し、成立しなかった条件を示す`test`、`retry`、`skipif`、`wait`、`timeout`、ワークフローに書いたリストやファイルから読んだリストを繰り返す`iteration`、ステップやジョブの間で共通する設定をまとめる`defaults`、最初の失敗でジョブを止める`fail_fast`、失敗の後にも実行する後片付けのための`always`、そしてコマンドラインで複数のYAMLをマージする機能があり、実行のたびに変わる値は`--var`と`--env-file`で与えられます。
 
 これらの関係は[Probeの理解](https://probe.linyo.ws/ja/guide/introduction/understanding-probe)で、k6、Hurl、Venom、runn、Blackbox exporter、GitHub Actionsのいずれを選んだほうがよいかは[比較](https://probe.linyo.ws/ja/guide/introduction/comparison)で説明しています。
+
+![Architecture](/misc/probe-architecture.svg)
 
 クイックスタート
 ----------------
