@@ -161,6 +161,8 @@ License
 
 MIT. See [LICENSE](./LICENSE).
 
+The executable is built from other software, each under a license of its own. A release archive carries their texts in `THIRD_PARTY_LICENSES`, and `make licenses` writes the file from the source.
+
 Author
 ------
 

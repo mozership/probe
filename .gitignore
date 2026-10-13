@@ -1,5 +1,7 @@
 /keys
 /probe
+/THIRD_PARTY_LICENSES
+/dist
 /e2e/sqlite.db
 /e2e/capture_screenshot.png
 /e2e/certs

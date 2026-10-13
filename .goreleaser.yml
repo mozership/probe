@@ -2,6 +2,10 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    # The licenses of what the executable is built from, which most of them
+    # ask to go with a copy in binary form. It fails the release when a
+    # module has no license file to pass on.
+    - go run ./internal/thirdparty/gen -o THIRD_PARTY_LICENSES
 builds:
   - id: probe
     main: ./cmd/probe
@@ -20,7 +24,8 @@ archives:
       {{- else if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
     files:
-      - none*
+      - LICENSE
+      - THIRD_PARTY_LICENSES
 checksum:
   name_template: 'checksums.txt'
 # The cask is pushed to mozership/homebrew-tap, which is what
