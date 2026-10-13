@@ -38,7 +38,9 @@ homebrew_casks:
     repository:
       owner: mozership
       name: homebrew-tap
-      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+      # GoReleaser takes a token as one variable of the environment and
+      # nothing else, so this is not written with index as skip_upload is.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
     homepage: https://probe.linyo.ws
     description: End-to-end checks over HTTP, gRPC, SQL, mail and SSH from one YAML workflow
