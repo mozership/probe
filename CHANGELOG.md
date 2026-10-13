@@ -4,6 +4,37 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## v1.27.0 (2026-10-13)
+
+### Breaking Changes
+
+This release breaks the Go API in a minor version, for code that implements
+the gRPC service of an action itself. Workflow files are not affected, and
+neither is an action served with `actionrpc.Serve`, which is how an external
+action is written.
+
+#### `pb.ActionsServer` and `pb.ActionsClient`
+
+The service an action serves has a second method, `Cleanup`, which Probe
+calls once a run is over on an action whose `action.yml` sets `cleanup`.
+`pb.ActionsServer` and `pb.ActionsClient` gain it, so a type that implements
+either without `actionrpc` no longer does.
+
+| Before | After |
+|---|---|
+| A server with `Run` alone implements `pb.ActionsServer` | It also needs `Cleanup(context.Context, *pb.CleanupRequest) (*pb.CleanupResponse, error)`, or embeds `pb.UnimplementedActionsServer`, which answers it as not implemented |
+| A stand-in with `Run` alone implements `pb.ActionsClient` | It also needs `Cleanup(ctx context.Context, in *pb.CleanupRequest, opts ...grpc.CallOption) (*pb.CleanupResponse, error)` |
+
+An action built against an earlier probe still runs under this one: its steps
+are run as before, and it is not called once the run is over, as its
+`action.yml` cannot ask for that.
+
+`actionrpc.Cleaner`, `actionrpc.CleanupCall`, `actionrpc.Cleanups`,
+`Call.Cleanups`, `Client.Cleanup`, `Server.Cleanup` and
+`actionrpc.CleanupExecutable` are new, as are `actionref.Manifest.Cleanup`,
+`actionref.Full`, `procgroup.Tracker.AfterStop`, and `WithCleanups` of the
+root package and of `actions/embedded`.
+
 ## v1.26.0 (2026-10-12)
 
 ### Breaking Changes
