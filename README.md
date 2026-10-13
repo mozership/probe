@@ -30,8 +30,6 @@ When an AI coding agent changes a service, something other than the code and the
   <img src="misc/demo.svg" alt="Demo: probe check finds the mistakes in an end-to-end test an AI agent wrote, the fixed test calls an API and queries the row it wrote, and --read-only refuses a write">
 </p>
 
-![Architecture](/misc/probe-architecture.svg)
-
 Features
 --------
 
@@ -44,6 +42,8 @@ Probe was made for reproducible experiments in computer science: a workflow that
 Beyond that, a workflow has `outputs` to pass data between steps and jobs, `test` to assert on any response and say which condition did not hold, `retry`, `skipif`, `wait` and `timeout`, `iteration` over a list written in the workflow or read from a file, `defaults` for settings shared across steps and jobs, `fail_fast` to stop a job at its first failure and `always` for a cleanup that runs after one, and merging of several YAML files on one command line, where `--var` and `--env-file` give the values that differ from run to run.
 
 [Understanding Probe](https://probe.linyo.ws/guide/introduction/understanding-probe) covers how these fit together, and [Comparison](https://probe.linyo.ws/guide/introduction/comparison) says where k6, Hurl, Venom, runn, Blackbox exporter or GitHub Actions is the better answer.
+
+![Architecture](/misc/probe-architecture.svg)
 
 Quick Start
 -----------
