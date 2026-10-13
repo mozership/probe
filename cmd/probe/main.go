@@ -356,17 +356,17 @@ func (c *Cmd) start(args []string) int {
 		c.printVersion()
 		return 0
 
+	case c.FmtCheck && c.SubCommand != "fmt":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
+		_, _ = fmt.Fprint(c.errWriter, fmtUsage)
+		return probe.ExitConfigError
+
 	case c.SubCommand != "":
 		return c.runSubCommand()
 
 	case c.DagMermaid:
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --mermaid can only be used with the dag subcommand\n")
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
-		return probe.ExitConfigError
-
-	case c.FmtCheck:
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "%s", fmtUsage)
 		return probe.ExitConfigError
 
 	case c.WorkflowPath == "":

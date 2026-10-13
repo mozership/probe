@@ -214,11 +214,23 @@ func TestCmd_fmt_stdin(t *testing.T) {
 }
 
 func TestCmd_fmt_checkWithoutFmt(t *testing.T) {
-	c := newBufferCmd()
-	if code := c.start([]string{"probe", "--check", "workflow.yml"}); code != probe.ExitConfigError {
-		t.Errorf("start = %d, want %d", code, probe.ExitConfigError)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"a run", []string{"probe", "--check", "workflow.yml"}},
+		{"the check subcommand", []string{"probe", "check", "--check", "workflow.yml"}},
+		{"the gen subcommand", []string{"probe", "gen", "spec.yml", "--check"}},
 	}
-	if errOut := fmt.Sprintf("%s", c.errWriter); !strings.Contains(errOut, "--check can only be used with the fmt subcommand") {
-		t.Errorf("unexpected error output: %s", errOut)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newBufferCmd()
+			if code := c.start(tt.args); code != probe.ExitConfigError {
+				t.Errorf("start = %d, want %d", code, probe.ExitConfigError)
+			}
+			if errOut := fmt.Sprintf("%s", c.errWriter); !strings.Contains(errOut, "--check can only be used with the fmt subcommand") {
+				t.Errorf("unexpected error output: %s", errOut)
+			}
+		})
 	}
 }

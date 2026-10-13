@@ -27,7 +27,7 @@ func TestFormat(t *testing.T) {
 		{"a sequence in a sequence", "a:\n  -   - 1\n      - 2\n  - - 3\n", "a:\n- - 1\n  - 2\n- - 3\n"},
 		{"a - on a line of its own", "a:\n  -\n      b: 1\n  -\n      - 2\n", "a:\n-\n  b: 1\n-\n  - 2\n"},
 		{"a sequence at the top", "  - a\n  - b:\n      - c\n", "- a\n- b:\n  - c\n"},
-		{"a value on the line after its key", "a:\n    value\nb:\n    \"quoted\"\n", "a:\n  value\n\nb:\n  \"quoted\"\n"},
+		{"a value on the line after its key", "a:\n    value\nb:\n    \"quoted\"\n", "a:\n  value\nb:\n  \"quoted\"\n"},
 		{"a document that is indented", "  a: 1\n  b:\n      c: 2\n", "a: 1\n\nb:\n  c: 2\n"},
 
 		// Scalars are left as they are written.
@@ -55,7 +55,7 @@ func TestFormat(t *testing.T) {
 		{"a complex key", "? a\n:   b\n", "? a\n: b\n"},
 
 		// Spaces.
-		{"spaces after a key", "a:    1\nb:\n  c:  \"x\"\n  d:\t2\n", "a: 1\n\nb:\n  c: \"x\"\n  d:\t2\n"},
+		{"spaces after a key", "a:    1\nb:\n  c:  \"x\"\n  d:\t2\n  e: \t 3\n  f:\t# g\n", "a: 1\n\nb:\n  c: \"x\"\n  d: 2\n  e: 3\n  f: # g\n"},
 		{"a : in a value", "a: b:c\nd: \"e:   f\"\ng: http://h:80/\n", "a: b:c\nd: \"e:   f\"\ng: http://h:80/\n"},
 		{"spaces at the end of a line", "a: 1  \nb:  \n  c: 2\t\n", "a: 1\n\nb:\n  c: 2\n"},
 		{"no newline at the end", "a: 1", "a: 1\n"},
@@ -71,6 +71,7 @@ func TestFormat(t *testing.T) {
 		// Blank lines.
 		{"keys at the top that hold scalars", "name: x\n\ndescription: y\n\nversion: 1\n", "name: x\ndescription: y\nversion: 1\n"},
 		{"keys at the top that hold collections", "name: x\ndescription: |\n  y\nvars:\n  a: 1\nsecrets: [A]\njobs:\n- name: A\n", "name: x\ndescription: |\n  y\n\nvars:\n  a: 1\n\nsecrets: [A]\n\njobs:\n- name: A\n"},
+		{"keys at the top that hold flow collections", "name: x\nsecrets: [A]\nneeds: {a: 1}\nlist:\n  [1, 2]\nmap:\n  {a: 1}\ndescription: y\n", "name: x\nsecrets: [A]\nneeds: {a: 1}\nlist:\n  [1, 2]\nmap:\n  {a: 1}\ndescription: y\n"},
 		{"many blank lines", "name: x\n\n\n\nvars:\n\n  a: 1\n\n\n  b: 2\n", "name: x\n\nvars:\n  a: 1\n  b: 2\n"},
 		{"blank lines at the start", "\n\nname: x\n", "name: x\n"},
 		{"jobs", "jobs:\n\n- name: A\n  steps:\n  - uses: hello\n- name: B\n  steps:\n  - uses: hello\n\n\n- name: C\n", "jobs:\n- name: A\n  steps:\n  - uses: hello\n\n- name: B\n  steps:\n  - uses: hello\n\n- name: C\n"},

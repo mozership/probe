@@ -440,7 +440,7 @@ jobs:
 
 The rules:
 
-- **Blank lines.** One blank line separates the keys at the top of the file when either of two that meet holds a mapping or a sequence, so `name` and `description` stay together, and one separates each job from the next. There is no other blank line: none between steps, and none at the start or the end of the file. The blank lines of a scalar, such as those of a `|` block, are part of it and are kept.
+- **Blank lines.** One blank line separates the keys at the top of the file when either of two that meet holds a mapping or a sequence written on the lines under it, so `name` and `description` stay together, and one separates each job from the next. A scalar, however many lines it takes, and a collection written in brackets, such as `secrets: [API_TOKEN]`, are not such. There is no other blank line: none between steps, and none at the start or the end of the file. The blank lines of a scalar, such as those of a `|` block, are part of it and are kept.
 - **Indentation.** Two spaces for each level, and a sequence is not indented under its key: the `-` of a job is at the column of `jobs`, and that of a step at the column of `steps`. The lines of a `|` or `>` block start two spaces in from their key.
 - **Comments.** A comment on a line of its own is indented as the line it comes before, or as the block it ends when it is written deeper than what follows it. A comment at the end of a line is a single space from it. Each has a space after its `#`, so `#note` becomes `# note`; a `#!` on the first line is kept.
 - **Spaces.** A key is a single space from its value, and a `-` from its entry. No line ends in a space, and the file ends in a single newline.

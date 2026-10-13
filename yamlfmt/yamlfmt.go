@@ -7,8 +7,9 @@
 //   - Indentation is two spaces, and a sequence is not indented under the key
 //     it belongs to.
 //   - A blank line separates the keys at the top of a file when either holds a
-//     mapping or a sequence, and the jobs from one another. There is no other
-//     blank line, apart from those a scalar holds.
+//     mapping or a sequence written on the lines under it, and the jobs from
+//     one another. There is no other blank line, apart from those a scalar
+//     holds.
 //   - A comment on its own line is indented as the line it comes before, and
 //     one at the end of a line is a single space from it. Each has a space
 //     after its #.
@@ -276,6 +277,25 @@ func (l *line) strip() {
 	l.headerLen = len(header)
 }
 
+// structural tells whether a content line is part of a block mapping or
+// sequence: an entry of a sequence, or a key with its value. A scalar or a
+// flow collection on a line of its own is not.
+func (l *line) structural() bool {
+	if len(l.dashes) > 0 {
+		return true
+	}
+	switch l.toks[0].typ {
+	case token.SequenceStartType, token.MappingStartType:
+		return false
+	}
+	for _, t := range l.toks {
+		if t.typ == token.MappingValueType {
+			return true
+		}
+	}
+	return false
+}
+
 // key returns the key a content line starts with, when it starts with one.
 func (l *line) key() string {
 	if l.kind != kindContent || l.marker || len(l.dashes) > 0 || l.first < 0 {
@@ -437,7 +457,8 @@ func indentBody(body []*line, to, delta int, explicit bool) {
 
 // separate marks the content lines that a blank line comes before: the keys
 // at the top of a document, when either of two that meet holds a mapping or
-// a sequence, and the jobs but the first.
+// a sequence written on the lines under it, and the jobs but the first. A
+// scalar, however many lines it takes, and a flow collection are not such.
 func separate(lines []*line) {
 	type entry struct {
 		at       int
@@ -466,7 +487,7 @@ func separate(lines []*line) {
 			entries = append(entries, entry{at: i})
 			jobs, first = l.key() == jobsKey, true
 		default:
-			if len(entries) > 0 {
+			if len(entries) > 0 && l.structural() {
 				entries[len(entries)-1].children = true
 			}
 			if jobs && l.newIndent == 0 && len(l.dashes) > 0 {
@@ -554,14 +575,14 @@ func (l *line) render() string {
 	return pad(l.newIndent) + strings.Join(parts, " ")
 }
 
-// tighten leaves a single space after the : at i of s, when more than one
-// separates it from what follows.
+// tighten leaves a single space after the : at i of s, when anything else
+// separates it from what follows: more spaces, or a tab.
 func tighten(s string, i int) string {
 	if i < 0 || i >= len(s) || s[i] != ':' {
 		return s
 	}
-	after := strings.TrimLeft(s[i+1:], " ")
-	if after == "" || len(s)-i-1-len(after) < 2 {
+	after := strings.TrimLeft(s[i+1:], " \t")
+	if sep := s[i+1 : len(s)-len(after)]; after == "" || sep == "" || sep == " " {
 		return s
 	}
 	return s[:i+1] + " " + after
