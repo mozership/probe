@@ -999,6 +999,8 @@ embeddedアクションで実行するジョブのステップが残したもの
 
 `SIGKILL`のように即座に終了させられたProbeは、何も呼びません。アクションは、後の実行のステップが始まるときに以前の実行が残したものを消すことで、これを補えます。
 
+[container](/ja/reference/actions/container)アクションは、この仕組みで書かれています。各コンテナに`Step.RunID`のラベルを付け、`Cleanup`でそのラベルのコンテナを削除します。
+
 ### 外部アクション
 
 アクションはProbeの外、独立したリポジトリに置くこともできます。Probeはアクションを提供する実行ファイルをダウンロードし、組み込みアクションと同じように実行します。ステップではリポジトリとコミットでアクションを指定します：
@@ -1053,6 +1055,7 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | アクション | 内容 | 最新 |
 |---|---|---|
 | [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした | v0.1.0 |
+| [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます | v0.1.0 |
 | [graphql](/ja/reference/actions/graphql) | GraphQLのクエリをHTTPで送り、レスポンスの`data`と`errors`を分けて返します | v0.2.0 |
 | [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます | v0.2.0 |
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした | v0.1.0 |
