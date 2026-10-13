@@ -25,11 +25,14 @@ Before writing a new workflow, look for existing ones in the repository and foll
 
 ```yaml
 name: API check
+
 secrets:
-  - API_TOKEN                    # its value never appears in output or reports
+- API_TOKEN # its value never appears in output or reports
+
 vars:
   api_url: "{{API_URL ?? 'http://localhost:8080'}}"
   token: "{{API_TOKEN}}"
+
 jobs:
 - name: Users API
   id: users
@@ -57,6 +60,7 @@ jobs:
       get: "/users/{{outputs.create.user_id}}"
     test: res.code == 200
     echo: "fetched {{res.body.name}}"
+
 - name: After the users job
   needs: [users]
   steps:
@@ -89,13 +93,14 @@ probe base.yml,staging.yml            # merge files, later ones override
 probe --env-file .env workflow.yml    # variables for vars to read, where the environment has none
 probe --var url=http://localhost:8080 workflow.yml  # give a var in place of the one written
 probe check workflow.yml              # find what is wrong or weak without running
+probe fmt workflow.yml                # lay the file out the one way, in place
 probe dag workflow.yml                # check the job graph without running
 probe -v workflow.yml                 # also print every request and response
 probe --report json=probe.json,markdown=probe.md workflow.yml
 probe coverage openapi.yml probe.json # what of the OpenAPI document, or a .proto file, no step checked
 ```
 
-After writing or changing a workflow, run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`.
+After writing or changing a workflow, run `probe fmt` on it, which lays it out the one way every workflow is: it changes blank lines, indentation and comments, never a value. Then run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`.
 
 The exit code says what to look at:
 

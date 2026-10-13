@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mozership/probe/yamlfmt"
 )
 
 func TestSkill_Frontmatter(t *testing.T) {
@@ -34,6 +36,15 @@ func TestSkill_ExampleLoads(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "example.yml")
 	if err := os.WriteFile(path, []byte(m[1]), 0o600); err != nil {
 		t.Fatal(err)
+	}
+
+	// It is also laid out as probe fmt lays a workflow out.
+	formatted, err := yamlfmt.Format([]byte(m[1]))
+	if err != nil {
+		t.Fatalf("the example is not formatted: %v", err)
+	}
+	if string(formatted) != m[1] {
+		t.Errorf("the example is not formatted as probe fmt formats it, which gives:\n%s", formatted)
 	}
 
 	p := New(path, false)
