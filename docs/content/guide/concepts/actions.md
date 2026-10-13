@@ -732,7 +732,7 @@ type Call struct {
     Step    Step              // the step it runs for
     Guard   Guard             // what the run allows the action to do
     Actions map[string]string // the names the workflow gives its external actions
-    Cleanups *Cleanups        // not nil when Probe cleans up once the run is over
+    Cleanups *Cleanups        // not nil under a Probe that cleans up once the run is over
 }
 
 type Step struct {
@@ -781,7 +781,7 @@ Probe calls `Cleanup` once the workflow is over, whether it passed, failed, or w
 
 What the steps of a job run by the embedded action leave behind stays until the workflow that embeds the job is over, as it does for the jobs of the workflow itself.
 
-`Call.Cleanups` is not nil when Probe is going to call `Cleanup`. It is nil under a Probe from before there was a cleanup, and when `action.yml` does not set `cleanup`; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
+`Call.Cleanups` is not nil under a Probe that cleans up, which calls `Cleanup` of an action whose `action.yml` sets `cleanup`. It is nil under a Probe from before there was a cleanup; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
 
 A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 

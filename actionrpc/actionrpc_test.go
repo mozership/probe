@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -629,6 +631,9 @@ type cleaningAction struct {
 	// promised is whether the runner said it cleans up.
 	promised bool
 	ran      []string
+	// result and state are what the steps return.
+	result   map[string]any
+	state    map[string]any
 	err      error
 	cleaned  []string
 	cleanErr error
@@ -641,7 +646,10 @@ func (a *cleaningAction) Run(with map[string]any) (map[string]any, error) {
 func (a *cleaningAction) RunStep(call Call) (map[string]any, map[string]any, error) {
 	a.promised = call.Cleanups != nil
 	call.Cleanups.Add(a.ran...)
-	return map[string]any{}, nil, a.err
+	if a.result == nil {
+		a.result = map[string]any{}
+	}
+	return a.result, a.state, a.err
 }
 
 func (a *cleaningAction) Cleanup(call CleanupCall) error {
@@ -683,7 +691,12 @@ func TestClientRunStepGathersCleanups(t *testing.T) {
 		cleanups *Cleanups
 		ran      []string
 		err      error
-		want     []string
+		// result and state are what the action returns, and wantErr the
+		// error when one of them cannot be sent.
+		result  map[string]any
+		state   map[string]any
+		wantErr string
+		want    []string
 	}{
 		{name: "a runner that does not clean up", ran: []string{"/a"}},
 		{name: "nothing to clean up", cleanups: &Cleanups{}},
@@ -691,15 +704,20 @@ func TestClientRunStepGathersCleanups(t *testing.T) {
 		{name: "of an action that failed", cleanups: &Cleanups{}, ran: []string{"/a"}, err: errors.New("boom"), want: []string{"/a"}},
 		{name: "of an action that was refused", cleanups: &Cleanups{}, ran: []string{"/a"}, err: refused, want: []string{"/a"}},
 		{name: "a failure with nothing to clean up", cleanups: &Cleanups{}, err: errors.New("boom")},
+		{name: "of an action whose result cannot be sent", cleanups: &Cleanups{}, ran: []string{"/a"}, result: map[string]any{"c": make(chan int)}, wantErr: "result", want: []string{"/a"}},
+		{name: "of an action whose state cannot be sent", cleanups: &Cleanups{}, ran: []string{"/a"}, state: map[string]any{"c": make(chan int)}, wantErr: "state", want: []string{"/a"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			action := &cleaningAction{ran: tt.ran, err: tt.err}
+			action := &cleaningAction{ran: tt.ran, err: tt.err, result: tt.result, state: tt.state}
 			c := &Client{client: directClient{&Server{Impl: action}}}
 
 			_, _, err := c.RunStep(Call{With: map[string]any{}, Cleanups: tt.cleanups})
-			if (err != nil) != (tt.err != nil) {
-				t.Fatalf("RunStep() error = %v, want %v", err, tt.err)
+			if (err != nil) != (tt.err != nil || tt.wantErr != "") {
+				t.Fatalf("RunStep() error = %v, want %v%s", err, tt.err, tt.wantErr)
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("RunStep() error = %v, want one about the %s", err, tt.wantErr)
 			}
 			// The error is the one the action returned, whatever it carried.
 			if tt.err != nil && !strings.Contains(err.Error(), tt.err.Error()) {
@@ -740,5 +758,25 @@ func TestClientCleanupOfAnActionWithoutOne(t *testing.T) {
 	err := c.Cleanup(context.Background(), CleanupCall{RunID: "run1"})
 	if status.Code(err) != codes.Unimplemented {
 		t.Errorf("Cleanup() error = %v, want Unimplemented", err)
+	}
+}
+
+// An action that does not come up is given no longer than one that does not
+// answer.
+func TestCleanupExecutableStopsAnActionThatDoesNotStart(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "hang")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexec sleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := CleanupExecutable(ctx, exe, nil, CleanupCall{RunID: "run1"}, hclog.NewNullLogger())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("CleanupExecutable() error = %v, want the deadline exceeded", err)
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Errorf("CleanupExecutable() took %s", took)
 	}
 }

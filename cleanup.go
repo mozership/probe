@@ -39,9 +39,10 @@ type cleanups struct {
 	// ran is set once run has called the actions; one that comes to be owed
 	// after that is called as soon as it is.
 	ran bool
-	// passedOn is set once the actions were passed on to the run this one
-	// is part of, which calls them when it is over.
-	passedOn bool
+	// passedOn is where the actions were passed on to, once they were:
+	// the run this one is part of, which calls them when it is over. One
+	// that comes to be owed after that is passed on as well.
+	passedOn *actionrpc.Cleanups
 }
 
 // newCleanups returns the cleanups of the run runID, whose actions log and
@@ -80,7 +81,10 @@ func (c *cleanups) begin(uses string) func() {
 		return func() {}
 	}
 	c.mu.Lock()
-	if !slices.Contains(c.owed, uses) {
+	switch {
+	case c.passedOn != nil:
+		c.passedOn.Add(uses)
+	case !slices.Contains(c.owed, uses):
 		c.owed = append(c.owed, uses)
 	}
 	c.running++
@@ -89,7 +93,7 @@ func (c *cleanups) begin(uses string) func() {
 	return func() {
 		c.mu.Lock()
 		c.running--
-		late := c.ran && !c.passedOn
+		late := c.ran
 		c.mu.Unlock()
 		// The cleanup has been and gone, and missed what this step left.
 		if late {
@@ -108,7 +112,9 @@ func (c *cleanups) owe(uses ...string) {
 	c.mu.Lock()
 	for _, u := range uses {
 		switch {
-		case c.ran && !c.passedOn:
+		case c.passedOn != nil:
+			c.passedOn.Add(u)
+		case c.ran:
 			late = append(late, u)
 		case !slices.Contains(c.owed, u):
 			c.owed = append(c.owed, u)
@@ -134,7 +140,7 @@ func (c *cleanups) passOn(to *actionrpc.Cleanups) {
 	}
 	to.Add(c.owed...)
 	c.owed = nil
-	c.passedOn = true
+	c.passedOn = to
 }
 
 // run calls each action once, the last one first run first, as what a later
@@ -150,7 +156,7 @@ func (c *cleanups) run() {
 	}
 
 	c.mu.Lock()
-	if c.ran || c.passedOn {
+	if c.ran || c.passedOn != nil {
 		c.mu.Unlock()
 		return
 	}

@@ -26,8 +26,8 @@ type RunOptions struct {
 	// directory of the workflow file. The working directory is used when it
 	// is empty.
 	BaseDir string
-	// cleanups are told of an action that is to clean up once the run is
-	// over. Without them no action is told that the runner cleans up.
+	// cleanups are told of the actions that are to clean up once the run
+	// is over. Without them no action is told that the runner cleans up.
 	cleanups *cleanups
 }
 
@@ -77,17 +77,15 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		Output: opts.Masker.Writer(os.Stderr),
 		Level:  opts.logLevel(),
 	})
+	// An action that runs steps of its own, as embedded does, says which
+	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
+	if opts.cleanups != nil {
+		call.Cleanups = &actionrpc.Cleanups{}
+		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
+	}
 	if !actionref.IsExternal(name) {
-		// An action of Probe leaves nothing to clean up itself, but one
-		// that runs steps of its own, as embedded does, says which
-		// external actions they ran that do.
-		if opts.cleanups != nil {
-			call.Cleanups = &actionrpc.Cleanups{}
-		}
-		result, state, err := actionrpc.RunStep(name, call, log)
-		opts.cleanups.owe(call.Cleanups.List()...)
-		return result, state, err
+		return actionrpc.RunStep(name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -99,7 +97,6 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 			return nil, nil, err
 		}
 		defer opts.cleanups.begin(full)()
-		call.Cleanups = &actionrpc.Cleanups{}
 	}
 	return actionrpc.RunExecutableStep(exe.Path, exe.SHA256, call, log)
 }

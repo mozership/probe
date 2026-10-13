@@ -24,7 +24,9 @@ func (a action) Run(with map[string]any) (map[string]any, error) {
 }
 
 // RunStep leaves the file <run ID>.<name> behind, after waiting for as long
-// as delay says. res.promised tells whether the runner said it cleans up.
+// as delay says. res.promised tells whether the runner said it cleans up,
+// and the actions that ran names are passed on to it as ones to clean up, as
+// by an action that ran steps of its own.
 func (action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
 	if delay, ok := call.With["delay"].(string); ok {
 		d, err := time.ParseDuration(delay)
@@ -32,6 +34,11 @@ func (action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, erro
 			return nil, nil, err
 		}
 		time.Sleep(d)
+	}
+	if ran, ok := call.With["ran"].([]any); ok {
+		for _, uses := range ran {
+			call.Cleanups.Add(fmt.Sprint(uses))
+		}
 	}
 	left := filepath.Join(os.Getenv("CLEANUP_DIR"), fmt.Sprintf("%s.%v", call.Step.RunID, call.With["name"]))
 	if err := os.WriteFile(left, nil, 0o644); err != nil {

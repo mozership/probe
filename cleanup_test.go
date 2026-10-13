@@ -189,10 +189,19 @@ func TestCleanupsPassOn(t *testing.T) {
 	// The run they were passed on to calls them, and this one none: what a
 	// step left behind is still in use there.
 	c.run()
-	c.begin("/c")()
-	c.owe("/d")
 	if got := r.called(); len(got) != 0 {
 		t.Errorf("called %v after passing on", got)
+	}
+
+	// Nor does it call what comes to be owed after that, as by a step that
+	// timed out: that is passed on as well.
+	c.begin("/c")()
+	c.owe("/d", "/a")
+	if got := r.called(); len(got) != 0 {
+		t.Errorf("called %v after passing on", got)
+	}
+	if got, want := to.List(), []string{"/a", "/b", "/c", "/d"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("passed on %v, want %v", got, want)
 	}
 }
 

@@ -51,8 +51,13 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 	if len(sum) > 0 {
 		secure = &plugin.SecureConfig{Checksum: sum, Hash: sha256.New()}
 	}
-	cl, action, err := start(exec.Command(path), secure, log)
+	// The process ends with ctx as well, so that one that does not come up
+	// is not waited for any longer than one that does not answer.
+	cl, action, err := start(exec.CommandContext(ctx, path), secure, log)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return err
 	}
 	defer cl.Kill()

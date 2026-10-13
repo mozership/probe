@@ -34,6 +34,19 @@ func newCleanupEnv(t *testing.T, manifest string) *cleanupEnv {
 		t.Fatal(err)
 	}
 	e.write(t, "left/action.yml", manifest)
+
+	// ./relay is the same action without a cleanup of its own.
+	bin, err := os.ReadFile(filepath.Join(dir, "left", "left"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "relay"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "relay", "left"), bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.write(t, "relay/action.yml", "runs:\n  using: binary\n  path: left\n")
 	return e
 }
 
@@ -146,10 +159,28 @@ jobs:
   - uses: ./left
     with:
       name: a
-    test: res.promised == false
+    test: res.promised == true
 `,
 			wantCode: ExitOK,
 			wantLeft: 1,
+		},
+		{
+			// ./relay does not ask to be called itself.
+			name:     "for an action that an external action says its steps ran",
+			manifest: cleaningManifest,
+			workflow: `name: cleanup
+vars:
+  action_dir: "{{ACTION_DIR}}"
+jobs:
+- name: first
+  steps:
+  - uses: ./relay
+    with:
+      name: a
+      ran: ["{{vars.action_dir}}"]
+`,
+			wantCode:     ExitOK,
+			wantCleanups: 1,
 		},
 		{
 			name:     "after a step that failed",
@@ -241,7 +272,7 @@ steps:
   with:
     name: b
 `)
-			cmd := e.command(tt.env...)
+			cmd := e.command(append(tt.env, "ACTION_DIR="+filepath.Join(e.dir, "left"))...)
 			// The path of the embedded job is relative to where probe runs.
 			cmd.Dir = e.dir
 			out, err := cmd.CombinedOutput()

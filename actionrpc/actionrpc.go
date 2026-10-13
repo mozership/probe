@@ -126,8 +126,8 @@ type Call struct {
 	// absolute path here.
 	Actions map[string]string
 	// Cleanups is not nil when the runner cleans up once the run is over:
-	// it calls Cleanup of an action whose action.yml sets cleanup, and of
-	// those named here. It is nil for a runner that does not, such as a
+	// it calls Cleanup of the action, when its action.yml sets cleanup, and
+	// of those named here. It is nil for a runner that does not, such as a
 	// Probe from before there was a cleanup, under which what a step leaves
 	// behind stays; an action can refuse to leave anything then.
 	Cleanups *Cleanups
@@ -301,7 +301,19 @@ type Server struct {
 }
 
 // Run runs the action with the request's parameters.
-func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse, err error) {
+	var cleanups *Cleanups
+	if req.GetCleanup() {
+		cleanups = &Cleanups{}
+	}
+	// The steps an action ran are to be cleaned up after however the call
+	// fails, also when it is its result that cannot be sent.
+	defer func() {
+		if err != nil {
+			err = withCleanups(err, cleanups.List())
+		}
+	}()
+
 	// The state is left out: it may hold credentials, such as cookies, that
 	// the runner has not learned to hide.
 	if m.log != nil {
@@ -316,11 +328,6 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, 
 	}
 
 	var v, newState map[string]any
-	var err error
-	var cleanups *Cleanups
-	if req.GetCleanup() {
-		cleanups = &Cleanups{}
-	}
 	if sa, ok := m.Impl.(StepAction); ok {
 		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups}
 		if req.State != nil {
@@ -334,7 +341,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, 
 		if m.log != nil {
 			m.log.Error("Action execution failed", "error", err)
 		}
-		return &pb.RunResponse{}, withCleanups(toStatus(err), cleanups.List())
+		return &pb.RunResponse{}, toStatus(err)
 	}
 
 	// The result is logged as LogOutcome logs it, credentials hidden: the
