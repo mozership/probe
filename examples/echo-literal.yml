@@ -11,11 +11,9 @@ jobs:
   - name: Single line
     uses: hello
     echo: Single line output
-
   - name: Multi-line with explicit newlines
     uses: hello
     echo: "Line 1\nLine 2\nLine 3"
-
   - name: Complex multiline line
     uses: hello
     echo: |
@@ -25,7 +23,6 @@ jobs:
       Back to left
 
       Empty line above
-
   - name: Template expressions
     uses: hello
     echo: |

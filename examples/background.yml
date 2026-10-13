@@ -25,14 +25,12 @@ jobs:
     test: res.pid > 0
     outputs:
       log: res.log
-
   - name: Ask it for a file
     uses: http
     with:
       url: "http://127.0.0.1:{{vars.port}}"
       get: /user.json
     test: res.code == 200 && res.body.name == "alice"
-
   - name: Read what the server logged
     uses: shell
     with:

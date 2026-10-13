@@ -26,14 +26,12 @@ jobs:
     test: len(res.json) == 2
     outputs:
       list: res.json
-
   - name: "Greet {{vars.name}}"
     uses: shell
     with:
       cmd: echo "hello {{vars.name}} ({{vars.id}})"
     test: trim(res.stdout) == "hello " + vars.name + " (" + string(vars.id) + ")"
     iteration: "{{ outputs.users.list }}"
-
   # a list without entries skips the step: there is nothing to run it with
   - name: Nobody to greet
     uses: shell

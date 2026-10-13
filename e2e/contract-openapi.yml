@@ -1,7 +1,9 @@
 openapi: 3.0.3
+
 info:
   title: httpbin, described for steps that break it
   version: "1"
+
 paths:
   /uuid:
     get:

@@ -14,13 +14,11 @@ jobs:
     with:
       cmd: echo ready
     test: trim(res.stdout) == "ready"
-
   - name: A step that fails
     uses: shell
     with:
       cmd: echo ready
     test: trim(res.stdout) == "not ready"
-
   # these would work on what the failed step checked, and are not run
   - name: "Skipped: {{vars.what}}"
     uses: shell
@@ -36,7 +34,6 @@ jobs:
   - name: A step that fails
     uses: hello
     test: 1 == 2
-
   - name: The step after it still runs
     uses: shell
     with:

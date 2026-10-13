@@ -19,7 +19,6 @@ jobs:
       timeout: 30s
       strict_host_check: false
       key_file: "{{vars.key_file}}"
-
   steps:
   - name: Get hostname
     uses: ssh
@@ -27,7 +26,6 @@ jobs:
       cmd: hostname
     echo: "Hostname: {{res.stdout}}"
     test: res.code == 0
-
   - name: Pipe command
     uses: ssh
     with:
@@ -36,7 +34,6 @@ jobs:
       timeout: 60s
     test: res.code == 0
     echo: "{{res.stdout}}"
-
   - name: Multi-line command
     uses: ssh
     with:
@@ -45,7 +42,6 @@ jobs:
         date
     test: res.code == 0
     echo: "{{res.stdout}}"
-
   - name: A command that outlives its timeout
     uses: ssh
     with:

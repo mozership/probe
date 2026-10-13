@@ -5,33 +5,29 @@ jobs:
   repeat:
     count: 3
     interval: 2s
-
   steps:
-    - name: Test repeat_index in echo - {{vars.name}}
-      uses: shell
-      with:
-        cmd: echo "Name={{vars.name}} Index={{repeat_index}}"
-      echo: |
-        Current iteration: {{repeat_index}}
-      wait: 500ms
-      vars:
-        name: repeat-{{repeat_index}}
-
-    - name: Test repeat_index in test condition - {{vars.name}}
-      uses: hello
-      test: "repeat_index >= 1"
-      wait: 500ms
-      vars:
-        name: Hello
-
-    - name: Test repeat_index calculation - {{repeat_index}}
-      uses: hello
-      echo: |
-        Calculated value: {{repeat_index * 10}}
-      wait: 500ms
-
-    - name: Per-iteration echo recorded in report
-      uses: hello
-      echo: |
-        iteration {{repeat_index}}: token=tk-{{repeat_index * 7}}
-      wait: 200ms
+  - name: Test repeat_index in echo - {{vars.name}}
+    uses: shell
+    with:
+      cmd: echo "Name={{vars.name}} Index={{repeat_index}}"
+    echo: |
+      Current iteration: {{repeat_index}}
+    wait: 500ms
+    vars:
+      name: repeat-{{repeat_index}}
+  - name: Test repeat_index in test condition - {{vars.name}}
+    uses: hello
+    test: "repeat_index >= 1"
+    wait: 500ms
+    vars:
+      name: Hello
+  - name: Test repeat_index calculation - {{repeat_index}}
+    uses: hello
+    echo: |
+      Calculated value: {{repeat_index * 10}}
+    wait: 500ms
+  - name: Per-iteration echo recorded in report
+    uses: hello
+    echo: |
+      iteration {{repeat_index}}: token=tk-{{repeat_index * 7}}
+    wait: 200ms

@@ -24,7 +24,6 @@ jobs:
     with:
       cmd: echo "{{vars.message}}"
     test: trim(res.stdout) == vars.message
-
   # the variables of a file are for the vars: a command that needs one in
   # its environment is given it from them
   - name: A command is given what it needs from the vars

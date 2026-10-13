@@ -12,7 +12,6 @@ jobs:
       max_attempts: 3
       interval: "100ms"
     test: res.code == 0
-
   - name: Retry with eventual success
     uses: shell
     with:
@@ -31,7 +30,6 @@ jobs:
       interval: "200ms"
       initial_delay: "100ms"
     test: res.code == 0
-
   - name: All retry attempts fail
     uses: shell
     with:
@@ -39,7 +37,7 @@ jobs:
     retry:
       max_attempts: 3
       interval: "100ms"
-    test: res.code == 1  # Expect failure after all retries
+    test: res.code == 1 # Expect failure after all retries
 
 - name: Practical Retry Use Cases
   steps:
@@ -61,7 +59,6 @@ jobs:
       interval: "500ms"
       initial_delay: "1s"
     test: res.code == 0
-
   - name: Health check with retry
     uses: shell
     with:
@@ -71,7 +68,6 @@ jobs:
       max_attempts: 10
       interval: "1s"
     test: res.code == 0
-
   - name: File availability check
     id: file_check
     uses: shell
@@ -86,7 +82,6 @@ jobs:
     outputs:
       file_exists: "true"
     test: res.code == 0
-
   - name: Use previous step output
     uses: shell
     with:
@@ -100,7 +95,6 @@ jobs:
     with:
       cmd: "echo 0 > /tmp/probe-retry-counter"
     test: res.code == 0
-
   - name: Retry until output matches expected value
     uses: shell
     with:

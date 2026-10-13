@@ -1,4 +1,5 @@
 name: File and Template Example
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
   name: alice
@@ -23,7 +24,6 @@ jobs:
     test: |
       res.code == 200 &&
       res.body.json.name == "alice"
-
   # template() expands the {{ }} templates in what file() read, against the
   # step's own vars, outputs and the rest
   - name: Post a body built from a template

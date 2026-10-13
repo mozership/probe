@@ -1,4 +1,5 @@
 name: HTTP under a guard
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 

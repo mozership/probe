@@ -1,4 +1,5 @@
 name: Cookie Example
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 
@@ -22,13 +23,11 @@ jobs:
       res.code == 200 &&
       res.cookies.session == "abc" &&
       res.body.cookies.session == "abc"
-
   - name: The kept cookie is sent
     uses: http
     with:
       get: /cookies
     test: res.body.cookies.session == "abc"
-
   # cookies are sent as given, in place of a kept one of the same name
   - name: Send cookies of the step's own
     uses: http
@@ -40,7 +39,6 @@ jobs:
     test: |
       res.body.cookies.session == "other" &&
       res.body.cookies.lang == "ja"
-
   - name: A removed cookie is no longer kept
     uses: http
     with:
@@ -60,7 +58,6 @@ jobs:
     with:
       get: /cookies/set?session=abc
     test: res.body.cookies.session == "abc"
-
   - name: Nothing is sent
     uses: http
     with:

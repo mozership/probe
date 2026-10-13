@@ -42,7 +42,6 @@ jobs:
     test: hasSuffix(trim(res.stdout), ".json")
     outputs:
       filename: trim(res.stdout)
-
   - name: hasPrefix()
     uses: shell
     with:
@@ -50,7 +49,6 @@ jobs:
     test: hasPrefix(trim(res.stdout), "https://")
     outputs:
       url: trim(res.stdout)
-
   - name: indexOf()
     uses: shell
     with:
@@ -59,7 +57,6 @@ jobs:
     outputs:
       text: trim(res.stdout)
       position: indexOf(trim(res.stdout), "world")
-
   - name: verify indexOf() position
     uses: shell
     with:
@@ -82,14 +79,12 @@ jobs:
       res.code == 0 &&
       parse_json(res.stdout).data.id == 12345 &&
       parse_json(res.stdout).data.name == "probe"
-
   - name: Use parsed outputs in next step
     uses: shell
     with:
       cmd: echo "User {{outputs.get_user.user_name}} has ID {{outputs.get_user.user_id}}"
     test: res.code == 0
     echo: "{{trim(res.stdout)}}"
-
   - name: Combine parse_json with match_json
     uses: shell
     with:
@@ -104,7 +99,6 @@ jobs:
       res.code == 0 &&
       match_json(parse_json(res.stdout), vars.expected)
     echo: "{{diff_json(parse_json(res.stdout), vars.expected)}}"
-
   - name: Parse JSON array from stdout
     uses: shell
     with:

@@ -1,4 +1,5 @@
 name: DNS under a guard
+
 vars:
   server: "{{DNS_SERVER ?? '127.0.0.1:15353'}}"
 

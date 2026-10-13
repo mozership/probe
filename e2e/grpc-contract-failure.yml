@@ -1,4 +1,5 @@
 name: gRPC Contract Failure
+
 vars:
   addr: "{{GRPC_ADDR ?? 'localhost:50051'}}"
 

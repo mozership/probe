@@ -19,41 +19,35 @@ jobs:
     with:
       name: example.test
     test: res.rcode == "NOERROR" && "192.0.2.1" in res.values && len(res.values) == 2
-
   - name: Where its mail goes
     uses: dns
     with:
       name: example.test
       type: MX
     test: res.answers[0].host == "mail.example.test" && res.answers[0].preference == 10
-
   - name: Who may send its mail
     uses: dns
     with:
       name: example.test
       type: TXT
     test: 'any(res.values, {# startsWith "v=spf1"}) && res.values[0] endsWith "-all"'
-
   - name: Who may issue its certificates
     uses: dns
     with:
       name: example.test
       type: CAA
     test: res.answers[0].tag == "issue" && res.answers[0].value == "letsencrypt.org"
-
   - name: An alias and what it points to
     uses: dns
     with:
       name: www.example.test
     test: res.answers[0].type == "CNAME" && res.answers[0].data == "example.test" && res.values == ["192.0.2.1"]
-
   - name: The name of an address
     uses: dns
     with:
       name: 192.0.2.1
       type: PTR
     test: res.values == ["example.test"]
-
   - name: Over TCP, from the server that holds the zone
     uses: dns
     with:
@@ -61,7 +55,6 @@ jobs:
       type: NS
       protocol: tcp
     test: res.authoritative && res.protocol == "tcp" && res.values == ["ns1.example.test"]
-
   - name: A name that does not exist
     uses: dns
     with:

@@ -2,6 +2,7 @@ name: Report Files
 description: |
   Produces one step of every status and every failure kind, so that e2e/test.yml
   can check the files written by --report. This workflow is expected to fail.
+
 jobs:
 - name: Checks
   id: checks

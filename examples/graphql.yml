@@ -4,8 +4,10 @@ description: |
   lives in a repository of its own. Probe downloads it on first use and
   checks it against the digest in action.yml at the pinned commit. The
   commit is written once, under actions, and the steps use the name.
+
 actions:
   graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+
 jobs:
 - name: Countries API
   steps:

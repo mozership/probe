@@ -36,7 +36,6 @@ jobs:
     outputs:
       user_id: res.body.user.id
       user_name: res.body.user.name
-
   - name: Create User
     uses: grpc
     with:
@@ -49,14 +48,13 @@ jobs:
             age: 30
             location: Fukuoka
         preferences:
-          - email_notifications
-          - sms_notifications
+        - email_notifications
+        - sms_notifications
       metadata:
         authorization: Bearer token123
     test: |
       res.status_code == "OK" &&
       res.body.user.name == "Liny Ows"
-
   - name: Update User
     uses: grpc
     with:
@@ -67,14 +65,13 @@ jobs:
           email: linyows@example.org
     test: |
       res.status_code == "OK"
-
   - name: List Users with TLS
     uses: grpc
     with:
       addr: localhost:50052
       method: ListUsers
       tls: true
-      insecure: true  # Allow self-signed certificate for testing
+      insecure: true # Allow self-signed certificate for testing
       body:
         page_size: 10
         filter:
@@ -85,7 +82,6 @@ jobs:
       res.status_code == "OK"
     echo: |
       Res: {{res.body}}
-
   - name: Watch Users
     uses: grpc
     with:
@@ -93,7 +89,6 @@ jobs:
       body:
         count: 3
     test: res.status_code == "OK" && len(res.messages) == 3 && res.complete
-
   - name: Watch Users up to max_messages
     uses: grpc
     with:
@@ -103,15 +98,14 @@ jobs:
         count: 0
       max_messages: 2
     test: len(res.messages) == 2 && !res.complete
-
   - name: Import Users
     uses: grpc
     with:
       method: ImportUsers
       # each item of the list is one message of the stream
       body:
-        - name: Ada
-        - name: Grace
+      - name: Ada
+      - name: Grace
     test: res.status_code == "OK" && res.body.imported == 2
 
 # The same service called with the Connect protocol, over HTTP/1.1, as a
@@ -131,7 +125,6 @@ jobs:
       body:
         userId: "123"
     test: res.status_code == "OK" && res.body.user.id == "123"
-
   - name: Get User as JSON, checked against .proto files
     uses: grpc
     with:
@@ -142,7 +135,6 @@ jobs:
         files: [./actions/grpc/testserver/pb/user_service.proto]
         import_paths: [./actions/grpc/testserver/pb]
     test: res.status_code == "OK" && res.body.user.id == "123"
-
   - name: Get User as protobuf
     uses: grpc
     with:
@@ -154,7 +146,6 @@ jobs:
         files: [./actions/grpc/testserver/pb/user_service.proto]
         import_paths: [./actions/grpc/testserver/pb]
     test: res.status_code == "OK" && res.body.user.id == "123"
-
   - name: A user that does not exist
     uses: grpc
     with:
@@ -162,7 +153,6 @@ jobs:
       body:
         userId: "999"
     test: res.status_code == "NOT_FOUND"
-
   - name: Watch Users over HTTP/1.1
     uses: grpc
     with:
@@ -173,14 +163,13 @@ jobs:
         files: [./actions/grpc/testserver/pb/user_service.proto]
         import_paths: [./actions/grpc/testserver/pb]
     test: res.status_code == "OK" && len(res.messages) == 3 && res.complete
-
   - name: Import Users over HTTP/1.1
     uses: grpc
     with:
       method: ImportUsers
       body:
-        - name: Ada
-        - name: Grace
+      - name: Ada
+      - name: Grace
       proto:
         files: [./actions/grpc/testserver/pb/user_service.proto]
         import_paths: [./actions/grpc/testserver/pb]

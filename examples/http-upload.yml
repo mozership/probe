@@ -1,4 +1,5 @@
 name: Form and Upload Example
+
 vars:
   url: "{{URL ?? 'http://localhost:8080'}}"
 
@@ -21,7 +22,6 @@ jobs:
     test: |
       res.code == 200 &&
       res.body.form.user == "alice"
-
   # multipart sends text fields and files as multipart/form-data;
   # a file path is relative to the working directory
   - name: Upload a file

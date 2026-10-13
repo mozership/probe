@@ -14,7 +14,6 @@ jobs:
     with:
       cmd: "echo 'Hello from Shell Action!'"
     test: res.code == 0
-
   - name: Environment variable usage
     uses: shell
     with:
@@ -25,7 +24,6 @@ jobs:
     test: |
       res.code == 0 &&
       res.stdout == "Project directory: /tmp/probe-shell-demo, port: 8080\n"
-
   - name: Working directory example
     uses: shell
     with:
@@ -47,26 +45,22 @@ jobs:
       cmd: "echo 'Running in: $0'"
       shell: "/bin/bash"
     test: res.code == 0
-
   - name: Command with timeout
     uses: shell
     with:
       cmd: "sleep 1 && echo 'Task completed'"
       timeout: "{{vars.build_timeout}}"
     test: res.code == 0
-
   - name: Error handling example
     uses: shell
     with:
       cmd: "echo 'This will fail' && exit 1"
     test: res.code == 1
-
   - name: Command not found (exit code 127)
     uses: shell
     with:
       cmd: "nonexistent_command"
     test: res.code == 127
-
   - name: Permission denied simulation (exit code 126)
     uses: shell
     with:
@@ -83,13 +77,11 @@ jobs:
     outputs:
       message: res.stdout
     test: res.code == 0
-
   - name: Capture stderr
     uses: shell
     with:
       cmd: "echo 'Warning message' >&2"
     test: res.code == 0
-
   - name: Use previous output
     uses: shell
     with:
@@ -103,13 +95,11 @@ jobs:
     with:
       cmd: "uname -a"
     test: res.code == 0
-
   - name: File operations
     uses: shell
     with:
       cmd: "mkdir -p /tmp/test && echo 'test content' > /tmp/test/file.txt && cat /tmp/test/file.txt"
     test: res.code == 0
-
   - name: Cleanup
     uses: shell
     with:
