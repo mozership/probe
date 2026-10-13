@@ -122,6 +122,20 @@ func TestParseManifestDeclarations(t *testing.T) {
 	if m.Guard != nil || m.Params != nil {
 		t.Errorf("Guard = %v, Params = %v, want both nil", m.Guard, m.Params)
 	}
+	// Nor does it ask for a cleanup.
+	if m.Cleanup {
+		t.Error("Cleanup = true, want false")
+	}
+	m, err = ParseManifest([]byte("runs:\n  using: binary\n  path: x\ncleanup: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.Cleanup {
+		t.Error("Cleanup = false, want true")
+	}
+	if _, err := ParseManifest([]byte("runs:\n  using: binary\n  path: x\ncleanup: [a]\n")); err == nil {
+		t.Error("a cleanup that is not a boolean should fail")
+	}
 	m, err = ParseManifest([]byte("runs:\n  using: binary\n  path: x\nparams: []\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -599,14 +613,14 @@ func TestRelease(t *testing.T) {
 			name: "replaces the tag and the checksums, and keeps the rest",
 			manifest: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom']\n" +
+				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom']\ncleanup:   true # removes its files\n" +
 				"runs:\n    using: binary\n    checksums:\n        linux_amd64: " + c + "\n        freebsd_amd64: " + c + "\n" +
 				"    url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n",
 			tag:       "v0.2.0",
 			checksums: checksums,
 			want: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard: [allow-host]\nparams: [name, \"to, whom\"]\n" +
+				"guard: [allow-host]\nparams: [name, \"to, whom\"]\ncleanup: true\n" +
 				"runs:\n  using: binary\n" +
 				"  url: https://github.com/example/probe-greet/releases/download/v0.2.0/probe-greet_{os}_{arch}\n" +
 				"  checksums:\n" +
@@ -824,5 +838,56 @@ func TestScaffold(t *testing.T) {
 		if _, err := Scaffold(repo); err == nil {
 			t.Errorf("Scaffold(%q) should fail", repo)
 		}
+	}
+}
+
+func TestFull(t *testing.T) {
+	// The temporary directory is behind a symbolic link on macOS.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "greet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "greet"), filepath.Join(base, "link")); err != nil {
+		t.Fatal(err)
+	}
+	remote := "github.com/example/probe-greet@" + strings.Repeat("a", 40)
+	tests := []struct {
+		name    string
+		uses    string
+		baseDir string
+		want    string
+	}{
+		{name: "a remote action is as it is", uses: remote, baseDir: base, want: remote},
+		{name: "a local action is taken from the base directory", uses: "./greet", baseDir: base, want: filepath.Join(base, "greet")},
+		{name: "by whichever way it is written", uses: "./x/../greet/", baseDir: base, want: filepath.Join(base, "greet")},
+		{name: "an absolute one is left there", uses: filepath.Join(base, "greet"), baseDir: "/elsewhere", want: filepath.Join(base, "greet")},
+		{name: "a symbolic link is followed", uses: "./link", baseDir: base, want: filepath.Join(base, "greet")},
+		{name: "one that is not there is as it is written", uses: "./missing", baseDir: base, want: filepath.Join(base, "missing")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Full(tt.uses, tt.baseDir)
+			if err != nil {
+				t.Fatalf("Full() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Full() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	// Without a base directory, a local action is taken from the working one.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Full("./no-such-action", ""); err != nil || got != filepath.Join(wd, "no-such-action") {
+		t.Errorf("Full() = %q, %v, want %q", got, err, filepath.Join(wd, "no-such-action"))
+	}
+	if _, err := Full("greet", base); err == nil {
+		t.Error("Full() of what names no external action should fail")
 	}
 }

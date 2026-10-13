@@ -566,8 +566,9 @@ Probe uses gRPC to communicate with actions, providing:
 1. **Resolution**: Probe reads the `action.yml` of every external action before the first job starts, and fetches the executable of each one the guard of the run lets run; a step whose action the guard does not let run is refused without its executable, and a built-in one needs no resolving
 2. **Per-Step Start**: An action is started when a step uses it
 3. **Process Isolation**: Each action runs in its own process
-4. **Cleanup**: The process is stopped as soon as the step has its result, so no action is kept running between steps
-5. **Error Isolation**: An action that fails or exits fails its step, not Probe
+4. **Per-Step Stop**: The process is stopped as soon as the step has its result, so no action is kept running between steps
+5. **Cleanup**: Once the workflow is over, Probe starts each external action that asked for it once more, to remove what its steps left behind. See [Cleaning Up After a Run](#cleaning-up-after-a-run)
+6. **Error Isolation**: An action that fails or exits fails its step, not Probe
 
 ### Built-in Action Management
 
@@ -731,6 +732,7 @@ type Call struct {
     Step    Step              // the step it runs for
     Guard   Guard             // what the run allows the action to do
     Actions map[string]string // the names the workflow gives its external actions
+    Cleanups *Cleanups        // not nil under a Probe that cleans up once the run is over
 }
 
 type Step struct {
@@ -752,6 +754,36 @@ Probe tells every such action about the step it runs for; what the action does w
 `Actions` holds the names the workflow gives its external actions under [`actions`](/reference/yaml-configuration#actions), each with the action it stands for in full, and a local one as an absolute path. Probe has already replaced the names in the workflow itself, so an action needs them only to run steps of its own, as the embedded action does for a job file.
 
 `State` is the state the action left in the job, or nil when it left none. Probe keeps `newState` without reading it, and passes it to the action in the next step of the same job that uses it. The state takes the form a result takes, maps keyed by strings, lists and plain values, and one that cannot take it fails the step with an action error. A nil `newState` keeps the state as it was, and so does a step that fails with an action error or times out. Each job keeps the state of each action apart, and each run of a repeated job, and a job run by the embedded action, starts with none. The state is not shown in the output, so it may hold credentials.
+
+#### Cleaning Up After a Run
+
+An action runs in a process that is stopped as soon as its step is done, so what a step leaves behind for the steps after it, such as a container it started, outlives the action. An action that leaves something behind sets `cleanup: true` in its `action.yml` and also implements `actionrpc.Cleaner`:
+
+```go
+type Cleaner interface {
+    Action
+    Cleanup(call CleanupCall) error
+}
+
+type CleanupCall struct {
+    RunID string // the run that is over, as Step.RunID named it
+}
+```
+
+Probe calls `Cleanup` once the workflow is over, whether it passed, failed, or was ended by Ctrl+C, `SIGTERM` or `SIGHUP`:
+
+- **Once for each action**, however many steps and jobs used it, and by whichever name. It is not called for an action no step ran.
+- **With the run alone.** The action has to find what to remove by `RunID`, so its steps mark what they make with it, as a container takes a label. Two runs at the same time have different IDs, and neither removes what the other made.
+- **After the background commands of the shell action are stopped**, and the action first used last, so that what a later step started is gone before what it may depend on.
+- **With 30 seconds for each action.** A cleanup that fails or takes longer is told as a warning and changes neither the result nor the exit status of the run.
+
+`Cleanup` must not fail for what is already gone. It can be called for a run in which the step left nothing, more than once for the same run, and, when a signal ends the run, while a step of the action is still running.
+
+What the steps of a job run by the embedded action leave behind stays until the workflow that embeds the job is over, as it does for the jobs of the workflow itself.
+
+`Call.Cleanups` is not nil under a Probe that cleans up, which calls `Cleanup` of an action whose `action.yml` sets `cleanup`. It is nil under a Probe from before there was a cleanup; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
+
+A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 
 ### External Actions
 
@@ -841,6 +873,7 @@ runs:
 | `runs.checksums` | SHA-256 digest of the executable for each `<os>_<arch>`, in lowercase hex |
 | `guard` | The kinds of guard the action keeps to itself: `read-only`, `allow-host` or both. Probe takes the action at its word and runs it under a guard of those kinds. Without it, the action is refused under any guard unless `--allow-action` names it. See [Guard](/guide/concepts/guard) |
 | `params` | The keys the action takes in `with`, for `probe check` to report a key it does not take. Without it, `with` is not checked; `[]` takes no key |
+| `cleanup` | `true` for an action that Probe is to call once the workflow is over, for it to remove what its steps left behind. Without it, the action is not called. See [Cleaning Up After a Run](#cleaning-up-after-a-run) |
 
 `runs` takes exactly one of `url` and `path`. With `url`, a checksum for the running platform is required, and a download with another digest is refused. The digest is checked again each time the executable is started. The commit in `uses` fixes `action.yml`, and `action.yml` fixes the digest, so the commit decides exactly which executable runs.
 
@@ -895,9 +928,9 @@ probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
 
-The name, the description, `guard` and `params` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
+The name, the description, `guard`, `params` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
 
-For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard` and `params`, and commit it; the first release then puts its tag and digests in:
+For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params` and `cleanup`, and commit it; the first release then puts its tag and digests in:
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml

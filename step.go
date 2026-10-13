@@ -198,7 +198,7 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 	done := beginBackground(jCtx.background, st.Uses)
 	// The call is made up here: an attempt that timed out goes on in the
 	// background while the next one changes the step.
-	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir}
+	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups}
 	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions}
 	go func() {
 		defer done()

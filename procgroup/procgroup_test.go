@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"testing"
 	"time"
@@ -207,4 +208,32 @@ func TestTrackerStopWaitsForPending(t *testing.T) {
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d started by a pending action is still running", pid)
 	}
+}
+
+func TestTrackerAfterStop(t *testing.T) {
+	// What is to be undone along with the processes is undone once they are
+	// gone, in the order it was given, and again by a second stop, such as
+	// the one at the end of a workflow a signal already stopped.
+	b := NewTracker()
+	pid := startGroup(t, "sleep 60")
+	b.Track(pid, "")
+
+	var calls []string
+	b.AfterStop(func() {
+		if groupAlive(pid) {
+			t.Errorf("process group %d is still running when what follows the stop is called", pid)
+		}
+		calls = append(calls, "first")
+	})
+	b.AfterStop(func() { calls = append(calls, "second") })
+
+	b.Stop()
+	b.Stop()
+	if want := []string{"first", "second", "first", "second"}; !reflect.DeepEqual(calls, want) {
+		t.Errorf("calls = %v, want %v", calls, want)
+	}
+
+	var none *Tracker
+	none.AfterStop(func() { t.Error("a nil tracker calls nothing") })
+	none.Stop()
 }

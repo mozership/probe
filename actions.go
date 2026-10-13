@@ -26,6 +26,9 @@ type RunOptions struct {
 	// directory of the workflow file. The working directory is used when it
 	// is empty.
 	BaseDir string
+	// cleanups are told of the actions that are to clean up once the run
+	// is over. Without them no action is told that the runner cleans up.
+	cleanups *cleanups
 }
 
 // logLevel returns the level the action's log records are filtered at.
@@ -74,6 +77,13 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		Output: opts.Masker.Writer(os.Stderr),
 		Level:  opts.logLevel(),
 	})
+	// An action that runs steps of its own, as embedded does, says which
+	// external actions they ran that are to clean up, however it ends.
+	call.Cleanups = nil
+	if opts.cleanups != nil {
+		call.Cleanups = &actionrpc.Cleanups{}
+		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
+	}
 	if !actionref.IsExternal(name) {
 		return actionrpc.RunStep(name, call, log)
 	}
@@ -81,7 +91,22 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 	if err != nil {
 		return nil, nil, err
 	}
+	if opts.cleanups != nil && cleansUp(name, opts.BaseDir) {
+		full, err := actionref.Full(name, opts.BaseDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer opts.cleanups.begin(full)()
+	}
 	return actionrpc.RunExecutableStep(exe.Path, exe.SHA256, call, log)
+}
+
+// cleansUp reports whether the action.yml of the external action name asks
+// for the action to be called once the run is over. It was read when the
+// action was resolved.
+func cleansUp(name, baseDir string) bool {
+	m, err := actionref.ReadManifest(name, baseDir)
+	return err == nil && m.Cleanup
 }
 
 // runAction runs the action named name for a step, when runner can tell it

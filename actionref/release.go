@@ -165,6 +165,9 @@ func (m *Manifest) encode() []byte {
 	if m.Params != nil {
 		fmt.Fprintf(&b, "params: %s\n", flowList(m.Params))
 	}
+	if m.Cleanup {
+		b.WriteString("cleanup: true\n")
+	}
 	fmt.Fprintf(&b, "runs:\n  using: %s\n", scalar(m.Runs.Using, false))
 	if m.Runs.URL != "" {
 		fmt.Fprintf(&b, "  url: %s\n", scalar(m.Runs.URL, false))
@@ -243,6 +246,9 @@ description: ""
 # The keys the action takes in with, for probe check to report any other.
 # Without params, with is not checked.
 # params: [name]
+# Whether Probe calls the action once a run is over, for it to remove what
+# its steps left behind, such as a server they started.
+# cleanup: true
 runs:
   using: binary
   # probe manifest <tag> <checksums-file> puts the tag of a release here and

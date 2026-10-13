@@ -42,6 +42,8 @@ type Tracker struct {
 	// stopping is held for the whole of Stop, so that a second call, such
 	// as one from a signal, returns only once the processes are gone.
 	stopping sync.Mutex
+	// afterStop are called by Stop once the processes are gone.
+	afterStop []func()
 }
 
 // NewTracker returns a Tracker with nothing recorded.
@@ -88,6 +90,18 @@ func (b *Tracker) Track(pid int, log string) {
 	b.mu.Unlock()
 }
 
+// AfterStop has Stop call f once the processes are gone, each time it is
+// called, for what else is to be undone when the workflow is over or probe
+// is interrupted.
+func (b *Tracker) AfterStop(f func()) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.afterStop = append(b.afterStop, f)
+	b.mu.Unlock()
+}
+
 // StopOnSignal stops the recorded processes when probe is interrupted,
 // terminated or hung up on, and then lets the signal end probe as it would
 // have. The background processes are in sessions of their own, so the
@@ -126,7 +140,8 @@ func (b *Tracker) StopOnSignal() func() {
 	}
 }
 
-// Stop terminates every recorded process and removes its log file.
+// Stop terminates every recorded process and removes its log file, and then
+// calls what AfterStop was given.
 func (b *Tracker) Stop() {
 	if b == nil {
 		return
@@ -143,9 +158,13 @@ func (b *Tracker) Stop() {
 	procs := b.procs
 	b.procs = nil
 	b.stopped = true
+	after := b.afterStop
 	b.mu.Unlock()
 
 	terminate(procs)
+	for _, f := range after {
+		f()
+	}
 }
 
 func (b *Tracker) pendingCount() int {

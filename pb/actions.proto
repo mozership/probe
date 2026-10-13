@@ -17,6 +17,10 @@ message RunRequest {
     // The names the workflow gives its external actions, each with the action
     // it stands for, for an action that runs steps of its own.
     map<string, string> actions = 6;
+    // Whether the runner cleans up once the run is over: it calls Cleanup of
+    // an action whose action.yml asks for it, and of the actions the response
+    // names in cleanups.
+    bool cleanup = 7;
 }
 
 // Guard is what the run allows actions to do, set by whoever runs probe
@@ -66,8 +70,24 @@ message RunResponse {
     google.protobuf.Struct result = 1;
     // The state the action leaves in the job, or none to keep it as it was.
     google.protobuf.Struct state = 3;
+    // The external actions the action ran that are to be cleaned up once the
+    // run is over, each as a step's uses names it in full, for an action that
+    // runs steps of its own. A local action is an absolute path here.
+    repeated string cleanups = 4;
 }
+
+// CleanupRequest tells an action that a run is over, for it to remove what
+// its steps left behind in it.
+message CleanupRequest {
+    // The run of probe that is over, as each step of it was told in Step.
+    string run_id = 1;
+}
+
+message CleanupResponse {}
 
 service Actions {
     rpc Run(RunRequest) returns (RunResponse);
+    // Cleanup is called once, after the last step of a run, on an action
+    // whose action.yml sets cleanup, however many steps used it.
+    rpc Cleanup(CleanupRequest) returns (CleanupResponse);
 }

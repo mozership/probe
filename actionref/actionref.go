@@ -124,6 +124,9 @@ type Manifest struct {
 	// check a step's with against. Nil, when action.yml does not say, takes
 	// any key.
 	Params []string `yaml:"params"`
+	// Cleanup says that the action is to be told once a run is over, for it
+	// to remove what its steps left behind in it.
+	Cleanup bool `yaml:"cleanup"`
 }
 
 // Runs says how an action is run.
@@ -213,6 +216,24 @@ func Resolve(uses, baseDir string) (*Executable, error) {
 // whole process, which Resolve then uses for the same action.
 func ReadManifest(uses, baseDir string) (*Manifest, error) {
 	return defaultResolver.Manifest(uses, baseDir)
+}
+
+// Full returns uses as it names the action from any directory: a local
+// action as the absolute path of its directory, taken relative to baseDir,
+// or to the working directory when baseDir is empty, and a remote one as it
+// is. Two uses that name the same action have the same one, whichever way
+// each is written: a symbolic link on the way to a local action is followed.
+func Full(uses, baseDir string) (string, error) {
+	_, ref, key, err := defaultResolver.entry(uses, baseDir)
+	if err != nil || ref.Local == "" {
+		return key, err
+	}
+	// A directory that is not there is left as it is written; resolving
+	// the action tells that it is missing.
+	if dir, err := filepath.EvalSymlinks(key); err == nil {
+		return dir, nil
+	}
+	return key, nil
 }
 
 // Resolve returns the executable of the external action uses names. A local

@@ -9,6 +9,8 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
@@ -17,6 +19,8 @@ import (
 	"github.com/mozership/probe/pb"
 	"github.com/mozership/probe/truncate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -43,6 +47,64 @@ type StepAction interface {
 	RunStep(call Call) (result, newState map[string]any, err error)
 }
 
+// Cleaner is an Action that removes what its steps left behind in a run,
+// such as the containers they started, once the run is over. The runner
+// calls Cleanup only on an action whose action.yml sets cleanup, and once
+// however many steps used it, so the action has to find what to remove by
+// the run alone, such as by a label of the run's ID that its steps put on
+// what they made.
+//
+// Cleanup is called when the run ends by a signal as well, and then a step
+// of the action may still be running, or may have been stopped halfway. It
+// can be called again for the same run, and for a run that left nothing, so
+// it must not fail for what is already gone.
+type Cleaner interface {
+	Action
+	Cleanup(call CleanupCall) error
+}
+
+// CleanupCall is what a Cleaner is given to clean up after a run.
+type CleanupCall struct {
+	// RunID names the run that is over, as Step.RunID named it to each of
+	// its steps.
+	RunID string
+}
+
+// Cleanups is given to an action by a runner that cleans up once the run is
+// over. It gathers the external actions that are to be cleaned up then, for
+// an action that runs steps of its own to pass on those its steps used. A
+// nil Cleanups gathers nothing.
+type Cleanups struct {
+	mu   sync.Mutex
+	uses []string
+}
+
+// Add names external actions to clean up once the run is over, each as a
+// step's uses names it in full, with a local one as an absolute path. One
+// already named is not named again.
+func (c *Cleanups) Add(uses ...string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, u := range uses {
+		if !slices.Contains(c.uses, u) {
+			c.uses = append(c.uses, u)
+		}
+	}
+}
+
+// List returns the actions named so far, in the order they were first named.
+func (c *Cleanups) List() []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.uses)
+}
+
 // Call is what a StepAction is given to run once for a step.
 type Call struct {
 	// With holds the step's with parameters, as Action.Run is given them.
@@ -63,6 +125,12 @@ type Call struct {
 	// of its own, as embedded does, to read a uses by. A local action is an
 	// absolute path here.
 	Actions map[string]string
+	// Cleanups is not nil when the runner cleans up once the run is over:
+	// it calls Cleanup of the action, when its action.yml sets cleanup, and
+	// of those named here. It is nil for a runner that does not, such as a
+	// Probe from before there was a cleanup, under which what a step leaves
+	// behind stays; an action can refuse to leave anything then.
+	Cleanups *Cleanups
 }
 
 // Step tells an action about the step it runs for.
@@ -150,7 +218,7 @@ func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert parameters to protobuf struct: %v", err)
 	}
-	req := &pb.RunRequest{With: withStruct, Step: stepToPB(call.Step), Guard: guardToPB(call.Guard), Actions: call.Actions}
+	req := &pb.RunRequest{With: withStruct, Step: stepToPB(call.Step), Guard: guardToPB(call.Guard), Actions: call.Actions, Cleanup: call.Cleanups != nil}
 	if call.State != nil {
 		req.State, err = structpb.NewStruct(call.State)
 		if err != nil {
@@ -160,8 +228,10 @@ func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
 
 	runRes, err := m.client.Run(context.Background(), req)
 	if err != nil {
+		call.Cleanups.Add(cleanupsOf(err)...)
 		return nil, nil, fromStatus(err)
 	}
+	call.Cleanups.Add(runRes.GetCleanups()...)
 
 	// Convert protobuf.Struct back to map[string]any
 	// Apply convertFloatToInt to restore integer types that were converted to float64 by protobuf
@@ -174,6 +244,44 @@ func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
 		newState = structToMap(runRes.State)
 	}
 	return result, newState, nil
+}
+
+// Cleanup tells the action that the run is over, for it to remove what its
+// steps left behind. It gives up once ctx is done.
+func (m *Client) Cleanup(ctx context.Context, call CleanupCall) error {
+	_, err := m.client.Cleanup(ctx, &pb.CleanupRequest{RunId: call.RunID})
+	return err
+}
+
+// withCleanups returns err carrying the actions to clean up, which the
+// response would have carried had the action not failed: the steps an action
+// ran before it failed are to be cleaned up after all the same.
+func withCleanups(err error, uses []string) error {
+	if len(uses) == 0 {
+		return err
+	}
+	s, ok := status.FromError(err)
+	if !ok {
+		s = status.New(codes.Unknown, err.Error())
+	}
+	if d, detailErr := s.WithDetails(&pb.RunResponse{Cleanups: uses}); detailErr == nil {
+		return d.Err()
+	}
+	return err
+}
+
+// cleanupsOf returns the actions to clean up that err carries.
+func cleanupsOf(err error) []string {
+	s, ok := status.FromError(err)
+	if !ok {
+		return nil
+	}
+	for _, d := range s.Details() {
+		if res, ok := d.(*pb.RunResponse); ok {
+			return res.GetCleanups()
+		}
+	}
+	return nil
 }
 
 // structToMap converts s to a map, with the integers protobuf turned into
@@ -193,7 +301,19 @@ type Server struct {
 }
 
 // Run runs the action with the request's parameters.
-func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse, err error) {
+	var cleanups *Cleanups
+	if req.GetCleanup() {
+		cleanups = &Cleanups{}
+	}
+	// The steps an action ran are to be cleaned up after however the call
+	// fails, also when it is its result that cannot be sent.
+	defer func() {
+		if err != nil {
+			err = withCleanups(err, cleanups.List())
+		}
+	}()
+
 	// The state is left out: it may hold credentials, such as cookies, that
 	// the runner has not learned to hide.
 	if m.log != nil {
@@ -208,9 +328,8 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, 
 	}
 
 	var v, newState map[string]any
-	var err error
 	if sa, ok := m.Impl.(StepAction); ok {
-		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions()}
+		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups}
 		if req.State != nil {
 			call.State = structToMap(req.State)
 		}
@@ -259,7 +378,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, 
 	if m.log != nil {
 		m.log.Debug("ActionsServer final result struct", "result", forLog(resultMap))
 	}
-	res := &pb.RunResponse{Result: resultStruct}
+	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List()}
 	if newState != nil {
 		convertedState, err := convertForProtobuf(newState)
 		if err != nil {
@@ -272,6 +391,26 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, 
 		}
 	}
 	return res, nil
+}
+
+// Cleanup has the action clean up after the run the request names. An action
+// that is not a Cleaner has nothing to do it with, which is an error: the
+// runner calls only an action that asked to be.
+func (m *Server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.CleanupResponse, error) {
+	c, ok := m.Impl.(Cleaner)
+	if !ok {
+		return &pb.CleanupResponse{}, status.Error(codes.Unimplemented, "the action does not clean up: it has no Cleanup")
+	}
+	if m.log != nil {
+		m.log.Debug("ActionsServer.Cleanup called", "run_id", req.GetRunId())
+	}
+	if err := c.Cleanup(CleanupCall{RunID: req.GetRunId()}); err != nil {
+		if m.log != nil {
+			m.log.Error("Action cleanup failed", "error", err)
+		}
+		return &pb.CleanupResponse{}, err
+	}
+	return &pb.CleanupResponse{}, nil
 }
 
 // Sendable returns a copy of v as an action in a process of its own sends

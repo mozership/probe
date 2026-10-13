@@ -537,7 +537,7 @@ Print an `action.yml` to start a new action from, for the GitHub repository `<ow
 probe manifest init mozership/probe-greet > action.yml
 ```
 
-The action is named after the repository, without a leading `probe-`, and `runs.url` names the executable of each platform `<repo>_{os}_{arch}`, which is what GoReleaser names one it publishes unarchived. The tag in `runs.url` is a placeholder and there are no checksums, so the action cannot be used from this commit: the first release puts both in. The description, `guard` and `params` are left for you to fill in, each with a comment that says what it is for.
+The action is named after the repository, without a leading `probe-`, and `runs.url` names the executable of each platform `<repo>_{os}_{arch}`, which is what GoReleaser names one it publishes unarchived. The tag in `runs.url` is a placeholder and there are no checksums, so the action cannot be used from this commit: the first release puts both in. The description, `guard`, `params` and `cleanup` are left for you to fill in, each with a comment that says what it is for.
 
 #### `manifest <tag>`
 
@@ -554,7 +554,7 @@ It reads `action-file` and prints it with two changes:
 - `runs.url` takes `tag` in place of the tag it has. It must be the address of a release asset on GitHub, `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`, and `<asset>` must have one `{os}` and one `{arch}`, with a character between them that is not a lowercase letter or a digit, such as `_`.
 - `runs.checksums` becomes the digests of `checksums-file`. A line is taken when its file is `<asset>` with a platform in place of `{os}` and `{arch}`, and any other line is left out, as are the checksums `action-file` had.
 
-`name`, `description`, `guard` and `params` are printed as they were read. The output is always written in the same form, with the checksums sorted by platform. The comment lines `action-file` starts with are kept, and no other comment is.
+`name`, `description`, `guard`, `params` and `cleanup` are printed as they were read. The output is always written in the same form, with the checksums sorted by platform. The comment lines `action-file` starts with are kept, and no other comment is.
 
 **Example:**
 ```bash

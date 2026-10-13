@@ -150,6 +150,9 @@ func (w *Workflow) Start(c Config) error {
 	// for later steps and jobs to use, but not after the workflow, and not
 	// after probe is interrupted. The watch for signals is deferred first so
 	// that it ends last, still on while the processes are being stopped.
+	// The actions that clean up are called after that, so that what a step
+	// left behind is removed once no process uses it, on a signal as well.
+	ctx.background.AfterStop(ctx.cleanups.run)
 	endWatch := ctx.background.StopOnSignal()
 	defer endWatch()
 	defer ctx.background.Stop()
@@ -650,6 +653,7 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 		Outputs:      w.outputs,
 		countersMu:   &sync.Mutex{},
 		background:   procgroup.NewTracker(),
+		cleanups:     newCleanups(w.runID, w.printer),
 		baseDir:      w.basePath,
 		runID:        w.runID,
 		actions:      w.named,

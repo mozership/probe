@@ -409,6 +409,19 @@ type standaloneConfig struct {
 	guard   actionrpc.Guard
 	actions map[string]string
 	builtin []string
+	// cleanups are those of the run the job is part of.
+	cleanups *actionrpc.Cleanups
+}
+
+// WithCleanups runs the job as part of a run that cleans up once it is over,
+// such as the run of the step that embeds it: the actions the job would have
+// had clean up when it ended are named in c instead, and what its steps left
+// behind stays for the rest of that run. Without it, or with a nil c, the
+// job cleans up after itself.
+func WithCleanups(c *actionrpc.Cleanups) StandaloneOption {
+	return func(cfg *standaloneConfig) {
+		cfg.cleanups = c
+	}
 }
 
 // WithRunID runs the job as part of the run id names, such as the run of the
@@ -516,13 +529,17 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 		Printer:    printer,
 		countersMu: &sync.Mutex{},
 		background: procgroup.NewTracker(),
+		cleanups:   newCleanups(runID, printer),
 		baseDir:    baseDir,
 		runID:      runID,
 		actions:    cfg.actions,
 	}
 	// This job runs inside the plugin process of the step that embeds it,
 	// which exits once the job is done, so its background processes go then.
-	// The watch for signals ends after the stop, as in a workflow.
+	// The watch for signals ends after the stop, as in a workflow. The
+	// actions that clean up are called then as well, unless the job is over
+	// by then and has passed them on to the run it is part of.
+	ctx.background.AfterStop(ctx.cleanups.run)
 	endWatch := ctx.background.StopOnSignal()
 	defer endWatch()
 	defer ctx.background.Stop()
@@ -537,6 +554,9 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	if err == nil {
 		failed, err = j.run(ctx)
 	}
+	// What the steps left behind is for the rest of the run the job is
+	// part of, as for the jobs after it in a workflow.
+	ctx.cleanups.passOn(cfg.cleanups)
 
 	run := JobRun{Err: err, Success: err == nil && !failed}
 	if run.Success {

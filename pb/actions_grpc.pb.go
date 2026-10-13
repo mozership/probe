@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Actions_Run_FullMethodName = "/pb.Actions/Run"
+	Actions_Run_FullMethodName     = "/pb.Actions/Run"
+	Actions_Cleanup_FullMethodName = "/pb.Actions/Cleanup"
 )
 
 // ActionsClient is the client API for Actions service.
@@ -27,6 +28,9 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ActionsClient interface {
 	Run(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunResponse, error)
+	// Cleanup is called once, after the last step of a run, on an action
+	// whose action.yml sets cleanup, however many steps used it.
+	Cleanup(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error)
 }
 
 type actionsClient struct {
@@ -46,11 +50,23 @@ func (c *actionsClient) Run(ctx context.Context, in *RunRequest, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *actionsClient) Cleanup(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error) {
+	out := new(CleanupResponse)
+	err := c.cc.Invoke(ctx, Actions_Cleanup_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ActionsServer is the server API for Actions service.
 // All implementations should embed UnimplementedActionsServer
 // for forward compatibility
 type ActionsServer interface {
 	Run(context.Context, *RunRequest) (*RunResponse, error)
+	// Cleanup is called once, after the last step of a run, on an action
+	// whose action.yml sets cleanup, however many steps used it.
+	Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error)
 }
 
 // UnimplementedActionsServer should be embedded to have forward compatible implementations.
@@ -59,6 +75,9 @@ type UnimplementedActionsServer struct {
 
 func (UnimplementedActionsServer) Run(context.Context, *RunRequest) (*RunResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Run not implemented")
+}
+func (UnimplementedActionsServer) Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Cleanup not implemented")
 }
 
 // UnsafeActionsServer may be embedded to opt out of forward compatibility for this service.
@@ -90,6 +109,24 @@ func _Actions_Run_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Actions_Cleanup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CleanupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActionsServer).Cleanup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Actions_Cleanup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActionsServer).Cleanup(ctx, req.(*CleanupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Actions_ServiceDesc is the grpc.ServiceDesc for Actions service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +137,10 @@ var Actions_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Run",
 			Handler:    _Actions_Run_Handler,
+		},
+		{
+			MethodName: "Cleanup",
+			Handler:    _Actions_Cleanup_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
