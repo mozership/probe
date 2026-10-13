@@ -1,6 +1,7 @@
 package actionrpc
 
 import (
+	"context"
 	"crypto/sha256"
 	"os"
 	"os/exec"
@@ -42,7 +43,40 @@ func RunExecutableStep(path string, sum []byte, call Call, log hclog.Logger) (ma
 	return run(exec.Command(path), secure, call, log)
 }
 
+// CleanupExecutable starts the action served by the executable at path, as
+// RunExecutable does, has it clean up after the run that call names, and
+// stops it. The action is stopped where it is once ctx is done.
+func CleanupExecutable(ctx context.Context, path string, sum []byte, call CleanupCall, log hclog.Logger) error {
+	var secure *plugin.SecureConfig
+	if len(sum) > 0 {
+		secure = &plugin.SecureConfig{Checksum: sum, Hash: sha256.New()}
+	}
+	cl, action, err := start(exec.Command(path), secure, log)
+	if err != nil {
+		return err
+	}
+	defer cl.Kill()
+	return action.Cleanup(ctx, call)
+}
+
 func run(cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	cl, action, err := start(cmd, secure, log)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer cl.Kill()
+
+	result, newState, err := action.RunStep(call)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return result, newState, nil
+}
+
+// start starts the process that serves an action, and returns it along with
+// the action to call. The caller stops the process with Kill.
+func start(cmd *exec.Cmd, secure *plugin.SecureConfig, log hclog.Logger) (*plugin.Client, *Client, error) {
 	cl := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  Handshake,
 		Plugins:          PluginMap,
@@ -54,21 +88,17 @@ func run(cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger
 			TempDir: os.TempDir(),
 		},
 	})
-	defer cl.Kill()
 
 	protocol, err := cl.Client()
 	if err != nil {
+		cl.Kill()
 		return nil, nil, err
 	}
 
 	raw, err := protocol.Dispense("actions")
 	if err != nil {
+		cl.Kill()
 		return nil, nil, err
 	}
-
-	result, newState, err := raw.(*Client).RunStep(call)
-	if err != nil {
-		return nil, nil, err
-	}
-	return result, newState, nil
+	return cl, raw.(*Client), nil
 }

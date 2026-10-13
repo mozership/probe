@@ -537,7 +537,7 @@ probe manifest <tag> <checksums-file> [action-file]
 probe manifest init mozership/probe-greet > action.yml
 ```
 
-アクションの名前はリポジトリ名から先頭の`probe-`を除いたもので、`runs.url`は各プラットフォームの実行ファイルを`<repo>_{os}_{arch}`という名前で指します。これはGoReleaserがアーカイブせずに公開する実行ファイルの名前です。`runs.url`のタグは仮のもので、チェックサムもないため、このコミットのアクションは使えません。どちらも最初のリリースで入ります。説明と`guard`、`params`は書き入れる箇所として残してあり、それぞれ何のためのものかをコメントで示しています。
+アクションの名前はリポジトリ名から先頭の`probe-`を除いたもので、`runs.url`は各プラットフォームの実行ファイルを`<repo>_{os}_{arch}`という名前で指します。これはGoReleaserがアーカイブせずに公開する実行ファイルの名前です。`runs.url`のタグは仮のもので、チェックサムもないため、このコミットのアクションは使えません。どちらも最初のリリースで入ります。説明と`guard`、`params`、`cleanup`は書き入れる箇所として残してあり、それぞれ何のためのものかをコメントで示しています。
 
 #### `manifest <tag>`
 
@@ -554,7 +554,7 @@ probe manifest init mozership/probe-greet > action.yml
 - `runs.url`のタグを`tag`に置き換えます。`runs.url`はGitHubのリリースアセットのアドレス`https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`でなければならず、`<asset>`には`{os}`と`{arch}`が1つずつ必要で、その間に`_`など、英小文字でも数字でもない文字が要ります。
 - `runs.checksums`を`checksums-file`のダイジェストに置き換えます。ファイル名が、`<asset>`の`{os}`と`{arch}`をプラットフォームに置き換えたものである行を採り、それ以外の行は無視します。`action-file`にあったチェックサムは残しません。
 
-`name`、`description`、`guard`、`params`は読んだまま出力します。出力はつねに同じ書式で、チェックサムはプラットフォーム順に並びます。`action-file`の先頭にあるコメント行は残し、それ以外のコメントは残しません。
+`name`、`description`、`guard`、`params`、`cleanup`は読んだまま出力します。出力はつねに同じ書式で、チェックサムはプラットフォーム順に並びます。`action-file`の先頭にあるコメント行は残し、それ以外のコメントは残しません。
 
 **例:**
 ```bash

@@ -12,7 +12,11 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/pb"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -466,7 +470,16 @@ func (a *statefulAction) RunStep(call Call) (map[string]any, map[string]any, err
 type directClient struct{ s *Server }
 
 func (c directClient) Run(ctx context.Context, in *pb.RunRequest, _ ...grpc.CallOption) (*pb.RunResponse, error) {
-	return c.s.Run(ctx, in)
+	res, err := c.s.Run(ctx, in)
+	if err != nil {
+		// An error arrives as the status it was sent in, and nothing more.
+		return res, status.FromProto(proto.Clone(status.Convert(err).Proto()).(*spb.Status)).Err()
+	}
+	return res, nil
+}
+
+func (c directClient) Cleanup(ctx context.Context, in *pb.CleanupRequest, _ ...grpc.CallOption) (*pb.CleanupResponse, error) {
+	return c.s.Cleanup(ctx, in)
 }
 
 func TestClientRunStep(t *testing.T) {
@@ -607,5 +620,125 @@ func TestClientRunStepTellsTheNamesOfActions(t *testing.T) {
 	}
 	if len(a.actions) != 0 {
 		t.Errorf("the action was told %v, want no names", a.actions)
+	}
+}
+
+// cleaningAction runs steps of its own, as embedded does, and names the
+// actions they ran that are to clean up; it also cleans up itself.
+type cleaningAction struct {
+	// promised is whether the runner said it cleans up.
+	promised bool
+	ran      []string
+	err      error
+	cleaned  []string
+	cleanErr error
+}
+
+func (a *cleaningAction) Run(with map[string]any) (map[string]any, error) {
+	return map[string]any{}, a.err
+}
+
+func (a *cleaningAction) RunStep(call Call) (map[string]any, map[string]any, error) {
+	a.promised = call.Cleanups != nil
+	call.Cleanups.Add(a.ran...)
+	return map[string]any{}, nil, a.err
+}
+
+func (a *cleaningAction) Cleanup(call CleanupCall) error {
+	a.cleaned = append(a.cleaned, call.RunID)
+	return a.cleanErr
+}
+
+func TestCleanups(t *testing.T) {
+	var none *Cleanups
+	none.Add("/a")
+	if got := none.List(); got != nil {
+		t.Errorf("a nil Cleanups lists %v", got)
+	}
+
+	c := &Cleanups{}
+	if got := c.List(); len(got) != 0 {
+		t.Errorf("an empty Cleanups lists %v", got)
+	}
+	c.Add("/b", "/a")
+	c.Add("/a", "/c", "/b")
+	want := []string{"/b", "/a", "/c"}
+	got := c.List()
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
+	}
+	// The list is the caller's own.
+	got[0] = "changed"
+	if got := c.List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v after the list it returned was changed, want %v", got, want)
+	}
+}
+
+func TestClientRunStepGathersCleanups(t *testing.T) {
+	refused := Refuse("not allowed")
+	tests := []struct {
+		name string
+		// cleanups is what the runner gives, nil for one that does not
+		// clean up.
+		cleanups *Cleanups
+		ran      []string
+		err      error
+		want     []string
+	}{
+		{name: "a runner that does not clean up", ran: []string{"/a"}},
+		{name: "nothing to clean up", cleanups: &Cleanups{}},
+		{name: "the actions the steps ran", cleanups: &Cleanups{}, ran: []string{"/a", "/b"}, want: []string{"/a", "/b"}},
+		{name: "of an action that failed", cleanups: &Cleanups{}, ran: []string{"/a"}, err: errors.New("boom"), want: []string{"/a"}},
+		{name: "of an action that was refused", cleanups: &Cleanups{}, ran: []string{"/a"}, err: refused, want: []string{"/a"}},
+		{name: "a failure with nothing to clean up", cleanups: &Cleanups{}, err: errors.New("boom")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := &cleaningAction{ran: tt.ran, err: tt.err}
+			c := &Client{client: directClient{&Server{Impl: action}}}
+
+			_, _, err := c.RunStep(Call{With: map[string]any{}, Cleanups: tt.cleanups})
+			if (err != nil) != (tt.err != nil) {
+				t.Fatalf("RunStep() error = %v, want %v", err, tt.err)
+			}
+			// The error is the one the action returned, whatever it carried.
+			if tt.err != nil && !strings.Contains(err.Error(), tt.err.Error()) {
+				t.Errorf("RunStep() error = %v, want %v", err, tt.err)
+			}
+			if IsRefused(err) != IsRefused(tt.err) {
+				t.Errorf("IsRefused(%v) = %v, want %v", err, IsRefused(err), IsRefused(tt.err))
+			}
+			if action.promised != (tt.cleanups != nil) {
+				t.Errorf("the action was told the runner cleans up: %v, want %v", action.promised, tt.cleanups != nil)
+			}
+			if got := tt.cleanups.List(); !reflect.DeepEqual(got, tt.want) && (len(got) != 0 || len(tt.want) != 0) {
+				t.Errorf("gathered %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClientCleanup(t *testing.T) {
+	action := &cleaningAction{}
+	c := &Client{client: directClient{&Server{Impl: action, log: hclog.NewNullLogger()}}}
+	if err := c.Cleanup(context.Background(), CleanupCall{RunID: "run1"}); err != nil {
+		t.Fatalf("Cleanup() error = %v", err)
+	}
+	if !reflect.DeepEqual(action.cleaned, []string{"run1"}) {
+		t.Errorf("cleaned up after %v, want run1", action.cleaned)
+	}
+
+	action.cleanErr = errors.New("still running")
+	if err := c.Cleanup(context.Background(), CleanupCall{RunID: "run2"}); err == nil || !strings.Contains(err.Error(), "still running") {
+		t.Errorf("Cleanup() error = %v, want the action's", err)
+	}
+}
+
+// An action.yml can ask for a cleanup the executable does not have.
+func TestClientCleanupOfAnActionWithoutOne(t *testing.T) {
+	c := &Client{client: directClient{&Server{Impl: &statefulAction{}}}}
+	err := c.Cleanup(context.Background(), CleanupCall{RunID: "run1"})
+	if status.Code(err) != codes.Unimplemented {
+		t.Errorf("Cleanup() error = %v, want Unimplemented", err)
 	}
 }

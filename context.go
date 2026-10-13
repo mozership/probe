@@ -73,6 +73,9 @@ type JobContext struct {
 	// Processes that steps left running in the background, stopped once the
 	// workflow is over
 	background *procgroup.Tracker
+	// Actions to call once the workflow is over, for each to remove what
+	// its steps left behind
+	cleanups *cleanups
 	// Directory of the workflow file, which local actions are relative to
 	baseDir string
 	// The state each action keeps in this run of the job

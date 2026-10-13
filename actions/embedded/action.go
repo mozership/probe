@@ -37,7 +37,7 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	after := WithAfter(func(result *Result) {
 		a.log.Debug("embedded job completed", "result", result)
 	})
-	ret, err := Execute(with, before, after, WithRunID(call.Step.RunID), WithGuard(call.Guard), WithActions(call.Actions), WithBuiltinActions(a.builtin))
+	ret, err := Execute(with, before, after, WithRunID(call.Step.RunID), WithGuard(call.Guard), WithActions(call.Actions), WithBuiltinActions(a.builtin), WithCleanups(call.Cleanups))
 
 	actionrpc.LogOutcome(a.log, "embedded job", ret, err)
 

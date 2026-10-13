@@ -52,6 +52,9 @@ type Callback struct {
 	actions map[string]string
 	// builtin are the names of the actions of Probe.
 	builtin []string
+	// cleanups are those of the run the job is part of, or nil for a job
+	// that cleans up after itself.
+	cleanups *actionrpc.Cleanups
 }
 
 func NewReq() *Req {
@@ -96,7 +99,7 @@ func (r *Req) Do() (*Result, error) {
 		opts = append(opts, probe.WithRunID(r.cb.runID))
 	}
 	if r.cb != nil {
-		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin))
+		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithCleanups(r.cb.cleanups))
 	}
 	run := job.RunStandalone(r.Vars, printer, jobID, filepath.Dir(absPath), opts...)
 
@@ -247,6 +250,15 @@ func WithActions(names map[string]string) Option {
 func WithBuiltinActions(names []string) Option {
 	return func(c *Callback) {
 		c.builtin = names
+	}
+}
+
+// WithCleanups leaves what the steps of the job left behind for the rest of
+// the run of the step that embeds it, which cleans up once it is over: the
+// actions to call then are named in c.
+func WithCleanups(c *actionrpc.Cleanups) Option {
+	return func(cb *Callback) {
+		cb.cleanups = c
 	}
 }
 
