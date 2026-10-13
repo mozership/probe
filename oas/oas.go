@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/mozership/probe/yamlfmt"
 	"github.com/pb33f/libopenapi"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 )
@@ -42,6 +43,12 @@ func GenerateFromBytes(data []byte) (string, error) {
 	out, err := yaml.Marshal(wf)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal workflow: %w", err)
+	}
+
+	// The workflow is laid out as probe fmt lays one out.
+	out, err = yamlfmt.Format(out)
+	if err != nil {
+		return "", fmt.Errorf("failed to format workflow: %w", err)
 	}
 
 	return string(out), nil

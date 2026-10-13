@@ -43,6 +43,7 @@ type Cmd struct {
 	Verbose        bool
 	Timing         bool
 	DagMermaid     bool
+	FmtCheck       bool
 	Output         string
 	Report         string
 	ReadOnly       bool
@@ -58,6 +59,7 @@ type Cmd struct {
 	validFlags []string
 	ver        string
 	rev        string
+	inReader   io.Reader
 	outWriter  io.Writer
 	errWriter  io.Writer
 	mocking    bool
@@ -67,9 +69,10 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"},
 		ver:        ver,
 		rev:        rev,
+		inReader:   os.Stdin,
 		outWriter:  os.Stdout,
 		errWriter:  os.Stderr,
 		mocking:    false,
@@ -97,7 +100,8 @@ func (c *Cmd) parseArgs(args []string) error {
 
 		arg := args[i]
 
-		if strings.HasPrefix(arg, "-") {
+		// A - alone is the standard input, for fmt.
+		if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Handle flags
 			flagName := strings.TrimLeft(arg, "-")
 
@@ -126,6 +130,8 @@ func (c *Cmd) parseArgs(args []string) error {
 				c.Verbose = true
 			case "mermaid":
 				c.DagMermaid = true
+			case "check":
+				c.FmtCheck = true
 			case "output":
 				// Accept both --output=stream and --output stream
 				if !hasValue {
@@ -217,7 +223,7 @@ func (c *Cmd) parseArgs(args []string) error {
 	return nil
 }
 
-var subCommands = []string{"gen", "dag", "check", "coverage", "guide", "skill", "manifest"}
+var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest"}
 
 func isSubCommand(name string) bool {
 	return slices.Contains(subCommands, name)
@@ -254,6 +260,7 @@ Usage: probe [options] <workflow-file>
        probe gen <openapi-file>
        probe dag [--mermaid] <workflow-file>
        probe check <workflow-file>
+       probe fmt [--check] <workflow-file>...
        probe coverage <openapi-file|proto-file> <report-file>
        probe guide [topic]
        probe skill [install [dir]]
@@ -270,6 +277,11 @@ Subcommands:
   dag <file>       Show job dependency graph as ASCII art (default)
                    Use --mermaid to output in Mermaid format
   check <file>     Find what is wrong or weak in a workflow without running it
+  fmt <file>...    Format workflow files in place, and print those it changed
+                   A directory is every YAML file under it, and - is the
+                   standard input, formatted to the standard output
+                   Use --check to change nothing, and exit with 1 when a
+                   file is not formatted
   coverage <openapi-file|proto-file> <report-file>
                    Show which operations of an OpenAPI document, or methods of
                    a .proto file, the steps of a run checked, from its
@@ -352,6 +364,11 @@ func (c *Cmd) start(args []string) int {
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
 		return probe.ExitConfigError
 
+	case c.FmtCheck:
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
+		_, _ = fmt.Fprintf(c.errWriter, "%s", fmtUsage)
+		return probe.ExitConfigError
+
 	case c.WorkflowPath == "":
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow is required\n")
 		return probe.ExitConfigError
@@ -372,6 +389,8 @@ func (c *Cmd) runSubCommand() int {
 		return c.runDag()
 	case "check":
 		return c.runCheck()
+	case "fmt":
+		return c.runFmt()
 	case "coverage":
 		return c.runCoverage()
 	case "guide":
