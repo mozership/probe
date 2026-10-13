@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/yamlfmt"
+	"github.com/mozership/probe/internal/yamlfmt"
 )
 
 func TestSkill_Frontmatter(t *testing.T) {

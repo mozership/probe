@@ -143,7 +143,7 @@ func TestFormat_Error(t *testing.T) {
 // as it is when it is formatted again.
 func TestFormat_Workflows(t *testing.T) {
 	var files []string
-	for _, pattern := range []string{"../examples/*.yml", "../examples/jobs/*.yml", "../e2e/*.yml", "../misc/demo/*.yml"} {
+	for _, pattern := range []string{"../../examples/*.yml", "../../examples/jobs/*.yml", "../../e2e/*.yml", "../../misc/demo/*.yml"} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)
@@ -164,7 +164,7 @@ func TestFormat_Workflows(t *testing.T) {
 			continue
 		}
 		if string(got) != string(src) {
-			t.Errorf("%s is not formatted: run probe fmt %s", path, strings.TrimPrefix(path, "../"))
+			t.Errorf("%s is not formatted: run probe fmt %s", path, strings.TrimPrefix(path, "../../"))
 		}
 	}
 }

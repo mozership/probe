@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/yamlfmt"
+	"github.com/mozership/probe/internal/yamlfmt"
 )
 
 const fmtUsage = "Usage: probe fmt [--check] <workflow-file>...\n"
