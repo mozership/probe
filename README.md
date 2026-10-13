@@ -134,6 +134,7 @@ These are external actions, each in a repository of its own, which a step pins b
 | Action | Use it for |
 |---|---|
 | [browser](https://probe.linyo.ws/reference/actions/browser) | Driving a real browser |
+| [container](https://probe.linyo.ws/reference/actions/container) | Containers started for a run, and removed after it |
 | [graphql](https://probe.linyo.ws/reference/actions/graphql) | GraphQL queries over HTTP |
 | [jmap](https://probe.linyo.ws/reference/actions/jmap) | JMAP methods |
 | [mail-latency](https://probe.linyo.ws/reference/actions/mail-latency) | Measuring delivery latency from received messages |

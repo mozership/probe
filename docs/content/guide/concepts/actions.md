@@ -785,6 +785,8 @@ What the steps of a job run by the embedded action leave behind stays until the 
 
 A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 
+The [container](/reference/actions/container) action is written this way: it labels each container with `Step.RunID`, and its `Cleanup` removes the containers of that label.
+
 ### External Actions
 
 An action can also live outside Probe, in a repository of its own. Probe downloads the executable that serves it and runs it as it runs a built-in action. A step names the action by repository and commit:
@@ -839,6 +841,7 @@ These external actions are published alongside Probe, each in a repository of it
 | Action | What it does | Latest |
 |---|---|---|
 | [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 | v0.1.0 |
+| [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman | v0.1.0 |
 | [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart | v0.2.0 |
 | [jmap](/reference/actions/jmap) | Calls [JMAP](https://jmap.io/) methods: fetches the session, fills in the account of each call, and gathers the method errors, which come with HTTP 200, in `res.errors` | v0.2.0 |
 | [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 | v0.1.0 |

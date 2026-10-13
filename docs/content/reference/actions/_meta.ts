@@ -14,6 +14,7 @@ export default {
   hello: 'HELLO',
   '-- external': { type: 'separator', title: 'External' },
   browser: 'BROWSER',
+  container: 'CONTAINER',
   graphql: 'GRAPHQL',
   jmap: 'JMAP',
   'mail-latency': 'MAIL-LATENCY',

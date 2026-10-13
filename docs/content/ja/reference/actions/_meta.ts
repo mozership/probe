@@ -15,6 +15,7 @@ export default {
   embedded: 'EMBEDDED',
   '-- external': { type: 'separator', title: '外部' },
   browser: 'BROWSER',
+  container: 'CONTAINER',
   graphql: 'GRAPHQL',
   jmap: 'JMAP',
   'mail-latency': 'MAIL-LATENCY',

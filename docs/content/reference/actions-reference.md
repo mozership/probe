@@ -22,6 +22,7 @@ hold for all of them are at the end of this page.
 These are published alongside Probe, each in a repository of its own. A step names one by repository and commit, and Probe downloads it the first time a workflow uses it. See [External Actions](/guide/concepts/actions#external-actions).
 
 - **[browser](/reference/actions/browser)** - Drive a real Chrome with chromedp
+- **[container](/reference/actions/container)** - Start a container for the steps of a run, and remove it once the run is over
 - **[graphql](/reference/actions/graphql)** - Send a GraphQL query over HTTP
 - **[jmap](/reference/actions/jmap)** - Call JMAP methods
 - **[mail-latency](/reference/actions/mail-latency)** - Measure delivery latency from a Maildir
