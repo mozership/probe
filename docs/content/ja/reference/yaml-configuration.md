@@ -394,8 +394,8 @@ jobs:
 | プロパティ | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `count` | Integer | 必須 | 実行回数。上限は`PROBE_MAX_REPEAT_COUNT`（既定10000） |
-| `interval` | Duration | 任意 | 実行間隔 |
-| `async` | Boolean | 任意 | 繰り返しを並行実行する |
+| `interval` | Duration | 任意 | 1回の実行が終わってから次を始めるまでの待ち時間。`async`のときは、1回の実行を始めてから次を始めるまでの間隔 |
+| `async` | Boolean | 任意 | 前の実行の終わりを待たずに次の実行を始める。`interval`がなければすべての実行を同時に始める |
 
 ```yaml
 jobs:

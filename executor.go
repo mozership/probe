@@ -109,9 +109,14 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 	var overallSuccess atomic.Bool
 	overallSuccess.Store(true)
 
-	interval := e.job.Repeat.Interval.Duration
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	// Without an interval every run starts at once. A ticker cannot be
+	// made for that, so tick stays nil and nothing is waited for.
+	var tick <-chan time.Time
+	if interval := e.job.Repeat.Interval.Duration; interval > 0 {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		tick = ticker.C
+	}
 
 	// The runs overlap, so each writes its outputs to a store of its own,
 	// in front of the workflow's, and reads its own before anyone else's.
@@ -157,8 +162,8 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 		ctx.JobScheduler.IncrementRepeatCounter(jobID)
 
 		// Wait for interval before next execution (except for the last one)
-		if current+1 < total {
-			<-ticker.C
+		if tick != nil && current+1 < total {
+			<-tick
 		}
 	}
 

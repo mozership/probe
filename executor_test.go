@@ -237,6 +237,37 @@ func TestExecutor_AsyncRepeat_NoDataRace(t *testing.T) {
 	}
 }
 
+// TestExecutor_AsyncRepeat_NoInterval runs an async repeat that has no
+// interval, which starts every run at once instead of making a ticker of a
+// zero interval, which panics.
+func TestExecutor_AsyncRepeat_NoInterval(t *testing.T) {
+	runner := NewMockActionRunner()
+	runner.SetResult("hello", map[string]any{"status": 0})
+
+	workflow := &Workflow{
+		Name: "async-no-interval",
+		Jobs: []Job{
+			{
+				Name:  "burst",
+				ID:    "burst",
+				Steps: []*Step{{Name: "tick", Uses: "hello", actionRunner: runner}},
+				Repeat: &Repeat{
+					Count: 5,
+					Async: true,
+				},
+			},
+		},
+		printer: newBufferPrinter(),
+	}
+
+	if err := workflow.Start(Config{}); err != nil {
+		t.Fatalf("workflow failed: %v", err)
+	}
+	if got := len(runner.Calls["hello"]); got != 5 {
+		t.Errorf("action called %d times, want 5", got)
+	}
+}
+
 // echoRunner answers every action with its own parameters as res, as hello
 // does, after sleeping for with.sleep when that is set. It records the
 // values of with.got, so that a test can see what each run read.
