@@ -845,6 +845,6 @@ description: |
 
 - **[APIテスト](/ja/guide/how-tos/api-testing)** - 包括的なAPIテスト戦略
 - **[エラーハンドリング戦略](/ja/guide/how-tos/error-handling-strategies)** - 堅牢なエラーハンドリングパターン
-- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 負荷テストとパフォーマンス検証
+- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 応答時間への上限と、専用のツールによる負荷試験
 
 監視は信頼性の高いシステムの基盤です。これらのパターンを使用して、ユーザーに影響を与える前に問題をキャッチする包括的な監視を構築しましょう。

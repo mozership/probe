@@ -1194,7 +1194,7 @@ test: |
 APIを包括的にテストできるようになったので、次を探索してください：
 
 - **[エラーハンドリング戦略](/ja/guide/how-tos/error-handling-strategies)** - 堅牢なエラーハンドリングパターン
-- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 高度な負荷テスト技術
+- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 応答時間への上限と、専用のツールによる負荷試験
 - **[環境管理](/ja/guide/how-tos/environment-management)** - テスト設定の管理
 
 APIテストは信頼性の高いサービスに不可欠です。これらのパターンを使用して、問題がプロダクションに到達する前に問題をキャッチする包括的なテストスイートを構築しましょう。

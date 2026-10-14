@@ -564,5 +564,5 @@ curl -H "Authorization: Bearer $API_AUTH_TOKEN" https://api.example.com/api/v1/p
 
 - **[APIテストパイプラインチュートリアル](/ja/guide/tutorials/api-testing-pipeline)** - 高度なAPIテストパターン
 - **[マルチ環境テストチュートリアル](/ja/guide/tutorials/multi-environment-testing)** - 複数環境でのテスト
-- **[ハウツー: パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 詳細なパフォーマンス分析
+- **[ハウツー: パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 応答時間への上限と、専用のツールによる負荷試験
 - **[ハウツー: モニタリングワークフロー](/ja/guide/how-tos/monitoring-workflows)** - 追加の監視パターン
