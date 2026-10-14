@@ -1,6 +1,6 @@
 # Performance Testing
 
-Every step records how long its action took, and a test can hold that time to a limit. This guide shows how to put a limit on one response, how to take several samples of the same operation, and how to run a load test from a workflow with a tool made for it. Probe does not generate load itself; the last section says why.
+Every step records how long its action took, and a test can hold that time to a limit. This guide shows how to put a limit on one response, how to take several samples of the same operation, and how to run a load test from a workflow with a tool made for it. Probe is not a load testing tool: it can send requests at a low, steady rate to take samples, and the last section says why it goes no further.
 
 ## What a Step Measures
 
@@ -93,7 +93,7 @@ A run that waits for the one before measures each request on a service that is i
 
 ## The Query Behind an Endpoint
 
-When an endpoint is slow, the query it runs is a common cause. The `db` action runs that query by itself, so its time can be compared with that of the endpoint:
+When an endpoint is slow, the query it runs is a common cause. The `db` action runs that query by itself, which tells whether the time is spent in the database:
 
 ```yaml
 name: Order History
@@ -121,11 +121,11 @@ jobs:
 
 The `?` placeholder is that of MySQL and SQLite; PostgreSQL takes `$1`.
 
-If the query is fast and the endpoint slow, the time goes elsewhere in the service. As the `db` action connects in each step, the time of a query that takes a few milliseconds is mostly that of connecting, while the service runs the query on a connection it already holds.
+The two times are not of the same thing, so each step has a limit of its own rather than one being compared with the other. The time of the `http` step is the whole request as a client sees it. That of the `db` step is the query alone, plus connecting, which the step does anew each time while the service runs the query on a connection it already holds; for a query that takes a few milliseconds, connecting is most of it. If the query stays within its limit while the endpoint does not, the time is spent elsewhere in the service.
 
 ## Response Times over Days
 
-A limit checked once a day by cron or CI shows a service getting slower over time, which no single run shows. A workflow run on a schedule is described in [Monitoring Workflows](/guide/how-tos/monitoring-workflows). Its exit status tells the scheduler whether the limit held, and `--report json=...` keeps a record of each run.
+A limit checked once a day by cron or CI shows a service getting slower over time, which no single run shows. A workflow run on a schedule is described in [Monitoring Workflows](/guide/how-tos/monitoring-workflows). Its exit status tells the scheduler whether the limit held. A report file is replaced by the next run that writes to the same path, so to keep a record of each run, give each its own path, as `--report json=reports/$(date +%F).json` does.
 
 ## Load Tests
 
