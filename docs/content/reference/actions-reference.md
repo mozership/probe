@@ -78,15 +78,16 @@ Use `retry` for a transient failure and `timeout` for a step that may hang:
 ## Performance Considerations
 
 - Jobs without a `needs` relation run in parallel, so independent checks do not queue behind each other.
-- `rt.sec` and `rt.duration` measure the action's round trip, not the whole step.
+- `rt.sec` and `rt.duration` measure the action's round trip, not the whole step. Every step runs its action in a process of its own, so the round trip of an `http` step includes connecting.
 - A large response body is held in memory; a binary body is written to a file and reported as `res.filepath`.
-- `repeat` with `async: true` runs the repetitions of a job concurrently, which is the way to generate load.
+- `repeat` with `async: true` starts a run of a job every `interval`, without waiting for the one before, which sends requests at a steady rate. It is for taking samples, not for load tests; see [Performance Testing](/guide/how-tos/performance-testing#load-tests).
 
 ```yaml
 jobs:
-  - name: Load test
+  - name: Ping at 10 requests a second
     repeat:
       count: 50
+      interval: 100ms
       async: true
     steps:
       - name: Ping

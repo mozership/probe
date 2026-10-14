@@ -73,6 +73,10 @@ func newRunID() string {
 
 // Start executes the workflow with the given configuration
 func (w *Workflow) Start(c Config) error {
+	if err := w.validateRepeatLimits(); err != nil {
+		return err
+	}
+
 	// Build the scheduler first: it assigns an ID to every job that omits one,
 	// and the result, the report order and the scheduler all index jobs by ID,
 	// so they have to agree before anything keys off them.
@@ -773,6 +777,33 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 			})
 			if found != nil {
 				return found
+			}
+		}
+	}
+	return nil
+}
+
+// validateRepeatLimits validates repeat count and max_attempts against configured limits
+//
+// Start checks them as well, for a workflow made in code rather than loaded,
+// since an async repeat without an interval cannot run.
+func (w *Workflow) validateRepeatLimits() error {
+	for jobIdx, job := range w.Jobs {
+		// Validate repeat configuration
+		if job.Repeat != nil {
+			if err := job.Repeat.Validate(); err != nil {
+				return NewConfigurationError("invalid_repeat",
+					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
+			}
+		}
+
+		// Validate retry configuration for each step
+		for stepIdx, step := range job.Steps {
+			if step.Retry != nil {
+				if err := step.Retry.Validate(); err != nil {
+					return NewConfigurationError("invalid_retry",
+						fmt.Sprintf("job %d (%s), step %d: %v", jobIdx, job.Name, stepIdx, err), nil)
+				}
 			}
 		}
 	}

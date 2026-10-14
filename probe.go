@@ -286,24 +286,5 @@ func (p *Probe) initializeEmptyIDs() {
 
 // validateRepeatLimits validates repeat count and max_attempts against configured limits
 func (p *Probe) validateRepeatLimits() error {
-	for jobIdx, job := range p.workflow.Jobs {
-		// Validate repeat configuration
-		if job.Repeat != nil {
-			if err := job.Repeat.Validate(); err != nil {
-				return NewConfigurationError("invalid_repeat",
-					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
-			}
-		}
-
-		// Validate retry configuration for each step
-		for stepIdx, step := range job.Steps {
-			if step.Retry != nil {
-				if err := step.Retry.Validate(); err != nil {
-					return NewConfigurationError("invalid_retry",
-						fmt.Sprintf("job %d (%s), step %d: %v", jobIdx, job.Name, stepIdx, err), nil)
-				}
-			}
-		}
-	}
-	return nil
+	return p.workflow.validateRepeatLimits()
 }
