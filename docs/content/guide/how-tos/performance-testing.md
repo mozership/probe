@@ -36,7 +36,7 @@ jobs:
       elapsed_ms: rt.sec * 1000
 ```
 
-One request is one sample. A request that waited on a cold cache, a garbage collection or a busy network takes many times as long as the one before it, so a limit close to the usual time fails now and then for no reason in the code. Set the limit well above the usual time, so that it catches a change that makes the operation slower many times over, such as a query that lost its index. To see how often the operation goes over a limit, rather than whether one request did, take more than one sample.
+One request is one sample. A request that waited on a cold cache, a garbage collection or a busy network takes many times as long as the one before it, so a limit close to the usual time fails now and then for no reason in the code. Set the limit well above the usual time, so that it catches a change that makes the operation slower many times over, such as a query that lost its index. To see how often the operation goes over a limit, rather than whether one request did, and how its time is spread, take more than one sample.
 
 ## Several Samples of One Operation
 
@@ -61,15 +61,18 @@ jobs:
     test: res.code == 200 && rt.sec < 0.3
 ```
 
-The result says in how many runs the test held:
+The result says in how many runs the test held, and how the times the action took are spread over the runs:
 
 ```
 ⏺ Search (Completed in 6.42s)
   ⎿ 0. Search by keyword (repeating 50 times)
         ✓  50/50 success (100.0%)
+          min 8.1ms, p50 12.4ms, p90 31.0ms, p95 44.2ms, p99 118ms, max 118ms
 ```
 
 A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, which a run fails either by getting a status other than `200` or by going over the time; the count does not say which, and the reason the first failing run failed is shown under the step.
+
+The times are those of every run in which the action returned one, the runs whose test failed included, so that the slow runs are not left out of them. A percentile is the time that the given share of the runs took at most: `p95 44.2ms` says that 95 in 100 runs took 44.2ms or less. It is always one of the times taken, so with fewer than 100 runs `p99` is the slowest run, as `max` is. Unlike the count, the times show a change that makes the operation slower by a fraction while it stays within the limit: compare the `p50` and `p95` of runs before the change with those after it, made from the same machine against the same environment, since the time includes the network between them. `--report json` records the times as `latency` of the step, and `--report markdown` as a table of the repeated steps, which puts them in a pull request beside the result.
 
 By default the runs follow one another, and `interval` is the wait from the end of one run to the start of the next. With `async: true`, a run starts every `interval` whether or not the one before has ended, so the requests are sent at a steady rate, as clients that do not wait for each other send them:
 

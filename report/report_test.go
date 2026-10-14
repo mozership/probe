@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,47 @@ func TestReport_WriteMarkdown_NoFailures(t *testing.T) {
 	}
 	if !strings.Contains(out, "**Passed** in 0.00s. Jobs: 1 total, 1 passed. Steps: 0 total.") {
 		t.Errorf("summary line missing, got:\n%s", out)
+	}
+}
+
+func TestReport_WriteMarkdown_ResponseTimes(t *testing.T) {
+	r := &Report{
+		Name: "Latency", Status: Passed,
+		Jobs: []Job{{
+			ID: "search", Name: "Search | API", Status: Passed,
+			Steps: []Step{
+				{Index: 0, Name: "Login", Status: Passed},
+				{Index: 1, Name: "Query", Status: Passed, Repeat: &Repeat{
+					Total: 50, Success: 50,
+					Latency: &Latency{Count: 50, MinMs: 8.2, MeanMs: 15, P50Ms: 12.5, P90Ms: 30, P95Ms: 120, P99Ms: 900, MaxMs: 1500},
+				}},
+				{Index: 2, Name: "Errors only", Status: Failed, Repeat: &Repeat{Total: 3, Failure: 3}},
+			},
+		}},
+	}
+
+	out := r.markdown(true)
+	want := "## Response Times\n\n" +
+		"| Job | Step | Runs | Min | p50 | p90 | p95 | p99 | Max |\n" +
+		"|---|---|---|---|---|---|---|---|---|\n" +
+		"| Search \\| API | 1. Query | 50 | 8.2ms | 12.5ms | 30.0ms | 120ms | 900ms | 1.50s |\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("Markdown should contain\n%s\ngot:\n%s", want, out)
+	}
+	if strings.Contains(out, "Errors only |") {
+		t.Error("a step whose action returned no time should have no row")
+	}
+
+	_, cuts := r.markdownWithCuts(true)
+	at := strings.Index(out, "\n## Response Times")
+	if !slices.Contains(cuts, at) {
+		t.Errorf("cuts = %v, want one before the response times at %d", cuts, at)
+	}
+}
+
+func TestReport_WriteMarkdown_NoResponseTimes(t *testing.T) {
+	if out := newTestReport().markdown(true); strings.Contains(out, "## Response Times") {
+		t.Errorf("a run without times should have no response times section, got:\n%s", out)
 	}
 }
 

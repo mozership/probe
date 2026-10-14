@@ -88,6 +88,7 @@ func buildStepReport(sr StepResult) report.Step {
 			Success: c.SuccessCount,
 			Failure: c.FailureCount,
 			Skipped: c.SkippedCount,
+			Latency: report.NewLatency(c.RTs),
 		}
 		// The terminal report marks a mix of passing and failing iterations as
 		// a warning. Any failing iteration fails the job, so it fails the step.

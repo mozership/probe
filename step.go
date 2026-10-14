@@ -613,6 +613,9 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 		counter.SuccessCount++
 	}
 	counter.LastResult = testResult
+	if st.ctx.RT.Duration != "" {
+		counter.RTs = append(counter.RTs, st.ctx.RT.Sec)
+	}
 	if st.contractChecked() {
 		counter.Checked = true
 	}
