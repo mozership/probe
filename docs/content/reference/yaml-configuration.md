@@ -394,8 +394,8 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
 | `count` | Integer | Yes | Number of runs. Capped by `PROBE_MAX_REPEAT_COUNT` (default 10000) |
-| `interval` | Duration | No | Wait from the end of one run to the start of the next. With `async`, the time from the start of one run to the start of the next |
-| `async` | Boolean | No | Start each run without waiting for the one before to end. Without `interval`, every run starts at once |
+| `interval` | Duration | No | Wait from the end of one run to the start of the next. With `async`, the time from the start of one run to the start of the next, and required |
+| `async` | Boolean | No | Start each run without waiting for the one before to end |
 
 ```yaml
 jobs:

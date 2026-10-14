@@ -586,6 +586,28 @@ func TestRepeatValidation(t *testing.T) {
 	})
 }
 
+func TestRepeatValidationAsyncInterval(t *testing.T) {
+	_ = os.Unsetenv(EnvMaxRepeatCount)
+
+	tests := []struct {
+		name    string
+		repeat  Repeat
+		wantErr bool
+	}{
+		{"async without interval", Repeat{Count: 5, Async: true}, true},
+		{"async with interval", Repeat{Count: 5, Async: true, Interval: Interval{Duration: time.Millisecond}}, false},
+		{"in turn without interval", Repeat{Count: 5}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.repeat.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestStepRetryValidation(t *testing.T) {
 	t.Run("valid max attempts", func(t *testing.T) {
 		_ = os.Unsetenv(EnvMaxAttempts)
