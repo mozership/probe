@@ -143,6 +143,9 @@ jobs:
     test: res.code == 0 && rt.sec < 0.2
 ```
 
+`?`はMySQLとSQLiteのプレースホルダーです。
+PostgreSQLでは`$1`と書きます。
+
 クエリが速くエンドポイントが遅いなら、時間はサービスの別の箇所でかかっています。
 ただし`db`アクションはステップごとに接続するので、数ミリ秒で終わるクエリの時間はほとんどが接続の時間です。
 サービスのほうは、すでに持っている接続でクエリを実行します。
@@ -159,7 +162,7 @@ cronやCIで毎日上限を確かめれば、それがわかります。
 Probeは、組み込みのものも含め、ステップごとにアクションのプロセスを起動します。
 各実行のテンプレート、テスト、outputsは、プロセスを起動する側で評価します。
 1回のリクエストを送るステップでも、Probe自身の処理に数十ミリ秒かかります。
-`repeat`は、`PROBE_MAX_REPEAT_COUNT`で引き上げない限り10000回で止まります。
+`repeat`の回数は、`PROBE_MAX_REPEAT_COUNT`で上限を引き上げない限り10000回未満です。
 Probeは、サービスが普通にさばけるレートで自身の限界に達してしまいます。
 しかも記録された時間からは、限界に達したのがProbeとサービスのどちらなのかがわかりません。
 負荷試験には、[k6](https://k6.io/)のように、多数のリクエストを同時に送って時間を記録するために作られたツールが必要です。
@@ -173,7 +176,6 @@ vars:
 
 jobs:
 - name: Checkout under load
-  fail_fast: true
   steps:
   - name: Service is up
     uses: http
@@ -185,7 +187,9 @@ jobs:
     uses: shell
     timeout: 15m
     with:
-      cmd: k6 run --env API_URL={{vars.api_url}} load/checkout.js
+      cmd: k6 run --env API_URL="$API_URL" load/checkout.js
+      env:
+        API_URL: "{{vars.api_url}}"
     test: res.code == 0
   - name: Orders were all written
     uses: http
@@ -198,6 +202,9 @@ jobs:
 k6は、スクリプトのしきい値のどれかが成り立たないと`0`以外のステータスで終了するので、そのステップは失敗します。
 前後のステップでは、負荷がデータに何をもたらしたかを確かめます。
 これはk6からは確かめられないことです。
+しきい値を満たせなかったときこそデータの状態を知る必要があるので、後のステップはk6の成否にかかわらず実行します。
+URLはコマンドに書き込まず、コマンドの環境変数としてk6に渡しています。
+`API_URL`にどのような値が入っても、コマンドそのものは変わりません。
 
 ## 次のステップ
 

@@ -119,6 +119,8 @@ jobs:
     test: res.code == 0 && rt.sec < 0.2
 ```
 
+The `?` placeholder is that of MySQL and SQLite; PostgreSQL takes `$1`.
+
 If the query is fast and the endpoint slow, the time goes elsewhere in the service. As the `db` action connects in each step, the time of a query that takes a few milliseconds is mostly that of connecting, while the service runs the query on a connection it already holds.
 
 ## Response Times over Days
@@ -127,7 +129,7 @@ A limit checked once a day by cron or CI shows a service getting slower over tim
 
 ## Load Tests
 
-Probe starts a process for the action of every step, a built-in one included, and evaluates the templates, tests and outputs of each run in the process that starts them. A step that sends one request takes tens of milliseconds of its own, and `repeat` stops at 10000 runs unless `PROBE_MAX_REPEAT_COUNT` raises it. Probe reaches its own limit at a rate a service usually handles, and the times it records do not say whether it or the service was the limit. A load test needs a tool that is made to send many requests at once and to record their times, such as [k6](https://k6.io/).
+Probe starts a process for the action of every step, a built-in one included, and evaluates the templates, tests and outputs of each run in the process that starts them. A step that sends one request takes tens of milliseconds of its own, and `repeat` takes fewer than 10000 runs unless `PROBE_MAX_REPEAT_COUNT` raises the limit. Probe reaches its own limit at a rate a service usually handles, and the times it records do not say whether it or the service was the limit. A load test needs a tool that is made to send many requests at once and to record their times, such as [k6](https://k6.io/).
 
 A workflow can run that tool as a step, and check the service before and after it:
 
@@ -138,7 +140,6 @@ vars:
 
 jobs:
 - name: Checkout under load
-  fail_fast: true
   steps:
   - name: Service is up
     uses: http
@@ -150,7 +151,9 @@ jobs:
     uses: shell
     timeout: 15m
     with:
-      cmd: k6 run --env API_URL={{vars.api_url}} load/checkout.js
+      cmd: k6 run --env API_URL="$API_URL" load/checkout.js
+      env:
+        API_URL: "{{vars.api_url}}"
     test: res.code == 0
   - name: Orders were all written
     uses: http
@@ -160,7 +163,7 @@ jobs:
     test: res.code == 200 && res.body.failed == 0
 ```
 
-k6 exits with a status other than `0` when one of the thresholds of the script does not hold, which fails the step. The steps around it check what the load did to the data, which k6 does not see.
+k6 exits with a status other than `0` when one of the thresholds of the script does not hold, which fails the step. The steps around it check what the load did to the data, which k6 does not see; they run whether or not k6 passed, since a failed threshold is when that is most worth knowing. The URL is given to k6 through the environment of the command rather than written into it, so that no value of `API_URL` can change the command.
 
 ## What's Next?
 
