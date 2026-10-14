@@ -69,7 +69,7 @@ The result says in how many runs the test held:
         ✓  50/50 success (100.0%)
 ```
 
-A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, so a run that got a status other than `200` counts as one that went over the time; the reason the first failing run failed is shown under the step.
+A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, which a run fails either by getting a status other than `200` or by going over the time; the count does not say which, and the reason the first failing run failed is shown under the step.
 
 By default the runs follow one another, and `interval` is the wait from the end of one run to the start of the next. With `async: true`, a run starts every `interval` whether or not the one before has ended, so the requests are sent at a steady rate, as clients that do not wait for each other send them:
 
