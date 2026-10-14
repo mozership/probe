@@ -36,7 +36,7 @@ jobs:
       elapsed_ms: rt.sec * 1000
 ```
 
-One request is one sample. A request that waited on a cold cache, a garbage collection or a busy network takes many times as long as the one before it, so a limit close to the usual time fails now and then for no reason in the code. Set the limit well above the usual time, so that it catches a change that makes the operation slower many times over, such as a query that lost its index. To see whether a change made the operation slower by a fraction, take more than one sample.
+One request is one sample. A request that waited on a cold cache, a garbage collection or a busy network takes many times as long as the one before it, so a limit close to the usual time fails now and then for no reason in the code. Set the limit well above the usual time, so that it catches a change that makes the operation slower many times over, such as a query that lost its index. To see how often the operation goes over a limit, rather than whether one request did, take more than one sample.
 
 ## Several Samples of One Operation
 
@@ -69,7 +69,7 @@ The result says in how many runs the test held:
         ✓  50/50 success (100.0%)
 ```
 
-A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the limit holds for most requests and which share it does not, where a single request could only pass or fail.
+A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, so a run that got a status other than `200` counts as one that went over the time; the reason the first failing run failed is shown under the step.
 
 By default the runs follow one another, and `interval` is the wait from the end of one run to the start of the next. With `async: true`, a run starts every `interval` whether or not the one before has ended, so the requests are sent at a steady rate, as clients that do not wait for each other send them:
 
@@ -121,7 +121,7 @@ jobs:
 
 The `?` placeholder is that of MySQL and SQLite; PostgreSQL takes `$1`.
 
-The two times are not of the same thing, so each step has a limit of its own rather than one being compared with the other. The time of the `http` step is the whole request as a client sees it. That of the `db` step is the query alone, plus connecting, which the step does anew each time while the service runs the query on a connection it already holds; for a query that takes a few milliseconds, connecting is most of it. If the query stays within its limit while the endpoint does not, the time is spent elsewhere in the service.
+The two times are not of the same thing, so each step has a limit of its own rather than one being compared with the other. The time of the `http` step runs from connecting to receiving the headers of the response, and that of the `db` step from connecting to the database to reading the last row, as [What a Step Measures](#what-a-step-measures) says. The step connects anew each time, which the service may not do for its own queries; for a query that takes a few milliseconds, connecting is most of the time of the step. If the query stays within its limit while the endpoint does not, the time is likely spent elsewhere in the service.
 
 ## Response Times over Days
 
