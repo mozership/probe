@@ -74,6 +74,10 @@ A run in which the test does not hold fails the job, so a test on `rt.sec` here 
 By default the runs follow one another, and `interval` is the wait from the end of one run to the start of the next. With `async: true`, a run starts every `interval` whether or not the one before has ended, so the requests are sent at a steady rate, as clients that do not wait for each other send them:
 
 ```yaml
+name: Search Latency
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+
 jobs:
 - name: Search at 10 requests a second
   repeat:

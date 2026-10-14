@@ -97,6 +97,10 @@ jobs:
 互いの応答を待たないクライアントと同じように、一定のレートでリクエストが送られます。
 
 ```yaml
+name: Search Latency
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+
 jobs:
 - name: Search at 10 requests a second
   repeat:
