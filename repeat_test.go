@@ -3,6 +3,7 @@ package probe
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -666,4 +667,29 @@ func TestStepRetryValidation(t *testing.T) {
 			t.Errorf("Expected error for max attempts exceeding custom limit")
 		}
 	})
+}
+
+// TestWorkflowStartRefusesAsyncRepeatWithoutInterval starts a workflow made
+// in code, which Probe.Load has not checked, so Start has to refuse the
+// repeat that cannot run rather than panic.
+func TestWorkflowStartRefusesAsyncRepeatWithoutInterval(t *testing.T) {
+	runner := NewMockActionRunner()
+	workflow := &Workflow{
+		Name: "burst",
+		Jobs: []Job{{
+			Name:   "burst",
+			ID:     "burst",
+			Steps:  []*Step{{Name: "tick", Uses: "hello", actionRunner: runner}},
+			Repeat: &Repeat{Count: 5, Async: true},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	err := workflow.Start(Config{})
+	if err == nil || !strings.Contains(err.Error(), "needs an interval") {
+		t.Fatalf("Start() = %v, want an error about the interval", err)
+	}
+	if n := len(runner.Calls["hello"]); n != 0 {
+		t.Errorf("action called %d times, want none", n)
+	}
 }
