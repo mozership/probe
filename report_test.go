@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -450,5 +451,120 @@ func TestWorkflow_GitHubSummaryFull(t *testing.T) {
 	stderr := w.printer.errWriter.(*bytes.Buffer).String()
 	if !strings.Contains(stderr, "[WARN] the job summary has no room left") {
 		t.Errorf("expected a warning, got:\n%s", stderr)
+	}
+}
+
+// timedRunner answers the n-th call with the n-th of its answers, an error
+// when the answer has none to give.
+type timedRunner struct {
+	mu      sync.Mutex
+	calls   int
+	answers []map[string]any
+}
+
+func (r *timedRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a := r.answers[r.calls]
+	r.calls++
+	if a == nil {
+		return nil, errors.New("connection refused")
+	}
+	return a, nil
+}
+
+// TestWorkflow_RepeatReportsLatency repeats a step whose action takes another
+// time in each run: the run whose test fails is part of the distribution, as
+// a slow run is no less a sample for failing a limit, and the run whose
+// action failed returns no time and is not.
+func TestWorkflow_RepeatReportsLatency(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+		{"res": map[string]any{"code": 200}, "rt": "20ms"},
+		{"res": map[string]any{"code": 500}, "rt": "300ms"},
+		nil,
+	}}
+	workflow := &Workflow{
+		Name: "Latency",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 4},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	jsonPath := filepath.Join(t.TempDir(), "report.json")
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r report.Report
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	st := r.Jobs[0].Steps[0]
+	if st.Repeat == nil || st.Repeat.Latency == nil {
+		t.Fatalf("step = %+v, want the latency of its runs", st)
+	}
+	want := report.Latency{Count: 3, MinMs: 10, MeanMs: 110, P50Ms: 20, P90Ms: 300, P95Ms: 300, P99Ms: 300, MaxMs: 300}
+	if *st.Repeat.Latency != want {
+		t.Errorf("latency = %+v, want %+v", *st.Repeat.Latency, want)
+	}
+	if st.Repeat.Success != 2 || st.Repeat.Failure != 2 {
+		t.Errorf("repeat = %+v, want 2 successes and 2 failures", st.Repeat)
+	}
+
+	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	if !strings.Contains(out, "min 10.0ms, p50 20.0ms, p90 300ms, p95 300ms, p99 300ms, max 300ms") {
+		t.Errorf("terminal should show the latency, got:\n%s", out)
+	}
+}
+
+// TestWorkflow_RepeatLatencyLeavesOutRetriedError retries a step whose first
+// attempt returns a time and fails its test, and whose last attempt fails to
+// run: the run returned no time, so it adds none, rather than that of the
+// attempt before.
+func TestWorkflow_RepeatLatencyLeavesOutRetriedError(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 500}, "rt": "50ms"},
+		nil,
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+	}}
+	workflow := &Workflow{
+		Name: "Latency",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 2},
+			Steps: []*Step{{
+				Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner,
+				Retry: &StepRetry{MaxAttempts: 2},
+			}},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	jsonPath := filepath.Join(t.TempDir(), "report.json")
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r report.Report
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	l := r.Jobs[0].Steps[0].Repeat.Latency
+	if l == nil || l.Count != 1 || l.MaxMs != 10 {
+		t.Errorf("latency = %+v, want the one time of the second run", l)
 	}
 }

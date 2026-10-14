@@ -146,7 +146,7 @@ A format without a path is written to its default file in the current directory.
 |---|---|---|
 | `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
 | `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step, for CI systems that read test results |
-| `markdown` | `probe-report.md` | A summary line, a table of jobs, and a section per failed step |
+| `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, and a section per failed step |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | The `markdown` page, appended to the GitHub Actions job summary |
 
 `github-summary` appends rather than overwrites, since earlier steps and other tools write to the same summary. Outside GitHub Actions, where `GITHUB_STEP_SUMMARY` is not set and no path is given, it prints a warning and is skipped without changing the exit code, so one command line serves CI and a local run. GitHub accepts at most 1 MiB of summary per step: when the page would go over, the requests and responses are left out, and if it is still too large the page is cut short at a failed step, with a note saying so. If earlier steps have left no room at all, nothing is written and a warning says so, so that the summary they wrote is not lost. Parent directories of an explicit path are created as for the other formats. An explicit path is kept inside the current directory in the same way, refusing any symlink that leads out, since the summary is appended to rather than replaced; the path in `GITHUB_STEP_SUMMARY` is used as given.
@@ -164,7 +164,7 @@ A step's status is `passed`, `failed`, `skipped`, or `untested` when it ran with
 | `refused` | The guard of the run, such as `--read-only`, refused what the step was to do | `<error>` |
 | `contract_request` | The request broke the contract the action checked it against: the workflow sent what an OpenAPI document does not allow | `<error>` |
 
-A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
+A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. It also reports the distribution of the times its action took. In `json` it is `latency`: the number of runs it counts, the minimum, mean and maximum, and the 50th, 90th, 95th and 99th percentiles, in milliseconds. The table in `markdown` has the same, but for the mean. It counts every run in which the action returned a time, those whose test failed included; a run in which the action failed to run, or the step was skipped, is not counted. A percentile is by nearest rank, the time that the given share of the runs took at most, so it is always one of the times taken. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
 
 The value can also come from the `PROBE_REPORT` environment variable, and the flag wins over it. If a report file cannot be written, the others are still written and Probe exits with status 2.
 

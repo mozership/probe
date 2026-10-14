@@ -35,6 +35,9 @@ type StepRepeatCounter struct {
 	LastResult  bool
 	RepeatTotal int      // Total number of times the step should be repeated
 	EchoOutputs []string // Formatted echo output captured per iteration
+	// RTs is the time in seconds the action took in each run that it
+	// returned one in, whether or not the step's test held.
+	RTs []float64
 	// Failure is why the first iteration that failed did, so that the step's
 	// result keeps the kind of failure, such as an action error, rather than
 	// only the count.
