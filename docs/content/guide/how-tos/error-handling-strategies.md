@@ -934,7 +934,7 @@ A 429 says when to try again, so the wait comes from the response rather than a 
 
 Now that you can handle errors effectively, explore:
 
-- **[Performance Testing](/guide/how-tos/performance-testing)** - Test system performance and scalability
+- **[Performance Testing](/guide/how-tos/performance-testing)** - Limits on response times, and load tests with a tool made for them
 - **[Environment Management](/guide/how-tos/environment-management)** - Manage configurations across environments
 - **[Monitoring Workflows](/guide/how-tos/monitoring-workflows)** - Build comprehensive monitoring systems
 

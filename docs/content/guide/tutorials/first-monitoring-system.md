@@ -611,6 +611,6 @@ Congratulations! You've built a comprehensive monitoring system. Here are ways t
 
 - **[API Testing Pipeline Tutorial](/guide/tutorials/api-testing-pipeline)** - Advanced API testing patterns
 - **[Multi-Environment Testing Tutorial](/guide/tutorials/multi-environment-testing)** - Test across multiple environments
-- **[How-tos: Performance Testing](/guide/how-tos/performance-testing)** - Detailed performance analysis
+- **[How-tos: Performance Testing](/guide/how-tos/performance-testing)** - Limits on response times, and load tests with a tool made for them
 - **[How-tos: Monitoring Workflows](/guide/how-tos/monitoring-workflows)** - Additional monitoring patterns
 - **[Reference: Actions](/reference/actions-reference)** - Complete action reference
