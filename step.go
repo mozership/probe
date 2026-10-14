@@ -613,7 +613,9 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 		counter.SuccessCount++
 	}
 	counter.LastResult = testResult
-	if st.ctx.RT.Duration != "" {
+	// A run whose action ended in an error returned no time. What the
+	// context holds then is that of an earlier attempt of a retry, if any.
+	if !hasError && st.ctx.RT.Duration != "" {
 		counter.RTs = append(counter.RTs, st.ctx.RT.Sec)
 	}
 	if st.contractChecked() {

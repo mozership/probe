@@ -525,3 +525,46 @@ func TestWorkflow_RepeatReportsLatency(t *testing.T) {
 		t.Errorf("terminal should show the latency, got:\n%s", out)
 	}
 }
+
+// TestWorkflow_RepeatLatencyLeavesOutRetriedError retries a step whose first
+// attempt returns a time and fails its test, and whose last attempt fails to
+// run: the run returned no time, so it adds none, rather than that of the
+// attempt before.
+func TestWorkflow_RepeatLatencyLeavesOutRetriedError(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 500}, "rt": "50ms"},
+		nil,
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+	}}
+	workflow := &Workflow{
+		Name: "Latency",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 2},
+			Steps: []*Step{{
+				Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner,
+				Retry: &StepRetry{MaxAttempts: 2},
+			}},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	jsonPath := filepath.Join(t.TempDir(), "report.json")
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r report.Report
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	l := r.Jobs[0].Steps[0].Repeat.Latency
+	if l == nil || l.Count != 1 || l.MaxMs != 10 {
+		t.Errorf("latency = %+v, want the one time of the second run", l)
+	}
+}
