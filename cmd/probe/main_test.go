@@ -784,6 +784,10 @@ func TestCmd_runProbe_baseline(t *testing.T) {
 	if err := os.WriteFile(broken, []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	empty := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(empty, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name     string
@@ -793,6 +797,7 @@ func TestCmd_runProbe_baseline(t *testing.T) {
 	}{
 		{"missing file from the flag", filepath.Join(dir, "none.json"), "", "--baseline: failed to read report"},
 		{"broken file from the environment", "", broken, "--baseline: failed to parse report"},
+		{"JSON that is no report", empty, "", "--baseline: " + empty + " is not a report of a run"},
 	}
 
 	for _, tt := range tests {

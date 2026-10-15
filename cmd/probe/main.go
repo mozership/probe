@@ -472,6 +472,11 @@ func (c *Cmd) runProbe() int {
 	}
 	if baseline != "" {
 		r, err := report.Read(baseline)
+		if err == nil && r.StartedAt.IsZero() {
+			// Any JSON object parses as a report; one of a run says when
+			// the run started.
+			err = fmt.Errorf("%s is not a report of a run, written by --report json", baseline)
+		}
 		if err != nil {
 			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --baseline: %v\n", err)
 			return probe.ExitConfigError
