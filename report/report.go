@@ -169,6 +169,16 @@ type Job struct {
 	StartedAt  time.Time `json:"started_at"`
 	DurationMs int64     `json:"duration_ms"`
 	Steps      []Step    `json:"steps"`
+	// RepeatTest is the outcome of the test of a repeated job over its
+	// runs, which decides whether the job passed; nil when it has none.
+	RepeatTest *RepeatTest `json:"repeat_test,omitempty"`
+}
+
+// RepeatTest is the outcome of the test of a repeated job over its runs.
+type RepeatTest struct {
+	Test    string   `json:"test"`
+	Status  string   `json:"status"` // Passed or Failed
+	Failure *Failure `json:"failure,omitempty"`
 }
 
 // Step is one step of a Job.
@@ -210,6 +220,9 @@ type Repeat struct {
 	// step that failed in a job with fail_fast, or for an iteration that
 	// came to no entry.
 	Skipped int `json:"skipped,omitempty"`
+	// Warmup is the runs before those counted here, which are counted in
+	// nothing.
+	Warmup int `json:"warmup,omitempty"`
 	// Latency is the distribution of the times the step's action took, nil
 	// when it returned none, as an action that failed to run does.
 	Latency *Latency `json:"latency,omitempty"`
@@ -297,6 +310,12 @@ func (r *Report) Mask(m *mask.Masker) {
 	for i := range r.Jobs {
 		job := &r.Jobs[i]
 		job.Name = m.String(job.Name)
+		if rt := job.RepeatTest; rt != nil {
+			rt.Test = m.String(rt.Test)
+			if rt.Failure != nil {
+				rt.Failure.Message = m.String(rt.Failure.Message)
+			}
+		}
 		for j := range job.Steps {
 			st := &job.Steps[j]
 			st.Name = m.String(st.Name)

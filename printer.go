@@ -225,8 +225,12 @@ func (p *Printer) Fprintln(w io.Writer, a ...any) {
 }
 
 // printStepRepeatStart prints the start of a repeated step execution
-func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount int, output *strings.Builder) {
+func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount, warmup int, output *strings.Builder) {
 	num := colorDim().Sprintf("%2d.", stepIdx)
+	if warmup > 0 {
+		p.Fprintf(output, "%s %s (repeating %d times, after %d to warm up)\n", num, stepName, repeatCount, warmup)
+		return
+	}
 	p.Fprintf(output, "%s %s (repeating %d times)\n", num, stepName, repeatCount)
 }
 
@@ -281,6 +285,20 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 	if l := report.NewLatency(counter.RTs); l != nil {
 		p.Fprintf(output, "      %s\n", colorDim().Sprint(l.Summary()))
 	}
+}
+
+// generateRepeatTest generates the outcome of the test of a repeated job
+// over its runs, under its steps, and why it failed under it. It is laid out
+// as a step is without its number, so that its icon and text line up with
+// theirs, and why it failed with the text.
+func (p *Printer) generateRepeatTest(rt *RepeatTestResult) string {
+	if rt == nil {
+		return ""
+	}
+	if rt.Passed {
+		return fmt.Sprintf("    %s repeat test: %s\n", colorSuccess().Sprintf(IconSuccess), rt.Test)
+	}
+	return fmt.Sprintf("    %s repeat test: %s\n%s", colorError().Sprintf(IconError), rt.Test, rt.Output)
 }
 
 // generateJobResults generates buffered job results as string
@@ -378,7 +396,7 @@ func (p *Printer) generateJobReport(jr *JobResult) (string, bool, time.Time, tim
 	}
 
 	p.generateJobStatus(jr.JobID, jr.JobName, status, duration.Seconds(), &output)
-	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.StepResults), &output)
+	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.StepResults)+p.generateRepeatTest(jr.RepeatTest), &output)
 
 	return output.String(), succeeded, jr.StartTime, jr.EndTime
 }
@@ -465,7 +483,7 @@ func (p *Printer) generateJobResultsFromStepResults(stepResults []StepResult) st
 	for _, stepResult := range stepResults {
 		// Handle repeat steps
 		if stepResult.RepeatCounter != nil {
-			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, &output)
+			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, stepResult.RepeatCounter.Warmup, &output)
 			p.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")

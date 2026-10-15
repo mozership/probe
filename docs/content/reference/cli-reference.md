@@ -145,8 +145,8 @@ A format without a path is written to its default file in the current directory.
 | Format | Default file | Contents |
 |---|---|---|
 | `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
-| `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step, for CI systems that read test results |
-| `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, and a section per failed step |
+| `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step and per `repeat.test`, for CI systems that read test results |
+| `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, and a section per failed step and per failed `repeat.test` |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | The `markdown` page, appended to the GitHub Actions job summary |
 
 `github-summary` appends rather than overwrites, since earlier steps and other tools write to the same summary. Outside GitHub Actions, where `GITHUB_STEP_SUMMARY` is not set and no path is given, it prints a warning and is skipped without changing the exit code, so one command line serves CI and a local run. GitHub accepts at most 1 MiB of summary per step: when the page would go over, the requests and responses are left out, and if it is still too large the page is cut short at a failed step, with a note saying so. If earlier steps have left no room at all, nothing is written and a warning says so, so that the summary they wrote is not lost. Parent directories of an explicit path are created as for the other formats. An explicit path is kept inside the current directory in the same way, refusing any symlink that leads out, since the summary is appended to rather than replaced; the path in `GITHUB_STEP_SUMMARY` is used as given.
@@ -164,7 +164,7 @@ A step's status is `passed`, `failed`, `skipped`, or `untested` when it ran with
 | `refused` | The guard of the run, such as `--read-only`, refused what the step was to do | `<error>` |
 | `contract_request` | The request broke the contract the action checked it against: the workflow sent what an OpenAPI document does not allow | `<error>` |
 
-A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. It also reports the distribution of the times its action took. In `json` it is `latency`: the number of runs it counts, the minimum, mean and maximum, and the 50th, 90th, 95th and 99th percentiles, in milliseconds. The table in `markdown` has the same, but for the mean. It counts every run in which the action returned a time, those whose test failed included; a run in which the action failed to run, or the step was skipped, is not counted. A percentile is by nearest rank, the time that the given share of the runs took at most, so it is always one of the times taken. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
+A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. It also reports the distribution of the times its action took. In `json` it is `latency`: the number of runs it counts, the minimum, mean and maximum, and the 50th, 90th, 95th and 99th percentiles, in milliseconds. The table in `markdown` has the same, but for the mean. It counts every run in which the action returned a time, those whose test failed included; a run in which the action failed to run, or the step was skipped, is not counted. A percentile is by nearest rank, the time that the given share of the runs took at most, so it is always one of the times taken. The runs of `repeat.warmup` are counted in neither, and `json` records their number as `warmup`. A job with [`repeat.test`](/reference/yaml-configuration#test-over-the-runs) passes or fails by that test alone: its steps are not failed by their runs, and `json` records the test as `repeat_test` of the job, with its `status` and, when it failed, its `failure`, of one of the kinds `assertion`, `test_error` or `test_type`. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
 
 The value can also come from the `PROBE_REPORT` environment variable, and the flag wins over it. If a report file cannot be written, the others are still written and Probe exits with status 2.
 
@@ -380,13 +380,14 @@ It reports as an **error**:
 - a key of a step's `with`, or of a job's `defaults`, that the built-in action does not take, which it ignores, such as `bdoy` for `body`; and `defaults` for a name no action has, which apply to no step. Only the keys directly under them are checked, not those of a map such as `headers`; a key that holds a template, an external action and `hello`, which takes any key, are not
 - a `needs` that names no job, and `needs` that go round
 - a step id a run refuses
-- an expression in `test`, `skipif` or `outputs`, or a template in `name`, `with`, `vars` or `echo`, that does not parse
+- an expression in `test`, `skipif`, `outputs` or `repeat.test`, or a template in `name`, `with`, `vars` or `echo`, that does not parse
+- a `repeat.test` that reads a step its job does not have, or a field a step does not have under `steps`, such as `steps.search.rate` for `success_rate`
 - an output read that no step publishes, that its step does not publish, or that is read before its step publishes it, such as by an earlier step of the job
 
 It reports as a **warning**:
 
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
-- a step that nothing checks: it has no `test`, and the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action
+- a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and the `repeat.test` of its job does not read it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 
 It exits with status 2 when it finds an error, and with 0 when it finds only warnings or nothing.
@@ -608,7 +609,7 @@ probe workflow.yml
 
 **Type:** Integer  
 **Default:** `10000`  
-**Description:** Upper limit for a step's `repeat.count`. A workflow that asks for more is rejected.
+**Description:** Upper limit for a job's `repeat.count`, and for its `count` and `warmup` together. A workflow that reaches it is rejected.
 
 ```bash
 export PROBE_MAX_REPEAT_COUNT=50000

@@ -795,6 +795,10 @@ func (w *Workflow) validateRepeatLimits() error {
 				return NewConfigurationError("invalid_repeat",
 					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
 			}
+			if err := job.validateRepeatIDs(); err != nil {
+				return NewConfigurationError("invalid_repeat",
+					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
+			}
 		}
 
 		// Validate retry configuration for each step

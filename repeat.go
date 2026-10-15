@@ -101,6 +101,19 @@ type Repeat struct {
 	Count    int      `yaml:"count" validate:"required,gte=0"`
 	Interval Interval `yaml:"interval"`
 	Async    bool     `yaml:"async,omitempty"`
+	// Warmup is the number of runs before the count, which are run as any
+	// other but counted in neither the results nor the times, and do not
+	// fail the job.
+	Warmup int `yaml:"warmup,omitempty" validate:"gte=0"`
+	// Test is checked once every run is over, against the runs of the
+	// steps, and decides alone whether the job passed: a run in which a
+	// step failed is then counted, and fails nothing by itself.
+	Test string `yaml:"test,omitempty"`
+}
+
+// Runs returns the number of runs of the job, the warmup runs included.
+func (r *Repeat) Runs() int {
+	return r.Warmup + r.Count
 }
 
 // Validate performs custom validation for Repeat
@@ -109,6 +122,16 @@ func (r *Repeat) Validate() error {
 	if r.Count >= maxCount {
 		return fmt.Errorf("repeat count %d exceeds maximum allowed value of %d. To allow higher values, set %s environment variable (e.g., %s=%d)",
 			r.Count, maxCount, EnvMaxRepeatCount, EnvMaxRepeatCount, r.Count+1)
+	}
+	if r.Warmup < 0 {
+		return fmt.Errorf("repeat warmup %d must be zero or greater", r.Warmup)
+	}
+	// The warmup runs are runs too, each with a process for its action. The
+	// count is below the limit here, so the limit is compared without
+	// adding the two, which a large warmup would overflow.
+	if r.Warmup > 0 && r.Warmup >= maxCount-r.Count {
+		return fmt.Errorf("repeat count %d with warmup %d reaches maximum allowed value of %d runs. To allow more runs, set %s environment variable",
+			r.Count, r.Warmup, maxCount, EnvMaxRepeatCount)
 	}
 	// The interval is what spaces the runs of an async repeat. Without one,
 	// every run would start at once, each with a process for its action.

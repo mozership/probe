@@ -43,17 +43,18 @@ func NewLatency(secs []float64) *Latency {
 		Count:  len(ms),
 		MinMs:  roundMs(ms[0]),
 		MeanMs: roundMs(sum / float64(len(ms))),
-		P50Ms:  roundMs(nearestRank(ms, 50)),
-		P90Ms:  roundMs(nearestRank(ms, 90)),
-		P95Ms:  roundMs(nearestRank(ms, 95)),
-		P99Ms:  roundMs(nearestRank(ms, 99)),
+		P50Ms:  roundMs(NearestRank(ms, 50)),
+		P90Ms:  roundMs(NearestRank(ms, 90)),
+		P95Ms:  roundMs(NearestRank(ms, 95)),
+		P99Ms:  roundMs(NearestRank(ms, 99)),
 		MaxMs:  roundMs(ms[len(ms)-1]),
 	}
 }
 
-// nearestRank returns the p-th percentile of sorted: the smallest value that
-// at least p percent of the values are less than or equal to.
-func nearestRank(sorted []float64, p float64) float64 {
+// NearestRank returns the p-th percentile of sorted, which is in ascending
+// order and not empty: the smallest value that at least p percent of the
+// values are less than or equal to.
+func NearestRank(sorted []float64, p float64) float64 {
 	rank := int(math.Ceil(p / 100 * float64(len(sorted))))
 	return sorted[max(rank, 1)-1]
 }

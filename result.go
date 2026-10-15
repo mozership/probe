@@ -19,6 +19,9 @@ const (
 
 // StepRepeatCounter tracks the execution results of repeated steps
 type StepRepeatCounter struct {
+	// ID is the id of the step, by which the test of the repeated job reads
+	// its runs.
+	ID           string
 	SuccessCount int
 	FailureCount int
 	// SkippedCount is the runs in which the step was not run: an earlier
@@ -38,6 +41,12 @@ type StepRepeatCounter struct {
 	// RTs is the time in seconds the action took in each run that it
 	// returned one in, whether or not the step's test held.
 	RTs []float64
+	// Warmup is the number of runs before those counted, which the counts
+	// and the times leave out.
+	Warmup int
+	// Tested is whether the job has a test over its runs, which decides
+	// whether it passed in place of the runs of its steps.
+	Tested bool
 	// Failure is why the first iteration that failed did, so that the step's
 	// result keeps the kind of failure, such as an action error, rather than
 	// only the count.
@@ -112,7 +121,20 @@ type JobResult struct {
 	EndTime     time.Time
 	Success     bool
 	StepResults []StepResult // Store all step results for this job
-	mutex       sync.Mutex
+	// RepeatTest is the outcome of the test of a repeated job over its
+	// runs; nil when it has none.
+	RepeatTest *RepeatTestResult
+	mutex      sync.Mutex
+}
+
+// RepeatTestResult is the outcome of the test of a repeated job.
+type RepeatTestResult struct {
+	Test   string
+	Passed bool
+	// Output is what the terminal shows under the test when it failed.
+	Output string
+	// Failure is why the test failed; nil when it passed.
+	Failure *StepFailure
 }
 
 // Result manages execution results for multiple jobs

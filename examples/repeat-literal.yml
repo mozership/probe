@@ -31,3 +31,35 @@ jobs:
     echo: |
       iteration {{repeat_index}}: token=tk-{{repeat_index * 7}}
     wait: 200ms
+
+- name: Warm up before the runs counted
+  repeat:
+    count: 3
+    warmup: 2
+  steps:
+  - name: Fails in the warmup runs alone
+    uses: hello
+    test: repeat_index >= 2
+
+- name: Pass by the share of the runs
+  repeat:
+    count: 4
+    warmup: 1
+    test: steps.flaky.runs == 4 && steps.flaky.failure == 1 && steps.flaky.success_rate >= 0.75 && steps.flaky.rt.p95 < 5
+  steps:
+  - name: Fails in one run of four
+    id: flaky
+    uses: hello
+    test: repeat_index != 2
+
+- name: Fail by the share of the runs
+  repeat:
+    count: 3
+    interval: 100ms
+    async: true
+    test: steps.strict.success_rate == 1
+  steps:
+  - name: Fails in one run of three
+    id: strict
+    uses: hello
+    test: repeat_index != 1

@@ -136,6 +136,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.checkExpressions()
 	c.checkOutputs()
 	c.checkTests()
+	c.checkRepeatTests()
 	return c.sorted(), nil
 }
 
@@ -765,6 +766,9 @@ func (c *checker) checkExpressions() {
 		jp := fmt.Sprintf("jobs[%d]", i)
 		c.templates(jp+".name", c.jobWhere(i), "name", job.Name)
 		c.expression(jp+".skipif", c.jobWhere(i), "skipif", job.SkipIf)
+		if job.Repeat != nil {
+			c.expression(jp+".repeat.test", c.jobWhere(i), "repeat.test", job.Repeat.Test)
+		}
 		for j, st := range job.Steps {
 			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
 			where := c.stepWhere(i, j)
@@ -982,11 +986,21 @@ func (c *checker) ancestors() []map[int]bool {
 // nothing, which pass or fail whatever the step does.
 func (c *checker) checkTests() {
 	for i, job := range c.wf.Jobs {
+		// A step whose runs the test of a repeated job reads is checked by
+		// that test.
+		var tested map[string]bool
+		if job.Repeat != nil {
+			tested = repeatReads(job.Repeat.Test)
+		}
 		for j, st := range job.Steps {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
+			id := st.ID
+			if id == "" {
+				id = fmt.Sprintf("step_%d", j)
+			}
 			switch {
 			case strings.TrimSpace(st.Test) == "":
-				if !checkedByContract(st.Uses, st.With) {
+				if !checkedByContract(st.Uses, st.With) && !tested[id] {
 					c.add(SeverityWarning, c.line(path), c.stepWhere(i, j), "nothing checks this step: it has no test")
 				}
 			case expr.Parse(st.Test) == nil && expr.ReadsNothing(st.Test):
@@ -1011,4 +1025,57 @@ func checkedByContract(uses string, with map[string]any) bool {
 		}
 	}
 	return false
+}
+
+// The fields of a step that the test of a repeated job reads under steps,
+// and those of its rt.
+var (
+	repeatRunFields = []string{"runs", "success", "failure", "skipped", "success_rate", "rt"}
+	repeatRTFields  = []string{"min", "mean", "p50", "p90", "p95", "p99", "max"}
+)
+
+// checkRepeatTests checks that the test of a repeated job reads steps of the
+// job by their ids, and fields that they have.
+func (c *checker) checkRepeatTests() {
+	for i, job := range c.wf.Jobs {
+		if job.Repeat == nil || strings.TrimSpace(job.Repeat.Test) == "" || expr.Parse(job.Repeat.Test) != nil {
+			continue
+		}
+		ids := make([]string, 0, len(job.Steps))
+		for j, st := range job.Steps {
+			id := st.ID
+			if id == "" {
+				id = fmt.Sprintf("step_%d", j)
+			}
+			ids = append(ids, id)
+		}
+		line := c.line(fmt.Sprintf("jobs[%d].repeat.test", i))
+		// A chain is read with each of its prefixes, so the same finding
+		// comes from several of them.
+		seen := map[string]bool{}
+		for _, chain := range expr.Reads(job.Repeat.Test, "steps") {
+			var msg string
+			switch {
+			case !slices.Contains(ids, chain[0]):
+				msg = fmt.Sprintf("repeat.test: steps.%s is not a step of the job; its steps are %s",
+					chain[0], strings.Join(ids, ", "))
+			case len(chain) > 1 && !slices.Contains(repeatRunFields, chain[1]):
+				msg = fmt.Sprintf("repeat.test: steps.%s has no %s; it has %s",
+					chain[0], chain[1], strings.Join(repeatRunFields, ", "))
+			case len(chain) > 2 && chain[1] != "rt":
+				msg = fmt.Sprintf("repeat.test: steps.%s.%s is a number, which has no %s",
+					chain[0], chain[1], chain[2])
+			case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):
+				msg = fmt.Sprintf("repeat.test: steps.%s.rt has no %s; it has %s",
+					chain[0], chain[2], strings.Join(repeatRTFields, ", "))
+			case len(chain) > 3:
+				msg = fmt.Sprintf("repeat.test: steps.%s.rt.%s is a number, which has no %s",
+					chain[0], chain[2], chain[3])
+			}
+			if msg != "" && !seen[msg] {
+				seen[msg] = true
+				c.add(SeverityError, line, c.jobWhere(i), "%s", msg)
+			}
+		}
+	}
 }
