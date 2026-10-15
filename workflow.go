@@ -120,6 +120,7 @@ func (w *Workflow) Start(c Config) error {
 
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
+	w.printer.SetBaseline(c.Baseline)
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.

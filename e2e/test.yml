@@ -233,6 +233,26 @@ jobs:
       strict.repeat_test.failure.kind == "assertion" &&
       strict.repeat_test.failure.message contains "steps.strict.success_rate = 0.6666666666666666" &&
       strict.steps[0].status == "passed" && strict.steps[0].repeat.failure == 1
+  - name: repeat-literal.yml compared to an earlier run of itself
+    uses: shell
+    with:
+      cmd: |
+        dir=$(mktemp -d) &&
+        ./probe --report json="$dir/base.json" examples/repeat-literal.yml > /dev/null
+        env -u FORCE_COLOR -u PROBE_TTY ./probe --baseline "$dir/base.json" --report json="$dir/report.json",markdown="$dir/report.md" examples/repeat-literal.yml
+        echo "exit=$?"
+        cat "$dir/report.md"
+        echo "baseline=$(grep -c '"baseline"' "$dir/report.json")"
+        rm -rf "$dir"
+    test: |
+      res.stdout contains "exit=1" &&
+      res.stdout matches "max [0-9.]+m?s\n          baseline p50 [0-9.]+m?s" &&
+      res.stdout contains "## Compared to the Baseline" &&
+      res.stdout contains "| Warm up before the runs counted | 0. Fails in the warmup runs alone | 3 → 3 | " &&
+      res.stdout contains "| 100.0% → 100.0% |\n" &&
+      res.stdout contains "| Fail by the share of the runs | 0. Fails in one run of three | 3 → 3 |" &&
+      res.stdout contains "baseline=8"
+    echo: "{{res.stdout}}"
   - name: An async repeat without an interval is a configuration error
     uses: shell
     with:

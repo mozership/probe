@@ -10,6 +10,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/report"
 )
 
 // Color function tests
@@ -1327,7 +1328,7 @@ func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *te
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := printer.generateJobResultsFromStepResults(tt.stepResults)
+			result := printer.generateJobResultsFromStepResults("", tt.stepResults)
 
 			// Check that the result contains the expected formatted report
 			if !strings.Contains(result, tt.wantContains) {
@@ -1349,6 +1350,53 @@ func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *te
 				}
 			}
 		})
+	}
+}
+
+// TestPrinter_generateJobResultsFromStepResults_Baseline shows under the times
+// of each repeated step those of the step of its id in the baseline, in the
+// job of the same id, and says so of a step the baseline has none of.
+func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	repeated := func(index int, id string, sec float64) StepResult {
+		return StepResult{
+			Index: index, ID: id, Name: id, Status: StatusSuccess, HasTest: true,
+			RepeatCounter: &StepRepeatCounter{ID: id, Name: id, SuccessCount: 1, RepeatTotal: 1, RTs: []float64{sec}},
+		}
+	}
+	steps := []StepResult{
+		repeated(0, "search", 0.12),
+		repeated(1, "added", 0.005),
+		{Index: 2, ID: "once", Name: "once", Status: StatusSuccess},
+	}
+	baseline := &report.Report{Jobs: []report.Job{
+		{ID: "other", Steps: []report.Step{
+			{ID: "search", Repeat: &report.Repeat{Latency: &report.Latency{Count: 1, P50Ms: 1, P95Ms: 1, P99Ms: 1}}},
+		}},
+		{ID: "api", Steps: []report.Step{
+			{ID: "search", Repeat: &report.Repeat{Latency: &report.Latency{Count: 1, P50Ms: 100, P95Ms: 200, P99Ms: 120}}},
+		}},
+	}}
+
+	printer := newBufferPrinter()
+	if got := printer.generateJobResultsFromStepResults("api", steps); strings.Contains(got, "baseline") {
+		t.Errorf("without a baseline nothing should be shown against one, got:\n%s", got)
+	}
+
+	printer.SetBaseline(baseline)
+	got := printer.generateJobResultsFromStepResults("api", steps)
+	for _, want := range []string{
+		"max 120ms\n      baseline p50 100ms (+20.0%), p95 200ms (-40.0%), p99 120ms\n",
+		"max 5.0ms\n      no baseline\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output should contain %q, got:\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, "baseline"); n != 2 {
+		t.Errorf("output should show the baseline of the 2 repeated steps alone, got:\n%s", got)
 	}
 }
 
@@ -1376,7 +1424,7 @@ func TestPrinter_generateJobResultsFromStepResults_RepeatEchoOutputs(t *testing.
 		},
 	}
 
-	got := printer.generateJobResultsFromStepResults([]StepResult{stepResult})
+	got := printer.generateJobResultsFromStepResults("", []StepResult{stepResult})
 
 	for i := 1; i <= 3; i++ {
 		want := fmt.Sprintf("iteration %d", i)
