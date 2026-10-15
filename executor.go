@@ -91,10 +91,11 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 		current, _ := ctx.JobScheduler.GetRepeatInfo(jobID)
 		ctx.RepeatCurrent = current
 
-		// Execute single run
-		err := e.job.Start(ctx)
+		// Execute single run. A job that cannot start fails in a warmup run
+		// too, as it would in every run; a step that failed in one does not.
+		failed, err := e.job.run(ctx)
 
-		if err != nil && !ctx.warmingUp() {
+		if err != nil || (failed && !ctx.warmingUp()) {
 			overallSuccess = false
 			e.workflow.SetExitStatus(true)
 		}
@@ -151,10 +152,10 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 				runsMu.Unlock()
 			}
 
-			// Execute single run
-			err := j.Start(execCtx)
+			// Execute single run, failed as a run in turn is
+			failed, err := j.run(execCtx)
 
-			if err != nil && !execCtx.warmingUp() {
+			if err != nil || (failed && !execCtx.warmingUp()) {
 				overallSuccess.Store(false)
 				e.workflow.SetExitStatus(true)
 			}

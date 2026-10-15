@@ -760,3 +760,35 @@ func TestWorkflowRepeatWarmupAsync(t *testing.T) {
 		t.Errorf("terminal should count the 3 runs after the warmup, got:\n%s", out)
 	}
 }
+
+// TestWorkflowRepeatWarmupCannotStart fails a job whose only run is a warmup
+// run that cannot start, in turn and async: a step failure there is counted
+// in nothing, but a job that cannot start fails in every run.
+func TestWorkflowRepeatWarmupCannotStart(t *testing.T) {
+	_ = os.Unsetenv(EnvMaxRepeatCount)
+
+	for _, async := range []bool{false, true} {
+		t.Run(fmt.Sprintf("async %v", async), func(t *testing.T) {
+			runner := &timedRunner{answers: []map[string]any{
+				{"res": map[string]any{"code": 200}, "rt": "1ms"},
+			}}
+			workflow := &Workflow{
+				Name: "Warmup",
+				Jobs: []Job{{
+					ID:     "search",
+					Name:   "Search",
+					Repeat: &Repeat{Count: 0, Warmup: 1, Async: async, Interval: Interval{Duration: time.Millisecond}},
+					Steps:  []*Step{{Name: "Query", ID: "Bad.Id", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+				}},
+				printer: newBufferPrinter(),
+			}
+
+			if err := workflow.Start(Config{}); err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			if workflow.exitStatus != ExitConfigError {
+				t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitConfigError)
+			}
+		})
+	}
+}

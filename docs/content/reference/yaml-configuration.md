@@ -415,7 +415,7 @@ jobs:
         test: res.code == 200
 ```
 
-The `warmup` runs come first, and are run as any other, `interval` and `async` included, but are left out of the result: a run in which a step failed does not fail the job, and the counts and the [response times](/reference/cli-reference#--report) are those of the `count` runs after them. They give the service the time to fill its caches and pools before the runs that are measured.
+The `warmup` runs come first, and are run as any other, `interval` and `async` included, but are left out of the result: a run in which a step failed does not fail the job, though a job that cannot start, such as for an invalid step id, fails in a warmup run as in any other, and the counts and the [response times](/reference/cli-reference#--report) are those of the `count` runs after them. They give the service the time to fill its caches and pools before the runs that are measured.
 
 Each run's steps read the outputs that the earlier steps of the same run published, also when `async` runs them at the same time. The jobs after it read each output as the latest run that published it left it, so a step the last run skipped keeps the value of the run before.
 
