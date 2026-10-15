@@ -144,6 +144,9 @@ type Report struct {
 	DurationMs  int64     `json:"duration_ms"`
 	Summary     Summary   `json:"summary"`
 	Jobs        []Job     `json:"jobs"`
+	// Baseline is the run the response times were compared to; nil when
+	// they were compared to none. See Compare.
+	Baseline *BaselineRun `json:"baseline,omitempty"`
 }
 
 // Summary counts jobs and steps by status.
@@ -183,7 +186,10 @@ type RepeatTest struct {
 
 // Step is one step of a Job.
 type Step struct {
-	Index      int      `json:"index"`
+	Index int `json:"index"`
+	// ID is the id of the step, or step_ and where it is written in the job
+	// when it has none, by which a later run's report finds it.
+	ID         string   `json:"id,omitempty"`
 	Name       string   `json:"name"`
 	Status     string   `json:"status"`
 	Test       string   `json:"test,omitempty"`
@@ -226,6 +232,9 @@ type Repeat struct {
 	// Latency is the distribution of the times the step's action took, nil
 	// when it returned none, as an action that failed to run does.
 	Latency *Latency `json:"latency,omitempty"`
+	// Baseline is the outcome of the step in the run compared to; nil when
+	// none was compared, or the run had no step of the id.
+	Baseline *RepeatBaseline `json:"baseline,omitempty"`
 }
 
 // Failure says why a step failed.

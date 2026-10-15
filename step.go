@@ -504,6 +504,7 @@ func (st *Step) finalize(name string, actionResult map[string]any, jCtx *JobCont
 func (st *Step) createStepResult(name string, jCtx *JobContext) StepResult {
 	result := StepResult{
 		Index:    st.Idx,
+		ID:       st.repeatID(),
 		Name:     name,
 		HasTest:  st.checked(),
 		RT:       "",
@@ -1059,9 +1060,10 @@ func (st *Step) counterKey() int {
 	return st.pos*counterEntries + st.ordinal
 }
 
-// repeatID is the id the test of a repeated job reads the step's runs by:
-// its id, or step_ and where it is written in the job when it has none, as a
-// loaded workflow gives it. Every entry of an iteration has the same.
+// repeatID is the id the test of a repeated job reads the step's runs by,
+// and a later run's report finds the step by: its id, or step_ and where it
+// is written in the job when it has none, as a loaded workflow gives it.
+// Every entry of an iteration has the same.
 func (st *Step) repeatID() string {
 	if st.ID != "" {
 		return st.ID
@@ -1185,6 +1187,7 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun 
 func (st *Step) createSkippedStepResult(name string, jCtx *JobContext) StepResult {
 	return StepResult{
 		Index:    st.Idx,
+		ID:       st.repeatID(),
 		Name:     name + " (SKIPPED)",
 		Status:   StatusSkipped,
 		RT:       "",
@@ -1197,6 +1200,7 @@ func (st *Step) createSkippedStepResult(name string, jCtx *JobContext) StepResul
 func (st *Step) createFailedStepResult(name string, jCtx *JobContext) StepResult {
 	result := StepResult{
 		Index:    st.Idx,
+		ID:       st.repeatID(),
 		Name:     name,
 		Status:   StatusError,
 		RT:       "",

@@ -1,7 +1,6 @@
 package oas
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,15 +41,7 @@ type ResponseCoverage struct {
 
 // ReadReport reads a report written by --report json.
 func ReadReport(path string) (*report.Report, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read report: %w", err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		return nil, fmt.Errorf("failed to parse report %s: %w", path, err)
-	}
-	return &r, nil
+	return report.Read(path)
 }
 
 // NewCoverage counts the steps of r whose response was matched to each

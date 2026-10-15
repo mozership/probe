@@ -144,9 +144,9 @@ A format without a path is written to its default file in the current directory.
 
 | Format | Default file | Contents |
 |---|---|---|
-| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
+| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its `id`, its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
 | `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step and per `repeat.test`, for CI systems that read test results |
-| `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, and a section per failed step and per failed `repeat.test` |
+| `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, a table of how they changed from the [`--baseline`](#--baseline), and a section per failed step and per failed `repeat.test` |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | The `markdown` page, appended to the GitHub Actions job summary |
 
 `github-summary` appends rather than overwrites, since earlier steps and other tools write to the same summary. Outside GitHub Actions, where `GITHUB_STEP_SUMMARY` is not set and no path is given, it prints a warning and is skipped without changing the exit code, so one command line serves CI and a local run. GitHub accepts at most 1 MiB of summary per step: when the page would go over, the requests and responses are left out, and if it is still too large the page is cut short at a failed step, with a note saying so. If earlier steps have left no room at all, nothing is written and a warning says so, so that the summary they wrote is not lost. Parent directories of an explicit path are created as for the other formats. An explicit path is kept inside the current directory in the same way, refusing any symlink that leads out, since the summary is appended to rather than replaced; the path in `GITHUB_STEP_SUMMARY` is used as given.
@@ -173,6 +173,26 @@ The value can also come from the `PROBE_REPORT` environment variable, and the fl
 probe --report junit workflow.yml
 probe --report json=out/report.json,junit=out/junit.xml,markdown=out/summary.md workflow.yml
 PROBE_REPORT=markdown probe workflow.yml
+```
+
+### `--baseline`
+
+**Type:** String  
+**Values:** the path of a report an earlier run wrote with `--report json`  
+**Default:** none  
+**Description:** Compare the response times of the repeated steps in the report files to those of the earlier run. It changes neither whether a job passes nor the exit status.
+
+A step is compared to the step of the same `id`, in the job of the same `id`, in the earlier report. A step without an `id` is `step_` and where it is written in its job, such as `step_1`, so adding a step before it makes it another step; give the steps compared an `id`. When a job has several steps of one `id`, as the entries of an iteration have, they are compared in order. A report written before Probe recorded the `id` of steps has none to compare to.
+
+`markdown` and `github-summary` have a table of the steps whose action returned times, with the runs, p50, p95, p99 and the share of the runs that succeeded, each as the earlier value → this run's, and how much the times changed. A step the earlier run has none of is marked `no baseline`. `json` records the earlier outcome of a step as `baseline` under its `repeat`, with `total`, `success` and `latency`, and the run compared to as `baseline` of the report, with its `run_id` and `started_at`. JUnit is not changed.
+
+The file is read before the run, and a file that cannot be read or is not a JSON report ends Probe with status 2 before any job runs. The value can also come from the `PROBE_BASELINE` environment variable, and the flag wins over it.
+
+**Example:**
+```bash
+probe --report json=main.json workflow.yml
+# after the change
+probe --report json,markdown --baseline main.json workflow.yml
 ```
 
 ### `--read-only`
@@ -593,6 +613,17 @@ probe workflow.yml
 ```bash
 export PROBE_REPORT=junit=out/junit.xml
 probe workflow.yml
+```
+
+### `PROBE_BASELINE`
+
+**Type:** String  
+**Default:** none  
+**Description:** The report of an earlier run to compare the response times to, same as `--baseline`. The flag takes precedence.
+
+```bash
+export PROBE_BASELINE=main.json
+probe --report markdown workflow.yml
 ```
 
 ### `PROBE_READ_ONLY`, `PROBE_ALLOW_HOSTS`, `PROBE_ALLOW_ACTIONS`
