@@ -65,6 +65,7 @@ func buildJobReport(jr *JobResult) report.Job {
 func buildStepReport(sr StepResult) report.Step {
 	step := report.Step{
 		Index:      sr.Index,
+		ID:         sr.ID,
 		Name:       sr.Name,
 		Test:       sr.Test,
 		DurationMs: sr.Elapsed.Milliseconds(),

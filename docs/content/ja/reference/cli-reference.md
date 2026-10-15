@@ -144,9 +144,9 @@ PROBE_OUTPUT=stream probe workflow.yml
 
 | 形式 | 既定のファイル | 内容 |
 |---|---|---|
-| `json` | `probe-report.json` | 実行全体。状態、所要時間、ジョブとステップの状態ごとの集計、そして各ステップの`test`、OpenAPIドキュメントでレスポンスを対応付けた先（`contract`）、失敗した場合はその理由とリクエスト・レスポンス |
+| `json` | `probe-report.json` | 実行全体。状態、所要時間、ジョブとステップの状態ごとの集計、そして各ステップの`id`、`test`、OpenAPIドキュメントでレスポンスを対応付けた先（`contract`）、失敗した場合はその理由とリクエスト・レスポンス |
 | `junit` | `probe-junit.xml` | ジョブごとに`testsuite`、ステップと`repeat.test`ごとに`testcase`を持つJUnit XML。テスト結果を読めるCI向け |
-| `markdown` | `probe-report.md` | 要約の1行、ジョブの表、繰り返したステップの応答時間の表、失敗したステップと失敗した`repeat.test`ごとの節 |
+| `markdown` | `probe-report.md` | 要約の1行、ジョブの表、繰り返したステップの応答時間の表、[`--baseline`](#--baseline)からの変化の表、失敗したステップと失敗した`repeat.test`ごとの節 |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | `markdown`と同じページを、GitHub Actionsのジョブサマリーに追記 |
 
 `github-summary`は上書きせずに追記します。先行するステップやほかのツールも同じサマリーに書き込むためです。`GITHUB_STEP_SUMMARY`が設定されておらずパスも指定されていない場合、つまりGitHub Actionsの外では、警告を出して書き出しを飛ばし、終了コードは変えません。同じコマンドラインをCIでも手元でも使えます。GitHubが受け付けるサマリーは1ステップあたり1MiBまでです。ページがそれを超えそうな場合はリクエストとレスポンスを省き、それでも大きすぎる場合は失敗したステップの区切りで打ち切り、その旨を書き添えます。先行するステップの書き込みで空きがまったく残っていない場合は、何も書かずに警告を出します。書き込んでしまうと上限を超え、先行するステップが書いた内容まで失われるためです。パスを明示した場合は、ほかの形式と同じく親ディレクトリを作成します。サマリーは置き換えずに追記するため、明示したパスも同じようにカレントディレクトリの中にとどめ、外へ出るシンボリックリンクは拒否します。`GITHUB_STEP_SUMMARY`のパスはそのまま使います。
@@ -173,6 +173,26 @@ PROBE_OUTPUT=stream probe workflow.yml
 probe --report junit workflow.yml
 probe --report json=out/report.json,junit=out/junit.xml,markdown=out/summary.md workflow.yml
 PROBE_REPORT=markdown probe workflow.yml
+```
+
+### `--baseline`
+
+**型:** String  
+**値:** 以前の実行が`--report json`で書き出したレポートのパス  
+**デフォルト:** なし  
+**説明:** レポートファイルで、繰り返したステップの応答時間を以前の実行と比べます。ジョブの成否と終了ステータスは変わりません。
+
+ステップは、以前のレポートのうち、`id`が同じジョブにある`id`が同じステップと比べます。`id`のないステップは、`step_1`のように`step_`とジョブ内の位置になります。そのため、前にステップを追加すると別のステップとして扱われます。比べるステップには`id`を付けてください。1つのジョブに同じ`id`のステップが複数ある場合（イテレーションの各エントリーなど）は、順に対応させます。Probeがステップの`id`を記録する前に書き出したレポートとは比べられません。
+
+`markdown`と`github-summary`には、アクションが時間を返したステップの表が入ります。回数、p50、p95、p99、成功した回の割合を、それぞれ「以前の値 → 今回の値」の形で示し、時間には変化の割合を添えます。以前の実行にないステップには`no baseline`と示します。`json`では、ステップの以前の結果を`repeat`の下の`baseline`として`total`、`success`、`latency`で記録し、比べた実行をレポートの`baseline`として`run_id`と`started_at`で記録します。JUnitは変わりません。
+
+ファイルは実行の前に読みます。読めないファイルやJSONのレポートでないファイルを指定した場合は、ジョブを実行せずに終了ステータス2で終わります。値は環境変数`PROBE_BASELINE`でも指定でき、フラグのほうが優先されます。
+
+**例:**
+```bash
+probe --report json=main.json workflow.yml
+# 変更の後
+probe --report json,markdown --baseline main.json workflow.yml
 ```
 
 ### `--read-only`
@@ -593,6 +613,17 @@ probe workflow.yml
 ```bash
 export PROBE_REPORT=junit=out/junit.xml
 probe workflow.yml
+```
+
+### `PROBE_BASELINE`
+
+**型:** String  
+**デフォルト:** なし  
+**説明:** 応答時間を比べる以前の実行のレポート。`--baseline`と同じ値を取り、フラグが指定された場合はそちらが優先されます。
+
+```bash
+export PROBE_BASELINE=main.json
+probe --report markdown workflow.yml
 ```
 
 ### `PROBE_READ_ONLY`、`PROBE_ALLOW_HOSTS`、`PROBE_ALLOW_ACTIONS`

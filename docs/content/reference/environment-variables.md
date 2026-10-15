@@ -43,6 +43,19 @@ export PROBE_REPORT=junit=out/junit.xml
 probe workflow.yml
 ```
 
+### `PROBE_BASELINE`
+
+**Type:** String  
+**Values:** the path of a report an earlier run wrote with `--report json`  
+**Default:** none  
+**Description:** The report of an earlier run, which the report files compare the response times of the repeated steps to. The `--baseline` flag overrides this variable.
+
+```bash
+# Compare to the report kept from the main branch
+export PROBE_BASELINE=main.json
+probe --report github-summary workflow.yml
+```
+
 ### `PROBE_MAX_REPEAT_COUNT`
 
 **Type:** Integer  
