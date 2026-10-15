@@ -606,6 +606,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 	counter, exists := jCtx.StepCounters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
+			ID:          st.repeatID(),
 			Name:        name,
 			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,
@@ -1058,6 +1059,26 @@ func (st *Step) counterKey() int {
 	return st.pos*counterEntries + st.ordinal
 }
 
+// repeatID is the id the test of a repeated job reads the step's runs by:
+// its id, or step_ and where it is written in the job when it has none, as a
+// loaded workflow gives it. Every entry of an iteration has the same.
+func (st *Step) repeatID() string {
+	if st.ID != "" {
+		return st.ID
+	}
+	pos := st.Idx
+	if st.placed {
+		pos = st.pos
+	}
+	return defaultStepID(pos)
+}
+
+// defaultStepID is the id of a step without one, by where it is written in
+// its job, as a loaded workflow gives it.
+func defaultStepID(pos int) string {
+	return fmt.Sprintf("step_%d", pos)
+}
+
 // skipAfterFailure reports the step as skipped without running it, as a job
 // with fail_fast does each step after one that failed.
 func (st *Step) skipAfterFailure(jCtx *JobContext) {
@@ -1139,6 +1160,7 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun 
 	counter, exists := jCtx.StepCounters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
+			ID:          st.repeatID(),
 			Name:        name,
 			Test:        st.Test,
 			RepeatTotal: jCtx.RepeatTotal,

@@ -63,6 +63,12 @@ type JobContext struct {
 	// RepeatWarmup is the number of runs before those counted; see
 	// Repeat.Warmup. RepeatCurrent counts them, and RepeatTotal does not.
 	RepeatWarmup int
+	// repeatTested is whether the job has a test over its runs; see
+	// Repeat.Test.
+	repeatTested bool
+	// repeatReads are the ids of the steps the test over the runs reads,
+	// which it checks as a step's own test does.
+	repeatReads  map[string]bool
 	StepCounters map[int]StepRepeatCounter // step index -> counter
 	countersMu   *sync.Mutex               // protects StepCounters for concurrent access
 	// Print writer
@@ -103,10 +109,17 @@ func (j *JobContext) warmingUp() bool {
 	return j.RepeatCurrent < j.RepeatWarmup
 }
 
+// countedOnly reports whether a failure in the run is counted and fails
+// nothing by itself: in a warmup run, or in a run of a job whose test over
+// its runs decides whether it passed.
+func (j *JobContext) countedOnly() bool {
+	return j.warmingUp() || j.repeatTested
+}
+
 // recordFailure notes the kind of a failure of a step for the exit code of
-// the run, unless the run is a warmup run, which cannot fail the job.
+// the run, unless the failure is only counted.
 func (j *JobContext) recordFailure(kind string) {
-	if j.warmingUp() {
+	if j.countedOnly() {
 		return
 	}
 	j.Result.recordFailure(kind)

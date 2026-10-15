@@ -200,12 +200,51 @@ jobs:
     with:
       cmd: GREETING=hi ./probe --env-file examples/fixtures/env.example examples/vars.yml
     test: res.code == 0 && res.stdout contains "hi, the team (local)"
-  - name: repeat-literal.yml (expected to fail)
+  - name: repeat-literal.yml (expected to fail, by a test over the runs too)
     uses: shell
     with:
-      cmd: ./probe examples/repeat-literal.yml
-    test: res.code == 1
+      # Without color, so that the lines are compared as they are laid out.
+      cmd: env -u FORCE_COLOR -u PROBE_TTY ./probe examples/repeat-literal.yml
+    test: |
+      res.code == 1 &&
+      res.stdout contains "0. Fails in the warmup runs alone (repeating 3 times, after 2 to warm up)\n        ✓  3/3 success (100.0%)" &&
+      res.stdout contains "        ✓  repeat test: steps.flaky.runs == 4" &&
+      res.stdout contains "        ✗  repeat test: steps.strict.success_rate == 1\n           failed: steps.strict.success_rate == 1\n             steps.strict.success_rate = 0.6666666666666666" &&
+      res.stdout contains "✗ 2 job(s) failed"
     echo: "{{res.stdout}}"
+  - name: repeat-literal.yml reports the warmup, the times and the test over the runs
+    uses: shell
+    with:
+      cmd: |
+        dir=$(mktemp -d) &&
+        ./probe --report json="$dir/report.json" examples/repeat-literal.yml > /dev/null
+        cat "$dir/report.json" && rm -rf "$dir"
+    test: |
+      let r = parse_json(res.stdout);
+      let warm = r.jobs[1].steps[0].repeat;
+      let share = r.jobs[2];
+      let strict = r.jobs[3];
+      res.code == 0 &&
+      r.status == "failed" &&
+      warm.total == 3 && warm.success == 3 && warm.warmup == 2 && warm.latency.count == 3 &&
+      share.status == "passed" && share.repeat_test.status == "passed" &&
+      share.steps[0].status == "passed" && share.steps[0].repeat.failure == 1 && share.steps[0].repeat.warmup == 1 &&
+      strict.status == "failed" && strict.repeat_test.status == "failed" &&
+      strict.repeat_test.failure.kind == "assertion" &&
+      strict.repeat_test.failure.message contains "steps.strict.success_rate = 0.6666666666666666" &&
+      strict.steps[0].status == "passed" && strict.steps[0].repeat.failure == 1
+  - name: An async repeat without an interval is a configuration error
+    uses: shell
+    with:
+      cmd: |
+        dir=$(mktemp -d) &&
+        sed '/interval: 100ms/d' examples/repeat-literal.yml > "$dir/workflow.yml" &&
+        ./probe "$dir/workflow.yml" 2>&1
+        echo "exit=$?"
+        rm -rf "$dir"
+    test: |
+      res.stdout contains "exit=2" &&
+      res.stdout contains "repeat with async needs an interval"
   - name: embedded-job.yml
     uses: shell
     with:

@@ -615,3 +615,81 @@ func TestReport_WriteJUnit_ContractRequest(t *testing.T) {
 		t.Errorf("a request that breaks its contract should be an <error>, got %+v", c)
 	}
 }
+
+// repeatTestReport is a report of two repeated jobs, one whose test over its
+// runs held and one whose test did not.
+func repeatTestReport() *Report {
+	return &Report{
+		Name: "Repeat test", Status: Failed,
+		Jobs: []Job{
+			{
+				ID: "fast", Name: "Fast", Status: Passed,
+				Steps:      []Step{{Index: 0, Name: "Query", Status: Passed, Repeat: &Repeat{Total: 4, Success: 3, Failure: 1}}},
+				RepeatTest: &RepeatTest{Test: "steps.query.success_rate >= 0.75", Status: Passed},
+			},
+			{
+				ID: "slow", Name: "Slow", Status: Failed,
+				Steps: []Step{{Index: 0, Name: "Query", Status: Passed, Repeat: &Repeat{Total: 3, Success: 3}}},
+				RepeatTest: &RepeatTest{Test: "steps.query.rt.p95 < 0.3", Status: Failed, Failure: &Failure{
+					Kind: FailureAssertion, Message: "test evaluated to false: steps.query.rt.p95 < 0.3 (steps.query.rt.p95 = 0.4)",
+				}},
+			},
+		},
+	}
+}
+
+func TestReport_WriteMarkdown_RepeatTest(t *testing.T) {
+	r := repeatTestReport()
+	out := r.markdown(true)
+	want := "## Failures\n\n" +
+		"### Slow / repeat test\n\n" +
+		"assertion: test evaluated to false: steps.query.rt.p95 < 0.3 (steps.query.rt.p95 = 0.4)\n\n" +
+		"```\nsteps.query.rt.p95 < 0.3\n```\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("Markdown should contain\n%s\ngot:\n%s", want, out)
+	}
+	if strings.Contains(out, "Fast / repeat test") {
+		t.Error("a test that held should have no section")
+	}
+
+	_, cuts := r.markdownWithCuts(true)
+	at := strings.Index(out, "### Slow / repeat test")
+	if !slices.Contains(cuts, at) {
+		t.Errorf("cuts = %v, want one before the failed test at %d", cuts, at)
+	}
+}
+
+func TestReport_WriteJUnit_RepeatTest(t *testing.T) {
+	var buf bytes.Buffer
+	if err := repeatTestReport().WriteJUnit(&buf); err != nil {
+		t.Fatalf("WriteJUnit: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`<testsuites name="Repeat test" tests="4" failures="1" errors="0" skipped="0"`,
+		`<testcase name="repeat test" classname="Fast" time="0.000"></testcase>`,
+		`<testcase name="repeat test" classname="Slow" time="0.000">`,
+		`<failure message="test evaluated to false: steps.query.rt.p95 &lt; 0.3 (steps.query.rt.p95 = 0.4)" type="assertion">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JUnit should contain %s, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "job failed without a failed step") {
+		t.Error("a job failed by its test over its runs should not need a testcase of its own")
+	}
+}
+
+func TestReport_MaskRepeatTest(t *testing.T) {
+	m := mask.New([]string{"S"}, map[string]string{"S": "sekret"})
+	r := &Report{Jobs: []Job{{RepeatTest: &RepeatTest{
+		Test:    `steps.q.runs == 1 && "sekret" != ""`,
+		Status:  Failed,
+		Failure: &Failure{Kind: FailureAssertion, Message: `"sekret" != ""`},
+	}}}}
+	r.Mask(m)
+	rt := r.Jobs[0].RepeatTest
+	if strings.Contains(rt.Test, "sekret") || strings.Contains(rt.Failure.Message, "sekret") {
+		t.Errorf("repeat_test = %+v, want the secret hidden", rt)
+	}
+}
