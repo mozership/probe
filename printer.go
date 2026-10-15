@@ -287,6 +287,18 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 	}
 }
 
+// generateRepeatTest generates the outcome of the test of a repeated job
+// over its runs, under its steps, and why it failed under it.
+func (p *Printer) generateRepeatTest(rt *RepeatTestResult) string {
+	if rt == nil {
+		return ""
+	}
+	if rt.Passed {
+		return fmt.Sprintf("%s repeat test: %s\n", colorSuccess().Sprint(strings.TrimSpace(IconSuccess)), rt.Test)
+	}
+	return fmt.Sprintf("%s repeat test: %s\n%s", colorError().Sprint(strings.TrimSpace(IconError)), rt.Test, rt.Output)
+}
+
 // generateJobResults generates buffered job results as string
 func (p *Printer) generateJobResults(jobID string, input string, output *strings.Builder) {
 	input = strings.TrimSpace(input)
@@ -382,7 +394,7 @@ func (p *Printer) generateJobReport(jr *JobResult) (string, bool, time.Time, tim
 	}
 
 	p.generateJobStatus(jr.JobID, jr.JobName, status, duration.Seconds(), &output)
-	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.StepResults), &output)
+	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.StepResults)+p.generateRepeatTest(jr.RepeatTest), &output)
 
 	return output.String(), succeeded, jr.StartTime, jr.EndTime
 }

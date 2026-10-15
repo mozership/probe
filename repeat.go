@@ -105,6 +105,10 @@ type Repeat struct {
 	// other but counted in neither the results nor the times, and do not
 	// fail the job.
 	Warmup int `yaml:"warmup,omitempty" validate:"gte=0"`
+	// Test is checked once every run is over, against the runs of the
+	// steps, and decides alone whether the job passed: a run in which a
+	// step failed is then counted, and fails nothing by itself.
+	Test string `yaml:"test,omitempty"`
 }
 
 // Runs returns the number of runs of the job, the warmup runs included.

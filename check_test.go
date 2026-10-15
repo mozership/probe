@@ -423,6 +423,43 @@ jobs:
 				{SeverityWarning, 37, "test reads nothing from the step"},
 			},
 		},
+		{
+			name: "a test over the runs of a repeated job",
+			workflow: `name: repeat test
+jobs:
+- name: Search
+  repeat:
+    count: 10
+    test: steps.serch.rt.p95 < 0.3 && steps.search.rate > 0.9 && steps.search.rt.p999 < 1 && steps.step_1.runs == 10
+  steps:
+  - name: Search
+    id: search
+    uses: http
+    with:
+      get: /search
+  - name: Other
+    uses: http
+    with:
+      get: /other
+- name: Broken
+  repeat:
+    count: 2
+    test: steps.a.runs ==
+  steps:
+  - name: A
+    id: a
+    uses: http
+    with:
+      get: /a
+    test: res.code == 200
+`,
+			want: []want{
+				{SeverityError, 6, "repeat.test: steps.serch is not a step of the job; its steps are search, step_1"},
+				{SeverityError, 6, "repeat.test: steps.search has no rate"},
+				{SeverityError, 6, "repeat.test: steps.search.rt has no p999"},
+				{SeverityError, 20, "repeat.test: unexpected token"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

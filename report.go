@@ -51,6 +51,13 @@ func buildJobReport(jr *JobResult) report.Job {
 	for _, sr := range jr.StepResults {
 		job.Steps = append(job.Steps, buildStepReport(sr))
 	}
+	if rt := jr.RepeatTest; rt != nil {
+		job.RepeatTest = &report.RepeatTest{Test: rt.Test, Status: report.Passed}
+		if f := rt.Failure; f != nil {
+			job.RepeatTest.Status = report.Failed
+			job.RepeatTest.Failure = &report.Failure{Kind: f.Kind, Message: f.Message}
+		}
+	}
 
 	return job
 }
@@ -92,9 +99,10 @@ func buildStepReport(sr StepResult) report.Step {
 			Latency: report.NewLatency(c.RTs),
 		}
 		// The terminal report marks a mix of passing and failing iterations as
-		// a warning. Any failing iteration fails the job, so it fails the step.
+		// a warning. Any failing iteration fails the job, so it fails the step,
+		// unless the job has a test over its runs, which counts them instead.
 		switch {
-		case c.FailureCount > 0:
+		case c.FailureCount > 0 && !c.Tested:
 			step.Status = report.Failed
 		case c.SuccessCount == 0 && c.SkippedCount > 0:
 			step.Status = report.Skipped

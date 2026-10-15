@@ -79,18 +79,25 @@ func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 	}
 
 	failures := false
+	failure := func() {
+		if !failures {
+			cuts = append(cuts, b.Len())
+			b.WriteString("\n## Failures\n\n")
+			failures = true
+		}
+		cuts = append(cuts, b.Len())
+	}
 	for _, job := range r.Jobs {
 		for _, st := range job.Steps {
 			if st.Status != Failed {
 				continue
 			}
-			if !failures {
-				cuts = append(cuts, b.Len())
-				b.WriteString("\n## Failures\n\n")
-				failures = true
-			}
-			cuts = append(cuts, b.Len())
+			failure()
 			writeMarkdownFailure(&b, job, st, payloads)
+		}
+		if rt := job.RepeatTest; rt != nil && rt.Status == Failed {
+			failure()
+			writeMarkdownRepeatTestFailure(&b, job, rt)
 		}
 	}
 
@@ -133,6 +140,16 @@ func writeMarkdownFailure(b *strings.Builder, job Job, st Step, payloads bool) {
 		writeFence(b, "json", indentJSON(part.data))
 		b.WriteString("</details>\n\n")
 	}
+}
+
+// writeMarkdownRepeatTestFailure writes the section of a job whose test over
+// its runs failed: the reason, then the test.
+func writeMarkdownRepeatTestFailure(b *strings.Builder, job Job, rt *RepeatTest) {
+	fmt.Fprintf(b, "### %s / repeat test\n\n", job.Name)
+	if rt.Failure != nil {
+		fmt.Fprintf(b, "%s: %s\n\n", rt.Failure.Kind, rt.Failure.Message)
+	}
+	writeFence(b, "", rt.Test)
 }
 
 // writeFence writes content in a fenced code block whose fence is longer than

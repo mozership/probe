@@ -33,6 +33,7 @@ jobs:                         # Required: a list of jobs
       interval: duration
       async: boolean
       warmup: integer
+      test: expression        # Optional: assertion over the runs
     steps:                    # Required: a list of steps
       - name: string          # Optional: step name
         id: string            # Optional: step id, required to publish outputs
@@ -399,6 +400,7 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | `interval` | Duration | No | Wait from the end of one run to the start of the next. With `async`, the time from the start of one run to the start of the next, and required |
 | `async` | Boolean | No | Start each run without waiting for the one before to end |
 | `warmup` | Integer | No | Number of runs before the `count`, which are counted in nothing. Together with `count`, capped by `PROBE_MAX_REPEAT_COUNT` |
+| `test` | Expression | No | Checked once every run is over, against the runs of the steps. When given, it alone decides whether the job passed. See [Test over the Runs](#test-over-the-runs) |
 
 ```yaml
 jobs:
@@ -418,6 +420,47 @@ jobs:
 The `warmup` runs come first, and are run as any other, `interval` and `async` included, but are left out of the result: a run in which a step failed does not fail the job, though a job that cannot start, such as for an invalid step id, fails in a warmup run as in any other, and the counts and the [response times](/reference/cli-reference#--report) are those of the `count` runs after them. They give the service the time to fill its caches and pools before the runs that are measured.
 
 Each run's steps read the outputs that the earlier steps of the same run published, also when `async` runs them at the same time. The jobs after it read each output as the latest run that published it left it, so a step the last run skipped keeps the value of the run before.
+
+##### Test over the Runs
+
+Without `repeat.test`, a run in which a step fails fails the job. `repeat.test` is checked once every run is over, against what the runs of each step came to, and decides alone whether the job passed:
+
+```yaml
+jobs:
+  - name: Search
+    repeat:
+      count: 100
+      interval: 100ms
+      warmup: 5
+      test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
+    steps:
+      - name: Search by keyword
+        id: search
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /search?q=probe
+        test: res.code == 200
+```
+
+The expression reads `vars`, the workflow variables, and `steps`, the runs of each step of the job by its `id`, or by `step_0` and so on for a step without one:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `runs` | Integer | The runs counted: `success`, `failure` and `skipped` together |
+| `success` | Integer | The runs in which the step passed, or was skipped by its own `skipif` |
+| `failure` | Integer | The runs in which its test failed or its action returned an error |
+| `skipped` | Integer | The runs in which it was not run, after a step that failed in a [`fail_fast`](#fail_fast) job, or for an [`iteration`](#iteration) without an entry |
+| `success_rate` | Float | `success` divided by `runs`, from 0 to 1 |
+| `rt` | Object | The times its action took in the runs in which it returned one, in seconds, as `rt.sec` is: `min`, `mean`, `p50`, `p90`, `p95`, `p99` and `max`. `nil` when it returned none |
+
+The percentiles are by nearest rank, as the [response times](/reference/cli-reference#--report) of the report are. The runs of `warmup` are counted in none of them. A step with an [`iteration`](#iteration) is counted over all of its entries.
+
+With `repeat.test`, the runs are counted and fail nothing by themselves:
+
+- A run in which a step fails does not fail the job, and the step is reported as passed, with its failed runs counted in its `repeat`.
+- The job passes when the test is true, and fails when it is false, cannot be evaluated or is not a boolean. A false test tells which condition is false, and what it compared, as a step's test does.
+- The exit status is that of the test: 1 when it failed, whatever the runs failed for.
 
 ## Steps
 

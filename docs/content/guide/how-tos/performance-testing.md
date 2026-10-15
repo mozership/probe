@@ -1,6 +1,6 @@
 # Performance Testing
 
-Every step records how long its action took, and a test can hold that time to a limit. This guide shows how to put a limit on one response, how to take several samples of the same operation, and how to run a load test from a workflow with a tool made for it. Probe is not a load testing tool: it can send requests at a low, steady rate to take samples, and the last section says why it goes no further.
+Every step records how long its action took, and a test can hold that time to a limit. This guide shows how to put a limit on one response, how to take several samples of the same operation and put a limit on what they come to, and how to run a load test from a workflow with a tool made for it. Probe is not a load testing tool: it can send requests at a low, steady rate to take samples, and the last section says why it goes no further.
 
 ## What a Step Measures
 
@@ -70,7 +70,7 @@ The result says in how many runs the test held, and how the times the action too
           min 8.1ms, p50 12.4ms, p90 31.0ms, p95 44.2ms, p99 118ms, max 118ms
 ```
 
-A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, which a run fails either by getting a status other than `200` or by going over the time; the count does not say which, and the reason the first failing run failed is shown under the step.
+A run in which the test does not hold fails the job, so a test on `rt.sec` here still demands that every sample be within the limit; [A Limit on the Runs](#a-limit-on-the-runs) shows how to allow a share of them over it. What the runs add is the count: `48/50 success (96.0%)` says that the test held in 48 of the 50 runs, where a single request could only pass or fail. The count is of the whole test, which a run fails either by getting a status other than `200` or by going over the time; the count does not say which, and the reason the first failing run failed is shown under the step.
 
 The times are those of every run in which the action returned one, the runs whose test failed included, so that the slow runs are not left out of them. A percentile is the time that the given share of the runs took at most: `p95 44.2ms` says that 95 in 100 runs took 44.2ms or less. It is always one of the times taken, so with fewer than 100 runs `p99` is the slowest run, as `max` is. Unlike the count, the times show a change that makes the operation slower by a fraction while it stays within the limit: compare the `p50` and `p95` of runs before the change with those after it, made from the same machine against the same environment, since the time includes the network between them. `--report json` records the times as `latency` of the step, and `--report markdown` as a table of the repeated steps, which puts them in a pull request beside the result.
 
@@ -108,6 +108,48 @@ jobs:
 ```
 
 A run that waits for the one before measures each request on a service that is idle otherwise. At a steady rate, a slow response does not delay the requests behind it, so a service that falls behind shows it in the times of the requests that follow. Keep the rate low, for the reasons given under [Load Tests](#load-tests).
+
+## A Limit on the Runs
+
+`repeat.test` puts a limit on what the runs came to, rather than on each run. It is checked once every run is over, and decides alone whether the job passed:
+
+```yaml
+name: Search Latency
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+
+jobs:
+- name: Search
+  repeat:
+    count: 100
+    interval: 100ms
+    warmup: 5
+    test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
+  steps:
+  - name: Search by keyword
+    id: search
+    uses: http
+    with:
+      url: "{{vars.api_url}}"
+      get: /search?q=probe
+    test: res.code == 200
+```
+
+`steps.search` is what the runs of the step with the id `search` came to: the counts `runs`, `success`, `failure` and `skipped`, the share `success_rate`, and under `rt` the times in seconds, as `rt.sec` is, with `min`, `mean`, `p50`, `p90`, `p95`, `p99` and `max`. This job passes when the step passed in at least 99 of 100 runs and 95 of 100 runs took less than 300ms. A run that failed is counted, and fails nothing by itself. The test of the step still decides whether a run counts as a success, so it checks the response, and the limit on the time is in `repeat.test`, where it holds a share of the runs rather than each of them.
+
+The result shows the test under the steps, and when it is false, which condition is false and what it compared:
+
+```
+⏺ Search (Failed in 11.20s)
+  ⎿ 0. Search by keyword (repeating 100 times, after 5 to warm up)
+        △  99/100 success (99.0%)
+          min 8.3ms, p50 12.1ms, p90 30.2ms, p95 312ms, p99 640ms, max 702ms
+    ✗ repeat test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
+           failed: steps.search.rt.p95 < 0.3
+             steps.search.rt.p95 = 0.312
+```
+
+The job fails, and the exit status is 1, only when the test does not hold, whatever the failed runs failed for. A limit read from `vars`, as `steps.search.rt.p95 < vars.p95_limit`, can be set for each environment. `probe check` reports a `repeat.test` that reads a step the job does not have, or a field a step does not have. See [Test over the Runs](/reference/yaml-configuration#test-over-the-runs) for every field.
 
 ## The Query Behind an Endpoint
 

@@ -33,6 +33,7 @@ jobs:                         # 必須: ジョブのリスト
       interval: duration
       async: boolean
       warmup: integer
+      test: expression        # 任意: 全回に対するアサーション
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
         id: string            # 任意: ステップ ID。outputs の公開に必要
@@ -399,6 +400,7 @@ jobs:
 | `interval` | Duration | 任意 | 1回の実行が終わってから次を始めるまでの待ち時間。`async`のときは、1回の実行を始めてから次を始めるまでの間隔で、必須 |
 | `async` | Boolean | 任意 | 前の実行の終わりを待たずに次の実行を始める |
 | `warmup` | Integer | 任意 | `count`の前に行う実行の回数。どの集計にも含めない。`count`との合計が`PROBE_MAX_REPEAT_COUNT`の上限を受ける |
+| `test` | Expression | 任意 | すべての回が終わった後に、各ステップの回の集計に対して評価する。指定した場合は、これだけでジョブの成否が決まる。[全回に対するテスト](#全回に対するテスト)を参照 |
 
 ```yaml
 jobs:
@@ -418,6 +420,47 @@ jobs:
 `warmup`の回は最初に行います。`interval`と`async`も含めてほかの回と同じように実行しますが、結果には含めません。ステップが失敗してもジョブは失敗しません。ただし、ステップIDが不正であるなどジョブを開始できない場合は、ほかの回と同じく`warmup`の回でも失敗します。成否の回数と[応答時間](/ja/reference/cli-reference#--report)は、その後の`count`回について数えます。計測する回の前に、サービスがキャッシュやコネクションプールを満たす時間を取るためのものです。
 
 各回のステップは、同じ回の前のステップが公開した出力を読みます。`async`で複数の回が同時に動く場合も同じです。後続のジョブは、それぞれの出力について、最後にそれを公開した回の値を読みます。そのため、最後の回が飛ばしたステップの出力は、その前の回の値になります。
+
+##### 全回に対するテスト
+
+`repeat.test`がなければ、ステップが失敗した回が1回でもあるとジョブは失敗します。`repeat.test`は、すべての回が終わった後に各ステップの回の集計に対して評価され、これだけでジョブの成否が決まります。
+
+```yaml
+jobs:
+  - name: Search
+    repeat:
+      count: 100
+      interval: 100ms
+      warmup: 5
+      test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
+    steps:
+      - name: Search by keyword
+        id: search
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /search?q=probe
+        test: res.code == 200
+```
+
+式からは、ワークフローの変数`vars`と、ジョブの各ステップの回の集計`steps`を読めます。`steps`のキーはステップの`id`で、`id`のないステップは`step_0`のように番号で指定します。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `runs` | Integer | 数えた回数。`success`、`failure`、`skipped`の合計 |
+| `success` | Integer | ステップが成功した回数。ステップ自身の`skipif`でスキップされた回を含む |
+| `failure` | Integer | テストが失敗した回数と、アクションがエラーを返した回数の合計 |
+| `skipped` | Integer | ステップが実行されなかった回数。[`fail_fast`](#fail_fast)のジョブで前のステップが失敗した回と、[`iteration`](#iteration)に要素がなかった回 |
+| `success_rate` | Float | `success`を`runs`で割った値。0から1 |
+| `rt` | Object | アクションが時間を返した回の所要時間。`rt.sec`と同じく秒単位で、`min`、`mean`、`p50`、`p90`、`p95`、`p99`、`max`を持つ。時間を返した回がなければ`nil` |
+
+パーセンタイルは、レポートの[応答時間](/ja/reference/cli-reference#--report)と同じく最近接順位法によるものです。`warmup`の回はどれにも数えません。[`iteration`](#iteration)のあるステップは、すべての要素の回をまとめて数えます。
+
+`repeat.test`を指定すると、各回の結果は数えるだけになり、それ自体では何も失敗させません。
+
+- ステップが失敗した回があってもジョブは失敗しません。ステップは成功として報告し、失敗した回は`repeat`の回数に数えます。
+- テストが真ならジョブは成功し、偽のとき、評価できないとき、真偽値でないときは失敗します。偽のときは、ステップのテストと同じく、どの条件が偽だったかと、比べた値を示します。
+- 終了ステータスはテストの結果で決まります。テストが失敗すれば、各回が何で失敗したかに関係なく1です。
 
 ## ステップ
 
