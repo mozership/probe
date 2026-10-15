@@ -988,11 +988,9 @@ func (c *checker) checkTests() {
 	for i, job := range c.wf.Jobs {
 		// A step whose runs the test of a repeated job reads is checked by
 		// that test.
-		tested := map[string]bool{}
+		var tested map[string]bool
 		if job.Repeat != nil {
-			for _, chain := range expr.Reads(job.Repeat.Test, "steps") {
-				tested[chain[0]] = true
-			}
+			tested = repeatReads(job.Repeat.Test)
 		}
 		for j, st := range job.Steps {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
@@ -1064,9 +1062,15 @@ func (c *checker) checkRepeatTests() {
 			case len(chain) > 1 && !slices.Contains(repeatRunFields, chain[1]):
 				msg = fmt.Sprintf("repeat.test: steps.%s has no %s; it has %s",
 					chain[0], chain[1], strings.Join(repeatRunFields, ", "))
-			case len(chain) > 2 && chain[1] == "rt" && !slices.Contains(repeatRTFields, chain[2]):
+			case len(chain) > 2 && chain[1] != "rt":
+				msg = fmt.Sprintf("repeat.test: steps.%s.%s is a number, which has no %s",
+					chain[0], chain[1], chain[2])
+			case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):
 				msg = fmt.Sprintf("repeat.test: steps.%s.rt has no %s; it has %s",
 					chain[0], chain[2], strings.Join(repeatRTFields, ", "))
+			case len(chain) > 3:
+				msg = fmt.Sprintf("repeat.test: steps.%s.rt.%s is a number, which has no %s",
+					chain[0], chain[2], chain[3])
 			}
 			if msg != "" && !seen[msg] {
 				seen[msg] = true

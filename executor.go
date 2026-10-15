@@ -76,6 +76,7 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	if r := e.job.Repeat; r != nil {
 		ctx.RepeatWarmup = r.Warmup
 		ctx.repeatTested = r.Test != ""
+		ctx.repeatReads = repeatReads(r.Test)
 		// A warmup run is left out by the counters, and the test reads them,
 		// so a job run once keeps them too when the run is a warmup run or
 		// the job has a test.
@@ -264,7 +265,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter 
 	// Create StepResults for repeat steps and add them to Result
 	for n := range indexes {
 		counter := counters[n]
-		hasTest := counter.Test != "" || counter.Checked
+		hasTest := counter.Test != "" || counter.Checked || ctx.repeatReads[counter.ID]
 
 		// Determine status based on repeat counter results
 		var status StatusType

@@ -2,7 +2,7 @@ package probe
 
 import (
 	"fmt"
-	"math"
+	"slices"
 
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/report"
@@ -51,34 +51,56 @@ func repeatRuns(counters []StepRepeatCounter) map[string]any {
 		if total > 0 {
 			rate = float64(r.success) / float64(total)
 		}
-		var rt map[string]any
-		if l := report.NewLatency(r.rts); l != nil {
-			rt = map[string]any{
-				"min":  seconds(l.MinMs),
-				"mean": seconds(l.MeanMs),
-				"p50":  seconds(l.P50Ms),
-				"p90":  seconds(l.P90Ms),
-				"p95":  seconds(l.P95Ms),
-				"p99":  seconds(l.P99Ms),
-				"max":  seconds(l.MaxMs),
-			}
-		}
 		steps[id] = map[string]any{
 			"runs":         total,
 			"success":      r.success,
 			"failure":      r.failure,
 			"skipped":      r.skipped,
 			"success_rate": rate,
-			"rt":           rt,
+			"rt":           repeatTimes(r.rts),
 		}
 	}
 	return steps
 }
 
-// seconds converts a time in milliseconds, which a Latency gives to the
-// microsecond, to seconds, as rt.sec is, without the error of dividing.
-func seconds(ms float64) float64 {
-	return math.Round(ms*1e3) / 1e6
+// repeatReads returns the ids of the steps that test, the test of a repeated
+// job, reads under steps; nil when it reads none, or does not parse.
+func repeatReads(test string) map[string]bool {
+	chains := expr.Reads(test, "steps")
+	if len(chains) == 0 {
+		return nil
+	}
+	ids := make(map[string]bool, len(chains))
+	for _, chain := range chains {
+		ids[chain[0]] = true
+	}
+	return ids
+}
+
+// repeatTimes is the distribution of secs, the times of the runs in seconds,
+// as the test of a repeated job reads it, or nil when there are none. The
+// percentiles are by nearest rank, as the report's latency is, but of the
+// times as they were taken: the report rounds them to the microsecond, which
+// would put a time just under a limit at it.
+func repeatTimes(secs []float64) map[string]any {
+	if len(secs) == 0 {
+		return nil
+	}
+	sorted := slices.Clone(secs)
+	slices.Sort(sorted)
+	var sum float64
+	for _, s := range sorted {
+		sum += s
+	}
+	return map[string]any{
+		"min":  sorted[0],
+		"mean": sum / float64(len(sorted)),
+		"p50":  report.NearestRank(sorted, 50),
+		"p90":  report.NearestRank(sorted, 90),
+		"p95":  report.NearestRank(sorted, 95),
+		"p99":  report.NearestRank(sorted, 99),
+		"max":  sorted[len(sorted)-1],
+	}
 }
 
 // skipped reports whether the job was skipped by its skipif, which leaves

@@ -430,7 +430,7 @@ jobs:
 - name: Search
   repeat:
     count: 10
-    test: steps.serch.rt.p95 < 0.3 && steps.search.rate > 0.9 && steps.search.rt.p999 < 1 && steps.step_1.runs == 10
+    test: steps.serch.rt.p95 < 0.3 && steps.search.rate > 0.9 && steps.search.rt.p999 < 1 && steps.step_1.runs == 10 && steps.search.runs.n > 0 && steps.search.rt.p95.s < 1
   steps:
   - name: Search
     id: search
@@ -457,6 +457,8 @@ jobs:
 				{SeverityError, 6, "repeat.test: steps.serch is not a step of the job; its steps are search, step_1"},
 				{SeverityError, 6, "repeat.test: steps.search has no rate"},
 				{SeverityError, 6, "repeat.test: steps.search.rt has no p999"},
+				{SeverityError, 6, "repeat.test: steps.search.runs is a number, which has no n"},
+				{SeverityError, 6, "repeat.test: steps.search.rt.p95 is a number, which has no s"},
 				{SeverityError, 20, "repeat.test: unexpected token"},
 			},
 		},

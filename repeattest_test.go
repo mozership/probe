@@ -310,3 +310,41 @@ func TestBuildReport_RepeatTestedStepFailedAndSkipped(t *testing.T) {
 		t.Errorf("status = %q, want %q", st.Status, report.Passed)
 	}
 }
+
+// TestRepeatTimesAtTheLimit reads times just under and just over a limit as
+// they were taken: rounded to the microsecond, as the report has them, the
+// first would fail a test that it is under 0.3 and the second pass one that
+// it is at most 0.3.
+func TestRepeatTimesAtTheLimit(t *testing.T) {
+	under := repeatTimes([]float64{0.2999999})
+	if p95 := under["p95"].(float64); !(p95 < 0.3) {
+		t.Errorf("p95 = %v, want under 0.3", p95)
+	}
+	over := repeatTimes([]float64{0.3000004})
+	if p95 := over["p95"].(float64); p95 <= 0.3 {
+		t.Errorf("p95 = %v, want over 0.3", p95)
+	}
+	if repeatTimes(nil) != nil {
+		t.Error("no times should be nil")
+	}
+}
+
+// TestWorkflow_RepeatTestChecksStepWithoutTest reports a step that has no
+// test of its own, but that the test over the runs reads, as passed rather
+// than untested.
+func TestWorkflow_RepeatTestChecksStepWithoutTest(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+	}}
+	workflow := repeatTestWorkflow(runner, 2, "steps.query.rt.p95 < 0.3")
+	workflow.Jobs[0].Steps[0].Test = ""
+
+	r := startWithReport(t, workflow)
+	if st := r.Jobs[0].Steps[0]; st.Status != report.Passed {
+		t.Errorf("step status = %q, want %q", st.Status, report.Passed)
+	}
+	if r.Summary.Steps.Passed != 1 || r.Summary.Steps.Untested != 0 {
+		t.Errorf("summary = %+v, want the step counted as passed", r.Summary.Steps)
+	}
+}
