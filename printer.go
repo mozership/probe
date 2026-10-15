@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/report"
 )
 
 // Color Functions
@@ -275,6 +276,10 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 			counter.SuccessCount,
 			totalCount,
 			skipped)
+	}
+
+	if l := report.NewLatency(counter.RTs); l != nil {
+		p.Fprintf(output, "      %s\n", colorDim().Sprint(l.Summary()))
 	}
 }
 

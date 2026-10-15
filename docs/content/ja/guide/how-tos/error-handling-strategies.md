@@ -924,7 +924,7 @@ jobs:
 
 効果的にエラーを処理できるようになったので、次を探索してください：
 
-- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - システムのパフォーマンスとスケーラビリティをテスト
+- **[パフォーマンステスト](/ja/guide/how-tos/performance-testing)** - 応答時間への上限と、専用のツールによる負荷試験
 - **[環境管理](/ja/guide/how-tos/environment-management)** - 環境間での設定を管理
 - **[モニタリングワークフロー](/ja/guide/how-tos/monitoring-workflows)** - 包括的な監視システムを構築
 

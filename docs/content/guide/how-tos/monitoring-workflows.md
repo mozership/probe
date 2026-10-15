@@ -871,6 +871,6 @@ Now that you can build monitoring workflows, explore:
 
 - **[API Testing](/guide/how-tos/api-testing)** - Comprehensive API testing strategies
 - **[Error Handling Strategies](/guide/how-tos/error-handling-strategies)** - Robust error handling patterns
-- **[Performance Testing](/guide/how-tos/performance-testing)** - Load testing and performance validation
+- **[Performance Testing](/guide/how-tos/performance-testing)** - Limits on response times, and load tests with a tool made for them
 
 Monitoring is the foundation of reliable systems. Use these patterns to build comprehensive monitoring that catches issues before they impact users.

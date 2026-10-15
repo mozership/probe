@@ -110,6 +110,11 @@ func (r *Repeat) Validate() error {
 		return fmt.Errorf("repeat count %d exceeds maximum allowed value of %d. To allow higher values, set %s environment variable (e.g., %s=%d)",
 			r.Count, maxCount, EnvMaxRepeatCount, EnvMaxRepeatCount, r.Count+1)
 	}
+	// The interval is what spaces the runs of an async repeat. Without one,
+	// every run would start at once, each with a process for its action.
+	if r.Async && r.Interval.Duration <= 0 {
+		return fmt.Errorf("repeat with async needs an interval, the time from the start of one run to the start of the next")
+	}
 	return nil
 }
 

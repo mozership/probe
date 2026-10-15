@@ -1210,7 +1210,7 @@ test: |
 Now that you can test APIs comprehensively, explore:
 
 - **[Error Handling Strategies](/guide/how-tos/error-handling-strategies)** - Robust error handling patterns
-- **[Performance Testing](/guide/how-tos/performance-testing)** - Advanced load testing techniques
+- **[Performance Testing](/guide/how-tos/performance-testing)** - Limits on response times, and load tests with a tool made for them
 - **[Environment Management](/guide/how-tos/environment-management)** - Managing test configurations
 
 API testing is crucial for reliable services. Use these patterns to build comprehensive test suites that catch issues before they reach production.

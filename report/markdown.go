@@ -7,9 +7,10 @@ import (
 )
 
 // WriteMarkdown writes the report as a Markdown page: a summary line, a table
-// of jobs, and a section for every failed step with its test, the reason it
-// failed, and the request and response. The page is meant to be read as is,
-// for example as a GitHub job summary or by a coding agent.
+// of jobs, a table of the response times of the repeated steps, and a section
+// for every failed step with its test, the reason it failed, and the request
+// and response. The page is meant to be read as is, for example as a GitHub
+// job summary or by a coding agent.
 func (r *Report) WriteMarkdown(w io.Writer) error {
 	_, err := io.WriteString(w, r.markdown(true))
 	return err
@@ -25,9 +26,10 @@ func (r *Report) markdown(payloads bool) string {
 
 // markdownWithCuts renders the page and also returns the offsets where it
 // can be cut short without leaving a block half written: before the job
-// table, before the failures heading, and before each failure section. They
-// are recorded while rendering rather than searched for afterwards, because
-// a test or a message can itself contain a line that looks like a heading.
+// table, before the response times, before the failures heading, and before
+// each failure section. They are recorded while rendering rather than
+// searched for afterwards, because a test or a message can itself contain a
+// line that looks like a heading.
 func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 	var b strings.Builder
 	var cuts []int
@@ -53,6 +55,27 @@ func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 		}
 		fmt.Fprintf(&b, "| %s | %s | %d/%d | %.2fs |\n",
 			markdownCell(job.Name), job.Status, passed, len(job.Steps), msToSec(job.DurationMs))
+	}
+
+	latencies := false
+	for _, job := range r.Jobs {
+		for _, st := range job.Steps {
+			if st.Repeat == nil || st.Repeat.Latency == nil {
+				continue
+			}
+			if !latencies {
+				cuts = append(cuts, b.Len())
+				b.WriteString("\n## Response Times\n\n")
+				b.WriteString("| Job | Step | Runs | Min | p50 | p90 | p95 | p99 | Max |\n")
+				b.WriteString("|---|---|---|---|---|---|---|---|---|\n")
+				latencies = true
+			}
+			l := st.Repeat.Latency
+			fmt.Fprintf(&b, "| %s | %d. %s | %d | %s | %s | %s | %s | %s | %s |\n",
+				markdownCell(job.Name), st.Index, markdownCell(st.Name), l.Count,
+				FormatMs(l.MinMs), FormatMs(l.P50Ms), FormatMs(l.P90Ms),
+				FormatMs(l.P95Ms), FormatMs(l.P99Ms), FormatMs(l.MaxMs))
+		}
 	}
 
 	failures := false

@@ -210,6 +210,9 @@ type Repeat struct {
 	// step that failed in a job with fail_fast, or for an iteration that
 	// came to no entry.
 	Skipped int `json:"skipped,omitempty"`
+	// Latency is the distribution of the times the step's action took, nil
+	// when it returned none, as an action that failed to run does.
+	Latency *Latency `json:"latency,omitempty"`
 }
 
 // Failure says why a step failed.
