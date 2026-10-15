@@ -44,42 +44,64 @@ func (r *Report) Compare(base *Report) {
 	}
 	r.Baseline = &BaselineRun{RunID: base.RunID, StartedAt: base.StartedAt}
 
-	baseJobs := make(map[string]*Job, len(base.Jobs))
-	for i := range base.Jobs {
-		if _, ok := baseJobs[base.Jobs[i].ID]; !ok {
-			baseJobs[base.Jobs[i].ID] = &base.Jobs[i]
+	for i := range r.Jobs {
+		job := &r.Jobs[i]
+		steps := base.BaselineSteps(job.ID)
+		for j := range job.Steps {
+			st := &job.Steps[j]
+			if st.Repeat == nil {
+				continue
+			}
+			b := steps.Next(st.ID)
+			if st.Repeat.Latency != nil {
+				st.Repeat.Baseline = b
+			}
 		}
+	}
+}
+
+// BaselineSteps are the repeated steps of a job of a baseline report, which
+// Next gives out by their ids in order.
+type BaselineSteps struct {
+	steps map[string][]*Step
+}
+
+// BaselineSteps returns the repeated steps of the first job of id in r; nil,
+// which has none, when r is nil or has no job of the id.
+func (r *Report) BaselineSteps(jobID string) *BaselineSteps {
+	if r == nil {
+		return nil
 	}
 	for i := range r.Jobs {
 		job := &r.Jobs[i]
-		baseJob, ok := baseJobs[job.ID]
-		if !ok {
+		if job.ID != jobID {
 			continue
 		}
-		baseSteps := make(map[string][]*Step)
-		for j := range baseJob.Steps {
-			st := &baseJob.Steps[j]
-			if st.ID != "" && st.Repeat != nil {
-				baseSteps[st.ID] = append(baseSteps[st.ID], st)
-			}
-		}
+		s := &BaselineSteps{steps: make(map[string][]*Step)}
 		for j := range job.Steps {
 			st := &job.Steps[j]
-			if st.ID == "" || st.Repeat == nil {
-				continue
+			if st.ID != "" && st.Repeat != nil {
+				s.steps[st.ID] = append(s.steps[st.ID], st)
 			}
-			matches := baseSteps[st.ID]
-			if len(matches) == 0 {
-				continue
-			}
-			baseSteps[st.ID] = matches[1:]
-			if st.Repeat.Latency == nil {
-				continue
-			}
-			rp := matches[0].Repeat
-			st.Repeat.Baseline = &RepeatBaseline{Total: rp.Total, Success: rp.Success, Latency: rp.Latency}
 		}
+		return s
 	}
+	return nil
+}
+
+// Next returns the outcome of the next repeated step of id, or nil when
+// there is none left.
+func (s *BaselineSteps) Next(id string) *RepeatBaseline {
+	if s == nil || id == "" {
+		return nil
+	}
+	matches := s.steps[id]
+	if len(matches) == 0 {
+		return nil
+	}
+	s.steps[id] = matches[1:]
+	rp := matches[0].Repeat
+	return &RepeatBaseline{Total: rp.Total, Success: rp.Success, Latency: rp.Latency}
 }
 
 // baselinePhrase names the run compared to, by when it started and its id
@@ -128,11 +150,34 @@ func comparison(rp *Repeat) []string {
 // msChange writes a time before and now, and how much it changed relative
 // to before.
 func msChange(before, now float64) string {
-	s := FormatMs(before) + " → " + FormatMs(now)
-	if before > 0 {
-		s += fmt.Sprintf(" (%+.1f%%)", (now-before)/before*100)
+	return FormatMs(before) + " → " + FormatMs(now) + relChange(before, now)
+}
+
+// relChange writes how much now changed relative to before, as " (+12.5%)",
+// or nothing when the two are written the same: a change finer than the
+// times are written to would be a share of what does not show, which for
+// times under 0.1ms is any share at all.
+func relChange(before, now float64) string {
+	if before <= 0 || FormatMs(before) == FormatMs(now) {
+		return ""
 	}
-	return s
+	return fmt.Sprintf(" (%+.1f%%)", (now-before)/before*100)
+}
+
+// Summary writes on one line the times of the step in the baseline, and how
+// much now, the times of this run, changed from them, as the terminal shows
+// it under now. A nil baseline is a step the baseline has none of.
+func (b *RepeatBaseline) Summary(now *Latency) string {
+	if b == nil {
+		return "no baseline"
+	}
+	if b.Latency == nil {
+		return "baseline has no times"
+	}
+	return fmt.Sprintf("baseline p50 %s%s, p95 %s%s, p99 %s%s",
+		FormatMs(b.Latency.P50Ms), relChange(b.Latency.P50Ms, now.P50Ms),
+		FormatMs(b.Latency.P95Ms), relChange(b.Latency.P95Ms, now.P95Ms),
+		FormatMs(b.Latency.P99Ms), relChange(b.Latency.P99Ms, now.P99Ms))
 }
 
 // successRate writes the share of runs that succeeded, or - when there were

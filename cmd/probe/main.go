@@ -329,7 +329,7 @@ func (c *Cmd) printOptions() {
 		{"-v", "--verbose", "Show verbose log"},
 		{"", "--output", "Report output: auto, spinner or stream (env: PROBE_OUTPUT)"},
 		{"", "--report", "Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)"},
-		{"", "--baseline", "Compare the response times in the reports to those of a --report json file (env: PROBE_BASELINE)"},
+		{"", "--baseline", "Compare the response times to those of a --report json file (env: PROBE_BASELINE)"},
 		{"", "--read-only", "Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)"},
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},

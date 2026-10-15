@@ -158,7 +158,7 @@ func TestReport_WriteMarkdown_Baseline(t *testing.T) {
 		"Compared to the run started at 2026-10-15T09:00:00Z (run-1), before → now.\n\n" +
 		"| Job | Step | Runs | p50 | p95 | p99 | Success |\n" +
 		"|---|---|---|---|---|---|---|\n" +
-		"| Search \\| API | 1. query | 40 → 50 | 120ms → 135ms (+12.5%) | 270ms → 270ms (+0.0%) | 270ms → 405ms (+50.0%) | 100.0% → 98.0% |\n" +
+		"| Search \\| API | 1. query | 40 → 50 | 120ms → 135ms (+12.5%) | 270ms → 270ms | 270ms → 405ms (+50.0%) | 100.0% → 98.0% |\n" +
 		"| Search \\| API | 2. added | 10 (no baseline) | 5.0ms | 10.0ms | 15.0ms | 100.0% |\n"
 	if !strings.Contains(out, want) {
 		t.Errorf("Markdown should contain\n%s\ngot:\n%s", want, out)
@@ -187,5 +187,70 @@ func TestComparison_BaselineWithoutTimes(t *testing.T) {
 	want := []string{"0 → 10", "- → 100ms", "- → 200ms", "- → 300ms", "0.0% → 100.0%"}
 	if got := comparison(rp); !reflect.DeepEqual(got, want) {
 		t.Errorf("comparison() = %q, want %q", got, want)
+	}
+}
+
+func TestMsChange(t *testing.T) {
+	tests := []struct {
+		before, now float64
+		want        string
+	}{
+		{120, 135, "120ms → 135ms (+12.5%)"},
+		{1.1, 1.14, "1.1ms → 1.1ms"},
+		{0.004, 0.006, "0.0ms → 0.0ms"},
+		{0, 5, "0.0ms → 5.0ms"},
+	}
+	for _, tt := range tests {
+		if got := msChange(tt.before, tt.now); got != tt.want {
+			t.Errorf("msChange(%v, %v) = %q, want %q", tt.before, tt.now, got, tt.want)
+		}
+	}
+}
+
+func TestRepeatBaseline_Summary(t *testing.T) {
+	now := &Latency{Count: 10, P50Ms: 135, P95Ms: 270, P99Ms: 5}
+	tests := []struct {
+		name     string
+		baseline *RepeatBaseline
+		want     string
+	}{
+		{"times", &RepeatBaseline{Latency: &Latency{P50Ms: 120, P95Ms: 300, P99Ms: 0}}, "baseline p50 120ms (+12.5%), p95 300ms (-10.0%), p99 0.0ms"},
+		{"no times", &RepeatBaseline{Total: 3}, "baseline has no times"},
+		{"no step", nil, "no baseline"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.baseline.Summary(now); got != tt.want {
+				t.Errorf("Summary() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBaselineSteps_Next(t *testing.T) {
+	base := &Report{Jobs: []Job{{ID: "api", Steps: []Step{
+		repeated(0, "each", 10, 10, 10),
+		repeated(1, "each", 10, 10, 20),
+		{Index: 2, ID: "once", Status: Passed},
+	}}}}
+
+	steps := base.BaselineSteps("api")
+	for i, want := range []float64{10, 20} {
+		if b := steps.Next("each"); b == nil || b.Latency.P50Ms != want {
+			t.Errorf("Next() %d = %+v, want p50 %vms", i, b, want)
+		}
+	}
+	for _, id := range []string{"each", "once", ""} {
+		if b := steps.Next(id); b != nil {
+			t.Errorf("Next(%q) = %+v, want none", id, b)
+		}
+	}
+
+	var none *Report
+	if b := none.BaselineSteps("api").Next("each"); b != nil {
+		t.Errorf("Next() of no baseline = %+v, want none", b)
+	}
+	if b := base.BaselineSteps("other").Next("each"); b != nil {
+		t.Errorf("Next() of a job the baseline has none of = %+v, want none", b)
 	}
 }

@@ -220,6 +220,15 @@ probe --report json=main.json search.yml
 probe --report json,markdown --baseline main.json search.yml
 ```
 
+端末では、各ステップの時間の下に以前の実行の時間が表示されます。
+
+```
+  ⎿ 0. Search by keyword (repeating 100 times)
+        ✓  100/100 success (100.0%)
+          min 8.3ms, p50 13.0ms, p90 35.1ms, p95 41.5ms, p99 70.2ms, max 88.0ms
+          baseline p50 12.1ms (+7.4%), p95 30.2ms (+37.4%), p99 64.0ms (+9.7%)
+```
+
 Markdownのレポートには、時間がどう変わったかの表が入ります。
 
 ```
