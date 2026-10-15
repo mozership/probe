@@ -68,7 +68,7 @@ type JobContext struct {
 	repeatTested bool
 	// repeatReads are the ids of the steps the test over the runs reads,
 	// which it checks as a step's own test does.
-	repeatReads map[string]bool
+	repeatReads  map[string]bool
 	StepCounters map[int]StepRepeatCounter // step index -> counter
 	countersMu   *sync.Mutex               // protects StepCounters for concurrent access
 	// Print writer
