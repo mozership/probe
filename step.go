@@ -401,7 +401,7 @@ func (st *Step) handleActionError(err error, name string, jCtx *JobContext) {
 		jCtx.Printer.PrintError("Action execution failed: %v", actionErr)
 	}
 	jCtx.SetFailed()
-	jCtx.Result.recordFailure(kind)
+	jCtx.recordFailure(kind)
 
 	// Create and add step result for failed action execution
 	if jCtx.Verbose {
@@ -574,8 +574,14 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 		_, testResult = st.check(jCtx.Printer)
 		if !testResult {
 			jCtx.SetFailed()
-			jCtx.Result.recordFailure(st.failure.Kind)
+			jCtx.recordFailure(st.failure.Kind)
 		}
+	}
+	// The test of a warmup run is checked all the same, since a failure
+	// skips the steps after it in a fail_fast job, but the run is counted in
+	// nothing.
+	if jCtx.warmingUp() {
+		return
 	}
 
 	var failure *StepFailure
@@ -1125,6 +1131,9 @@ func (st *Step) handleSkip(name, reason string, notRun bool, jCtx *JobContext) {
 // iteration without an entry, was given nothing to do, and the run counts
 // as neither a success nor a failure of it.
 func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun bool) {
+	if jCtx.warmingUp() {
+		return
+	}
 	// Update counter atomically with lock held throughout
 	jCtx.countersMu.Lock()
 	counter, exists := jCtx.StepCounters[st.counterKey()]

@@ -65,7 +65,10 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	jobID := e.job.ID
 	_, total := ctx.JobScheduler.GetRepeatInfo(jobID)
 	ctx.IsRepeating = total > 1
-	ctx.RepeatTotal = total
+	if e.job.Repeat != nil {
+		ctx.RepeatWarmup = e.job.Repeat.Warmup
+	}
+	ctx.RepeatTotal = total - ctx.RepeatWarmup
 	ctx.StepCounters = make(map[int]StepRepeatCounter)
 	return ctx
 }
@@ -88,7 +91,7 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 		// Execute single run
 		err := e.job.Start(ctx)
 
-		if err != nil {
+		if err != nil && !ctx.warmingUp() {
 			overallSuccess = false
 			e.workflow.SetExitStatus(true)
 		}
@@ -148,7 +151,7 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 			// Execute single run
 			err := j.Start(execCtx)
 
-			if err != nil {
+			if err != nil && !execCtx.warmingUp() {
 				overallSuccess.Store(false)
 				e.workflow.SetExitStatus(true)
 			}
@@ -236,6 +239,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 			counter.RepeatTotal = ctx.RepeatTotal
 			ctx.StepCounters[i] = counter
 		}
+		counter.Warmup = ctx.RepeatWarmup
 		counters[n] = counter
 	}
 	ctx.countersMu.Unlock()

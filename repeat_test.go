@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -691,5 +692,68 @@ func TestWorkflowStartRefusesAsyncRepeatWithoutInterval(t *testing.T) {
 	}
 	if n := len(runner.Calls["hello"]); n != 0 {
 		t.Errorf("action called %d times, want none", n)
+	}
+}
+
+func TestRepeatValidationWarmup(t *testing.T) {
+	if err := os.Setenv(EnvMaxRepeatCount, "10"); err != nil {
+		t.Fatalf("Failed to set environment variable: %v", err)
+	}
+	defer func() { _ = os.Unsetenv(EnvMaxRepeatCount) }()
+
+	tests := []struct {
+		name    string
+		repeat  Repeat
+		wantErr bool
+	}{
+		{"runs under the limit", Repeat{Count: 5, Warmup: 4}, false},
+		{"runs at the limit", Repeat{Count: 5, Warmup: 5}, true},
+		{"count under the limit alone", Repeat{Count: 9, Warmup: 1}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.repeat.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestWorkflowRepeatWarmupAsync runs the warmup runs of an async repeat
+// first, which fail their test and are counted in nothing.
+func TestWorkflowRepeatWarmupAsync(t *testing.T) {
+	_ = os.Unsetenv(EnvMaxRepeatCount)
+
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "1ms"},
+		{"res": map[string]any{"code": 200}, "rt": "1ms"},
+		{"res": map[string]any{"code": 200}, "rt": "1ms"},
+		{"res": map[string]any{"code": 200}, "rt": "1ms"},
+		{"res": map[string]any{"code": 200}, "rt": "1ms"},
+	}}
+	workflow := &Workflow{
+		Name: "Warmup",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 3, Warmup: 2, Async: true, Interval: Interval{Duration: time.Millisecond}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "repeat_index >= 2", actionRunner: runner}},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	if err := workflow.Start(Config{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if workflow.exitStatus != ExitOK {
+		t.Errorf("exit status = %d, want %d: the warmup runs do not fail the job", workflow.exitStatus, ExitOK)
+	}
+	if runner.calls != 5 {
+		t.Errorf("action called %d times, want 5", runner.calls)
+	}
+	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	if !strings.Contains(out, "(repeating 3 times, after 2 to warm up)") || !strings.Contains(out, "3/3 success") {
+		t.Errorf("terminal should count the 3 runs after the warmup, got:\n%s", out)
 	}
 }

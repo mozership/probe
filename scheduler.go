@@ -57,7 +57,7 @@ func (js *JobScheduler) AddJob(job *Job) error {
 
 	// Set repeat targets
 	if job.Repeat != nil {
-		js.repeatTargets[job.ID] = job.Repeat.Count
+		js.repeatTargets[job.ID] = job.Repeat.Runs()
 		js.repeatCounters[job.ID] = 0
 	} else {
 		js.repeatTargets[job.ID] = 1 // No repeat = run once

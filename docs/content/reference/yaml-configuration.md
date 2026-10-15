@@ -31,6 +31,8 @@ jobs:                         # Required: a list of jobs
     repeat:                   # Optional: run the job repeatedly
       count: integer
       interval: duration
+      async: boolean
+      warmup: integer
     steps:                    # Required: a list of steps
       - name: string          # Optional: step name
         id: string            # Optional: step id, required to publish outputs
@@ -396,6 +398,7 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | `count` | Integer | Yes | Number of runs. Capped by `PROBE_MAX_REPEAT_COUNT` (default 10000) |
 | `interval` | Duration | No | Wait from the end of one run to the start of the next. With `async`, the time from the start of one run to the start of the next, and required |
 | `async` | Boolean | No | Start each run without waiting for the one before to end |
+| `warmup` | Integer | No | Number of runs before the `count`, which are counted in nothing. Together with `count`, capped by `PROBE_MAX_REPEAT_COUNT` |
 
 ```yaml
 jobs:
@@ -411,6 +414,8 @@ jobs:
           url: "{{vars.api_url}}/status"
         test: res.code == 200
 ```
+
+The `warmup` runs come first, and are run as any other, `interval` and `async` included, but are left out of the result: a run in which a step failed does not fail the job, and the counts and the [response times](/reference/cli-reference#--report) are those of the `count` runs after them. They give the service the time to fill its caches and pools before the runs that are measured.
 
 Each run's steps read the outputs that the earlier steps of the same run published, also when `async` runs them at the same time. The jobs after it read each output as the latest run that published it left it, so a step the last run skipped keeps the value of the run before.
 
@@ -568,7 +573,7 @@ Inside a step, an expression sees exactly these names:
 | `rt` | Object | Response time: `rt.duration` (string) and `rt.sec` (float seconds) |
 | `status` | Integer | Action exit status, `0` on success |
 | `outputs` | Object | Outputs published by earlier steps |
-| `repeat_index` | Integer | Current index when the job repeats |
+| `repeat_index` | Integer | Current index when the job repeats, from 0, the `warmup` runs included |
 
 There is no `env`, `jobs` or `steps` in this context.
 
@@ -653,7 +658,7 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 - Every step needs a `uses`, and it must name an action: one of Probe, an external action, or a name given under `actions`. One that names none stops the run before its first job, with exit status 2, even in a step that would be skipped.
 - A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
-- `repeat.count` must be zero or greater, and `retry.max_attempts` at least 1.
+- `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.
 - A step must have an `id` for its `outputs` to be published.
 
 `probe check` reports these without running the workflow, together with keys a workflow does not take, expressions that do not parse and outputs read before they are published. See the [CLI Reference](/reference/cli-reference#check).

@@ -38,6 +38,9 @@ type StepRepeatCounter struct {
 	// RTs is the time in seconds the action took in each run that it
 	// returned one in, whether or not the step's test held.
 	RTs []float64
+	// Warmup is the number of runs before those counted, which the counts
+	// and the times leave out.
+	Warmup int
 	// Failure is why the first iteration that failed did, so that the step's
 	// result keeps the kind of failure, such as an action error, rather than
 	// only the count.

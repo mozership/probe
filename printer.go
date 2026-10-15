@@ -225,8 +225,12 @@ func (p *Printer) Fprintln(w io.Writer, a ...any) {
 }
 
 // printStepRepeatStart prints the start of a repeated step execution
-func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount int, output *strings.Builder) {
+func (p *Printer) printStepRepeatStart(stepIdx int, stepName string, repeatCount, warmup int, output *strings.Builder) {
 	num := colorDim().Sprintf("%2d.", stepIdx)
+	if warmup > 0 {
+		p.Fprintf(output, "%s %s (repeating %d times, after %d to warm up)\n", num, stepName, repeatCount, warmup)
+		return
+	}
 	p.Fprintf(output, "%s %s (repeating %d times)\n", num, stepName, repeatCount)
 }
 
@@ -465,7 +469,7 @@ func (p *Printer) generateJobResultsFromStepResults(stepResults []StepResult) st
 	for _, stepResult := range stepResults {
 		// Handle repeat steps
 		if stepResult.RepeatCounter != nil {
-			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, &output)
+			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, stepResult.RepeatCounter.Warmup, &output)
 			p.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")

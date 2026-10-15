@@ -164,7 +164,7 @@ A step's status is `passed`, `failed`, `skipped`, or `untested` when it ran with
 | `refused` | The guard of the run, such as `--read-only`, refused what the step was to do | `<error>` |
 | `contract_request` | The request broke the contract the action checked it against: the workflow sent what an OpenAPI document does not allow | `<error>` |
 
-A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. It also reports the distribution of the times its action took. In `json` it is `latency`: the number of runs it counts, the minimum, mean and maximum, and the 50th, 90th, 95th and 99th percentiles, in milliseconds. The table in `markdown` has the same, but for the mean. It counts every run in which the action returned a time, those whose test failed included; a run in which the action failed to run, or the step was skipped, is not counted. A percentile is by nearest rank, the time that the given share of the runs took at most, so it is always one of the times taken. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
+A step in a job with `repeat` fails when any iteration fails, and reports how many iterations passed and why the first failing one failed. It also reports the distribution of the times its action took. In `json` it is `latency`: the number of runs it counts, the minimum, mean and maximum, and the 50th, 90th, 95th and 99th percentiles, in milliseconds. The table in `markdown` has the same, but for the mean. It counts every run in which the action returned a time, those whose test failed included; a run in which the action failed to run, or the step was skipped, is not counted. A percentile is by nearest rank, the time that the given share of the runs took at most, so it is always one of the times taken. The runs of `repeat.warmup` are counted in neither, and `json` records their number as `warmup`. When an action sets `dump: false` on its response, the request and response are left out of the report as they are left out of the terminal.
 
 The value can also come from the `PROBE_REPORT` environment variable, and the flag wins over it. If a report file cannot be written, the others are still written and Probe exits with status 2.
 
@@ -608,7 +608,7 @@ probe workflow.yml
 
 **Type:** Integer  
 **Default:** `10000`  
-**Description:** Upper limit for a step's `repeat.count`. A workflow that asks for more is rejected.
+**Description:** Upper limit for a job's `repeat.count`, and for its `count` and `warmup` together. A workflow that reaches it is rejected.
 
 ```bash
 export PROBE_MAX_REPEAT_COUNT=50000
