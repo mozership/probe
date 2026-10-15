@@ -74,6 +74,17 @@ A run in which the test does not hold fails the job, so a test on `rt.sec` here 
 
 The times are those of every run in which the action returned one, the runs whose test failed included, so that the slow runs are not left out of them. A percentile is the time that the given share of the runs took at most: `p95 44.2ms` says that 95 in 100 runs took 44.2ms or less. It is always one of the times taken, so with fewer than 100 runs `p99` is the slowest run, as `max` is. Unlike the count, the times show a change that makes the operation slower by a fraction while it stays within the limit: compare the `p50` and `p95` of runs before the change with those after it, made from the same machine against the same environment, since the time includes the network between them. `--report json` records the times as `latency` of the step, and `--report markdown` as a table of the repeated steps, which puts them in a pull request beside the result.
 
+A service that has just started, or has had no requests for a while, tends to answer the first few slowly, since its caches are empty and its connection pools not yet filled. Those runs push up `max` and `p99`, and may fail the test. `warmup` runs that many first and counts them in neither the results nor the times:
+
+```yaml
+  repeat:
+    count: 50
+    interval: 100ms
+    warmup: 5
+```
+
+A warmup run whose test fails does not fail the job; if the service does not answer at all, the runs counted after them fail. Only the service warms up: each step connects anew, so Probe reuses no connection.
+
 By default the runs follow one another, and `interval` is the wait from the end of one run to the start of the next. With `async: true`, a run starts every `interval` whether or not the one before has ended, so the requests are sent at a steady rate, as clients that do not wait for each other send them:
 
 ```yaml

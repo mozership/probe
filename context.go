@@ -60,8 +60,11 @@ type JobContext struct {
 	IsRepeating   bool
 	RepeatCurrent int
 	RepeatTotal   int
-	StepCounters  map[int]StepRepeatCounter // step index -> counter
-	countersMu    *sync.Mutex               // protects StepCounters for concurrent access
+	// RepeatWarmup is the number of runs before those counted; see
+	// Repeat.Warmup. RepeatCurrent counts them, and RepeatTotal does not.
+	RepeatWarmup int
+	StepCounters map[int]StepRepeatCounter // step index -> counter
+	countersMu   *sync.Mutex               // protects StepCounters for concurrent access
 	// Print writer
 	Printer *Printer
 	// Result for managing job-level output
@@ -92,4 +95,19 @@ type JobContext struct {
 // SetFailed marks the job context as failed
 func (j *JobContext) SetFailed() {
 	j.Failed = true
+}
+
+// warmingUp reports whether the run is one of the warmup runs of a repeated
+// job, which the job's result leaves out.
+func (j *JobContext) warmingUp() bool {
+	return j.RepeatCurrent < j.RepeatWarmup
+}
+
+// recordFailure notes the kind of a failure of a step for the exit code of
+// the run, unless the run is a warmup run, which cannot fail the job.
+func (j *JobContext) recordFailure(kind string) {
+	if j.warmingUp() {
+		return
+	}
+	j.Result.recordFailure(kind)
 }

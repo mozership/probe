@@ -31,6 +31,8 @@ jobs:                         # 必須: ジョブのリスト
     repeat:                   # 任意: ジョブを繰り返す
       count: integer
       interval: duration
+      async: boolean
+      warmup: integer
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
         id: string            # 任意: ステップ ID。outputs の公開に必要
@@ -396,6 +398,7 @@ jobs:
 | `count` | Integer | 必須 | 実行回数。上限は`PROBE_MAX_REPEAT_COUNT`（既定10000） |
 | `interval` | Duration | 任意 | 1回の実行が終わってから次を始めるまでの待ち時間。`async`のときは、1回の実行を始めてから次を始めるまでの間隔で、必須 |
 | `async` | Boolean | 任意 | 前の実行の終わりを待たずに次の実行を始める |
+| `warmup` | Integer | 任意 | `count`の前に行う実行の回数。どの集計にも含めない。`count`との合計が`PROBE_MAX_REPEAT_COUNT`の上限を受ける |
 
 ```yaml
 jobs:
@@ -411,6 +414,8 @@ jobs:
           method: GET
         test: res.code == 200
 ```
+
+`warmup`の回は最初に行います。`interval`と`async`も含めてほかの回と同じように実行しますが、結果には含めません。ステップが失敗してもジョブは失敗しません。ただし、ステップIDが不正であるなどジョブを開始できない場合は、ほかの回と同じく`warmup`の回でも失敗します。成否の回数と[応答時間](/ja/reference/cli-reference#--report)は、その後の`count`回について数えます。計測する回の前に、サービスがキャッシュやコネクションプールを満たす時間を取るためのものです。
 
 各回のステップは、同じ回の前のステップが公開した出力を読みます。`async`で複数の回が同時に動く場合も同じです。後続のジョブは、それぞれの出力について、最後にそれを公開した回の値を読みます。そのため、最後の回が飛ばしたステップの出力は、その前の回の値になります。
 
@@ -568,7 +573,7 @@ steps:
 | `rt` | Object | レスポンスタイム。`rt.duration`（文字列）と`rt.sec`（秒、浮動小数点数） |
 | `status` | Integer | アクションの終了ステータス。成功は`0` |
 | `outputs` | Object | 先行ステップが公開した値 |
-| `repeat_index` | Integer | ジョブ繰り返し時の現在のインデックス |
+| `repeat_index` | Integer | ジョブ繰り返し時の現在のインデックス。0から始まり、`warmup`の回も数える |
 
 このコンテキストに`env`、`jobs`、`steps`はありません。
 
@@ -653,7 +658,7 @@ headers:
 - 各ステップには`uses`が必要で、アクションを指している必要があります。Probeのアクション、外部アクション、`actions`で付けた名前のいずれかです。どれでもない場合は、スキップされるステップであっても、最初のジョブの前に終了ステータス2で実行が止まります
 - `actions`の名前はProbeのアクションの名前であってはならず、コミットで固定した外部アクションかローカルのパスを指す必要があります
 - `needs`は存在するジョブIDを指し、依存関係は循環していない必要があります
-- `repeat.count`は0以上、`retry.max_attempts`は1以上である必要があります
+- `repeat.count`と`repeat.warmup`は0以上、`retry.max_attempts`は1以上である必要があります
 - ステップに`id`が無いと`outputs`は公開されません
 
 `probe check`は、受け付けないキー、解析できない式、公開される前に読む出力とあわせて、これらをワークフローを実行せずに報告します。[CLIリファレンス](/ja/reference/cli-reference#check)を参照してください。

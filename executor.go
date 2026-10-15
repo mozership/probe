@@ -65,7 +65,13 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	jobID := e.job.ID
 	_, total := ctx.JobScheduler.GetRepeatInfo(jobID)
 	ctx.IsRepeating = total > 1
-	ctx.RepeatTotal = total
+	if e.job.Repeat != nil {
+		ctx.RepeatWarmup = e.job.Repeat.Warmup
+		// A warmup run is left out by the counters, which a job run once
+		// keeps too when the run is one.
+		ctx.IsRepeating = ctx.IsRepeating || ctx.RepeatWarmup > 0
+	}
+	ctx.RepeatTotal = total - ctx.RepeatWarmup
 	ctx.StepCounters = make(map[int]StepRepeatCounter)
 	return ctx
 }
@@ -85,10 +91,11 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 		current, _ := ctx.JobScheduler.GetRepeatInfo(jobID)
 		ctx.RepeatCurrent = current
 
-		// Execute single run
-		err := e.job.Start(ctx)
+		// Execute single run. A job that cannot start fails in a warmup run
+		// too, as it would in every run; a step that failed in one does not.
+		failed, err := e.job.run(ctx)
 
-		if err != nil {
+		if err != nil || (failed && !ctx.warmingUp()) {
 			overallSuccess = false
 			e.workflow.SetExitStatus(true)
 		}
@@ -145,10 +152,10 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 				runsMu.Unlock()
 			}
 
-			// Execute single run
-			err := j.Start(execCtx)
+			// Execute single run, failed as a run in turn is
+			failed, err := j.run(execCtx)
 
-			if err != nil {
+			if err != nil || (failed && !execCtx.warmingUp()) {
 				overallSuccess.Store(false)
 				e.workflow.SetExitStatus(true)
 			}
@@ -236,6 +243,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) {
 			counter.RepeatTotal = ctx.RepeatTotal
 			ctx.StepCounters[i] = counter
 		}
+		counter.Warmup = ctx.RepeatWarmup
 		counters[n] = counter
 	}
 	ctx.countersMu.Unlock()
