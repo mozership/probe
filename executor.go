@@ -53,8 +53,12 @@ func (e *Executor) executeWithBuffering(ctx JobContext) bool {
 
 	if ctx.IsRepeating {
 		counters := e.appendRepeatStepResults(&ctx)
-		if ctx.repeatTested && !e.skipped(ctx) {
-			// A run that could not start failed the job already.
+		// A job is left skipped when its skipif skipped every run counted.
+		// A run that ran a step leaves a counter, and then the test is
+		// checked, whichever runs were skipped. A run that could not start
+		// failed the job already.
+		if ctx.repeatTested && (len(counters) > 0 || !e.skipped(ctx)) {
+			e.unskip(ctx)
 			overallSuccess = e.checkRepeatTest(ctx, counters) && overallSuccess
 		}
 	}

@@ -90,6 +90,17 @@ func (e *Executor) skipped(ctx JobContext) bool {
 	return jr.Status == "skipped"
 }
 
+// unskip takes back the skipped status that a run skipped by the job's
+// skipif left, when other runs ran and the test over them decides.
+func (e *Executor) unskip(ctx JobContext) {
+	jr := ctx.Result.Jobs[e.job.ID]
+	jr.mutex.Lock()
+	defer jr.mutex.Unlock()
+	if jr.Status == "skipped" {
+		jr.Status = "Running"
+	}
+}
+
 // checkRepeatTest checks the test of a repeated job against the runs of its
 // steps once every run is over, records the outcome on the job's result, and
 // reports whether the test held, which is whether the job passed.

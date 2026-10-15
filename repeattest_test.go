@@ -3,11 +3,13 @@ package probe
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/report"
@@ -197,5 +199,74 @@ func TestWorkflow_RepeatTestCannotStart(t *testing.T) {
 	}
 	if workflow.exitStatus != ExitConfigError {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitConfigError)
+	}
+}
+
+// TestWorkflow_RepeatTestReadsStepWithoutID reads the runs of a step that
+// has no id, as a workflow made in code has, by where it is written.
+func TestWorkflow_RepeatTestReadsStepWithoutID(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+	}}
+	workflow := repeatTestWorkflow(runner, 2, "steps.step_0.runs == 2")
+	workflow.Jobs[0].Steps[0].ID = ""
+
+	r := startWithReport(t, workflow)
+	if rt := r.Jobs[0].RepeatTest; rt == nil || rt.Status != report.Passed {
+		t.Errorf("repeat_test = %+v, want it passed", rt)
+	}
+}
+
+// TestWorkflow_RepeatTestAfterSkippedRuns checks the test of a job whose
+// skipif skipped the runs after the first, which leave the job skipped only
+// when no run was counted.
+func TestWorkflow_RepeatTestAfterSkippedRuns(t *testing.T) {
+	tests := []struct {
+		test   string
+		status string
+		exit   int
+	}{
+		{"false", report.Failed, ExitTestFailed},
+		{"steps.query.runs == 1", report.Passed, ExitOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.test, func(t *testing.T) {
+			runner := &timedRunner{answers: []map[string]any{
+				{"res": map[string]any{"code": 200}, "rt": "10ms"},
+			}}
+			workflow := repeatTestWorkflow(runner, 3, tt.test)
+			workflow.Jobs[0].SkipIf = "outputs.query?.done == true"
+			workflow.Jobs[0].Steps[0].Outputs = map[string]string{"done": "true"}
+
+			r := startWithReport(t, workflow)
+			if workflow.exitStatus != tt.exit {
+				t.Errorf("exit status = %d, want %d", workflow.exitStatus, tt.exit)
+			}
+			if job := r.Jobs[0]; job.Status != tt.status || job.RepeatTest == nil || job.RepeatTest.Status != tt.status {
+				t.Errorf("job = %+v, want it and its test %s", job, tt.status)
+			}
+		})
+	}
+}
+
+// TestWorkflow_RepeatTestOfSkippedJob leaves the test of a job whose every
+// run was skipped unchecked, in turn and async.
+func TestWorkflow_RepeatTestOfSkippedJob(t *testing.T) {
+	for _, async := range []bool{false, true} {
+		t.Run(fmt.Sprintf("async %v", async), func(t *testing.T) {
+			workflow := repeatTestWorkflow(&timedRunner{}, 2, "false")
+			workflow.Jobs[0].SkipIf = "true"
+			workflow.Jobs[0].Repeat.Async = async
+			workflow.Jobs[0].Repeat.Interval = Interval{Duration: time.Millisecond}
+
+			r := startWithReport(t, workflow)
+			if workflow.exitStatus != ExitOK {
+				t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
+			}
+			if job := r.Jobs[0]; job.Status != report.Skipped || job.RepeatTest != nil {
+				t.Errorf("job = %+v, want it skipped with no test checked", job)
+			}
+		})
 	}
 }

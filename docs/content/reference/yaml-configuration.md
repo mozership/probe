@@ -461,6 +461,7 @@ With `repeat.test`, the runs are counted and fail nothing by themselves:
 - A run in which a step fails does not fail the job, and the step is reported as passed, with its failed runs counted in its `repeat`.
 - The job passes when the test is true, and fails when it is false, cannot be evaluated or is not a boolean. A false test tells which condition is false, and what it compared, as a step's test does.
 - The exit status is that of the test: 1 when it failed, whatever the runs failed for.
+- A job whose [`skipif`](#skipif) skipped every run counted is skipped, and the test is not checked. When it skipped only some, the test is checked against the runs that ran.
 
 ## Steps
 
