@@ -649,3 +649,43 @@ func TestWorkflow_RepeatWarmupLeavesExitStatus(t *testing.T) {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
 	}
 }
+
+// TestWorkflow_RepeatOnlyWarmup runs a job whose one run is a warmup run: it
+// fails its test, and the job passes with no run counted.
+func TestWorkflow_RepeatOnlyWarmup(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 500}, "rt": "10ms"},
+	}}
+	workflow := &Workflow{
+		Name: "Warmup",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 0, Warmup: 1},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+		}},
+		printer: newBufferPrinter(),
+	}
+
+	jsonPath := filepath.Join(t.TempDir(), "report.json")
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if runner.calls != 1 {
+		t.Errorf("action called %d times, want 1", runner.calls)
+	}
+	if workflow.exitStatus != ExitOK {
+		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
+	}
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r report.Report
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if r.Status != report.Passed || len(r.Jobs[0].Steps) != 0 {
+		t.Errorf("report = %+v, want a passed job with no step counted", r)
+	}
+}

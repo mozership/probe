@@ -67,6 +67,9 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	ctx.IsRepeating = total > 1
 	if e.job.Repeat != nil {
 		ctx.RepeatWarmup = e.job.Repeat.Warmup
+		// A warmup run is left out by the counters, which a job run once
+		// keeps too when the run is one.
+		ctx.IsRepeating = ctx.IsRepeating || ctx.RepeatWarmup > 0
 	}
 	ctx.RepeatTotal = total - ctx.RepeatWarmup
 	ctx.StepCounters = make(map[int]StepRepeatCounter)

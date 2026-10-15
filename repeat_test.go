@@ -3,6 +3,7 @@ package probe
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -709,6 +710,8 @@ func TestRepeatValidationWarmup(t *testing.T) {
 		{"runs under the limit", Repeat{Count: 5, Warmup: 4}, false},
 		{"runs at the limit", Repeat{Count: 5, Warmup: 5}, true},
 		{"count under the limit alone", Repeat{Count: 9, Warmup: 1}, true},
+		{"negative warmup", Repeat{Count: 1, Warmup: -1}, true},
+		{"warmup that overflows the sum", Repeat{Count: 1, Warmup: math.MaxInt}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

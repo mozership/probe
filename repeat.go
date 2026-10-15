@@ -119,10 +119,15 @@ func (r *Repeat) Validate() error {
 		return fmt.Errorf("repeat count %d exceeds maximum allowed value of %d. To allow higher values, set %s environment variable (e.g., %s=%d)",
 			r.Count, maxCount, EnvMaxRepeatCount, EnvMaxRepeatCount, r.Count+1)
 	}
-	// The warmup runs are runs too, each with a process for its action.
-	if r.Warmup > 0 && r.Runs() >= maxCount {
-		return fmt.Errorf("repeat count %d with warmup %d makes %d runs, which exceeds maximum allowed value of %d. To allow higher values, set %s environment variable (e.g., %s=%d)",
-			r.Count, r.Warmup, r.Runs(), maxCount, EnvMaxRepeatCount, EnvMaxRepeatCount, r.Runs()+1)
+	if r.Warmup < 0 {
+		return fmt.Errorf("repeat warmup %d must be zero or greater", r.Warmup)
+	}
+	// The warmup runs are runs too, each with a process for its action. The
+	// count is below the limit here, so the limit is compared without
+	// adding the two, which a large warmup would overflow.
+	if r.Warmup > 0 && r.Warmup >= maxCount-r.Count {
+		return fmt.Errorf("repeat count %d with warmup %d reaches maximum allowed value of %d runs. To allow more runs, set %s environment variable",
+			r.Count, r.Warmup, maxCount, EnvMaxRepeatCount)
 	}
 	// The interval is what spaces the runs of an async repeat. Without one,
 	// every run would start at once, each with a process for its action.
