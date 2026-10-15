@@ -203,7 +203,8 @@ jobs:
   - name: repeat-literal.yml (expected to fail, by a test over the runs too)
     uses: shell
     with:
-      cmd: ./probe examples/repeat-literal.yml
+      # Without color, so that the lines are compared as they are laid out.
+      cmd: env -u FORCE_COLOR -u PROBE_TTY ./probe examples/repeat-literal.yml
     test: |
       res.code == 1 &&
       res.stdout contains "0. Fails in the warmup runs alone (repeating 3 times, after 2 to warm up)\n        ✓  3/3 success (100.0%)" &&
