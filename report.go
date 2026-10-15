@@ -104,7 +104,7 @@ func buildStepReport(sr StepResult) report.Step {
 		switch {
 		case c.FailureCount > 0 && !c.Tested:
 			step.Status = report.Failed
-		case c.SuccessCount == 0 && c.SkippedCount > 0:
+		case c.SuccessCount == 0 && c.FailureCount == 0 && c.SkippedCount > 0:
 			step.Status = report.Skipped
 		case sr.HasTest:
 			step.Status = report.Passed

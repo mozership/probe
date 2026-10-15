@@ -199,6 +199,29 @@ func (j *Job) cloneForAsync() *Job {
 	return &cloned
 }
 
+// validateRepeatIDs checks that no two steps of a job with a test over its
+// runs are read by the same id under steps, one by its id and another, which
+// has none, by where it is written; the test would read their runs as one.
+// A loaded workflow gives a step without an id its default one, and refuses
+// the same id twice, but a workflow made in code is given none.
+func (j *Job) validateRepeatIDs() error {
+	if j.Repeat == nil || j.Repeat.Test == "" {
+		return nil
+	}
+	seen := make(map[string]int, len(j.Steps))
+	for i, st := range j.Steps {
+		id := st.ID
+		if id == "" {
+			id = defaultStepID(i)
+		}
+		if k, ok := seen[id]; ok {
+			return fmt.Errorf("steps %d and %d are both read as steps.%s by repeat.test; give one of them another id", k, i, id)
+		}
+		seen[id] = i
+	}
+	return nil
+}
+
 // executeSteps runs all steps in the job, handling iterations appropriately
 func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	idx := 0

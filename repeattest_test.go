@@ -276,3 +276,37 @@ func TestWorkflow_RepeatTestOfSkippedJob(t *testing.T) {
 		})
 	}
 }
+
+// TestWorkflowStartRefusesRepeatTestIDCollision refuses a job made in code
+// in which a step without an id would be read by the id another step has.
+func TestWorkflowStartRefusesRepeatTestIDCollision(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{nil, nil, nil, nil}}
+	workflow := repeatTestWorkflow(runner, 2, "steps.step_0.success_rate == 1")
+	workflow.Jobs[0].Steps = []*Step{
+		{Name: "Unnamed", Uses: "http", actionRunner: runner},
+		{Name: "Named", ID: "step_0", Uses: "http", actionRunner: runner},
+	}
+
+	err := workflow.Start(Config{})
+	if err == nil || !strings.Contains(err.Error(), "steps 0 and 1 are both read as steps.step_0") {
+		t.Errorf("Start() = %v, want the steps read by one id refused", err)
+	}
+	if runner.calls != 0 {
+		t.Errorf("action called %d times, want none", runner.calls)
+	}
+}
+
+// TestBuildReport_RepeatTestedStepFailedAndSkipped reports a step of a job
+// with a test over its runs that failed in one run and was not run in
+// another as passed: it ran, and its runs are counted.
+func TestBuildReport_RepeatTestedStepFailedAndSkipped(t *testing.T) {
+	st := buildStepReport(StepResult{
+		Name:          "Query",
+		HasTest:       true,
+		Status:        StatusError,
+		RepeatCounter: &StepRepeatCounter{Name: "Query", FailureCount: 1, SkippedCount: 1, Tested: true},
+	})
+	if st.Status != report.Passed {
+		t.Errorf("status = %q, want %q", st.Status, report.Passed)
+	}
+}

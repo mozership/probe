@@ -1070,6 +1070,12 @@ func (st *Step) repeatID() string {
 	if st.placed {
 		pos = st.pos
 	}
+	return defaultStepID(pos)
+}
+
+// defaultStepID is the id of a step without one, by where it is written in
+// its job, as a loaded workflow gives it.
+func defaultStepID(pos int) string {
 	return fmt.Sprintf("step_%d", pos)
 }
 
