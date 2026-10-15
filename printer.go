@@ -288,15 +288,17 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 }
 
 // generateRepeatTest generates the outcome of the test of a repeated job
-// over its runs, under its steps, and why it failed under it.
+// over its runs, under its steps, and why it failed under it. It is laid out
+// as a step is without its number, so that its icon and text line up with
+// theirs, and why it failed with the text.
 func (p *Printer) generateRepeatTest(rt *RepeatTestResult) string {
 	if rt == nil {
 		return ""
 	}
 	if rt.Passed {
-		return fmt.Sprintf("%s repeat test: %s\n", colorSuccess().Sprint(strings.TrimSpace(IconSuccess)), rt.Test)
+		return fmt.Sprintf("    %s repeat test: %s\n", colorSuccess().Sprintf(IconSuccess), rt.Test)
 	}
-	return fmt.Sprintf("%s repeat test: %s\n%s", colorError().Sprint(strings.TrimSpace(IconError)), rt.Test, rt.Output)
+	return fmt.Sprintf("    %s repeat test: %s\n%s", colorError().Sprintf(IconError), rt.Test, rt.Output)
 }
 
 // generateJobResults generates buffered job results as string

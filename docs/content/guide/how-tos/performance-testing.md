@@ -144,7 +144,7 @@ The result shows the test under the steps, and when it is false, which condition
   ⎿ 0. Search by keyword (repeating 100 times, after 5 to warm up)
         △  99/100 success (99.0%)
           min 8.3ms, p50 12.1ms, p90 30.2ms, p95 312ms, p99 640ms, max 702ms
-    ✗ repeat test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
+        ✗  repeat test: steps.search.success_rate >= 0.99 && steps.search.rt.p95 < 0.3
            failed: steps.search.rt.p95 < 0.3
              steps.search.rt.p95 = 0.312
 ```

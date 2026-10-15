@@ -112,7 +112,7 @@ func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 	}
 
 	out := workflow.printer.outWriter.(*bytes.Buffer).String()
-	if !strings.Contains(out, "✓ repeat test: steps.query.success_rate >= vars.rate") {
+	if !strings.Contains(out, "✓  repeat test: steps.query.success_rate >= vars.rate") {
 		t.Errorf("terminal should show the test passed, got:\n%s", out)
 	}
 }
@@ -148,7 +148,13 @@ func TestWorkflow_RepeatTestFails(t *testing.T) {
 	}
 
 	out := workflow.printer.outWriter.(*bytes.Buffer).String()
-	for _, s := range []string{"✗ repeat test: steps.query.rt.p95 < 0.3", "failed: steps.query.rt.p95 < 0.3", "steps.query.rt.p95 = 0.4"} {
+	// The test lines up with the steps above it: its icon with theirs, and
+	// why it failed with its text.
+	for _, s := range []string{
+		"\n        ✗  repeat test: steps.query.rt.p95 < 0.3\n",
+		"\n           failed: steps.query.rt.p95 < 0.3\n",
+		"\n             steps.query.rt.p95 = 0.4\n",
+	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("terminal should contain %q, got:\n%s", s, out)
 		}
