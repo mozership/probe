@@ -680,6 +680,67 @@ func TestReport_WriteJUnit_RepeatTest(t *testing.T) {
 	}
 }
 
+// baselineTestReport is a report of two repeated jobs compared to an earlier
+// run, one whose test against it was skipped and one whose test failed.
+func baselineTestReport() *Report {
+	r := repeatTestReport()
+	r.Jobs[0].BaselineTest = &RepeatTest{Test: "steps.query.rt.p95 < baseline.steps.query.rt.p95", Status: Skipped, Reason: "the baseline has no step query"}
+	r.Jobs[1].RepeatTest = nil
+	r.Jobs[1].BaselineTest = &RepeatTest{Test: "steps.query.rt.p95 < baseline.steps.query.rt.p95", Status: Failed, Failure: &Failure{
+		Kind: FailureAssertion, Message: "test evaluated to false: steps.query.rt.p95 < baseline.steps.query.rt.p95 (steps.query.rt.p95 = 0.4, baseline.steps.query.rt.p95 = 0.2)",
+	}}
+	return r
+}
+
+func TestReport_WriteMarkdown_BaselineTest(t *testing.T) {
+	out := baselineTestReport().markdown(true)
+	want := "### Slow / baseline test\n\n" +
+		"assertion: test evaluated to false: steps.query.rt.p95 < baseline.steps.query.rt.p95 (steps.query.rt.p95 = 0.4, baseline.steps.query.rt.p95 = 0.2)\n\n" +
+		"```\nsteps.query.rt.p95 < baseline.steps.query.rt.p95\n```\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("Markdown should contain\n%s\ngot:\n%s", want, out)
+	}
+	if strings.Contains(out, "Fast / baseline test") {
+		t.Error("a skipped test should have no section")
+	}
+}
+
+func TestReport_WriteJUnit_BaselineTest(t *testing.T) {
+	var buf bytes.Buffer
+	if err := baselineTestReport().WriteJUnit(&buf); err != nil {
+		t.Fatalf("WriteJUnit: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`<testsuites name="Repeat test" tests="5" failures="1" errors="0" skipped="1"`,
+		`<testcase name="baseline test" classname="Fast" time="0.000">`,
+		`<skipped message="the baseline has no step query"></skipped>`,
+		`<testcase name="baseline test" classname="Slow" time="0.000">`,
+		`<failure message="test evaluated to false: steps.query.rt.p95 &lt; baseline.steps.query.rt.p95 (steps.query.rt.p95 = 0.4, baseline.steps.query.rt.p95 = 0.2)" type="assertion">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JUnit should contain %s, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "job failed without a failed step") {
+		t.Error("a job failed by its test against the baseline should not need a testcase of its own")
+	}
+}
+
+func TestReport_MaskBaselineTest(t *testing.T) {
+	m := mask.New([]string{"S"}, map[string]string{"S": "sekret"})
+	r := &Report{Jobs: []Job{{BaselineTest: &RepeatTest{
+		Test:    `baseline.steps.q.runs == 1 && "sekret" != ""`,
+		Status:  Failed,
+		Failure: &Failure{Kind: FailureAssertion, Message: `"sekret" != ""`},
+	}}}}
+	r.Mask(m)
+	rt := r.Jobs[0].BaselineTest
+	if strings.Contains(rt.Test, "sekret") || strings.Contains(rt.Failure.Message, "sekret") {
+		t.Errorf("baseline_test = %+v, want the secret hidden", rt)
+	}
+}
+
 func TestReport_MaskRepeatTest(t *testing.T) {
 	m := mask.New([]string{"S"}, map[string]string{"S": "sekret"})
 	r := &Report{Jobs: []Job{{RepeatTest: &RepeatTest{

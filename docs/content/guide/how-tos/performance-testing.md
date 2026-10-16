@@ -185,7 +185,29 @@ Compared to the run started at 2026-10-15T09:00:00Z (2f9159ffd442ca6c), before �
 
 A step is compared to the step of the same `id`, in the job of the same `id`, so give both an `id`: one without is known by where it is written in its job, and adding a step before it makes it another. A step the earlier run has none of is marked `no baseline`.
 
-The comparison is only shown. It fails no job, because the times of two runs differ even when nothing changed, and how much they differ depends on the service and the runners. Two runs on the same machine, one after the other, differ the least, so in CI, run the main branch in the same job as the change rather than keeping its report from another run. With `--report github-summary` the table is on the summary page of the run. See [`--baseline`](/reference/cli-reference#--baseline) for what the JSON report records.
+The comparison by itself fails no job, because the times of two runs differ even when nothing changed, and how much they differ depends on the service and the runners. Two runs on the same machine, one after the other, differ the least, so in CI, run the main branch in the same job as the change rather than keeping its report from another run. With `--report github-summary` the table is on the summary page of the run. See [`--baseline`](/reference/cli-reference#--baseline) for what the JSON report records.
+
+Once you know how much the times differ between two runs of the same code, `repeat.baseline_test` can fail the job on a change larger than that. It reads the earlier run's steps under `baseline.steps`, with their times in seconds, as `steps` has them:
+
+```yaml
+repeat:
+  count: 100
+  warmup: 5
+  test: steps.search.success_rate >= 0.99
+  baseline_test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+```
+
+This job fails when its p95 is 20% or more above the earlier run's:
+
+```
+        ✓  repeat test: steps.search.success_rate >= 0.99
+        ✗  baseline test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+           failed: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+             steps.search.rt.p95 = 0.0415
+             baseline.steps.search.rt.p95 * 1.2 = 0.03624
+```
+
+Without `--baseline`, as on the main branch, the test is skipped and the job passes by it, so the same workflow writes the report to compare to. It is skipped too when the earlier run has none of the step it reads, such as one added by the change. See [Test against an Earlier Run](/reference/yaml-configuration#test-against-an-earlier-run) for every field.
 
 ## The Query Behind an Endpoint
 

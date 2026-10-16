@@ -246,11 +246,38 @@ Compared to the run started at 2026-10-15T09:00:00Z (2f9159ffd442ca6c), before �
 `id`のないステップはジョブ内の位置で識別されるので、前にステップを追加すると別のステップとして扱われます。
 以前の実行にないステップには`no baseline`と示します。
 
-比較は表示するだけです。
-ジョブを失敗させないのは、何も変えていなくても2回の実行の時間は違い、どれだけ違うかはサービスとランナーによるためです。
+比較そのものでは、ジョブは失敗しません。
+何も変えていなくても2回の実行の時間は違い、どれだけ違うかはサービスとランナーによるためです。
 同じマシンで続けて実行した2回が最も差が小さいので、CIでは、mainブランチのレポートを別の実行から持ってくるより、変更と同じジョブでmainブランチも実行するほうが確かです。
 `--report github-summary`を指定すれば、表は実行のサマリーページに載ります。
 JSONのレポートに記録される内容は[`--baseline`](/ja/reference/cli-reference#--baseline)を参照してください。
+
+同じコードを2回実行したときに時間がどれだけ違うかがわかれば、`repeat.baseline_test`で、それより大きな変化があったときにジョブを失敗させられます。
+このテストは、以前の実行のステップを`baseline.steps`の下で読みます。
+時間は`steps`と同じく秒単位です。
+
+```yaml
+repeat:
+  count: 100
+  warmup: 5
+  test: steps.search.success_rate >= 0.99
+  baseline_test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+```
+
+このジョブは、p95が以前の実行より20%以上遅くなると失敗します。
+
+```
+        ✓  repeat test: steps.search.success_rate >= 0.99
+        ✗  baseline test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+           failed: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+             steps.search.rt.p95 = 0.0415
+             baseline.steps.search.rt.p95 * 1.2 = 0.03624
+```
+
+mainブランチでの実行のように`--baseline`を指定しないときは、テストをスキップし、ジョブはこのテストでは失敗しません。
+そのため、比べる元のレポートも同じワークフローで書き出せます。
+変更で追加したステップのように、テストが読むステップが以前の実行にないときもスキップします。
+フィールドの一覧は[以前の実行と比べるテスト](/ja/reference/yaml-configuration#以前の実行と比べるテスト)を参照してください。
 
 ## エンドポイントの裏のクエリ
 
