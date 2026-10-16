@@ -401,7 +401,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - どのジョブも指していない`needs`、循環する`needs`
 - 実行時に拒否されるステップID
 - 解析できない式（`test`、`skipif`、`outputs`、`repeat.test`、`repeat.baseline_test`）とテンプレート（`name`、`with`、`vars`、`echo`）
-- そのジョブにないステップや、`steps`の下にないフィールドを読む`repeat.test`（`success_rate`のつもりの`steps.search.rate`など）。`steps`や`baseline.steps`の下で同じものを読む`repeat.baseline_test`
+- そのジョブにないステップや、`steps`の下にないフィールドを読む`repeat.test`（`success_rate`のつもりの`steps.search.rate`など）。`steps`や`baseline.steps`の下で同じものを読むか、`baseline`の下の`steps`以外を読む`repeat.baseline_test`
 - `baseline`を読む`repeat.test`。`baseline`を読めるのは`repeat.baseline_test`だけ
 - `baseline.steps`の下のステップやフィールドを、`baseline.steps[vars.id]`のように実行時に決まるキーで読む`repeat.baseline_test`
 - どのステップも公開していない出力、そのステップが公開していない出力、そのステップが公開する前に読む出力（同じジョブの前のステップから読む場合など）の参照
@@ -411,6 +411,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - 読む側のジョブが直接にも間接にも`needs`で指定していないジョブの出力の参照。まだ公開されていないかもしれません
 - 何も検証していないステップ。`test`がなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
 - `1 == 1`のように何も読まない`test`。ステップが何をしても結果が変わりません
+- `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
 
 エラーが見つかれば終了ステータスは2、警告だけか何も見つからなければ0です。
 

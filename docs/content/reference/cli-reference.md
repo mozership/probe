@@ -401,7 +401,7 @@ It reports as an **error**:
 - a `needs` that names no job, and `needs` that go round
 - a step id a run refuses
 - an expression in `test`, `skipif`, `outputs`, `repeat.test` or `repeat.baseline_test`, or a template in `name`, `with`, `vars` or `echo`, that does not parse
-- a `repeat.test` that reads a step its job does not have, or a field a step does not have under `steps`, such as `steps.search.rate` for `success_rate`, and a `repeat.baseline_test` that does so under `steps` or `baseline.steps`
+- a `repeat.test` that reads a step its job does not have, or a field a step does not have under `steps`, such as `steps.search.rate` for `success_rate`, and a `repeat.baseline_test` that does so under `steps` or `baseline.steps`, or reads anything under `baseline` other than `steps`
 - a `repeat.test` that reads `baseline`, which only `repeat.baseline_test` can
 - a `repeat.baseline_test` that reads a step or a field under `baseline.steps` by a key known only when it runs, such as `baseline.steps[vars.id]`
 - an output read that no step publishes, that its step does not publish, or that is read before its step publishes it, such as by an earlier step of the job
@@ -411,6 +411,7 @@ It reports as a **warning**:
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
 - a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
+- a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
 
 It exits with status 2 when it finds an error, and with 0 when it finds only warnings or nothing.
 
