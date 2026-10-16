@@ -81,7 +81,16 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 		ctx.RepeatWarmup = r.Warmup
 		ctx.repeatTested = r.Test != ""
 		ctx.baselineTested = r.BaselineTest != ""
-		ctx.repeatReads = repeatReads(r.Test, r.BaselineTest)
+		tests := []string{r.Test}
+		if ctx.baselineTested {
+			// Whether the test is skipped depends on the run compared to
+			// alone, and not on the runs, so it is known before they start.
+			ctx.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Printer.baseline, e.job.ID)
+			if ctx.baselineSkipped == "" {
+				tests = append(tests, r.BaselineTest)
+			}
+		}
+		ctx.repeatReads = repeatReads(tests...)
 		// A warmup run is left out by the counters, and the tests read them,
 		// so a job run once keeps them too when the run is a warmup run or
 		// the job has a test.

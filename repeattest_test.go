@@ -410,7 +410,8 @@ func TestBaselineMissing(t *testing.T) {
 
 // TestWorkflow_BaselineTest checks the test of a repeated job against the
 // run compared to: the job passes when it holds, fails when it does not, and
-// passes with the test skipped when there is nothing to compare to.
+// passes with the test skipped when there is nothing to compare to. A step
+// that only the test reads is then shown untested, as nothing checked it.
 func TestWorkflow_BaselineTest(t *testing.T) {
 	noColor := color.NoColor
 	color.NoColor = true
@@ -471,6 +472,7 @@ func TestWorkflow_BaselineTest(t *testing.T) {
 			}}
 			workflow := repeatTestWorkflow(runner, 2, "")
 			workflow.Jobs[0].Repeat.BaselineTest = test
+			workflow.Jobs[0].Steps[0].Test = ""
 
 			r := startComparedTo(t, workflow, tt.baseline)
 			if workflow.exitStatus != tt.exit {
@@ -490,9 +492,14 @@ func TestWorkflow_BaselineTest(t *testing.T) {
 			if !reflect.DeepEqual(job.BaselineTest, tt.want) {
 				t.Errorf("baseline_test = %+v, want %+v", job.BaselineTest, tt.want)
 			}
-			// The step is read by the test, so it is not shown untested.
-			if st := job.Steps[0]; st.Status != report.Passed {
-				t.Errorf("step status = %q, want %q", st.Status, report.Passed)
+			// The step has no test of its own, and is shown tested only when
+			// the test that reads it is checked.
+			wantStep := report.Passed
+			if tt.want.Status == report.Skipped {
+				wantStep = report.Untested
+			}
+			if st := job.Steps[0]; st.Status != wantStep {
+				t.Errorf("step status = %q, want %q", st.Status, wantStep)
 			}
 
 			out := workflow.printer.outWriter.(*bytes.Buffer).String()

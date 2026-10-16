@@ -122,6 +122,16 @@ func baselineRuns(base *report.Report, jobID string) map[string]any {
 	return steps
 }
 
+// baselineSkip returns why test, the test of the job of jobID against base,
+// the report of the run compared to, is skipped: when no run was compared
+// to, or as baselineMissing tells. It returns empty when the test is checked.
+func baselineSkip(test string, base *report.Report, jobID string) string {
+	if base == nil {
+		return "no baseline was given"
+	}
+	return baselineMissing(test, baselineRuns(base, jobID))
+}
+
 // baselineMissing returns why test, the test of a repeated job against the
 // run compared to, cannot be checked against steps, that run's steps as
 // baselineRuns gathers them: the first step it reads under baseline.steps
@@ -207,14 +217,10 @@ func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter)
 // a step the test reads.
 func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounter) bool {
 	test := e.job.Repeat.BaselineTest
-	res := &RepeatTestResult{Test: test, Passed: true}
-	if base := ctx.Printer.baseline; base == nil {
-		res.Skipped = "no baseline was given"
-	} else {
-		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(base, e.job.ID)}}
-		if res.Skipped = baselineMissing(test, env.Baseline["steps"].(map[string]any)); res.Skipped == "" {
-			res = evalRepeatTest(ctx, test, env)
-		}
+	res := &RepeatTestResult{Test: test, Passed: true, Skipped: ctx.baselineSkipped}
+	if res.Skipped == "" {
+		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Printer.baseline, e.job.ID)}}
+		res = evalRepeatTest(ctx, test, env)
 	}
 	e.recordRepeatTest(ctx, res, func(jr *JobResult) { jr.BaselineTest = res })
 	return res.Passed
