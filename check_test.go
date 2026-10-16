@@ -487,6 +487,17 @@ jobs:
     uses: http
     with:
       get: /a
+- name: By key
+  repeat:
+    count: 2
+    test: baseline[vars.k] != nil
+    baseline_test: steps.b.rt.p95 < baseline.steps.b.rt[vars.p]
+  steps:
+  - name: B
+    id: b
+    uses: http
+    with:
+      get: /b
 `,
 			want: []want{
 				{SeverityError, 6, "repeat.test: baseline is read only by repeat.baseline_test"},
@@ -495,6 +506,26 @@ jobs:
 				{SeverityError, 7, "repeat.baseline_test: baseline.steps.search.rt has no p999"},
 				{SeverityError, 7, "repeat.baseline_test: baseline has no run_id; it has steps"},
 				{SeverityWarning, 17, "repeat.baseline_test: it reads nothing under baseline, so it can go in repeat.test"},
+				{SeverityError, 27, "repeat.test: baseline is read only by repeat.baseline_test"},
+			},
+		},
+		{
+			name: "a test against the run compared to that reads a step by a key known when it runs",
+			workflow: `name: baseline by key
+jobs:
+- name: By key
+  repeat:
+    count: 2
+    baseline_test: steps.b.rt.p95 < baseline.steps[vars.id].rt.p95
+  steps:
+  - name: B
+    id: b
+    uses: http
+    with:
+      get: /b
+`,
+			want: []want{
+				{SeverityError, 0, "repeat.baseline_test: baseline.steps is read by a key known only when the test runs"},
 			},
 		},
 	}

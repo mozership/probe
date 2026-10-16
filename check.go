@@ -1076,11 +1076,15 @@ func (c *checker) checkRepeatTests() {
 				add(SeverityError, repeatChainProblem("steps", chain, ids, repeatRunFields))
 			}
 			baseline := expr.Reads(t.test, "baseline")
+			byKey := expr.ReadsByVariableKey(t.test, "baseline")
+			// A test against the run compared to that reads it by a key
+			// known only when it runs is refused as the workflow is loaded;
+			// see Repeat.Validate.
 			switch {
-			case t.key == "test" && len(baseline) > 0:
+			case t.key == "test" && len(baseline)+len(byKey) > 0:
 				add(SeverityError, "baseline is read only by repeat.baseline_test")
 			case t.key == "test":
-			case len(baseline) == 0:
+			case len(baseline) == 0 && len(byKey) == 0:
 				add(SeverityWarning, "it reads nothing under baseline, so it can go in repeat.test")
 			}
 			for _, chain := range baseline {

@@ -50,6 +50,26 @@ func TestReads(t *testing.T) {
 	}
 }
 
+func TestReadsByVariableKey(t *testing.T) {
+	tests := []struct {
+		input string
+		want  [][]string
+	}{
+		{`outputs[vars.id].token`, [][]string{{}}},
+		{`outputs.auth[vars.key]`, [][]string{{"auth"}}},
+		{`outputs?.auth?.[vars.key] ?? ""`, [][]string{{"auth"}}},
+		{`outputs.auth.token`, nil},
+		{`outputs['create-user'].id`, nil},
+		{`vars.outputs[k]`, nil},
+		{`outputs[k] ==`, nil},
+	}
+	for _, tt := range tests {
+		if got := ReadsByVariableKey(tt.input, "outputs"); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("ReadsByVariableKey(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestReadsNothing(t *testing.T) {
 	tests := map[string]bool{
 		`true`:                          true,
