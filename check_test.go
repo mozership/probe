@@ -462,6 +462,41 @@ jobs:
 				{SeverityError, 20, "repeat.test: unexpected token"},
 			},
 		},
+		{
+			name: "a test of a repeated job against the run compared to",
+			workflow: `name: baseline test
+jobs:
+- name: Search
+  repeat:
+    count: 10
+    test: steps.search.success_rate == 1 && baseline.steps.search.runs > 0
+    baseline_test: steps.search.rt.p95 < baseline.steps.serch.rt.p95 && baseline.steps.search.failure == 0 && baseline.steps.search.rt.p999 < 1 && baseline.run_id != ""
+  steps:
+  - name: Search
+    id: search
+    uses: http
+    with:
+      get: /search
+- name: Plain
+  repeat:
+    count: 2
+    baseline_test: steps.a.success_rate == 1
+  steps:
+  - name: A
+    id: a
+    uses: http
+    with:
+      get: /a
+`,
+			want: []want{
+				{SeverityError, 6, "repeat.test: baseline is read only by repeat.baseline_test"},
+				{SeverityError, 7, "repeat.baseline_test: baseline.steps.serch is not a step of the job; its steps are search"},
+				{SeverityError, 7, "repeat.baseline_test: baseline.steps.search has no failure; it has runs, success, success_rate, rt"},
+				{SeverityError, 7, "repeat.baseline_test: baseline.steps.search.rt has no p999"},
+				{SeverityError, 7, "repeat.baseline_test: baseline has no run_id; it has steps"},
+				{SeverityWarning, 17, "repeat.baseline_test: it reads nothing under baseline, so it can go in repeat.test"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

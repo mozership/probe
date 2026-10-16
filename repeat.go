@@ -109,6 +109,11 @@ type Repeat struct {
 	// steps, and decides alone whether the job passed: a run in which a
 	// step failed is then counted, and fails nothing by itself.
 	Test string `yaml:"test,omitempty"`
+	// BaselineTest is checked once every run is over too, against the runs
+	// of the steps and those of the run compared to, under baseline. It is
+	// checked only when that run has the steps it reads, and then the job
+	// passes only when it holds. It leaves how a failed run is taken to Test.
+	BaselineTest string `yaml:"baseline_test,omitempty"`
 }
 
 // Runs returns the number of runs of the job, the warmup runs included.

@@ -127,7 +127,10 @@ type JobResult struct {
 	// RepeatTest is the outcome of the test of a repeated job over its
 	// runs; nil when it has none.
 	RepeatTest *RepeatTestResult
-	mutex      sync.Mutex
+	// BaselineTest is the outcome of the test of a repeated job against the
+	// run compared to; nil when it has none.
+	BaselineTest *RepeatTestResult
+	mutex        sync.Mutex
 }
 
 // RepeatTestResult is the outcome of the test of a repeated job.
@@ -138,6 +141,10 @@ type RepeatTestResult struct {
 	Output string
 	// Failure is why the test failed; nil when it passed.
 	Failure *StepFailure
+	// Skipped is why the test was not checked, which a test against the run
+	// compared to is not when there is nothing to compare to; empty when it
+	// was checked.
+	Skipped string
 }
 
 // Result manages execution results for multiple jobs

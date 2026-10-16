@@ -205,7 +205,7 @@ func (j *Job) cloneForAsync() *Job {
 // A loaded workflow gives a step without an id its default one, and refuses
 // the same id twice, but a workflow made in code is given none.
 func (j *Job) validateRepeatIDs() error {
-	if j.Repeat == nil || j.Repeat.Test == "" {
+	if j.Repeat == nil || (j.Repeat.Test == "" && j.Repeat.BaselineTest == "") {
 		return nil
 	}
 	seen := make(map[string]int, len(j.Steps))
@@ -215,7 +215,7 @@ func (j *Job) validateRepeatIDs() error {
 			id = defaultStepID(i)
 		}
 		if k, ok := seen[id]; ok {
-			return fmt.Errorf("steps %d and %d are both read as steps.%s by repeat.test; give one of them another id", k, i, id)
+			return fmt.Errorf("steps %d and %d are both read as steps.%s by the tests over the runs; give one of them another id", k, i, id)
 		}
 		seen[id] = i
 	}

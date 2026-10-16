@@ -175,13 +175,20 @@ type Job struct {
 	// RepeatTest is the outcome of the test of a repeated job over its
 	// runs, which decides whether the job passed; nil when it has none.
 	RepeatTest *RepeatTest `json:"repeat_test,omitempty"`
+	// BaselineTest is the outcome of the test of a repeated job against the
+	// run compared to, which the job passes only when it holds or is not
+	// checked; nil when the job has none.
+	BaselineTest *RepeatTest `json:"baseline_test,omitempty"`
 }
 
 // RepeatTest is the outcome of the test of a repeated job over its runs.
 type RepeatTest struct {
 	Test    string   `json:"test"`
-	Status  string   `json:"status"` // Passed or Failed
+	Status  string   `json:"status"` // Passed, Failed or Skipped
 	Failure *Failure `json:"failure,omitempty"`
+	// Reason is why the test was skipped, which a test against the run
+	// compared to is when there is nothing to compare to.
+	Reason string `json:"reason,omitempty"`
 }
 
 // Step is one step of a Job.
@@ -319,7 +326,10 @@ func (r *Report) Mask(m *mask.Masker) {
 	for i := range r.Jobs {
 		job := &r.Jobs[i]
 		job.Name = m.String(job.Name)
-		if rt := job.RepeatTest; rt != nil {
+		for _, rt := range []*RepeatTest{job.RepeatTest, job.BaselineTest} {
+			if rt == nil {
+				continue
+			}
 			rt.Test = m.String(rt.Test)
 			if rt.Failure != nil {
 				rt.Failure.Message = m.String(rt.Failure.Message)

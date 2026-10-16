@@ -63,8 +63,15 @@ func repeatTestWorkflow(runner *timedRunner, count int, test string) *Workflow {
 // startWithReport starts the workflow with a JSON report and returns it.
 func startWithReport(t *testing.T, workflow *Workflow) report.Report {
 	t.Helper()
+	return startComparedTo(t, workflow, nil)
+}
+
+// startComparedTo starts the workflow with a JSON report, compared to
+// baseline, the report of an earlier run, and returns it.
+func startComparedTo(t *testing.T, workflow *Workflow, baseline *report.Report) report.Report {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}, Baseline: baseline}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -346,5 +353,178 @@ func TestWorkflow_RepeatTestChecksStepWithoutTest(t *testing.T) {
 	}
 	if r.Summary.Steps.Passed != 1 || r.Summary.Steps.Untested != 0 {
 		t.Errorf("summary = %+v, want the step counted as passed", r.Summary.Steps)
+	}
+}
+
+func TestBaselineRuns(t *testing.T) {
+	base := &report.Report{Jobs: []report.Job{
+		{ID: "other", Steps: []report.Step{{ID: "search", Repeat: &report.Repeat{Total: 1, Success: 1}}}},
+		{ID: "api", Steps: []report.Step{
+			{ID: "search", Repeat: &report.Repeat{Total: 10, Success: 9, Latency: &report.Latency{
+				Count: 9, MinMs: 1, MeanMs: 2, P50Ms: 3, P90Ms: 4, P95Ms: 5, P99Ms: 6, MaxMs: 7,
+			}}},
+			// The entries of an iteration are steps of one id.
+			{ID: "each", Repeat: &report.Repeat{Total: 2, Success: 2, Latency: &report.Latency{Count: 2, P50Ms: 1}}},
+			{ID: "each", Repeat: &report.Repeat{Total: 2, Success: 1, Latency: &report.Latency{Count: 1, P50Ms: 2}}},
+			{ID: "failed", Repeat: &report.Repeat{Total: 3}},
+			{ID: "once"},
+		}},
+	}}
+
+	want := map[string]any{
+		"search": map[string]any{
+			"runs": 10, "success": 9, "success_rate": 0.9,
+			"rt": map[string]any{"min": 0.001, "mean": 0.002, "p50": 0.003, "p90": 0.004, "p95": 0.005, "p99": 0.006, "max": 0.007},
+		},
+		"each":   map[string]any{"runs": 4, "success": 3, "success_rate": 0.75, "rt": map[string]any(nil)},
+		"failed": map[string]any{"runs": 3, "success": 0, "success_rate": 0.0, "rt": map[string]any(nil)},
+	}
+	if got := baselineRuns(base, "api"); !reflect.DeepEqual(got, want) {
+		t.Errorf("baselineRuns() = %#v, want %#v", got, want)
+	}
+	if got := baselineRuns(base, "none"); len(got) != 0 {
+		t.Errorf("baselineRuns() of a job the baseline has none of = %#v, want none", got)
+	}
+}
+
+func TestBaselineMissing(t *testing.T) {
+	steps := map[string]any{
+		"search": map[string]any{"runs": 10, "rt": map[string]any{"p95": 0.1}},
+		"each":   map[string]any{"runs": 4, "rt": map[string]any(nil)},
+	}
+	tests := []struct {
+		test, want string
+	}{
+		{"steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2", ""},
+		{"steps.each.runs >= baseline.steps.each.runs", ""},
+		{"steps.added.rt.p95 < baseline.steps.added.rt.p95", "the baseline has no step added"},
+		{"steps.each.rt.p95 < baseline.steps.each.rt.p95", "the baseline has no times of step each"},
+		{"steps.search.rt.p95 < 0.3", ""},
+	}
+	for _, tt := range tests {
+		if got := baselineMissing(tt.test, steps); got != tt.want {
+			t.Errorf("baselineMissing(%q) = %q, want %q", tt.test, got, tt.want)
+		}
+	}
+}
+
+// TestWorkflow_BaselineTest checks the test of a repeated job against the
+// run compared to: the job passes when it holds, fails when it does not, and
+// passes with the test skipped when there is nothing to compare to.
+func TestWorkflow_BaselineTest(t *testing.T) {
+	noColor := color.NoColor
+	color.NoColor = true
+	defer func() { color.NoColor = noColor }()
+
+	const test = "steps.query.rt.p95 < baseline.steps.query.rt.p95 * 1.2"
+	baseline := func(id string, p95Ms float64) *report.Report {
+		return &report.Report{RunID: "run-1", StartedAt: time.Now(), Jobs: []report.Job{{ID: "search", Steps: []report.Step{{
+			ID: id, Repeat: &report.Repeat{Total: 2, Success: 2, Latency: &report.Latency{Count: 2, P50Ms: p95Ms, P95Ms: p95Ms, P99Ms: p95Ms}},
+		}}}}}
+	}
+	tests := []struct {
+		name     string
+		baseline *report.Report
+		exit     int
+		want     *report.RepeatTest
+		terminal []string
+	}{
+		{
+			name:     "faster than the baseline",
+			baseline: baseline("query", 100),
+			exit:     ExitOK,
+			want:     &report.RepeatTest{Test: test, Status: report.Passed},
+			terminal: []string{"\n        ✓  baseline test: " + test + "\n"},
+		},
+		{
+			name:     "slower than the baseline",
+			baseline: baseline("query", 10),
+			exit:     ExitTestFailed,
+			want: &report.RepeatTest{Test: test, Status: report.Failed, Failure: &report.Failure{
+				Kind:    report.FailureAssertion,
+				Message: "test evaluated to false: " + test + " (steps.query.rt.p95 = 0.02, baseline.steps.query.rt.p95 * 1.2 = 0.012)",
+			}},
+			terminal: []string{
+				"\n        ✗  baseline test: " + test + "\n",
+				"\n             baseline.steps.query.rt.p95 * 1.2 = 0.012\n",
+			},
+		},
+		{
+			name:     "no baseline",
+			exit:     ExitOK,
+			want:     &report.RepeatTest{Test: test, Status: report.Skipped, Reason: "no baseline was given"},
+			terminal: []string{"\n        ⏭  baseline test: " + test + "\n           skipped: no baseline was given\n"},
+		},
+		{
+			name:     "a baseline without the step",
+			baseline: baseline("other", 100),
+			exit:     ExitOK,
+			want:     &report.RepeatTest{Test: test, Status: report.Skipped, Reason: "the baseline has no step query"},
+			terminal: []string{"skipped: the baseline has no step query\n"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &timedRunner{answers: []map[string]any{
+				{"res": map[string]any{"code": 200}, "rt": "10ms"},
+				{"res": map[string]any{"code": 200}, "rt": "20ms"},
+			}}
+			workflow := repeatTestWorkflow(runner, 2, "")
+			workflow.Jobs[0].Repeat.BaselineTest = test
+
+			r := startComparedTo(t, workflow, tt.baseline)
+			if workflow.exitStatus != tt.exit {
+				t.Errorf("exit status = %d, want %d", workflow.exitStatus, tt.exit)
+			}
+			job := r.Jobs[0]
+			wantStatus := report.Passed
+			if tt.exit != ExitOK {
+				wantStatus = report.Failed
+			}
+			if job.Status != wantStatus {
+				t.Errorf("job status = %q, want %q", job.Status, wantStatus)
+			}
+			if job.RepeatTest != nil {
+				t.Errorf("repeat_test = %+v, want none", job.RepeatTest)
+			}
+			if !reflect.DeepEqual(job.BaselineTest, tt.want) {
+				t.Errorf("baseline_test = %+v, want %+v", job.BaselineTest, tt.want)
+			}
+			// The step is read by the test, so it is not shown untested.
+			if st := job.Steps[0]; st.Status != report.Passed {
+				t.Errorf("step status = %q, want %q", st.Status, report.Passed)
+			}
+
+			out := workflow.printer.outWriter.(*bytes.Buffer).String()
+			for _, s := range tt.terminal {
+				if !strings.Contains(out, s) {
+					t.Errorf("terminal should contain %q, got:\n%s", s, out)
+				}
+			}
+		})
+	}
+}
+
+// TestWorkflow_BaselineTestLeavesFailedRunsToTest fails a job a run of which
+// failed, though its test against the run compared to holds: that test does
+// not decide how a failed run is taken, as the test over the runs does.
+func TestWorkflow_BaselineTestLeavesFailedRunsToTest(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+		{"res": map[string]any{"code": 500}, "rt": "10ms"},
+	}}
+	workflow := repeatTestWorkflow(runner, 2, "")
+	workflow.Jobs[0].Repeat.BaselineTest = "steps.query.runs == baseline.steps.query.runs"
+	base := &report.Report{RunID: "run-1", StartedAt: time.Now(), Jobs: []report.Job{{ID: "search", Steps: []report.Step{{
+		ID: "query", Repeat: &report.Repeat{Total: 2, Success: 2},
+	}}}}}
+
+	r := startComparedTo(t, workflow, base)
+	if workflow.exitStatus != ExitTestFailed {
+		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
+	}
+	job := r.Jobs[0]
+	if job.Status != report.Failed || job.BaselineTest == nil || job.BaselineTest.Status != report.Passed {
+		t.Errorf("job = %+v, want it failed with the baseline test passed", job)
 	}
 }
