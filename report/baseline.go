@@ -100,7 +100,26 @@ func (s *BaselineSteps) Next(id string) *RepeatBaseline {
 		return nil
 	}
 	s.steps[id] = matches[1:]
-	rp := matches[0].Repeat
+	return repeatBaseline(matches[0])
+}
+
+// All returns the outcomes of the repeated steps that Next has not given
+// out, by their ids, each in order.
+func (s *BaselineSteps) All() map[string][]*RepeatBaseline {
+	if s == nil {
+		return nil
+	}
+	all := make(map[string][]*RepeatBaseline, len(s.steps))
+	for id, steps := range s.steps {
+		for _, st := range steps {
+			all[id] = append(all[id], repeatBaseline(st))
+		}
+	}
+	return all
+}
+
+func repeatBaseline(st *Step) *RepeatBaseline {
+	rp := st.Repeat
 	return &RepeatBaseline{Total: rp.Total, Success: rp.Success, Latency: rp.Latency}
 }
 

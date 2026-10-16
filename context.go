@@ -66,6 +66,9 @@ type JobContext struct {
 	// repeatTested is whether the job has a test over its runs; see
 	// Repeat.Test.
 	repeatTested bool
+	// baselineTested is whether the job has a test against the run compared
+	// to; see Repeat.BaselineTest.
+	baselineTested bool
 	// repeatReads are the ids of the steps the test over the runs reads,
 	// which it checks as a step's own test does.
 	repeatReads  map[string]bool

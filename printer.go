@@ -308,18 +308,21 @@ func (p *Printer) printStepBaseline(counter *StepRepeatCounter, b *report.Repeat
 	}
 }
 
-// generateRepeatTest generates the outcome of the test of a repeated job
-// over its runs, under its steps, and why it failed under it. It is laid out
+// generateRepeatTest generates the outcome of a test of a repeated job, the
+// test over its runs or the one against the run compared to, named by label,
+// under its steps, and why it failed or was skipped under it. It is laid out
 // as a step is without its number, so that its icon and text line up with
 // theirs, and why it failed with the text.
-func (p *Printer) generateRepeatTest(rt *RepeatTestResult) string {
-	if rt == nil {
+func (p *Printer) generateRepeatTest(label string, rt *RepeatTestResult) string {
+	switch {
+	case rt == nil:
 		return ""
+	case rt.Skipped != "":
+		return fmt.Sprintf("    %s %s: %s\n       %s %s\n", colorInfo().Sprintf(IconSkip), label, rt.Test, colorInfo().Sprintf("skipped:"), rt.Skipped)
+	case rt.Passed:
+		return fmt.Sprintf("    %s %s: %s\n", colorSuccess().Sprintf(IconSuccess), label, rt.Test)
 	}
-	if rt.Passed {
-		return fmt.Sprintf("    %s repeat test: %s\n", colorSuccess().Sprintf(IconSuccess), rt.Test)
-	}
-	return fmt.Sprintf("    %s repeat test: %s\n%s", colorError().Sprintf(IconError), rt.Test, rt.Output)
+	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, rt.Output)
 }
 
 // generateJobResults generates buffered job results as string
@@ -417,7 +420,7 @@ func (p *Printer) generateJobReport(jr *JobResult) (string, bool, time.Time, tim
 	}
 
 	p.generateJobStatus(jr.JobID, jr.JobName, status, duration.Seconds(), &output)
-	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.JobID, jr.StepResults)+p.generateRepeatTest(jr.RepeatTest), &output)
+	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.JobID, jr.StepResults)+p.generateRepeatTest("repeat test", jr.RepeatTest)+p.generateRepeatTest("baseline test", jr.BaselineTest), &output)
 
 	return output.String(), succeeded, jr.StartTime, jr.EndTime
 }

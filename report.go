@@ -51,15 +51,26 @@ func buildJobReport(jr *JobResult) report.Job {
 	for _, sr := range jr.StepResults {
 		job.Steps = append(job.Steps, buildStepReport(sr))
 	}
-	if rt := jr.RepeatTest; rt != nil {
-		job.RepeatTest = &report.RepeatTest{Test: rt.Test, Status: report.Passed}
-		if f := rt.Failure; f != nil {
-			job.RepeatTest.Status = report.Failed
-			job.RepeatTest.Failure = &report.Failure{Kind: f.Kind, Message: f.Message}
-		}
-	}
+	job.RepeatTest = buildRepeatTestReport(jr.RepeatTest)
+	job.BaselineTest = buildRepeatTestReport(jr.BaselineTest)
 
 	return job
+}
+
+func buildRepeatTestReport(rt *RepeatTestResult) *report.RepeatTest {
+	if rt == nil {
+		return nil
+	}
+	out := &report.RepeatTest{Test: rt.Test, Status: report.Passed}
+	switch {
+	case rt.Failure != nil:
+		out.Status = report.Failed
+		out.Failure = &report.Failure{Kind: rt.Failure.Kind, Message: rt.Failure.Message}
+	case rt.Skipped != "":
+		out.Status = report.Skipped
+		out.Reason = rt.Skipped
+	}
+	return out
 }
 
 func buildStepReport(sr StepResult) report.Step {

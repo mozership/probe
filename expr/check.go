@@ -64,6 +64,39 @@ func (c *chainCollector) Visit(node *ast.Node) {
 	}
 }
 
+// ReadsByVariableKey returns where input, an expression, reads the object
+// name by a key that cannot be known before it runs, as the chains of the
+// constant keys read before that key: outputs[vars.id].token is read as [],
+// and outputs.auth[k] as [auth]. An expression that does not parse reads
+// nothing here.
+func ReadsByVariableKey(input, name string) [][]string {
+	tree, err := parser.Parse(input)
+	if err != nil {
+		return nil
+	}
+	c := &variableKeyCollector{name: name}
+	ast.Walk(&tree.Node, c)
+	return c.chains
+}
+
+type variableKeyCollector struct {
+	name   string
+	chains [][]string
+}
+
+func (c *variableKeyCollector) Visit(node *ast.Node) {
+	m, ok := (*node).(*ast.MemberNode)
+	if !ok {
+		return
+	}
+	if _, constant := m.Property.(*ast.StringNode); constant {
+		return
+	}
+	if chain, ok := memberChain(m.Node, c.name); ok {
+		c.chains = append(c.chains, append([]string{}, chain...))
+	}
+}
+
 // memberChain returns the constant keys read from the identifier name by n,
 // a chain of member accesses such as name.a.b, or false when n is not one.
 func memberChain(n ast.Node, name string) ([]string, bool) {
