@@ -46,6 +46,7 @@ type Cmd struct {
 	FmtCheck       bool
 	Output         string
 	Report         string
+	Baseline       string
 	ReadOnly       bool
 	AllowHosts     string
 	AllowActions   string
@@ -69,7 +70,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "read-only", "allow-host", "allow-action", "var", "env-file"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file"},
 		ver:        ver,
 		rev:        rev,
 		inReader:   os.Stdin,
@@ -205,6 +206,15 @@ func (c *Cmd) parseArgs(args []string) error {
 					return err
 				}
 				c.Report = flagValue
+			case "baseline":
+				if !hasValue {
+					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+						return fmt.Errorf("flag needs an argument: %s", arg)
+					}
+					flagValue = args[i+1]
+					skipNext = true
+				}
+				c.Baseline = flagValue
 			}
 		} else {
 			// Non-flag arguments
@@ -319,6 +329,7 @@ func (c *Cmd) printOptions() {
 		{"-v", "--verbose", "Show verbose log"},
 		{"", "--output", "Report output: auto, spinner or stream (env: PROBE_OUTPUT)"},
 		{"", "--report", "Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)"},
+		{"", "--baseline", "Compare the response times to those of a --report json file (env: PROBE_BASELINE)"},
 		{"", "--read-only", "Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)"},
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
@@ -452,6 +463,26 @@ func (c *Cmd) runProbe() int {
 		return probe.ExitConfigError
 	}
 	p.Config.Reports = reports
+
+	// And over PROBE_BASELINE. The file is read before the run, so that a
+	// run is not made for reports that cannot be compared.
+	baseline := c.Baseline
+	if baseline == "" {
+		baseline = os.Getenv("PROBE_BASELINE")
+	}
+	if baseline != "" {
+		r, err := report.Read(baseline)
+		if err == nil && r.StartedAt.IsZero() {
+			// Any JSON object parses as a report; one of a run says when
+			// the run started.
+			err = fmt.Errorf("%s is not a report of a run, written by --report json", baseline)
+		}
+		if err != nil {
+			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --baseline: %v\n", err)
+			return probe.ExitConfigError
+		}
+		p.Config.Baseline = r
+	}
 
 	guard, err := c.guard()
 	if err != nil {

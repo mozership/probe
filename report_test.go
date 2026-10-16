@@ -526,6 +526,66 @@ func TestWorkflow_RepeatReportsLatency(t *testing.T) {
 	}
 }
 
+// TestWorkflow_RepeatComparesToBaseline runs a repeated job with the report
+// of an earlier run as the baseline: each step is reported with its id, or
+// step_ and where it is written when it has none, and found by it in the
+// baseline.
+func TestWorkflow_RepeatComparesToBaseline(t *testing.T) {
+	runner := &timedRunner{answers: []map[string]any{
+		{"res": map[string]any{"code": 200}, "rt": "10ms"},
+		{"res": map[string]any{"code": 200}, "rt": "20ms"},
+		{"res": map[string]any{"code": 200}, "rt": "30ms"},
+		{"res": map[string]any{"code": 200}, "rt": "40ms"},
+	}}
+	workflow := &Workflow{
+		Name: "Latency",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 2},
+			Steps: []*Step{
+				{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200", actionRunner: runner},
+				{Name: "Again", Uses: "http", Test: "res.code == 200", actionRunner: runner},
+			},
+		}},
+		printer: newBufferPrinter(),
+	}
+	started := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+	baseline := &report.Report{
+		RunID: "run-1", StartedAt: started,
+		Jobs: []report.Job{{ID: "search", Steps: []report.Step{
+			{Index: 0, ID: "query", Repeat: &report.Repeat{Total: 5, Success: 5, Latency: &report.Latency{Count: 5, P50Ms: 7}}},
+			{Index: 1, ID: "step_1", Repeat: &report.Repeat{Total: 5, Success: 4, Latency: &report.Latency{Count: 5, P50Ms: 9}}},
+		}}},
+	}
+
+	jsonPath := filepath.Join(t.TempDir(), "report.json")
+	cfg := Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}, Baseline: baseline}
+	if err := workflow.Start(cfg); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	r, err := report.Read(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Baseline == nil || r.Baseline.RunID != "run-1" || !r.Baseline.StartedAt.Equal(started) {
+		t.Errorf("Baseline = %+v, want the run compared to", r.Baseline)
+	}
+	for i, want := range []struct {
+		id    string
+		p50Ms float64
+	}{{"query", 7}, {"step_1", 9}} {
+		st := r.Jobs[0].Steps[i]
+		if st.ID != want.id {
+			t.Errorf("step %d id = %q, want %q", i, st.ID, want.id)
+		}
+		if st.Repeat == nil || st.Repeat.Baseline == nil || st.Repeat.Baseline.Latency.P50Ms != want.p50Ms {
+			t.Errorf("step %d repeat = %+v, want a baseline with p50 %vms", i, st.Repeat, want.p50Ms)
+		}
+	}
+}
+
 // TestWorkflow_RepeatLatencyLeavesOutRetriedError retries a step whose first
 // attempt returns a time and fails its test, and whose last attempt fails to
 // run: the run returned no time, so it adds none, rather than that of the

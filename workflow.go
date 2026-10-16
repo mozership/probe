@@ -120,6 +120,7 @@ func (w *Workflow) Start(c Config) error {
 
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
+	w.printer.SetBaseline(c.Baseline)
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.
@@ -168,18 +169,20 @@ func (w *Workflow) Start(c Config) error {
 	reporter.Finish(ctx.Result)
 	w.exitStatus = ctx.Result.exitCode(atomic.LoadInt32(&w.failed) == 1)
 
-	return w.writeReports(c.Reports, ctx.Result, jobIDs, startedAt, time.Now())
+	return w.writeReports(c.Reports, c.Baseline, ctx.Result, jobIDs, startedAt, time.Now())
 }
 
-// writeReports writes every requested report file. A file that cannot be
-// written does not stop the others; the errors are returned together.
-func (w *Workflow) writeReports(targets []report.Target, rs *Result, order []string, startedAt, finishedAt time.Time) error {
+// writeReports writes every requested report file, compared to baseline
+// when it is not nil. A file that cannot be written does not stop the
+// others; the errors are returned together.
+func (w *Workflow) writeReports(targets []report.Target, baseline *report.Report, rs *Result, order []string, startedAt, finishedAt time.Time) error {
 	if len(targets) == 0 {
 		return nil
 	}
 
 	r := BuildReport(w.Name, w.Description, rs, order, startedAt, finishedAt)
 	r.RunID = w.runID
+	r.Compare(baseline)
 	r.Mask(w.printer.Masker())
 
 	var errs []error

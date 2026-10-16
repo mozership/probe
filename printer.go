@@ -91,6 +91,15 @@ type Printer struct {
 	// masker hides the workflow's secrets in everything written through the
 	// printer. Nil hides nothing.
 	masker *mask.Masker
+	// baseline is the report of an earlier run, which the times of the
+	// repeated steps are shown against. Nil shows none.
+	baseline *report.Report
+}
+
+// SetBaseline sets the report of an earlier run to show the times of the
+// repeated steps against.
+func (p *Printer) SetBaseline(r *report.Report) {
+	p.baseline = r
 }
 
 // SetMasker installs the masker applied to everything the printer writes.
@@ -287,6 +296,18 @@ func (p *Printer) printStepRepeatResult(counter *StepRepeatCounter, hasTest bool
 	}
 }
 
+// printStepBaseline prints under the times of a repeated step those of the
+// step in the baseline, b, and how much they changed; nothing when there is
+// no baseline to show them against, or the step took no times.
+func (p *Printer) printStepBaseline(counter *StepRepeatCounter, b *report.RepeatBaseline, output *strings.Builder) {
+	if p.baseline == nil {
+		return
+	}
+	if l := report.NewLatency(counter.RTs); l != nil {
+		p.Fprintf(output, "      %s\n", colorDim().Sprint(b.Summary(l)))
+	}
+}
+
 // generateRepeatTest generates the outcome of the test of a repeated job
 // over its runs, under its steps, and why it failed under it. It is laid out
 // as a step is without its number, so that its icon and text line up with
@@ -396,7 +417,7 @@ func (p *Printer) generateJobReport(jr *JobResult) (string, bool, time.Time, tim
 	}
 
 	p.generateJobStatus(jr.JobID, jr.JobName, status, duration.Seconds(), &output)
-	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.StepResults)+p.generateRepeatTest(jr.RepeatTest), &output)
+	p.generateJobResults(jr.JobID, p.generateJobResultsFromStepResults(jr.JobID, jr.StepResults)+p.generateRepeatTest(jr.RepeatTest), &output)
 
 	return output.String(), succeeded, jr.StartTime, jr.EndTime
 }
@@ -455,7 +476,7 @@ func (p *Printer) GenerateReportOnlySteps(rs *Result) string {
 		if jr, exists := rs.Jobs[jobID]; exists {
 			jr.mutex.Lock()
 			// Generate job results from StepResults
-			stepOutput := p.generateJobResultsFromStepResults(jr.StepResults)
+			stepOutput := p.generateJobResultsFromStepResults(jr.JobID, jr.StepResults)
 			p.generateJobResults(jr.JobID, stepOutput, &output)
 			jr.mutex.Unlock()
 		}
@@ -472,19 +493,23 @@ func (p *Printer) PrintReport(rs *Result) {
 	}
 }
 
-// generateJobResultsFromStepResults creates job output string from StepResults
-func (p *Printer) generateJobResultsFromStepResults(stepResults []StepResult) string {
+// generateJobResultsFromStepResults creates job output string from
+// StepResults of the job of jobID, by which its steps are found in the
+// baseline.
+func (p *Printer) generateJobResultsFromStepResults(jobID string, stepResults []StepResult) string {
 	if len(stepResults) == 0 {
 		return ""
 	}
 
 	var output strings.Builder
+	baseline := p.baseline.BaselineSteps(jobID)
 
 	for _, stepResult := range stepResults {
 		// Handle repeat steps
 		if stepResult.RepeatCounter != nil {
 			p.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, stepResult.RepeatCounter.Warmup, &output)
 			p.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
+			p.printStepBaseline(stepResult.RepeatCounter, baseline.Next(stepResult.ID), &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")
 				if echo == "" {

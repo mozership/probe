@@ -7,7 +7,8 @@ import (
 )
 
 // WriteMarkdown writes the report as a Markdown page: a summary line, a table
-// of jobs, a table of the response times of the repeated steps, and a section
+// of jobs, a table of the response times of the repeated steps, a table of
+// how they changed from the baseline when there is one, and a section
 // for every failed step with its test, the reason it failed, and the request
 // and response. The page is meant to be read as is, for example as a GitHub
 // job summary or by a coding agent.
@@ -26,7 +27,8 @@ func (r *Report) markdown(payloads bool) string {
 
 // markdownWithCuts renders the page and also returns the offsets where it
 // can be cut short without leaving a block half written: before the job
-// table, before the response times, before the failures heading, and before
+// table, before the response times, before the comparison to the baseline,
+// before the failures heading, and before
 // each failure section. They are recorded while rendering rather than
 // searched for afterwards, because a test or a message can itself contain a
 // line that looks like a heading.
@@ -75,6 +77,28 @@ func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 				markdownCell(job.Name), st.Index, markdownCell(st.Name), l.Count,
 				FormatMs(l.MinMs), FormatMs(l.P50Ms), FormatMs(l.P90Ms),
 				FormatMs(l.P95Ms), FormatMs(l.P99Ms), FormatMs(l.MaxMs))
+		}
+	}
+
+	if r.Baseline != nil {
+		compared := false
+		for _, job := range r.Jobs {
+			for _, st := range job.Steps {
+				if st.Repeat == nil || st.Repeat.Latency == nil {
+					continue
+				}
+				if !compared {
+					cuts = append(cuts, b.Len())
+					b.WriteString("\n## Compared to the Baseline\n\n")
+					fmt.Fprintf(&b, "%s, before → now.\n\n", baselinePhrase(r.Baseline))
+					b.WriteString("| Job | Step | Runs | p50 | p95 | p99 | Success |\n")
+					b.WriteString("|---|---|---|---|---|---|---|\n")
+					compared = true
+				}
+				fmt.Fprintf(&b, "| %s | %d. %s | %s |\n",
+					markdownCell(job.Name), st.Index, markdownCell(st.Name),
+					strings.Join(comparison(st.Repeat), " | "))
+			}
 		}
 	}
 

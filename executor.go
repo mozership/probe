@@ -286,6 +286,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter 
 		// Create StepResult with repeat counter
 		stepResult := StepResult{
 			Index:         n,
+			ID:            counter.ID,
 			Name:          counter.Name,
 			Status:        status,
 			HasTest:       hasTest,

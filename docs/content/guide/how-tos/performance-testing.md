@@ -151,6 +151,42 @@ The result shows the test under the steps, and when it is false, which condition
 
 The job fails, and the exit status is 1, only when the test does not hold, whatever the failed runs failed for. A limit read from `vars`, as `steps.search.rt.p95 < vars.p95_limit`, can be set for each environment. `probe check` reports a `repeat.test` that reads a step the job does not have, or a field a step does not have. See [Test over the Runs](/reference/yaml-configuration#test-over-the-runs) for every field.
 
+## Compared to an Earlier Run
+
+A limit in seconds is hard to set for CI. The runners differ in speed from one run to the next, so a strict limit fails changes that made nothing slower, and a loose one lets through a change that did. What a pull request needs to show is that it is no slower than the branch it goes into, and `--baseline` shows that: it compares the times of this run to those of the report an earlier run wrote with `--report json`.
+
+```bash
+# on the main branch
+probe --report json=main.json search.yml
+# on the change
+probe --report json,markdown --baseline main.json search.yml
+```
+
+The terminal shows the times of the earlier run under those of each step:
+
+```
+  ⎿ 0. Search by keyword (repeating 100 times)
+        ✓  100/100 success (100.0%)
+          min 8.3ms, p50 13.0ms, p90 35.1ms, p95 41.5ms, p99 70.2ms, max 88.0ms
+          baseline p50 12.1ms (+7.4%), p95 30.2ms (+37.4%), p99 64.0ms (+9.7%)
+```
+
+The Markdown report has a table of how they changed:
+
+```
+## Compared to the Baseline
+
+Compared to the run started at 2026-10-15T09:00:00Z (2f9159ffd442ca6c), before → now.
+
+| Job | Step | Runs | p50 | p95 | p99 | Success |
+|---|---|---|---|---|---|---|
+| Search | 0. Search by keyword | 100 → 100 | 12.1ms → 13.0ms (+7.4%) | 30.2ms → 41.5ms (+37.4%) | 64.0ms → 70.2ms (+9.7%) | 100.0% → 100.0% |
+```
+
+A step is compared to the step of the same `id`, in the job of the same `id`, so give both an `id`: one without is known by where it is written in its job, and adding a step before it makes it another. A step the earlier run has none of is marked `no baseline`.
+
+The comparison is only shown. It fails no job, because the times of two runs differ even when nothing changed, and how much they differ depends on the service and the runners. Two runs on the same machine, one after the other, differ the least, so in CI, run the main branch in the same job as the change rather than keeping its report from another run. With `--report github-summary` the table is on the summary page of the run. See [`--baseline`](/reference/cli-reference#--baseline) for what the JSON report records.
+
 ## The Query Behind an Endpoint
 
 When an endpoint is slow, the query it runs is a common cause. The `db` action runs that query by itself, which tells whether the time is spent in the database:

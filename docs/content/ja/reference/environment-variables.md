@@ -43,6 +43,19 @@ export PROBE_REPORT=junit=out/junit.xml
 probe workflow.yml
 ```
 
+### `PROBE_BASELINE`
+
+**型:** String  
+**値:** 以前の実行が`--report json`で書き出したレポートのパス  
+**デフォルト:** なし  
+**説明:** 以前の実行のレポート。レポートファイルで、繰り返したステップの応答時間をこれと比べます。`--baseline`フラグを指定した場合はそちらが優先されます。
+
+```bash
+# main ブランチで残したレポートと比べる
+export PROBE_BASELINE=main.json
+probe --report github-summary workflow.yml
+```
+
 ### `PROBE_MAX_REPEAT_COUNT`
 
 **型:** Integer  

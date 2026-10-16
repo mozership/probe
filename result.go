@@ -61,7 +61,10 @@ type StepRepeatCounter struct {
 
 // StepResult represents the result of a step execution
 type StepResult struct {
-	Index         int
+	Index int
+	// ID is the id of the step, or step_ and where it is written in the job
+	// when it has none; see Step.repeatID.
+	ID            string
 	Name          string
 	Status        StatusType
 	StartedAt     time.Time
