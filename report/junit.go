@@ -98,17 +98,27 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 			suite.add(tc)
 		}
 
-		// The test of a repeated job over its runs is a testcase of its own,
-		// which decides whether the job passed.
-		if rt := job.RepeatTest; rt != nil {
+		// The tests of a repeated job, over its runs and against the run
+		// compared to, are testcases of their own, which decide whether the
+		// job passed.
+		for _, t := range []struct {
+			name string
+			rt   *RepeatTest
+		}{{"repeat test", job.RepeatTest}, {"baseline test", job.BaselineTest}} {
+			if t.rt == nil {
+				continue
+			}
 			tc := junitTestCase{
-				Name:      "repeat test",
+				Name:      t.name,
 				ClassName: job.Name,
 				Time:      junitTime(0),
 			}
-			if rt.Status == Failed {
+			switch t.rt.Status {
+			case Failed:
 				failedStep = true
-				tc.Failure, tc.Error = junitRepeatTestFailure(rt)
+				tc.Failure, tc.Error = junitRepeatTestFailure(t.rt)
+			case Skipped:
+				tc.Skipped = &junitSkipped{Message: t.rt.Reason}
 			}
 			suite.add(tc)
 		}
@@ -189,7 +199,7 @@ func junitFailure(st Step) (failure, errElem *junitProblem) {
 // junitRepeatTestFailure maps a failed test of a repeated job to a <failure>
 // when it was false, and to an <error> when it could not be checked.
 func junitRepeatTestFailure(rt *RepeatTest) (failure, errElem *junitProblem) {
-	p := &junitProblem{Message: "repeat test failed", Type: FailureAssertion, Body: rt.Test}
+	p := &junitProblem{Message: "test failed", Type: FailureAssertion, Body: rt.Test}
 	if f := rt.Failure; f != nil {
 		p.Message = f.Message
 		p.Type = f.Kind

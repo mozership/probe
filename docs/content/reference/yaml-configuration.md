@@ -34,6 +34,7 @@ jobs:                         # Required: a list of jobs
       async: boolean
       warmup: integer
       test: expression        # Optional: assertion over the runs
+      baseline_test: expression # Optional: assertion against an earlier run
     steps:                    # Required: a list of steps
       - name: string          # Optional: step name
         id: string            # Optional: step id, required to publish outputs
@@ -401,6 +402,7 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | `async` | Boolean | No | Start each run without waiting for the one before to end |
 | `warmup` | Integer | No | Number of runs before the `count`, which are counted in nothing. Together with `count`, capped by `PROBE_MAX_REPEAT_COUNT` |
 | `test` | Expression | No | Checked once every run is over, against the runs of the steps. When given, it alone decides whether the job passed. See [Test over the Runs](#test-over-the-runs) |
+| `baseline_test` | Expression | No | Checked once every run is over, against the runs of the steps and those of the run given by [`--baseline`](/reference/cli-reference#--baseline). Skipped when there is none. See [Test against an Earlier Run](#test-against-an-earlier-run) |
 
 ```yaml
 jobs:
@@ -462,6 +464,43 @@ With `repeat.test`, the runs are counted and fail nothing by themselves:
 - The job passes when the test is true, and fails when it is false, cannot be evaluated or is not a boolean. A false test tells which condition is false, and what it compared, as a step's test does.
 - The exit status is that of the test: 1 when it failed, whatever the runs failed for.
 - A job whose [`skipif`](#skipif) skipped every run counted is skipped, and the test is not checked. When it skipped only some, the test is checked against the runs that ran.
+
+##### Test against an Earlier Run
+
+`repeat.baseline_test` compares the runs to those of an earlier run, the report given by [`--baseline`](/reference/cli-reference#--baseline). It is checked once every run is over, after `repeat.test`, and reads what that test reads and, under `baseline.steps`, the steps of the same job in the earlier run, by their `id`:
+
+```yaml
+jobs:
+  - name: Search
+    repeat:
+      count: 100
+      warmup: 5
+      test: steps.search.success_rate >= 0.99
+      baseline_test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+    steps:
+      - name: Search by keyword
+        id: search
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /search?q=probe
+        test: res.code == 200
+```
+
+A step under `baseline.steps` has fewer fields than one under `steps`, as the report records fewer:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `runs` | Integer | The runs counted |
+| `success` | Integer | The runs in which the step passed |
+| `success_rate` | Float | `success` divided by `runs`, from 0 to 1 |
+| `rt` | Object | The times of the step in seconds, with the same fields as under `steps`, from the response times of the report. `nil` when it has none |
+
+A job matches the job of the same `id`, and a step the step of the same `id`. A step with an [`iteration`](#iteration) is several steps of one `id` in the report: `runs` and `success` are those of them all, but their times cannot be put together from the percentiles, so `rt` is `nil`.
+
+The test is skipped, and the job passes by it, when no `--baseline` was given, when the earlier run has none of a step that the test reads under `baseline.steps`, or none of the times that it reads under `rt`. The workflow therefore runs as it is with and without `--baseline`. A skipped test tells why, as `skipped: the baseline has no step search`. Whether the earlier run has what the test reads is known before it runs only when the step and the field are written in it, so a step or a field read by a key known only when it runs, as `baseline.steps[vars.id]`, is refused as the workflow is loaded, with exit status 2.
+
+When it is checked, the job passes only when it holds, and the exit status is that of the test, as for `repeat.test`. It does not change how a failed run is taken: without `repeat.test`, a run in which a step fails still fails the job. `baseline` can be read only by this test, and `probe check` reports a `baseline_test` that reads a step or a field that `baseline.steps` does not have.
 
 ## Steps
 

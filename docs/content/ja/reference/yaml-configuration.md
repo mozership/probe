@@ -34,6 +34,7 @@ jobs:                         # 必須: ジョブのリスト
       async: boolean
       warmup: integer
       test: expression        # 任意: 全回に対するアサーション
+      baseline_test: expression # 任意: 以前の実行と比べるアサーション
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
         id: string            # 任意: ステップ ID。outputs の公開に必要
@@ -401,6 +402,7 @@ jobs:
 | `async` | Boolean | 任意 | 前の実行の終わりを待たずに次の実行を始める |
 | `warmup` | Integer | 任意 | `count`の前に行う実行の回数。どの集計にも含めない。`count`との合計が`PROBE_MAX_REPEAT_COUNT`の上限を受ける |
 | `test` | Expression | 任意 | すべての回が終わった後に、各ステップの回の集計に対して評価する。指定した場合は、これだけでジョブの成否が決まる。[全回に対するテスト](#全回に対するテスト)を参照 |
+| `baseline_test` | Expression | 任意 | すべての回が終わった後に、各ステップの回の集計と、[`--baseline`](/ja/reference/cli-reference#--baseline)で指定した実行の集計に対して評価する。指定がなければスキップする。[以前の実行と比べるテスト](#以前の実行と比べるテスト)を参照 |
 
 ```yaml
 jobs:
@@ -462,6 +464,43 @@ jobs:
 - テストが真ならジョブは成功し、偽のとき、評価できないとき、真偽値でないときは失敗します。偽のときは、ステップのテストと同じく、どの条件が偽だったかと、比べた値を示します。
 - 終了ステータスはテストの結果で決まります。テストが失敗すれば、各回が何で失敗したかに関係なく1です。
 - 数える回をすべて[`skipif`](#skipif)がスキップしたジョブはスキップとなり、テストは評価しません。一部の回だけをスキップした場合は、実行した回に対してテストを評価します。
+
+##### 以前の実行と比べるテスト
+
+`repeat.baseline_test`は、各回を以前の実行（[`--baseline`](/ja/reference/cli-reference#--baseline)で指定したレポート）と比べます。すべての回が終わった後、`repeat.test`の次に評価します。`repeat.test`が読めるものに加えて、`baseline.steps`の下で、以前の実行における同じジョブのステップを`id`で読めます。
+
+```yaml
+jobs:
+  - name: Search
+    repeat:
+      count: 100
+      warmup: 5
+      test: steps.search.success_rate >= 0.99
+      baseline_test: steps.search.rt.p95 < baseline.steps.search.rt.p95 * 1.2
+    steps:
+      - name: Search by keyword
+        id: search
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /search?q=probe
+        test: res.code == 200
+```
+
+レポートに記録される項目が少ないので、`baseline.steps`の下のステップは`steps`の下より少ないフィールドを持ちます。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `runs` | Integer | 数えた回数 |
+| `success` | Integer | ステップが成功した回数 |
+| `success_rate` | Float | `success`を`runs`で割った値。0から1 |
+| `rt` | Object | ステップの所要時間。レポートの応答時間から取り、秒単位で`steps`の下と同じフィールドを持つ。時間がなければ`nil` |
+
+ジョブは`id`が同じジョブと、ステップは`id`が同じステップと対応させます。[`iteration`](#iteration)のあるステップは、レポートでは同じ`id`の複数のステップになります。`runs`と`success`はそれらの合計ですが、時間はパーセンタイルからまとめられないので、`rt`は`nil`になります。
+
+`--baseline`を指定しなかったとき、テストが`baseline.steps`の下で読むステップが以前の実行にないとき、`rt`の下で読む時間がないときは、テストをスキップし、ジョブはこのテストでは失敗しません。そのため、同じワークフローを`--baseline`の有無にかかわらずそのまま実行できます。スキップしたときは、`skipped: the baseline has no step search`のように理由を示します。以前の実行にテストが読むものがあるかを実行前に判断できるのは、ステップとフィールドが式に直接書かれているときだけです。そのため、`baseline.steps[vars.id]`のように実行時に決まるキーでステップやフィールドを読むテストは、ワークフローを読み込む時点で拒否し、終了ステータス2で終わります。
+
+評価した場合は、テストが成り立つときだけジョブは成功し、終了ステータスは`repeat.test`と同じくテストの結果で決まります。各回の失敗の扱いは変えません。`repeat.test`がなければ、ステップが失敗した回があるとジョブは失敗します。`baseline`を読めるのはこのテストだけです。`baseline.steps`にないステップやフィールドを読む`baseline_test`は、`probe check`が報告します。
 
 ## ステップ
 
