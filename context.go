@@ -66,8 +66,15 @@ type JobContext struct {
 	// repeatTested is whether the job has a test over its runs; see
 	// Repeat.Test.
 	repeatTested bool
-	// repeatReads are the ids of the steps the test over the runs reads,
-	// which it checks as a step's own test does.
+	// baselineTested is whether the job has a test against the run compared
+	// to; see Repeat.BaselineTest.
+	baselineTested bool
+	// baselineSkipped is why that test is skipped, or empty when it is
+	// checked; see baselineSkip.
+	baselineSkipped string
+	// repeatReads are the ids of the steps the tests over the runs read,
+	// which they check as a step's own test does. Those that only a skipped
+	// test reads are left out, as nothing checks them.
 	repeatReads  map[string]bool
 	StepCounters map[int]StepRepeatCounter // step index -> counter
 	countersMu   *sync.Mutex               // protects StepCounters for concurrent access

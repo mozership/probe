@@ -210,6 +210,7 @@ jobs:
       res.stdout contains "0. Fails in the warmup runs alone (repeating 3 times, after 2 to warm up)\n        ✓  3/3 success (100.0%)" &&
       res.stdout contains "        ✓  repeat test: steps.flaky.runs == 4" &&
       res.stdout contains "        ✗  repeat test: steps.strict.success_rate == 1\n           failed: steps.strict.success_rate == 1\n             steps.strict.success_rate = 0.6666666666666666" &&
+      res.stdout contains "        ⏭  baseline test: steps.compared.runs == baseline.steps.compared.runs && steps.compared.rt.p50 < baseline.steps.compared.rt.max + 1\n           skipped: no baseline was given\n" &&
       res.stdout contains "✗ 2 job(s) failed"
     echo: "{{res.stdout}}"
   - name: repeat-literal.yml reports the warmup, the times and the test over the runs
@@ -224,6 +225,7 @@ jobs:
       let warm = r.jobs[1].steps[0].repeat;
       let share = r.jobs[2];
       let strict = r.jobs[3];
+      let compared = r.jobs[4];
       res.code == 0 &&
       r.status == "failed" &&
       warm.total == 3 && warm.success == 3 && warm.warmup == 2 && warm.latency.count == 3 &&
@@ -232,7 +234,9 @@ jobs:
       strict.status == "failed" && strict.repeat_test.status == "failed" &&
       strict.repeat_test.failure.kind == "assertion" &&
       strict.repeat_test.failure.message contains "steps.strict.success_rate = 0.6666666666666666" &&
-      strict.steps[0].status == "passed" && strict.steps[0].repeat.failure == 1
+      strict.steps[0].status == "passed" && strict.steps[0].repeat.failure == 1 &&
+      compared.status == "passed" && compared.repeat_test == nil &&
+      compared.baseline_test.status == "skipped" && compared.baseline_test.reason == "no baseline was given"
   - name: repeat-literal.yml compared to an earlier run of itself
     uses: shell
     with:
@@ -251,7 +255,8 @@ jobs:
       res.stdout contains "| Warm up before the runs counted | 0. Fails in the warmup runs alone | 3 → 3 | " &&
       res.stdout contains "| 100.0% → 100.0% |\n" &&
       res.stdout contains "| Fail by the share of the runs | 0. Fails in one run of three | 3 → 3 |" &&
-      res.stdout contains "baseline=8"
+      res.stdout contains "        ✓  baseline test: steps.compared.runs == baseline.steps.compared.runs" &&
+      res.stdout contains "baseline=9"
     echo: "{{res.stdout}}"
   - name: An async repeat without an interval is a configuration error
     uses: shell

@@ -63,3 +63,14 @@ jobs:
     id: strict
     uses: hello
     test: repeat_index != 1
+
+- name: Compare to an earlier run
+  repeat:
+    count: 3
+    # Skipped without --baseline, so the job passes by it.
+    baseline_test: steps.compared.runs == baseline.steps.compared.runs && steps.compared.rt.p50 < baseline.steps.compared.rt.max + 1
+  steps:
+  - name: Takes about as long as before
+    id: compared
+    uses: hello
+    test: res.status == 0

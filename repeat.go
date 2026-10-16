@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/mozership/probe/expr"
 )
 
 const (
@@ -109,6 +111,11 @@ type Repeat struct {
 	// steps, and decides alone whether the job passed: a run in which a
 	// step failed is then counted, and fails nothing by itself.
 	Test string `yaml:"test,omitempty"`
+	// BaselineTest is checked once every run is over too, against the runs
+	// of the steps and those of the run compared to, under baseline. It is
+	// checked only when that run has the steps it reads, and then the job
+	// passes only when it holds. It leaves how a failed run is taken to Test.
+	BaselineTest string `yaml:"baseline_test,omitempty"`
 }
 
 // Runs returns the number of runs of the job, the warmup runs included.
@@ -138,7 +145,28 @@ func (r *Repeat) Validate() error {
 	if r.Async && r.Interval.Duration <= 0 {
 		return fmt.Errorf("repeat with async needs an interval, the time from the start of one run to the start of the next")
 	}
+	if baselineReadByKey(r.BaselineTest) {
+		return fmt.Errorf("repeat.baseline_test: %s", errBaselineByKey)
+	}
 	return nil
+}
+
+// errBaselineByKey tells why a test against the run compared to cannot read
+// a step of it, or the field of a step, by a key known only when it runs.
+const errBaselineByKey = "baseline.steps is read by a key known only when the test runs; write the step and the field, as baseline.steps.search.rt, so that the test is skipped when the baseline has none of them"
+
+// baselineReadByKey reports whether test reads a step under baseline.steps,
+// or a field of one, by a key known only when it runs. Whether the run
+// compared to has what the test reads is known before the test runs only
+// when the step and its field are written in it, and the test is skipped
+// when it does not.
+func baselineReadByKey(test string) bool {
+	for _, chain := range expr.ReadsByVariableKey(test, "baseline") {
+		if len(chain) < 3 {
+			return true
+		}
+	}
+	return false
 }
 
 // StepRetry defines the retry configuration for steps until success (status 0)

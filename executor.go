@@ -61,6 +61,10 @@ func (e *Executor) executeWithBuffering(ctx JobContext) bool {
 			e.unskip(ctx)
 			overallSuccess = e.checkRepeatTest(ctx, counters) && overallSuccess
 		}
+		if ctx.baselineTested && (len(counters) > 0 || !e.skipped(ctx)) {
+			e.unskip(ctx)
+			overallSuccess = e.checkBaselineTest(ctx, counters) && overallSuccess
+		}
 	}
 
 	e.finalize(overallSuccess, ctx)
@@ -76,11 +80,21 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	if r := e.job.Repeat; r != nil {
 		ctx.RepeatWarmup = r.Warmup
 		ctx.repeatTested = r.Test != ""
-		ctx.repeatReads = repeatReads(r.Test)
-		// A warmup run is left out by the counters, and the test reads them,
+		ctx.baselineTested = r.BaselineTest != ""
+		tests := []string{r.Test}
+		if ctx.baselineTested {
+			// Whether the test is skipped depends on the run compared to
+			// alone, and not on the runs, so it is known before they start.
+			ctx.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Printer.baseline, e.job.ID)
+			if ctx.baselineSkipped == "" {
+				tests = append(tests, r.BaselineTest)
+			}
+		}
+		ctx.repeatReads = repeatReads(tests...)
+		// A warmup run is left out by the counters, and the tests read them,
 		// so a job run once keeps them too when the run is a warmup run or
 		// the job has a test.
-		ctx.IsRepeating = ctx.IsRepeating || ctx.RepeatWarmup > 0 || ctx.repeatTested
+		ctx.IsRepeating = ctx.IsRepeating || ctx.RepeatWarmup > 0 || ctx.repeatTested || ctx.baselineTested
 	}
 	ctx.RepeatTotal = total - ctx.RepeatWarmup
 	ctx.StepCounters = make(map[int]StepRepeatCounter)

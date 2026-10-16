@@ -8,11 +8,13 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-// repeatTestEnv is what the test of a repeated job reads: the vars of the
-// workflow, and under steps the runs of each step by its id.
+// repeatTestEnv is what the tests of a repeated job read: the vars of the
+// workflow, and under steps the runs of each step by its id. The test
+// against the run compared to reads that run's steps under baseline too.
 type repeatTestEnv struct {
-	Vars  map[string]any `expr:"vars"`
-	Steps map[string]any `expr:"steps"`
+	Vars     map[string]any `expr:"vars"`
+	Steps    map[string]any `expr:"steps"`
+	Baseline map[string]any `expr:"baseline"`
 }
 
 // repeatRuns gathers the counters of a repeated job by the id of their step,
@@ -63,18 +65,93 @@ func repeatRuns(counters []StepRepeatCounter) map[string]any {
 	return steps
 }
 
-// repeatReads returns the ids of the steps that test, the test of a repeated
-// job, reads under steps; nil when it reads none, or does not parse.
-func repeatReads(test string) map[string]bool {
-	chains := expr.Reads(test, "steps")
-	if len(chains) == 0 {
-		return nil
-	}
-	ids := make(map[string]bool, len(chains))
-	for _, chain := range chains {
-		ids[chain[0]] = true
+// repeatReads returns the ids of the steps that tests, the tests of a
+// repeated job, read under steps; nil when they read none, or do not parse.
+func repeatReads(tests ...string) map[string]bool {
+	var ids map[string]bool
+	for _, test := range tests {
+		for _, chain := range expr.Reads(test, "steps") {
+			if ids == nil {
+				ids = map[string]bool{}
+			}
+			ids[chain[0]] = true
+		}
 	}
 	return ids
+}
+
+// baselineRuns gathers the repeated steps of the job of jobID in base, the
+// report of the run compared to, by their ids, as the test against that run
+// reads them under baseline.steps. Each step has runs, success and
+// success_rate, as the runs of the step have; and rt, with the same fields
+// in seconds, or nil when the step returned no times. A job has several
+// steps of an id when the step was run once per entry of an iteration: their
+// counts are added up, but their times cannot be, so rt is nil.
+func baselineRuns(base *report.Report, jobID string) map[string]any {
+	all := base.BaselineSteps(jobID).All()
+	steps := make(map[string]any, len(all))
+	for id, runs := range all {
+		var total, success int
+		for _, b := range runs {
+			total += b.Total
+			success += b.Success
+		}
+		rate := 0.0
+		if total > 0 {
+			rate = float64(success) / float64(total)
+		}
+		var rt map[string]any
+		if l := runs[0].Latency; len(runs) == 1 && l != nil {
+			rt = map[string]any{
+				"min":  l.MinMs / 1000,
+				"mean": l.MeanMs / 1000,
+				"p50":  l.P50Ms / 1000,
+				"p90":  l.P90Ms / 1000,
+				"p95":  l.P95Ms / 1000,
+				"p99":  l.P99Ms / 1000,
+				"max":  l.MaxMs / 1000,
+			}
+		}
+		steps[id] = map[string]any{
+			"runs":         total,
+			"success":      success,
+			"success_rate": rate,
+			"rt":           rt,
+		}
+	}
+	return steps
+}
+
+// baselineSkip returns why test, the test of the job of jobID against base,
+// the report of the run compared to, is skipped: when no run was compared
+// to, or as baselineMissing tells. It returns empty when the test is checked.
+func baselineSkip(test string, base *report.Report, jobID string) string {
+	if base == nil {
+		return "no baseline was given"
+	}
+	return baselineMissing(test, baselineRuns(base, jobID))
+}
+
+// baselineMissing returns why test, the test of a repeated job against the
+// run compared to, cannot be checked against steps, that run's steps as
+// baselineRuns gathers them: the first step it reads under baseline.steps
+// that the run has none of, or whose times it reads and the run has none
+// of. It returns empty when the test can be checked.
+func baselineMissing(test string, steps map[string]any) string {
+	for _, chain := range expr.Reads(test, "baseline") {
+		if len(chain) < 2 || chain[0] != "steps" {
+			continue
+		}
+		id := chain[1]
+		st, ok := steps[id].(map[string]any)
+		if !ok {
+			return fmt.Sprintf("the baseline has no step %s", id)
+		}
+		if rt, _ := st["rt"].(map[string]any); len(chain) > 2 && chain[2] == "rt" && rt == nil {
+			return fmt.Sprintf("the baseline has no times of step %s", id)
+		}
+	}
+	return ""
 }
 
 // repeatTimes is the distribution of secs, the times of the runs in seconds,
@@ -127,8 +204,30 @@ func (e *Executor) unskip(ctx JobContext) {
 // steps once every run is over, records the outcome on the job's result, and
 // reports whether the test held, which is whether the job passed.
 func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter) bool {
-	test := e.job.Repeat.Test
 	env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters)}
+	res := evalRepeatTest(ctx, e.job.Repeat.Test, env)
+	e.recordRepeatTest(ctx, res, func(jr *JobResult) { jr.RepeatTest = res })
+	return res.Passed
+}
+
+// checkBaselineTest checks the test of a repeated job against the run
+// compared to once every run is over, and records the outcome on the job's
+// result. It reports whether the job passes by it: when the test held, or
+// was skipped, as it is when no run was compared to, or that run has none of
+// a step the test reads.
+func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounter) bool {
+	test := e.job.Repeat.BaselineTest
+	res := &RepeatTestResult{Test: test, Passed: true, Skipped: ctx.baselineSkipped}
+	if res.Skipped == "" {
+		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Printer.baseline, e.job.ID)}}
+		res = evalRepeatTest(ctx, test, env)
+	}
+	e.recordRepeatTest(ctx, res, func(jr *JobResult) { jr.BaselineTest = res })
+	return res.Passed
+}
+
+// evalRepeatTest evaluates test, a test of a repeated job, against env.
+func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestResult {
 	ev := &expr.Expr{}
 	res := &RepeatTestResult{Test: test}
 
@@ -153,14 +252,18 @@ func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter)
 	} else {
 		res.Passed = true
 	}
+	return res
+}
 
+// recordRepeatTest records res, the outcome of a test of a repeated job, by
+// set on the job's result, and its failure for the exit code of the run.
+func (e *Executor) recordRepeatTest(ctx JobContext, res *RepeatTestResult, set func(*JobResult)) {
 	if res.Failure != nil {
 		ctx.Result.recordFailure(res.Failure.Kind)
 	}
 	if jr, ok := ctx.Result.Jobs[e.job.ID]; ok {
 		jr.mutex.Lock()
-		jr.RepeatTest = res
+		set(jr)
 		jr.mutex.Unlock()
 	}
-	return res.Passed
 }

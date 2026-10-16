@@ -792,3 +792,20 @@ func TestWorkflowRepeatWarmupCannotStart(t *testing.T) {
 		})
 	}
 }
+
+func TestRepeatValidate_BaselineReadByKey(t *testing.T) {
+	tests := map[string]bool{
+		"steps.q.rt.p95 < baseline.steps.q.rt.p95":            false,
+		"steps.q.rt.p95 < baseline.steps.q.rt[vars.p]":        false,
+		"steps.q.rt.p95 < baseline.steps[vars.id].rt.p95":     true,
+		"baseline.steps.q[vars.f] > 0":                        true,
+		"baseline[vars.k] != nil":                             true,
+		"steps.q.rt.p95 < (baseline?.steps?.q?.rt?.p95 ?? 1)": false,
+	}
+	for test, refused := range tests {
+		err := (&Repeat{Count: 2, BaselineTest: test}).Validate()
+		if refused != (err != nil) {
+			t.Errorf("Validate() of %q = %v, want refused %v", test, err, refused)
+		}
+	}
+}

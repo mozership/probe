@@ -246,7 +246,17 @@ func TestBaselineSteps_Next(t *testing.T) {
 		}
 	}
 
+	if all := base.BaselineSteps("api").All(); len(all["each"]) != 2 || all["each"][1].Latency.P50Ms != 20 || len(all) != 1 {
+		t.Errorf("All() = %+v, want the two steps of each in order", all)
+	}
+	if all := steps.All(); len(all["each"]) != 0 {
+		t.Errorf("All() after Next = %+v, want none of each left", all)
+	}
+
 	var none *Report
+	if all := none.BaselineSteps("api").All(); all != nil {
+		t.Errorf("All() of no baseline = %+v, want none", all)
+	}
 	if b := none.BaselineSteps("api").Next("each"); b != nil {
 		t.Errorf("Next() of no baseline = %+v, want none", b)
 	}

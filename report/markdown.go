@@ -121,7 +121,11 @@ func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 		}
 		if rt := job.RepeatTest; rt != nil && rt.Status == Failed {
 			failure()
-			writeMarkdownRepeatTestFailure(&b, job, rt)
+			writeMarkdownRepeatTestFailure(&b, job, "repeat test", rt)
+		}
+		if rt := job.BaselineTest; rt != nil && rt.Status == Failed {
+			failure()
+			writeMarkdownRepeatTestFailure(&b, job, "baseline test", rt)
 		}
 	}
 
@@ -167,9 +171,10 @@ func writeMarkdownFailure(b *strings.Builder, job Job, st Step, payloads bool) {
 }
 
 // writeMarkdownRepeatTestFailure writes the section of a job whose test over
-// its runs failed: the reason, then the test.
-func writeMarkdownRepeatTestFailure(b *strings.Builder, job Job, rt *RepeatTest) {
-	fmt.Fprintf(b, "### %s / repeat test\n\n", job.Name)
+// its runs, or against the run compared to, failed, named by label: the
+// reason, then the test.
+func writeMarkdownRepeatTestFailure(b *strings.Builder, job Job, label string, rt *RepeatTest) {
+	fmt.Fprintf(b, "### %s / %s\n\n", job.Name, label)
 	if rt.Failure != nil {
 		fmt.Fprintf(b, "%s: %s\n\n", rt.Failure.Kind, rt.Failure.Message)
 	}

@@ -768,6 +768,7 @@ func (c *checker) checkExpressions() {
 		c.expression(jp+".skipif", c.jobWhere(i), "skipif", job.SkipIf)
 		if job.Repeat != nil {
 			c.expression(jp+".repeat.test", c.jobWhere(i), "repeat.test", job.Repeat.Test)
+			c.expression(jp+".repeat.baseline_test", c.jobWhere(i), "repeat.baseline_test", job.Repeat.BaselineTest)
 		}
 		for j, st := range job.Steps {
 			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
@@ -990,7 +991,7 @@ func (c *checker) checkTests() {
 		// that test.
 		var tested map[string]bool
 		if job.Repeat != nil {
-			tested = repeatReads(job.Repeat.Test)
+			tested = repeatReads(job.Repeat.Test, job.Repeat.BaselineTest)
 		}
 		for j, st := range job.Steps {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
@@ -1027,18 +1028,22 @@ func checkedByContract(uses string, with map[string]any) bool {
 	return false
 }
 
-// The fields of a step that the test of a repeated job reads under steps,
-// and those of its rt.
+// The fields of a step that the tests of a repeated job read under steps,
+// those that the test against the run compared to reads under
+// baseline.steps, and those of their rt.
 var (
-	repeatRunFields = []string{"runs", "success", "failure", "skipped", "success_rate", "rt"}
-	repeatRTFields  = []string{"min", "mean", "p50", "p90", "p95", "p99", "max"}
+	repeatRunFields   = []string{"runs", "success", "failure", "skipped", "success_rate", "rt"}
+	baselineRunFields = []string{"runs", "success", "success_rate", "rt"}
+	repeatRTFields    = []string{"min", "mean", "p50", "p90", "p95", "p99", "max"}
 )
 
-// checkRepeatTests checks that the test of a repeated job reads steps of the
-// job by their ids, and fields that they have.
+// checkRepeatTests checks that the tests of a repeated job read steps of the
+// job by their ids, and fields that they have; that only the test against
+// the run compared to reads it, under baseline.steps; and that this test
+// reads it.
 func (c *checker) checkRepeatTests() {
 	for i, job := range c.wf.Jobs {
-		if job.Repeat == nil || strings.TrimSpace(job.Repeat.Test) == "" || expr.Parse(job.Repeat.Test) != nil {
+		if job.Repeat == nil {
 			continue
 		}
 		ids := make([]string, 0, len(job.Steps))
@@ -1049,33 +1054,75 @@ func (c *checker) checkRepeatTests() {
 			}
 			ids = append(ids, id)
 		}
-		line := c.line(fmt.Sprintf("jobs[%d].repeat.test", i))
-		// A chain is read with each of its prefixes, so the same finding
-		// comes from several of them.
-		seen := map[string]bool{}
-		for _, chain := range expr.Reads(job.Repeat.Test, "steps") {
-			var msg string
-			switch {
-			case !slices.Contains(ids, chain[0]):
-				msg = fmt.Sprintf("repeat.test: steps.%s is not a step of the job; its steps are %s",
-					chain[0], strings.Join(ids, ", "))
-			case len(chain) > 1 && !slices.Contains(repeatRunFields, chain[1]):
-				msg = fmt.Sprintf("repeat.test: steps.%s has no %s; it has %s",
-					chain[0], chain[1], strings.Join(repeatRunFields, ", "))
-			case len(chain) > 2 && chain[1] != "rt":
-				msg = fmt.Sprintf("repeat.test: steps.%s.%s is a number, which has no %s",
-					chain[0], chain[1], chain[2])
-			case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):
-				msg = fmt.Sprintf("repeat.test: steps.%s.rt has no %s; it has %s",
-					chain[0], chain[2], strings.Join(repeatRTFields, ", "))
-			case len(chain) > 3:
-				msg = fmt.Sprintf("repeat.test: steps.%s.rt.%s is a number, which has no %s",
-					chain[0], chain[2], chain[3])
+		for _, t := range []struct{ key, test string }{
+			{"test", job.Repeat.Test},
+			{"baseline_test", job.Repeat.BaselineTest},
+		} {
+			if strings.TrimSpace(t.test) == "" || expr.Parse(t.test) != nil {
+				continue
 			}
-			if msg != "" && !seen[msg] {
-				seen[msg] = true
-				c.add(SeverityError, line, c.jobWhere(i), "%s", msg)
+			key := "repeat." + t.key
+			line := c.line(fmt.Sprintf("jobs[%d].%s", i, key))
+			// A chain is read with each of its prefixes, so the same finding
+			// comes from several of them.
+			seen := map[string]bool{}
+			add := func(severity, msg string) {
+				if msg != "" && !seen[msg] {
+					seen[msg] = true
+					c.add(severity, line, c.jobWhere(i), "%s: %s", key, msg)
+				}
+			}
+			for _, chain := range expr.Reads(t.test, "steps") {
+				add(SeverityError, repeatChainProblem("steps", chain, ids, repeatRunFields))
+			}
+			baseline := expr.Reads(t.test, "baseline")
+			byKey := expr.ReadsByVariableKey(t.test, "baseline")
+			// A test against the run compared to that reads it by a key
+			// known only when it runs is refused as the workflow is loaded;
+			// see Repeat.Validate.
+			switch {
+			case t.key == "test" && len(baseline)+len(byKey) > 0:
+				add(SeverityError, "baseline is read only by repeat.baseline_test")
+			case t.key == "test":
+			case len(baseline) == 0 && len(byKey) == 0:
+				add(SeverityWarning, "it reads nothing under baseline, so it can go in repeat.test")
+			}
+			for _, chain := range baseline {
+				if t.key != "baseline_test" {
+					break
+				}
+				if chain[0] != "steps" {
+					add(SeverityError, fmt.Sprintf("baseline has no %s; it has steps", chain[0]))
+					continue
+				}
+				if len(chain) > 1 {
+					add(SeverityError, repeatChainProblem("baseline.steps", chain[1:], ids, baselineRunFields))
+				}
 			}
 		}
 	}
+}
+
+// repeatChainProblem returns what is wrong with chain, read by a test of a
+// repeated job under prefix, given the ids of the steps of the job and the
+// fields that a step has there; empty when nothing is.
+func repeatChainProblem(prefix string, chain, ids, fields []string) string {
+	switch {
+	case !slices.Contains(ids, chain[0]):
+		return fmt.Sprintf("%s.%s is not a step of the job; its steps are %s",
+			prefix, chain[0], strings.Join(ids, ", "))
+	case len(chain) > 1 && !slices.Contains(fields, chain[1]):
+		return fmt.Sprintf("%s.%s has no %s; it has %s",
+			prefix, chain[0], chain[1], strings.Join(fields, ", "))
+	case len(chain) > 2 && chain[1] != "rt":
+		return fmt.Sprintf("%s.%s.%s is a number, which has no %s",
+			prefix, chain[0], chain[1], chain[2])
+	case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):
+		return fmt.Sprintf("%s.%s.rt has no %s; it has %s",
+			prefix, chain[0], chain[2], strings.Join(repeatRTFields, ", "))
+	case len(chain) > 3:
+		return fmt.Sprintf("%s.%s.rt.%s is a number, which has no %s",
+			prefix, chain[0], chain[2], chain[3])
+	}
+	return ""
 }
