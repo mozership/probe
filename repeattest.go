@@ -234,19 +234,21 @@ func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestR
 	out, err := ev.Eval(test, env)
 	if err != nil {
 		res.Failure = &StepFailure{Kind: FailureTestError, Message: err.Error()}
-		res.Output = ctx.Printer.generateTestError(test, err)
+		ctx.Printer.logTestError(test, err)
+		res.Output = testErrorDetail(err)
 	} else if passed, ok := out.(bool); !ok {
 		res.Failure = &StepFailure{
 			Kind:    FailureTestType,
 			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", out, out),
 		}
-		res.Output = ctx.Printer.generateTestTypeMismatch(test, out)
+		ctx.Printer.LogDebug("%s", typeMismatchText(test, out))
+		res.Output = typeMismatchDetail(test, out)
 	} else if !passed {
 		message := "test evaluated to false"
 		if clause, ok := ev.FalseClause(test, env); ok {
-			clause = ctx.Printer.maskClause(clause)
+			clause = maskClause(ctx.Printer.Masker(), clause)
 			message += ": " + clauseSummary(clause)
-			res.Output = ctx.Printer.generateFalseClause(clause)
+			res.Output = falseClauseDetail(clause)
 		}
 		res.Failure = &StepFailure{Kind: FailureAssertion, Message: message}
 	} else {

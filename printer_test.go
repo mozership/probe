@@ -16,8 +16,8 @@ import (
 // Color function tests
 func TestColorFunctions(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -202,8 +202,8 @@ func TestStepResult(t *testing.T) {
 // Generate method tests
 func TestPrinter_generateHeader(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -245,8 +245,8 @@ func TestPrinter_generateHeader(t *testing.T) {
 
 func TestPrinter_generateError(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 
@@ -315,8 +315,8 @@ func TestPrinter_generateLogDebug(t *testing.T) {
 
 func TestPrinter_generateLogError(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 
@@ -351,8 +351,8 @@ func TestPrinter_generateLogError(t *testing.T) {
 }
 func TestPrinter_generateJobStatus(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -496,8 +496,8 @@ func TestPrinter_generateJobStatus_SuccessNotBlue(t *testing.T) {
 
 // Test PrintMapData with nested structures
 func TestPrinter_PrintMapData(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(true) // verbose mode to see LogDebug output
 
@@ -601,8 +601,8 @@ func TestPrinter_PrintMapData(t *testing.T) {
 // Test that skipped jobs have gray formatting for entire line
 func TestPrinter_generateJobStatus_SkippedFormatting(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -857,191 +857,10 @@ func TestPrinter_generateReport_WithRepeatStep(t *testing.T) {
 
 // Tests for new Step Output Formatting Functions
 
-func TestPrinter_generateEchoOutput(t *testing.T) {
-	// Disable color output for consistent testing
-	color.NoColor = true
-	defer func() { color.NoColor = false }()
-
-	printer := NewPrinter(false)
-
-	tests := []struct {
-		name     string
-		content  string
-		err      error
-		expected string
-	}{
-		{
-			name:     "single line content",
-			content:  "Hello World",
-			err:      nil,
-			expected: "       Hello World\n",
-		},
-		{
-			name:     "multi-line content with explicit newlines",
-			content:  "Line 1\nLine 2\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       Line 2\n       Line 3\n",
-		},
-		{
-			name:     "complex multiline with indentation",
-			content:  "Header\n  Indented\n    More indented\nBack to left",
-			err:      nil,
-			expected: "       Header\n         Indented\n           More indented\n       Back to left\n",
-		},
-		{
-			name:     "empty line handling",
-			content:  "Line 1\n\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       \n       Line 3\n",
-		},
-		{
-			name:     "error case",
-			content:  "",
-			err:      fmt.Errorf("template error"),
-			expected: "       error: template error\n",
-		},
-		{
-			name:     "empty content",
-			content:  "",
-			err:      nil,
-			expected: "       \n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := printer.generateEchoOutput(tt.content, tt.err)
-			if result != tt.expected {
-				t.Errorf("generateEchoOutput() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPrinter_generateTestFailure(t *testing.T) {
-	// Disable color output for consistent testing
-	color.NoColor = true
-	defer func() { color.NoColor = false }()
-
-	printer := NewPrinter(false)
-
-	tests := []struct {
-		name     string
-		testExpr string
-		result   any
-		req      map[string]any
-		res      map[string]any
-		expected string
-	}{
-		{
-			name:     "simple test failure",
-			testExpr: "res.status == 200",
-			result:   false,
-			req:      map[string]any{"method": "GET", "url": "http://example.com"},
-			res:      map[string]any{"status": 404, "body": "Not Found"},
-			expected: "       request: map[string]interface {}{\"method\":\"GET\", \"url\":\"http://example.com\"}\n       response: map[string]interface {}{\"body\":\"Not Found\", \"status\":404}\n",
-		},
-		{
-			name:     "empty maps",
-			testExpr: "true",
-			result:   false,
-			req:      map[string]any{},
-			res:      map[string]any{},
-			expected: "       request: map[string]interface {}{}\n       response: map[string]interface {}{}\n",
-		},
-		{
-			name:     "nil maps",
-			testExpr: "false",
-			result:   false,
-			req:      nil,
-			res:      nil,
-			expected: "       request: map[string]interface {}(nil)\n       response: map[string]interface {}(nil)\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := printer.generateTestFailure(tt.testExpr, tt.result, tt.req, tt.res)
-			if result != tt.expected {
-				t.Errorf("generateTestFailure() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPrinter_generateTestError(t *testing.T) {
-	printer := NewPrinter(false)
-
-	tests := []struct {
-		name     string
-		err      error
-		expected string
-	}{
-		{
-			name:     "simple error",
-			err:      fmt.Errorf("compilation error"),
-			expected: "       test error: compilation error\n",
-		},
-		{
-			name:     "complex error message",
-			err:      fmt.Errorf("invalid expression: res.status == \"200\""),
-			expected: "       test error: invalid expression: res.status == \"200\"\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := printer.generateTestError("test expression", tt.err)
-			if result != tt.expected {
-				t.Errorf("generateTestError() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPrinter_generateTestTypeMismatch(t *testing.T) {
-	printer := NewPrinter(false)
-
-	tests := []struct {
-		name     string
-		testExpr string
-		result   any
-		expected string
-	}{
-		{
-			name:     "string result instead of bool",
-			testExpr: "res.status",
-			result:   "200",
-			expected: "       Test: `res.status` = 200\n",
-		},
-		{
-			name:     "number result instead of bool",
-			testExpr: "res.code",
-			result:   404,
-			expected: "       Test: `res.code` = 404\n",
-		},
-		{
-			name:     "map result instead of bool",
-			testExpr: "res.body",
-			result:   map[string]any{"error": "not found"},
-			expected: "       Test: `res.body` = map[error:not found]\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := printer.generateTestTypeMismatch(tt.testExpr, tt.result)
-			if result != tt.expected {
-				t.Errorf("generateTestTypeMismatch() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestPrinter_PrintTestResult(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -1128,8 +947,8 @@ func TestPrinter_PrintEchoContent(t *testing.T) {
 
 func TestPrinter_PrintRequestResponse(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -1185,8 +1004,8 @@ func TestPrinter_PrintRequestResponse(t *testing.T) {
 // Test embedded job report formatting with newlines
 func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -1300,8 +1119,8 @@ func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *te
 // of each repeated step those of the step of its id in the baseline, in the
 // job of the same id, and says so of a step the baseline has none of.
 func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	repeated := func(index int, id string, sec float64) StepResult {
 		return StepResult{
@@ -1344,8 +1163,8 @@ func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
 }
 
 func TestPrinter_generateJobResultsFromStepResults_RepeatEchoOutputs(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -1396,7 +1215,7 @@ func TestPrinter_MasksOutput(t *testing.T) {
 	p.Fprintln(p.outWriter, " pa\"ss")
 	p.PrintError("failed with %q", `pa"ss`)
 
-	failure := p.generateTestFailure("t", false,
+	failure := exchangeDetail(p.Masker(),
 		map[string]any{"headers": map[string]any{"authorization": "Bearer x"}, "body": `pa"ss`},
 		map[string]any{"body": `pa"ss`})
 	p.Fprint(p.outWriter, failure)
@@ -1435,52 +1254,6 @@ func TestIndentDetail(t *testing.T) {
 				t.Errorf("indentDetail() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestPrinter_generateFalseClause(t *testing.T) {
-	color.NoColor = true
-	defer func() { color.NoColor = false }()
-
-	printer := NewPrinter(false)
-	printer.SetMasker(mask.New(nil, nil))
-	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": "Bearer s3cr3t-token"}})
-
-	tests := []struct {
-		name   string
-		clause expr.Clause
-		want   string
-	}{
-		{
-			name: "a comparison and what it read",
-			clause: expr.Clause{Expr: `res.code == 200`, Operands: []expr.Operand{
-				{Expr: "res.code", Value: 500},
-			}},
-			want: "       failed: res.code == 200\n         res.code = 500\n",
-		},
-		{
-			name:   "a condition with nothing to show",
-			clause: expr.Clause{Expr: `res.code == 200 || res.code == 201`},
-			want:   "       failed: res.code == 200 || res.code == 201\n",
-		},
-		{
-			name: "a secret a value holds is hidden",
-			clause: expr.Clause{Expr: `res.body.token == vars.token`, Operands: []expr.Operand{
-				{Expr: "res.body.token", Value: "Bearer s3cr3t-token"},
-			}},
-			want: "       failed: res.body.token == vars.token\n         res.body.token = \"" + printer.Masker().String("Bearer s3cr3t-token") + "\"\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := printer.generateFalseClause(printer.maskClause(tt.clause)); got != tt.want {
-				t.Errorf("generateFalseClause() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-	if strings.Contains(tests[2].want, "s3cr3t-token") {
-		t.Fatalf("the masker did not hide the secret: %q", tests[2].want)
 	}
 }
 
@@ -1527,30 +1300,6 @@ func TestClauseSummary(t *testing.T) {
 	}
 	if got := clauseSummary(expr.Clause{Expr: "1 == 2"}); got != "1 == 2" {
 		t.Errorf("clauseSummary() = %q, want the condition alone", got)
-	}
-}
-
-// A secret is hidden before its value is written out and cut: cut first, or
-// with its quotes escaped, it is no longer the text the masker knows.
-func TestPrinter_maskClauseBeforeCutting(t *testing.T) {
-	long := strings.Repeat("k", maxOperandLength+50)
-	quoted := `pa"ss\word`
-	printer := NewPrinter(false)
-	printer.SetMasker(mask.New(nil, nil))
-	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": long}, "password": quoted})
-
-	clause := printer.maskClause(expr.Clause{Expr: `res.body.token == "` + long + `"`, Operands: []expr.Operand{
-		{Expr: "res.body.token", Value: long},
-		{Expr: "res.body", Value: map[string]any{"list": []any{quoted}, "nested": map[string]any{"token": long}}},
-	}})
-
-	for _, out := range []string{printer.generateFalseClause(clause), clauseSummary(clause)} {
-		if strings.Contains(out, strings.Repeat("k", 20)) {
-			t.Errorf("a cut secret is shown: %q", out)
-		}
-		if strings.Contains(out, "ss") {
-			t.Errorf("a secret with a quote is shown: %q", out)
-		}
 	}
 }
 

@@ -576,16 +576,16 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
 	}
 
 	if st.Echo != "" {
-		result.EchoOutput = st.getEchoOutput(jCtx.Printer)
+		result.EchoOutput = st.getEchoOutput()
 	}
 
 	return result
 }
 
 // getEchoOutput returns the echo output as string
-func (st *stepRun) getEchoOutput(printer *Printer) string {
+func (st *stepRun) getEchoOutput() string {
 	exprOut, err := st.expr.EvalTemplate(st.Echo, st.ctx)
-	return printer.generateEchoOutput(exprOut, err)
+	return echoDetail(exprOut, err)
 }
 
 func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError bool) {
@@ -624,7 +624,7 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	var echoErr error
 	if st.Echo != "" {
 		echoRaw, echoErr = st.expr.EvalTemplate(st.Echo, st.ctx)
-		echoFormatted = jCtx.Printer.generateEchoOutput(echoRaw, echoErr)
+		echoFormatted = echoDetail(echoRaw, echoErr)
 	}
 
 	// Update counter atomically with lock held throughout
@@ -769,7 +769,7 @@ func places(n int) string {
 func (st *stepRun) check(printer *Printer) (string, bool) {
 	if f := st.contractFailure(); f != nil {
 		st.failure = f
-		return printer.generateContractFailure(f), false
+		return contractDetail(printer.Masker(), f), false
 	}
 	if st.Test == "" {
 		st.failure = nil
@@ -790,7 +790,8 @@ func (st *stepRun) DoTest(printer *Printer) (string, bool) {
 	exprOut, err := st.evalTest()
 	if err != nil {
 		st.failure = &StepFailure{Kind: FailureTestError, Message: err.Error()}
-		return printer.generateTestError(st.Test, err), false
+		printer.logTestError(st.Test, err)
+		return testErrorDetail(err), false
 	}
 
 	boolOutput, boolOk := exprOut.(bool)
@@ -799,7 +800,8 @@ func (st *stepRun) DoTest(printer *Printer) (string, bool) {
 			Kind:    FailureTestType,
 			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", exprOut, exprOut),
 		}
-		return printer.generateTestTypeMismatch(st.Test, exprOut), false
+		printer.LogDebug("%s", typeMismatchText(st.Test, exprOut))
+		return typeMismatchDetail(st.Test, exprOut), false
 	}
 
 	if printer.verbose {
@@ -817,12 +819,12 @@ func (st *stepRun) DoTest(printer *Printer) (string, bool) {
 			}
 			// The message is cut before the report masks it, so the
 			// secrets are hidden here, in the values themselves.
-			clause = printer.maskClause(clause)
+			clause = maskClause(printer.Masker(), clause)
 			message += ": " + clauseSummary(clause)
-			detail = printer.generateFalseClause(clause)
+			detail = falseClauseDetail(clause)
 		}
 		st.failure = st.newFailure(FailureAssertion, message)
-		return detail + printer.generateTestFailure(st.Test, exprOut, st.ctx.Req, st.ctx.Res), false
+		return detail + exchangeDetail(printer.Masker(), st.ctx.Req, st.ctx.Res), false
 	}
 
 	return "", true

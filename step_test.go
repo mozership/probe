@@ -1200,9 +1200,8 @@ func TestStep_getEchoOutput(t *testing.T) {
 				ctx:  tt.context,
 				expr: &expr.Expr{},
 			}
-			printer := newBufferPrinter()
 
-			result := step.getEchoOutput(printer)
+			result := step.getEchoOutput()
 
 			if result != tt.expected {
 				t.Errorf("getEchoOutput() = %q, want %q", result, tt.expected)
@@ -1219,9 +1218,8 @@ func TestStep_getEchoOutput_Error(t *testing.T) {
 		ctx:  StepContext{},
 		expr: &expr.Expr{},
 	}
-	printer := newBufferPrinter()
 
-	result := step.getEchoOutput(printer)
+	result := step.getEchoOutput()
 
 	// Should contain error indication when template evaluation fails
 	if !strings.Contains(result, "error: {{invalid_expression + }}: ") {
@@ -2770,8 +2768,8 @@ func TestFailureKindOf_Refused(t *testing.T) {
 }
 
 func TestStep_DoTest_FalseClause(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name        string
