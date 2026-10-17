@@ -2,11 +2,10 @@ package probe
 
 import (
 	"fmt"
-	"github.com/mozership/probe/actionrpc"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/procgroup"
@@ -529,20 +528,21 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	result.Jobs[jobID] = jr
 
 	ctx := JobContext{
+		runEnv: &runEnv{
+			Config: Config{
+				Verbose: printer.verbose,
+				Guard:   cfg.guard,
+			},
+			Printer:    printer,
+			Result:     result,
+			background: procgroup.NewTracker(),
+			cleanups:   newCleanups(runID, printer),
+			baseDir:    baseDir,
+			runID:      runID,
+			actions:    cfg.actions,
+		},
 		Vars:    vars,
 		Outputs: NewOutputs(),
-		Result:  result,
-		Config: Config{
-			Verbose: printer.verbose,
-			Guard:   cfg.guard,
-		},
-		Printer:    printer,
-		countersMu: &sync.Mutex{},
-		background: procgroup.NewTracker(),
-		cleanups:   newCleanups(runID, printer),
-		baseDir:    baseDir,
-		runID:      runID,
-		actions:    cfg.actions,
 	}
 	// This job runs inside the plugin process of the step that embeds it,
 	// which exits once the job is done, so its background processes go then.

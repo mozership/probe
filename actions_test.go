@@ -78,7 +78,9 @@ func TestStepWithMockRunner(t *testing.T) {
 
 	// Create minimal job context for testing
 	jCtx := &JobContext{
-		Config: Config{Verbose: false},
+		runEnv: &runEnv{
+			Config: Config{Verbose: false},
+		},
 	}
 
 	step.ctx = StepContext{}
@@ -362,7 +364,12 @@ func (unsendableStateRunner) RunStep(name string, call actionrpc.Call, opts RunO
 }
 
 func TestActionStateThatCannotBeSentFailsTheStep(t *testing.T) {
-	jCtx := &JobContext{Printer: newBufferPrinter(), states: newActionStates()}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
+		states: newActionStates(),
+	}
 	st := newStepRun(&Step{Name: "s", Uses: "unsendable"}, nil)
 	_, err := st.executeSingleAction(unsendableStateRunner{}, map[string]any{}, jCtx, false)
 	if err == nil || !strings.Contains(err.Error(), "cannot keep the action's state") {

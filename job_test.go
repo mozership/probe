@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
@@ -238,9 +237,11 @@ func TestJob_shouldSkip(t *testing.T) {
 			}
 
 			ctx := JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
 				Vars:    tt.vars,
 				Outputs: NewOutputs(),
-				Printer: newBufferPrinter(),
 			}
 
 			ev := &expr.Expr{}
@@ -284,9 +285,11 @@ func TestJob_shouldSkip_errorHandling(t *testing.T) {
 			}
 
 			ctx := JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
 				Vars:    map[string]any{},
 				Outputs: NewOutputs(),
-				Printer: newBufferPrinter(),
 			}
 
 			ev := &expr.Expr{}
@@ -316,9 +319,11 @@ func TestJob_handleSkip(t *testing.T) {
 	result.Jobs["test-job"] = jobResult
 
 	ctx := JobContext{
-		Result:  result,
-		Printer: newBufferPrinter(),
-		Config:  Config{Verbose: false},
+		runEnv: &runEnv{
+			Result:  result,
+			Printer: newBufferPrinter(),
+			Config:  Config{Verbose: false},
+		},
 	}
 
 	// Call handleSkip
@@ -826,11 +831,12 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 		result := NewResult()
 		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
 		failed, err := job.run(JobContext{
-			Vars:       map[string]any{"n": n},
-			Printer:    printer,
-			Result:     result,
-			Outputs:    NewOutputs(),
-			countersMu: &sync.Mutex{},
+			runEnv: &runEnv{
+				Printer: printer,
+				Result:  result,
+			},
+			Vars:    map[string]any{"n": n},
+			Outputs: NewOutputs(),
 		})
 		if err != nil || failed {
 			t.Fatalf("run %d: failed = %v, err = %v", n, failed, err)

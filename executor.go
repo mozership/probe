@@ -51,17 +51,17 @@ func (e *Executor) executeWithBuffering(ctx JobContext) bool {
 
 	overallSuccess := e.executeJobRepeatLoop(ctx)
 
-	if ctx.IsRepeating {
+	if rep := ctx.repeat; rep != nil {
 		counters := e.appendRepeatStepResults(&ctx)
 		// A job is left skipped when its skipif skipped every run counted.
 		// A run that ran a step leaves a counter, and then the test is
 		// checked, whichever runs were skipped. A run that could not start
 		// failed the job already.
-		if ctx.repeatTested && (len(counters) > 0 || !e.skipped(ctx)) {
+		if rep.tested && (len(counters) > 0 || !e.skipped(ctx)) {
 			e.unskip(ctx)
 			overallSuccess = e.checkRepeatTest(ctx, counters) && overallSuccess
 		}
-		if ctx.baselineTested && (len(counters) > 0 || !e.skipped(ctx)) {
+		if rep.baselineTested && (len(counters) > 0 || !e.skipped(ctx)) {
 			e.unskip(ctx)
 			overallSuccess = e.checkBaselineTest(ctx, counters) && overallSuccess
 		}
@@ -72,32 +72,36 @@ func (e *Executor) executeWithBuffering(ctx JobContext) bool {
 	return overallSuccess
 }
 
-// setupContext initializes the job context for buffered execution
+// setupContext gives the job's context what its runs share: when the runs
+// are counted, the counts they are counted in.
 func (e *Executor) setupContext(ctx JobContext) JobContext {
 	jobID := e.job.ID
 	_, total := ctx.JobScheduler.GetRepeatInfo(jobID)
-	ctx.IsRepeating = total > 1
-	if r := e.job.Repeat; r != nil {
-		ctx.RepeatWarmup = r.Warmup
-		ctx.repeatTested = r.Test != ""
-		ctx.baselineTested = r.BaselineTest != ""
-		tests := []string{r.Test}
-		if ctx.baselineTested {
-			// Whether the test is skipped depends on the run compared to
-			// alone, and not on the runs, so it is known before they start.
-			ctx.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Printer.baseline, e.job.ID)
-			if ctx.baselineSkipped == "" {
-				tests = append(tests, r.BaselineTest)
-			}
-		}
-		ctx.repeatReads = repeatReads(tests...)
-		// A warmup run is left out by the counters, and the tests read them,
-		// so a job run once keeps them too when the run is a warmup run or
-		// the job has a test.
-		ctx.IsRepeating = ctx.IsRepeating || ctx.RepeatWarmup > 0 || ctx.repeatTested || ctx.baselineTested
+	var r Repeat
+	if e.job.Repeat != nil {
+		r = *e.job.Repeat
 	}
-	ctx.RepeatTotal = total - ctx.RepeatWarmup
-	ctx.StepCounters = make(map[int]StepRepeatCounter)
+	tested, baselineTested := r.Test != "", r.BaselineTest != ""
+	// A warmup run is left out by the counters, and the tests read them, so a
+	// job run once keeps them too when the run is a warmup run or the job has
+	// a test.
+	if total <= 1 && r.Warmup == 0 && !tested && !baselineTested {
+		return ctx
+	}
+	rep := newJobRepeat(total, r.Warmup)
+	rep.tested = tested
+	rep.baselineTested = baselineTested
+	tests := []string{r.Test}
+	if baselineTested {
+		// Whether the test is skipped depends on the run compared to alone,
+		// and not on the runs, so it is known before they start.
+		rep.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Printer.baseline, e.job.ID)
+		if rep.baselineSkipped == "" {
+			tests = append(tests, r.BaselineTest)
+		}
+	}
+	rep.reads = repeatReads(tests...)
+	ctx.repeat = rep
 	return ctx
 }
 
@@ -253,30 +257,31 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter {
 	jobID := e.job.ID
 
-	ctx.countersMu.Lock()
-	indexes := make([]int, 0, len(ctx.StepCounters))
-	for i := range ctx.StepCounters {
+	rep := ctx.repeat
+	rep.mu.Lock()
+	indexes := make([]int, 0, len(rep.counters))
+	for i := range rep.counters {
 		indexes = append(indexes, i)
 	}
 	sort.Ints(indexes)
 	counters := make([]StepRepeatCounter, len(indexes))
 	for n, i := range indexes {
-		counter := ctx.StepCounters[i]
+		counter := rep.counters[i]
 		// Ensure RepeatTotal is set (in case it wasn't set earlier)
 		if counter.RepeatTotal == 0 {
-			counter.RepeatTotal = ctx.RepeatTotal
-			ctx.StepCounters[i] = counter
+			counter.RepeatTotal = rep.total
+			rep.counters[i] = counter
 		}
-		counter.Warmup = ctx.RepeatWarmup
-		counter.Tested = ctx.repeatTested
+		counter.Warmup = rep.warmup
+		counter.Tested = rep.tested
 		counters[n] = counter
 	}
-	ctx.countersMu.Unlock()
+	rep.mu.Unlock()
 
 	// Create StepResults for repeat steps and add them to Result
 	for n := range indexes {
 		counter := counters[n]
-		hasTest := counter.Test != "" || counter.Checked || ctx.repeatReads[counter.ID]
+		hasTest := counter.Test != "" || counter.Checked || rep.reads[counter.ID]
 
 		// Determine status based on repeat counter results
 		var status StatusType
