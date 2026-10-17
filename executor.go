@@ -95,7 +95,7 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 	if baselineTested {
 		// Whether the test is skipped depends on the run compared to alone,
 		// and not on the runs, so it is known before they start.
-		rep.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Printer.baseline, e.job.ID)
+		rep.baselineSkipped = baselineSkip(r.BaselineTest, ctx.Baseline, e.job.ID)
 		if rep.baselineSkipped == "" {
 			tests = append(tests, r.BaselineTest)
 		}

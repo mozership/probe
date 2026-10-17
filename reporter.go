@@ -74,24 +74,26 @@ type Reporter interface {
 }
 
 // newReporter builds the reporter for the given mode.
-func newReporter(mode OutputMode, p *Printer) Reporter {
+func newReporter(mode OutputMode, p *Printer, render *reportRenderer) Reporter {
 	if mode.resolve() == OutputModeStream {
-		return NewStreamReporter(p)
+		return newStreamReporter(p, render)
 	}
-	return NewBufferedReporter(p)
+	return newBufferedReporter(p, render)
 }
 
 // BufferedReporter keeps the original behaviour: a spinner during the run and
 // the complete report at the end.
 type BufferedReporter struct {
 	printer     *Printer
+	render      *reportRenderer
 	name        string
 	description string
 }
 
-// NewBufferedReporter creates a reporter that prints the report at the end.
-func NewBufferedReporter(p *Printer) *BufferedReporter {
-	return &BufferedReporter{printer: p}
+// newBufferedReporter creates a reporter that prints the report render
+// renders at the end.
+func newBufferedReporter(p *Printer, render *reportRenderer) *BufferedReporter {
+	return &BufferedReporter{printer: p, render: render}
 }
 
 func (r *BufferedReporter) Start(name, description string) {
@@ -110,8 +112,7 @@ func (r *BufferedReporter) JobDone(jobID string, jr *JobResult) {}
 
 func (r *BufferedReporter) Finish(rs *Result) {
 	r.printer.StopSpinner()
-	r.printer.PrintHeader(r.name, r.description)
-	r.printer.PrintReport(rs)
+	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(r.name, r.description)+r.render.GenerateReport(rs))
 }
 
 // StreamReporter prints the report incrementally.
@@ -123,6 +124,7 @@ func (r *BufferedReporter) Finish(rs *Result) {
 // is what keeps a CI log alive while the first job is still running.
 type StreamReporter struct {
 	printer *Printer
+	render  *reportRenderer
 	order   []string
 	index   map[string]int
 
@@ -134,23 +136,25 @@ type StreamReporter struct {
 	latestEnd     time.Time
 }
 
-// NewStreamReporter creates a reporter that flushes job blocks as they finish.
-func NewStreamReporter(p *Printer) *StreamReporter {
-	index := make(map[string]int, len(p.BufferIDs))
-	for i, id := range p.BufferIDs {
+// newStreamReporter creates a reporter that flushes job blocks, which render
+// renders, as they finish.
+func newStreamReporter(p *Printer, render *reportRenderer) *StreamReporter {
+	index := make(map[string]int, len(render.order))
+	for i, id := range render.order {
 		index[id] = i
 	}
 
 	return &StreamReporter{
 		printer: p,
-		order:   p.BufferIDs,
+		render:  render,
+		order:   render.order,
 		index:   index,
 		ready:   make(map[string]*JobResult),
 	}
 }
 
 func (r *StreamReporter) Start(name, description string) {
-	r.printer.PrintHeader(name, description)
+	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(name, description))
 }
 
 func (r *StreamReporter) StepStart(jobID, stepName string) {
@@ -226,7 +230,7 @@ func (r *StreamReporter) Finish(rs *Result) {
 	}
 
 	var output strings.Builder
-	r.printer.generateFooter(totalTime, r.succeeded, len(rs.Jobs), &output)
+	r.render.generateFooter(totalTime, r.succeeded, len(rs.Jobs), &output)
 	r.printer.Fprint(r.printer.outWriter, output.String())
 }
 
@@ -248,7 +252,7 @@ func (r *StreamReporter) flushLocked() {
 // writeJobLocked renders one job block and folds it into the footer totals.
 // Callers must hold r.mu.
 func (r *StreamReporter) writeJobLocked(jr *JobResult) {
-	block, succeeded, start, end := r.printer.generateJobReport(jr)
+	block, succeeded, start, end := r.render.generateJobReport(jr)
 	if succeeded {
 		r.succeeded++
 	}

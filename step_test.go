@@ -1987,7 +1987,7 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	// A later step publishing a name already taken gets a warning, not an
 	// error-labelled message.
 	errOut := new(bytes.Buffer)
-	printer := NewPrinter(false, nil)
+	printer := NewPrinter(false)
 	printer.errWriter = errOut
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -2800,7 +2800,7 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			printer := NewPrinter(false, []string{})
+			printer := NewPrinter(false)
 			printer.SetMasker(mask.New(nil, nil))
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}}
 			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}

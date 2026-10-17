@@ -11,14 +11,14 @@ import (
 // newTestStreamPrinter builds a printer writing into buffers, together with a
 // stream reporter over the given job order.
 func newTestStreamPrinter(bufferIDs []string) (*Printer, *bytes.Buffer, *bytes.Buffer, *StreamReporter) {
-	p := NewPrinter(false, bufferIDs)
+	p := NewPrinter(false)
 	out := new(bytes.Buffer)
 	errOut := new(bytes.Buffer)
 	p.outWriter = out
 	p.errWriter = errOut
 	p.spinner = nil
 
-	r := NewStreamReporter(p)
+	r := newStreamReporter(p, newReportRenderer(bufferIDs, nil, nil))
 	p.SetReporter(r)
 
 	return p, out, errOut, r
@@ -132,10 +132,10 @@ func TestOutputMode_resolve(t *testing.T) {
 func TestNewReporter(t *testing.T) {
 	p := newBufferPrinter()
 
-	if _, ok := newReporter(OutputModeSpinner, p).(*BufferedReporter); !ok {
+	if _, ok := newReporter(OutputModeSpinner, p, newReportRenderer(nil, nil, nil)).(*BufferedReporter); !ok {
 		t.Error("newReporter(spinner) should return a *BufferedReporter")
 	}
-	if _, ok := newReporter(OutputModeStream, p).(*StreamReporter); !ok {
+	if _, ok := newReporter(OutputModeStream, p, newReportRenderer(nil, nil, nil)).(*StreamReporter); !ok {
 		t.Error("newReporter(stream) should return a *StreamReporter")
 	}
 }
@@ -158,11 +158,7 @@ func TestStreamReporter_MatchesBufferedReport(t *testing.T) {
 	}
 	r.Finish(rs)
 
-	buffered := NewPrinter(false, order)
-	bufferedOut := new(bytes.Buffer)
-	buffered.outWriter = bufferedOut
-	buffered.spinner = nil
-	want := buffered.GenerateReport(newTestResult(base))
+	want := newReportRenderer(order, nil, nil).GenerateReport(newTestResult(base))
 
 	if out.String() != want {
 		t.Errorf("streamed report differs from buffered report\ngot:\n%s\nwant:\n%s", out.String(), want)
@@ -330,12 +326,12 @@ func TestStreamReporter_ConcurrentNotifications(t *testing.T) {
 }
 
 func TestBufferedReporter_PrintsOnFinish(t *testing.T) {
-	p := NewPrinter(false, []string{"first"})
+	p := NewPrinter(false)
 	out := new(bytes.Buffer)
 	p.outWriter = out
 	p.spinner = nil
 
-	r := NewBufferedReporter(p)
+	r := newBufferedReporter(p, newReportRenderer([]string{"first"}, nil, nil))
 	p.SetReporter(r)
 
 	rs := newTestResult(time.Now())

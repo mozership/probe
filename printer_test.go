@@ -107,7 +107,7 @@ func TestRepeatNoTestDisplay(t *testing.T) {
 
 // Printer interface tests
 func TestNewPrinter(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 	if printer == nil {
 		t.Error("NewPrinter() should return a non-nil Printer")
 		return
@@ -117,66 +117,9 @@ func TestNewPrinter(t *testing.T) {
 		t.Error("NewPrinter(false) should set verbose to false")
 	}
 
-	verbosePrinter := NewPrinter(true, []string{})
+	verbosePrinter := NewPrinter(true)
 	if !verbosePrinter.verbose {
 		t.Error("NewPrinter(true) should set verbose to true")
-	}
-}
-
-func TestNewPrinter_BufferInitialization(t *testing.T) {
-	tests := []struct {
-		name      string
-		bufferIDs []string
-	}{
-		{
-			name:      "empty buffer IDs",
-			bufferIDs: []string{},
-		},
-		{
-			name:      "single buffer ID",
-			bufferIDs: []string{"job1"},
-		},
-		{
-			name:      "multiple buffer IDs",
-			bufferIDs: []string{"job1", "job2", "job3"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			printer := NewPrinter(false, tt.bufferIDs)
-
-			if printer.Buffer == nil {
-				t.Error("Buffer should not be nil")
-				return
-			}
-
-			// Check BufferIDs are stored correctly
-			if len(printer.BufferIDs) != len(tt.bufferIDs) {
-				t.Errorf("Expected %d BufferIDs, got %d", len(tt.bufferIDs), len(printer.BufferIDs))
-			}
-
-			for i, expectedID := range tt.bufferIDs {
-				if i >= len(printer.BufferIDs) || printer.BufferIDs[i] != expectedID {
-					t.Errorf("BufferIDs[%d]: expected '%s', got '%s'", i, expectedID, printer.BufferIDs[i])
-				}
-			}
-
-			// Check that all provided IDs have initialized buffers
-			for _, id := range tt.bufferIDs {
-				if _, exists := printer.Buffer[id]; !exists {
-					t.Errorf("Buffer for ID '%s' should be initialized", id)
-				}
-				if printer.Buffer[id] == nil {
-					t.Errorf("Buffer for ID '%s' should not be nil", id)
-				}
-			}
-
-			// Check that buffer count matches expected
-			if len(printer.Buffer) != len(tt.bufferIDs) {
-				t.Errorf("Expected %d buffers, got %d", len(tt.bufferIDs), len(printer.Buffer))
-			}
-		})
 	}
 }
 
@@ -262,7 +205,7 @@ func TestPrinter_generateHeader(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -305,7 +248,7 @@ func TestPrinter_generateError(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name   string
@@ -338,7 +281,7 @@ func TestPrinter_generateError(t *testing.T) {
 }
 
 func TestPrinter_generateLogDebug(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name   string
@@ -375,7 +318,7 @@ func TestPrinter_generateLogError(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name   string
@@ -411,7 +354,7 @@ func TestPrinter_generateJobStatus(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name     string
@@ -474,7 +417,7 @@ func TestPrinter_generateJobStatus_ColorMapping(t *testing.T) {
 	color.NoColor = false
 	defer func() { color.NoColor = true }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name              string
@@ -529,7 +472,7 @@ func TestPrinter_generateJobStatus_SuccessNotBlue(t *testing.T) {
 	color.NoColor = false
 	defer func() { color.NoColor = true }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	var output strings.Builder
 	printer.generateJobStatus("success-job", "Success Job", StatusSuccess, 1.5, &output)
@@ -556,7 +499,7 @@ func TestPrinter_PrintMapData(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(true, []string{}) // verbose mode to see LogDebug output
+	printer := NewPrinter(true) // verbose mode to see LogDebug output
 
 	tests := []struct {
 		name     string
@@ -661,7 +604,7 @@ func TestPrinter_generateJobStatus_SkippedFormatting(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	// Test skipped job formatting
 	var output strings.Builder
@@ -687,7 +630,7 @@ func TestPrinter_generateJobStatus_SkippedFormatting(t *testing.T) {
 }
 
 func TestPrinter_generateJobResults(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name  string
@@ -741,7 +684,7 @@ func TestPrinter_generateJobResults(t *testing.T) {
 }
 
 func TestPrinter_generateFooter(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name         string
@@ -789,7 +732,7 @@ func TestPrinter_generateFooter(t *testing.T) {
 }
 
 func TestPrinter_generateReport(t *testing.T) {
-	printer := NewPrinter(false, []string{"job1", "job2"})
+	printer := newReportRenderer([]string{"job1", "job2"}, nil, nil)
 
 	// Create test WorkflowBuffer
 	rs := NewResult()
@@ -853,7 +796,7 @@ func TestPrinter_generateReport(t *testing.T) {
 }
 
 func TestPrinter_generateReport_EmptyBuffer(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	rs := NewResult()
 	result := printer.GenerateReport(rs)
@@ -865,7 +808,7 @@ func TestPrinter_generateReport_EmptyBuffer(t *testing.T) {
 }
 
 func TestPrinter_generateReport_WithRepeatStep(t *testing.T) {
-	printer := NewPrinter(false, []string{"job1"})
+	printer := newReportRenderer([]string{"job1"}, nil, nil)
 
 	rs := NewResult()
 
@@ -919,7 +862,7 @@ func TestPrinter_generateEchoOutput(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name     string
@@ -980,7 +923,7 @@ func TestPrinter_generateTestFailure(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name     string
@@ -1027,7 +970,7 @@ func TestPrinter_generateTestFailure(t *testing.T) {
 }
 
 func TestPrinter_generateTestError(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name     string
@@ -1057,7 +1000,7 @@ func TestPrinter_generateTestError(t *testing.T) {
 }
 
 func TestPrinter_generateTestTypeMismatch(t *testing.T) {
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 
 	tests := []struct {
 		name     string
@@ -1245,7 +1188,7 @@ func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *te
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name         string
@@ -1380,12 +1323,12 @@ func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
 		}},
 	}}
 
-	printer := newBufferPrinter()
+	printer := newReportRenderer(nil, nil, nil)
 	if got := printer.generateJobResultsFromStepResults("api", steps); strings.Contains(got, "baseline") {
 		t.Errorf("without a baseline nothing should be shown against one, got:\n%s", got)
 	}
 
-	printer.SetBaseline(baseline)
+	printer.baseline = baseline
 	got := printer.generateJobResultsFromStepResults("api", steps)
 	for _, want := range []string{
 		"max 120ms\n      baseline p50 100ms (+20.0%), p95 200ms (-40.0%), p99 120ms\n",
@@ -1404,7 +1347,7 @@ func TestPrinter_generateJobResultsFromStepResults_RepeatEchoOutputs(t *testing.
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := newBufferPrinter()
+	printer := newReportRenderer(nil, nil, nil)
 
 	stepResult := StepResult{
 		Index:   1,
@@ -1499,7 +1442,7 @@ func TestPrinter_generateFalseClause(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = false }()
 
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 	printer.SetMasker(mask.New(nil, nil))
 	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": "Bearer s3cr3t-token"}})
 
@@ -1592,7 +1535,7 @@ func TestClauseSummary(t *testing.T) {
 func TestPrinter_maskClauseBeforeCutting(t *testing.T) {
 	long := strings.Repeat("k", maxOperandLength+50)
 	quoted := `pa"ss\word`
-	printer := NewPrinter(false, []string{})
+	printer := NewPrinter(false)
 	printer.SetMasker(mask.New(nil, nil))
 	printer.Masker().Learn(map[string]any{"headers": map[string]any{"authorization": long}, "password": quoted})
 
@@ -1607,6 +1550,30 @@ func TestPrinter_maskClauseBeforeCutting(t *testing.T) {
 		}
 		if strings.Contains(out, "ss") {
 			t.Errorf("a secret with a quote is shown: %q", out)
+		}
+	}
+}
+
+// The report is shown as it is rendered, so it hides the secrets its masker
+// knows, as the printer does in what it writes.
+func TestReportRenderer_MasksTheReport(t *testing.T) {
+	r := newReportRenderer([]string{"job"}, nil, mask.New([]string{"S"}, map[string]string{"S": "hunter2"}))
+	rs := NewResult()
+	rs.Jobs["job"] = &JobResult{
+		JobID:   "job",
+		JobName: "Job hunter2",
+		Success: true,
+		StepResults: []StepResult{
+			{Index: 0, Name: "Log in as hunter2", Status: StatusSuccess, RT: "1ms"},
+		},
+	}
+
+	for name, got := range map[string]string{"GenerateReport": r.GenerateReport(rs), "GenerateReportOnlySteps": r.GenerateReportOnlySteps(rs)} {
+		if strings.Contains(got, "hunter2") {
+			t.Errorf("%s() shows the secret:\n%s", name, got)
+		}
+		if !strings.Contains(got, "Log in as") {
+			t.Errorf("%s() should have the step, got:\n%s", name, got)
 		}
 	}
 }
