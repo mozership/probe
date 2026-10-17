@@ -77,6 +77,42 @@ message RunResponse {
     // The processes the action left running in the background, for the
     // runner to stop once the run is over.
     repeated Process processes = 5;
+    // The check of the step against a contract, such as an OpenAPI
+    // document, which the runner takes as the step's test; none when the
+    // action checked it against none.
+    Contract contract = 6;
+}
+
+// Contract is the check of a step against a contract.
+message Contract {
+    // What the contract matched the step to; none when it has nothing that
+    // matches it.
+    ContractMatch matched = 1;
+    // What the contract does not allow in the request and the response,
+    // empty when it allows all of it.
+    repeated Violation violations = 2;
+}
+
+// ContractMatch is what a contract matched a step to.
+message ContractMatch {
+    // The contract, such as the path of an OpenAPI document.
+    string spec = 1;
+    // The operation, such as GET /users/{id}.
+    string operation = 2;
+    // The response the operation declares for the step, such as 200; empty
+    // when it declares none.
+    string response = 3;
+}
+
+// Violation is what a contract does not allow in a request or a response.
+message Violation {
+    // Where it is: request or response.
+    string in = 1;
+    // The field, such as $.id; empty when it is not in one.
+    string field = 2;
+    // The kind of violation; empty when there is no kind to tell.
+    string reason = 3;
+    string message = 4;
 }
 
 // Process is a process an action left running in the background.

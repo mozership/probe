@@ -734,6 +734,7 @@ type Call struct {
     Actions map[string]string // the names the workflow gives its external actions
     Cleanups *Cleanups        // not nil under a Probe that cleans up once the run is over
     Processes *Processes      // the processes the action leaves running in the background
+    Contract *Contract        // the check of the step against a contract, such as an OpenAPI document
 }
 
 type Step struct {
@@ -785,6 +786,8 @@ What the steps of a job run by the embedded action leave behind stays until the 
 `Call.Cleanups` is not nil under a Probe that cleans up, which calls `Cleanup` of an action whose `action.yml` sets `cleanup`. It is nil under a Probe from before there was a cleanup; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
 
 An action that leaves a process running in the background, as the shell action does for `background: true`, starts it in a session of its own, so that it outlives the action, and tells Probe of it with `Call.Processes.Add(actionrpc.Process{PID: pid, Log: logFile})`, also when the step then fails. Probe stops the process group it leads once the workflow is over, or when Ctrl+C, `SIGTERM` or `SIGHUP` ends it, and removes the log file, if any. A Probe from before there were processes does not hear of them, and leaves them running.
+
+An action that checks a step against a contract, as the http action does with `openapi`, tells Probe of the check with `Call.Contract.Report(actionrpc.ContractCheck{Matched: matched, Violations: violations})`, where `Violations` is empty when the contract allows the request and the response. Probe takes the check as the step's test: the step fails as `contract_request` or `contract_response` when there is a violation, even when its `test` holds, and a step without a `test` is checked by the contract alone. `Matched` is what the contract matched the step to, which `probe coverage` counts, or nil when it has nothing that matches. A Probe from before there were contracts to report does not hear of the check, and takes the step as unchecked. `probe check` does not know which keys of an external action ask for a check, and warns of such a step without a `test` that nothing checks it.
 
 A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 

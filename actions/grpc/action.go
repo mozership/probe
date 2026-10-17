@@ -56,6 +56,12 @@ func Keeps() []string {
 	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
 }
 
+// Contracts returns the keys of with that ask the action to check a step
+// against a contract: proto, the .proto files of the service.
+func Contracts() []string {
+	return []string{"proto"}
+}
+
 // Params returns the keys the grpc action takes in with: those of Req, and
 // proto, which it reads apart from Req.
 func Params() []string {

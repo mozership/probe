@@ -1672,8 +1672,21 @@ func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 type CountingMockActionRunner struct {
 	result     map[string]any
 	resultFunc func(count int) map[string]any
-	callCount  *int
-	err        error // returned by every call when set
+	// contractFunc is the check of each call against a contract that the
+	// action reports, or nil for none.
+	contractFunc func(count int) *actionrpc.ContractCheck
+	callCount    *int
+	err          error // returned by every call when set
+}
+
+func (m *CountingMockActionRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	ret, err := m.RunActions(name, call.With, opts)
+	if err == nil && m.contractFunc != nil {
+		if check := m.contractFunc(*m.callCount); check != nil {
+			call.Contract.Report(*check)
+		}
+	}
+	return ret, nil, err
 }
 
 func (m *CountingMockActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
@@ -2223,14 +2236,46 @@ func TestStepTellsTheActionAboutTheStep(t *testing.T) {
 	}
 }
 
-// violationsRes is the res of an action that checked the response against a
-// contract and found what is given.
-func violationsRes(vs ...map[string]any) map[string]any {
+// contractOf is the check of an action that checked the step against a
+// contract and found the violations given.
+func contractOf(vs ...map[string]any) *actionrpc.ContractCheck {
 	list := []any{}
 	for _, v := range vs {
 		list = append(list, v)
 	}
-	return map[string]any{"code": 200, "violations": list}
+	check := actionrpc.ContractCheckOf(list, nil)
+	return &check
+}
+
+// The check the action reports of an attempt against a contract is the
+// step's, and an attempt that fails leaves none of an earlier one.
+func TestStep_executeSingleAction_TakesTheContractTheActionReports(t *testing.T) {
+	callCount := 0
+	broken := contractOf(map[string]any{"in": "response", "message": "body failed"})
+	runner := &CountingMockActionRunner{
+		callCount: &callCount,
+		result:    map[string]any{"res": map[string]any{"code": 200}},
+		contractFunc: func(int) *actionrpc.ContractCheck {
+			return broken
+		},
+	}
+	st := &stepRun{Step: &Step{Uses: "http"}, expr: &expr.Expr{}}
+	jCtx := &JobContext{runEnv: &runEnv{Printer: newBufferPrinter()}}
+
+	if _, err := st.executeSingleAction(runner, map[string]any{}, jCtx, false); err != nil {
+		t.Fatalf("executeSingleAction() error = %v", err)
+	}
+	if !reflect.DeepEqual(st.contract, broken) {
+		t.Errorf("contract = %+v, want %+v", st.contract, broken)
+	}
+
+	runner.err = errors.New("connection refused")
+	if _, err := st.executeSingleAction(runner, map[string]any{}, jCtx, false); err == nil {
+		t.Fatal("executeSingleAction() error = nil, want the action's")
+	}
+	if st.contract != nil {
+		t.Errorf("contract = %+v after a failed attempt, want none", st.contract)
+	}
 }
 
 func TestStep_check_Contract(t *testing.T) {
@@ -2239,22 +2284,29 @@ func TestStep_check_Contract(t *testing.T) {
 	tests := []struct {
 		name        string
 		test        string
-		res         map[string]any
+		contract    *actionrpc.ContractCheck
 		wantChecked bool
 		wantOK      bool
 		wantKind    string
 	}{
-		{name: "no contract and no test", res: map[string]any{"code": 200}},
-		{name: "a contract kept, without a test", res: violationsRes(), wantChecked: true, wantOK: true},
-		{name: "a contract kept, with a test that holds", test: "res.code == 200", res: violationsRes(), wantChecked: true, wantOK: true},
-		{name: "a contract kept, with a test that fails", test: "res.code == 201", res: violationsRes(), wantChecked: true, wantKind: FailureAssertion},
-		{name: "a contract broken, without a test", res: violationsRes(broken), wantChecked: true, wantKind: FailureContractResponse},
-		{name: "a contract broken, with a test that holds", test: "res.code == 200", res: violationsRes(broken), wantChecked: true, wantKind: FailureContractResponse},
-		{name: "a request that breaks the contract", test: "res.code == 200", res: violationsRes(map[string]any{"in": "request", "message": "body failed"}), wantChecked: true, wantKind: FailureContractRequest},
+		{name: "no contract and no test"},
+		{name: "a contract kept, without a test", contract: contractOf(), wantChecked: true, wantOK: true},
+		{name: "a contract kept, with a test that holds", test: "res.code == 200", contract: contractOf(), wantChecked: true, wantOK: true},
+		{name: "a contract kept, with a test that fails", test: "res.code == 201", contract: contractOf(), wantChecked: true, wantKind: FailureAssertion},
+		{name: "a contract broken, without a test", contract: contractOf(broken), wantChecked: true, wantKind: FailureContractResponse},
+		{name: "a contract broken, with a test that holds", test: "res.code == 200", contract: contractOf(broken), wantChecked: true, wantKind: FailureContractResponse},
+		{name: "a request that breaks the contract", test: "res.code == 200", contract: contractOf(map[string]any{"in": "request", "message": "body failed"}), wantChecked: true, wantKind: FailureContractRequest},
+		// What res holds is the step's to read; the runner hears of a
+		// contract only from the action.
+		{name: "violations in res alone", test: "res.code == 200", wantChecked: true, wantOK: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
+			res := map[string]any{"code": 200}
+			if tt.contract == nil && tt.test != "" {
+				res["violations"] = []any{broken}
+			}
+			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Res: res}, contract: tt.contract}
 			if got := st.checked(); got != tt.wantChecked {
 				t.Fatalf("checked() = %v, want %v", got, tt.wantChecked)
 			}
@@ -2283,11 +2335,12 @@ func TestStep_contractFailure(t *testing.T) {
 		Step: &Step{},
 		ctx: StepContext{
 			Req: map[string]any{"url": "http://example.com/v1/users/2"},
-			Res: violationsRes(
-				map[string]any{"in": "response", "reason": "missing property 'name'", "message": "body failed"},
-				map[string]any{"in": "response", "field": "$.id", "reason": "got string, want integer", "message": "body failed"},
-			),
+			Res: map[string]any{"code": 200},
 		},
+		contract: contractOf(
+			map[string]any{"in": "response", "reason": "missing property 'name'", "message": "body failed"},
+			map[string]any{"in": "response", "field": "$.id", "reason": "got string, want integer", "message": "body failed"},
+		),
 	}
 
 	f := st.contractFailure()
@@ -2317,15 +2370,15 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		res        map[string]any
+		contract   *actionrpc.ContractCheck
 		wantStatus StatusType
 	}{
-		{name: "a response that keeps to its contract passes without a test", res: violationsRes(), wantStatus: StatusSuccess},
-		{name: "a response that breaks its contract fails", res: violationsRes(broken), wantStatus: StatusError},
+		{name: "a response that keeps to its contract passes without a test", contract: contractOf(), wantStatus: StatusSuccess},
+		{name: "a response that breaks its contract fails", contract: contractOf(broken), wantStatus: StatusError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
+			st := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 200}}, contract: tt.contract}
 			jCtx := &JobContext{
 				runEnv: &runEnv{
 					Printer: newBufferPrinter(),
@@ -2361,11 +2414,13 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 	mock := &CountingMockActionRunner{
 		callCount: &callCount,
 		resultFunc: func(count int) map[string]any {
-			res := violationsRes()
+			return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
+		},
+		contractFunc: func(count int) *actionrpc.ContractCheck {
 			if count <= 2 {
-				res = violationsRes(map[string]any{"in": "response", "message": "body failed"})
+				return contractOf(map[string]any{"in": "response", "message": "body failed"})
 			}
-			return map[string]any{"status": 0, "res": res}
+			return contractOf()
 		},
 	}
 	step := &stepRun{
@@ -2408,9 +2463,9 @@ func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 		},
 	}
 
-	step.ctx = StepContext{Res: violationsRes()}
+	step.contract = contractOf()
 	step.handleRepeatExecution(jCtx, "Contract", false)
-	step.ctx = StepContext{Res: violationsRes(map[string]any{"in": "response", "message": "body failed"})}
+	step.contract = contractOf(map[string]any{"in": "response", "message": "body failed"})
 	step.handleRepeatExecution(jCtx, "Contract", false)
 
 	counter := jCtx.repeat.counters[0]
@@ -2456,7 +2511,7 @@ func TestStep_contractFailure_Kind(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &stepRun{Step: &Step{}, ctx: StepContext{Res: violationsRes(tt.violations...)}}
+			st := &stepRun{Step: &Step{}, contract: contractOf(tt.violations...)}
 			f := st.contractFailure()
 			if f == nil {
 				t.Fatal("contractFailure() = nil, want a failure")
@@ -2476,25 +2531,26 @@ func TestStep_contractFailure_Kind(t *testing.T) {
 
 func TestStep_contractMatched(t *testing.T) {
 	tests := []struct {
-		name string
-		res  map[string]any
-		want *report.Contract
+		name     string
+		contract *actionrpc.ContractCheck
+		want     *report.Contract
 	}{
-		{name: "no contract", res: map[string]any{"code": 200}},
+		{name: "no contract"},
+		{name: "a contract with nothing that matches", contract: contractOf()},
 		{
-			name: "an operation and a response",
-			res:  map[string]any{"contract": map[string]any{"spec": "openapi.yml", "operation": "GET /users/{id}", "response": "200"}},
-			want: &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"},
+			name:     "an operation and a response",
+			contract: &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}},
+			want:     &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"},
 		},
 		{
-			name: "an operation that declares no response for the status",
-			res:  map[string]any{"contract": map[string]any{"spec": "openapi.yml", "operation": "GET /users/{id}"}},
-			want: &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}"},
+			name:     "an operation that declares no response for the status",
+			contract: &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}"}},
+			want:     &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &stepRun{Step: &Step{}, ctx: StepContext{Res: tt.res}}
+			st := &stepRun{Step: &Step{}, contract: tt.contract}
 			if got := st.contractMatched(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("contractMatched() = %+v, want %+v", got, tt.want)
 			}
@@ -2503,9 +2559,8 @@ func TestStep_contractMatched(t *testing.T) {
 }
 
 func TestStep_createStepResult_ContractMatched(t *testing.T) {
-	res := violationsRes()
-	res["contract"] = map[string]any{"spec": "openapi.yml", "operation": "GET /users/{id}", "response": "200"}
-	st := &stepRun{Step: &Step{}, expr: &expr.Expr{}, ctx: StepContext{Res: res}}
+	contract := &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}}
+	st := &stepRun{Step: &Step{}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 200}}, contract: contract}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
@@ -2536,9 +2591,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	jCtx.Result.Jobs["job-1"] = &JobResult{JobID: "job-1"}
 
 	for _, response := range []string{"200", "2XX"} {
-		res := violationsRes()
-		res["contract"] = map[string]any{"spec": "openapi.yml", "operation": "GET /items", "response": response}
-		step.ctx = StepContext{Res: res}
+		step.contract = &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /items", Response: response}}
 		step.handleRepeatExecution(jCtx, "Items", false)
 	}
 
@@ -2575,11 +2628,13 @@ func TestStep_executeActionWithRetry_ContractOnly(t *testing.T) {
 			mock := &CountingMockActionRunner{
 				callCount: &callCount,
 				resultFunc: func(count int) map[string]any {
-					res := violationsRes()
+					return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
+				},
+				contractFunc: func(count int) *actionrpc.ContractCheck {
 					if count <= tt.brokenUntil {
-						res = violationsRes(broken)
+						return contractOf(broken)
 					}
-					return map[string]any{"status": 0, "res": res}
+					return contractOf()
 				},
 			}
 			// No test: the contract alone checks the step.
