@@ -104,7 +104,7 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config:  Config{Verbose: false},
-			Printer: NewPrinter(false, []string{}),
+			Printer: NewPrinter(false),
 			Result:  result,
 		},
 		repeat: &jobRepeat{

@@ -93,7 +93,7 @@ func (r *Req) Do() (*Result, error) {
 	// A local action in the job is found next to the job file, as one in a
 	// workflow is found next to the workflow file.
 	jobID := "embedded"
-	printer := probe.NewPrinter(true, []string{jobID})
+	printer := probe.NewPrinter(true)
 	var opts []probe.StandaloneOption
 	if r.cb != nil && r.cb.runID != "" {
 		opts = append(opts, probe.WithRunID(r.cb.runID))

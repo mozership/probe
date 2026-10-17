@@ -95,18 +95,14 @@ func (w *Workflow) Start(c Config) error {
 		return err
 	}
 
-	// Collect all job IDs for buffer initialization
+	// Collect all job IDs, for the order of the report
 	jobIDs := make([]string, len(w.Jobs))
 	for i, job := range w.Jobs {
 		jobIDs[i] = job.ID
 	}
 
 	if w.printer == nil {
-		w.printer = NewPrinter(c.Verbose, jobIDs)
-	} else {
-		// A caller cannot know a generated ID in advance, so Start owns the
-		// order the report is rendered in.
-		w.printer.SetBufferIDs(jobIDs)
+		w.printer = NewPrinter(c.Verbose)
 	}
 
 	// The variables read from files are those of the environment the
@@ -120,11 +116,13 @@ func (w *Workflow) Start(c Config) error {
 
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
-	w.printer.SetBaseline(c.Baseline)
 
 	// A reporter tracks how far the report has been emitted, which is state
-	// for this run alone, so every run gets a fresh one.
-	reporter := newReporter(c.Output, w.printer)
+	// for this run alone, so every run gets a fresh one. A caller cannot know
+	// a generated ID in advance, so the report is rendered in the order of
+	// the IDs the jobs have now.
+	render := newReportRenderer(jobIDs, c.Baseline, w.printer.Masker())
+	reporter := newReporter(c.Output, w.printer, render)
 	w.printer.SetReporter(reporter)
 
 	startedAt := time.Now()

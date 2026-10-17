@@ -337,10 +337,10 @@ func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
 		}
 		result.Jobs["test-job"] = jobResult
 
-		// This should not panic and should execute successfully
-		workflow.printer.PrintReport(result)
-
-		// If we get here without panic, the test passes
+		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).GenerateReport(result)
+		if !strings.Contains(got, "test-job") {
+			t.Errorf("GenerateReport() should have the job, got:\n%s", got)
+		}
 	})
 }
 
@@ -1462,7 +1462,7 @@ func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
 	t.Helper()
 
 	if w.printer == nil {
-		p := NewPrinter(false, nil)
+		p := NewPrinter(false)
 		p.spinner = nil
 		p.errWriter = new(bytes.Buffer)
 		w.printer = p
@@ -1807,7 +1807,7 @@ func TestWorkflow_Start_GivenVars(t *testing.T) {
 		Vars: map[string]any{"url": "http://localhost"},
 		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", actionRunner: runner, With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
 	}
-	p := NewPrinter(false, nil)
+	p := NewPrinter(false)
 	p.spinner = nil
 	p.outWriter = new(bytes.Buffer)
 	p.errWriter = new(bytes.Buffer)
@@ -1890,7 +1890,7 @@ func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
 	noColor := color.NoColor
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
-	printer := NewPrinter(false, nil)
+	printer := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name    string
