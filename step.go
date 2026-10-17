@@ -196,9 +196,11 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 	// than after the select, so that one started after the step timed out is
 	// still stopped with the others.
 	done := beginBackground(jCtx.background, st.Uses)
-	// The call is made up here: an attempt that timed out goes on in the
-	// background while the next one changes the step.
-	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups}
+	// The call is made up here: an attempt that timed out is stopped, which
+	// takes a while, in the background while the next one changes the step.
+	// The action is given ctx, so that it is stopped once the step times out
+	// rather than run on unseen.
+	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
 	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions}
 	go func() {
 		defer done()
@@ -211,8 +213,14 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 
 	// Wait for either completion or timeout. The state of an action that
 	// timed out is not kept, as its result is not.
+	timedOut := errors.New("action execution timed out after " + timeout.String())
 	select {
 	case res := <-resultCh:
+		// An action stopped for the timeout can return before the timeout
+		// is seen here, with an error that says less.
+		if res.err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, timedOut
+		}
 		if res.err == nil {
 			if err := jCtx.states.set(st.Uses, res.state); err != nil {
 				return nil, err
@@ -220,7 +228,7 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 		}
 		return res.ret, res.err
 	case <-ctx.Done():
-		return nil, errors.New("action execution timed out after " + timeout.String())
+		return nil, timedOut
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"os"
 	"os/exec"
+	"syscall"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
@@ -18,11 +20,22 @@ func Run(name string, with map[string]any, log hclog.Logger) (map[string]any, er
 	return result, err
 }
 
+// StopGrace is how long an action whose call is given up on is given to exit
+// on SIGTERM before it is killed.
+const StopGrace = 2 * time.Second
+
 // RunStep is Run for a step: the action is told about the step and given the
 // state it left in the job, and the state it leaves is returned, which is nil
 // when it keeps none.
 func RunStep(name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	return run(exec.Command(os.Args[0], BuiltinCmd, name), nil, call, log)
+	return RunStepContext(context.Background(), name, call, log)
+}
+
+// RunStepContext is RunStep that gives up on the action once ctx is done:
+// the action is sent SIGTERM, and killed if it has not exited StopGrace
+// later, and ctx's error is returned.
+func RunStepContext(ctx context.Context, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	return run(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
 }
 
 // RunExecutable starts the action served by the executable at path, calls it
@@ -36,11 +49,28 @@ func RunExecutable(path string, sum []byte, with map[string]any, log hclog.Logge
 
 // RunExecutableStep is RunExecutable for a step, as RunStep is Run for one.
 func RunExecutableStep(path string, sum []byte, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	return RunExecutableStepContext(context.Background(), path, sum, call, log)
+}
+
+// RunExecutableStepContext is RunExecutableStep that gives up on the action
+// once ctx is done, as RunStepContext does.
+func RunExecutableStepContext(ctx context.Context, path string, sum []byte, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
 	var secure *plugin.SecureConfig
 	if len(sum) > 0 {
 		secure = &plugin.SecureConfig{Checksum: sum, Hash: sha256.New()}
 	}
-	return run(exec.Command(path), secure, call, log)
+	return run(ctx, command(ctx, path), secure, call, log)
+}
+
+// command returns the command that serves an action, which is stopped once
+// ctx is done. It is sent SIGTERM rather than killed, so that it can stop
+// what it started, such as the background commands of the shell action, and
+// is killed if it has not exited StopGrace later.
+func command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = StopGrace
+	return cmd
 }
 
 // CleanupExecutable starts the action served by the executable at path, as
@@ -64,19 +94,60 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 	return action.Cleanup(ctx, call)
 }
 
-func run(cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	cl, action, err := start(cmd, secure, log)
+func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	cl, action, err := start(cmd, secure, stoppedLogger{Logger: log, ctx: ctx})
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
 		return nil, nil, err
 	}
-	defer cl.Kill()
+	defer func() {
+		// Kill would have the action shut down without a signal, before the
+		// SIGTERM it is sent once ctx is done has reached it.
+		if ctx.Err() != nil {
+			awaitExit(cl)
+		}
+		cl.Kill()
+	}()
 
-	result, newState, err := action.RunStep(call)
+	result, newState, err := action.RunStepContext(ctx, call)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
 		return nil, nil, err
 	}
 
 	return result, newState, nil
+}
+
+// stoppedLogger is the log go-plugin is given for an action that is stopped
+// once ctx is done. That the action exited by the signal it was sent then is
+// what the runner meant to happen, so it is not logged as an error, which a
+// person would see whether or not the step's failure says why.
+type stoppedLogger struct {
+	hclog.Logger
+	ctx context.Context
+}
+
+func (l stoppedLogger) Error(msg string, args ...any) {
+	// The message is go-plugin's, for a process that exited with an error.
+	if msg == "plugin process exited" && l.ctx.Err() != nil {
+		l.Debug(msg, args...)
+		return
+	}
+	l.Logger.Error(msg, args...)
+}
+
+// awaitExit waits for the process that serves an action to exit, as one sent
+// SIGTERM by command does, by StopGrace or by being killed then. It gives up
+// a little later, for Kill to see to the process.
+func awaitExit(cl *plugin.Client) {
+	deadline := time.Now().Add(StopGrace + time.Second)
+	for !cl.Exited() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // start starts the process that serves an action, and returns it along with
