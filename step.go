@@ -960,10 +960,15 @@ func (st *stepRun) handleWait(jCtx *JobContext) {
 	}
 
 	if duration > 0 {
-		msg := colorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
-		msg = fmt.Sprintf("%s %s", msg, st.Name)
-		sleepWithMessage(duration, msg, jCtx.Printer.AddSpinnerSuffix)
+		sleepWithMessage(duration, st.waitMessage(duration), jCtx.Printer.AddSpinnerSuffix)
 	}
+}
+
+// waitMessage is what the spinner shows while the step waits for duration:
+// the wait and the name of the step, evaluated as prepare evaluated it.
+func (st *stepRun) waitMessage(duration time.Duration) string {
+	msg := colorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
+	return fmt.Sprintf("%s %s", msg, st.expandedName)
 }
 
 func sleepWithMessage(d time.Duration, m string, fn func(m string)) {

@@ -534,6 +534,25 @@ func TestStep_createFailedStepResult_NoTest(t *testing.T) {
 
 // Tests for refactored methods
 
+// The wait shows the name of the step as prepare evaluated it: with its
+// templates evaluated, and the stand-in for a step without one.
+func TestStep_waitMessage(t *testing.T) {
+	for _, tt := range []struct{ name, want string }{
+		{"Poll {{vars.n}}", "Poll 3"},
+		{"", "Unknown Step"},
+	} {
+		step := newStepRun(&Step{Name: tt.name}, nil)
+		step.ctx = StepContext{Vars: map[string]any{"n": 3}}
+		jCtx := &JobContext{Printer: newBufferPrinter()}
+		if _, ok := step.prepare(jCtx); !ok {
+			t.Fatalf("prepare() of %q did not continue", tt.name)
+		}
+		if got := step.waitMessage(2 * time.Second); !strings.HasSuffix(got, " "+tt.want) {
+			t.Errorf("waitMessage() of %q = %q, want it to end with %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestStep_prepare(t *testing.T) {
 	tests := []struct {
 		name           string
