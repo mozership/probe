@@ -16,8 +16,8 @@ import (
 // Color function tests
 func TestColorFunctions(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -202,8 +202,8 @@ func TestStepResult(t *testing.T) {
 // Generate method tests
 func TestPrinter_generateHeader(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -245,8 +245,8 @@ func TestPrinter_generateHeader(t *testing.T) {
 
 func TestPrinter_generateError(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 
@@ -315,8 +315,8 @@ func TestPrinter_generateLogDebug(t *testing.T) {
 
 func TestPrinter_generateLogError(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 
@@ -351,8 +351,8 @@ func TestPrinter_generateLogError(t *testing.T) {
 }
 func TestPrinter_generateJobStatus(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -496,8 +496,8 @@ func TestPrinter_generateJobStatus_SuccessNotBlue(t *testing.T) {
 
 // Test PrintMapData with nested structures
 func TestPrinter_PrintMapData(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(true) // verbose mode to see LogDebug output
 
@@ -601,8 +601,8 @@ func TestPrinter_PrintMapData(t *testing.T) {
 // Test that skipped jobs have gray formatting for entire line
 func TestPrinter_generateJobStatus_SkippedFormatting(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -859,8 +859,8 @@ func TestPrinter_generateReport_WithRepeatStep(t *testing.T) {
 
 func TestPrinter_PrintTestResult(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -947,8 +947,8 @@ func TestPrinter_PrintEchoContent(t *testing.T) {
 
 func TestPrinter_PrintRequestResponse(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -1004,8 +1004,8 @@ func TestPrinter_PrintRequestResponse(t *testing.T) {
 // Test embedded job report formatting with newlines
 func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 
@@ -1119,8 +1119,8 @@ func TestPrinter_generateJobResultsFromStepResults_ReportNewlineFormatting(t *te
 // of each repeated step those of the step of its id in the baseline, in the
 // job of the same id, and says so of a step the baseline has none of.
 func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	repeated := func(index int, id string, sec float64) StepResult {
 		return StepResult{
@@ -1163,8 +1163,8 @@ func TestPrinter_generateJobResultsFromStepResults_Baseline(t *testing.T) {
 }
 
 func TestPrinter_generateJobResultsFromStepResults_RepeatEchoOutputs(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := newReportRenderer(nil, nil, nil)
 

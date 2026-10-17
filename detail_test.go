@@ -12,8 +12,8 @@ import (
 
 func TestEchoDetail(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name     string
@@ -71,8 +71,8 @@ func TestEchoDetail(t *testing.T) {
 
 func TestExchangeDetail(t *testing.T) {
 	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 
@@ -188,8 +188,8 @@ func TestTypeMismatchDetail(t *testing.T) {
 }
 
 func TestFalseClauseDetail(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	printer := NewPrinter(false)
 	printer.SetMasker(mask.New(nil, nil))

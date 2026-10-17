@@ -2768,8 +2768,8 @@ func TestFailureKindOf_Refused(t *testing.T) {
 }
 
 func TestStep_DoTest_FalseClause(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	defer func() { color.NoColor = false }()
 
 	tests := []struct {
 		name        string
