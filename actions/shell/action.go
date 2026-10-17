@@ -16,9 +16,17 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
+	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+	return ret, err
+}
+
+// RunStep runs the command, and tells the runner of one it left running in
+// the background, for the runner to stop once the run is over.
+func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+	with := call.With
 	// Validate that required parameters are provided
 	if len(with) == 0 {
-		return map[string]any{}, errors.New("shell action requires parameters in 'with' section. Please specify command details like cmd")
+		return map[string]any{}, nil, errors.New("shell action requires parameters in 'with' section. Please specify command details like cmd")
 	}
 
 	actionrpc.LogParams(a.log, "received shell request parameters", with)
@@ -28,12 +36,16 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	})
 	after := WithAfter(func(result *Result) {
 		a.log.Debug("shell command completed", "result", result)
+		// One run in the foreground has exited by now.
+		if result.Req.Background && result.Res.PID > 0 {
+			call.Processes.Add(actionrpc.Process{PID: result.Res.PID, Log: result.Res.Log})
+		}
 	})
 	ret, err := Execute(with, before, after)
 
 	actionrpc.LogOutcome(a.log, "shell command", ret, err)
 
-	return ret, err
+	return ret, nil, err
 }
 
 func Serve() {

@@ -736,6 +736,85 @@ func TestClientRunStepGathersCleanups(t *testing.T) {
 	}
 }
 
+// backgroundAction leaves procs running in the background, and then returns
+// what it is given to.
+type backgroundAction struct {
+	procs  []Process
+	result map[string]any
+	err    error
+}
+
+func (a *backgroundAction) Run(with map[string]any) (map[string]any, error) {
+	return map[string]any{}, a.err
+}
+
+func (a *backgroundAction) RunStep(call Call) (map[string]any, map[string]any, error) {
+	call.Processes.Add(a.procs...)
+	if a.result == nil {
+		a.result = map[string]any{}
+	}
+	return a.result, nil, a.err
+}
+
+// The processes an action leaves running reach the runner, also when the
+// action fails after it started them.
+func TestClientRunStepGathersProcesses(t *testing.T) {
+	procs := []Process{{PID: 10, Log: "/tmp/a.log"}, {PID: 20}}
+	tests := []struct {
+		name   string
+		procs  []Process
+		result map[string]any
+		err    error
+		want   []Process
+	}{
+		{name: "none"},
+		{name: "those left running", procs: procs, want: procs},
+		{name: "of an action that failed", procs: procs, err: errors.New("boom"), want: procs},
+		{name: "of an action whose result cannot be sent", procs: procs, result: map[string]any{"c": make(chan int)}, want: procs},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := &backgroundAction{procs: tt.procs, result: tt.result, err: tt.err}
+			c := &Client{client: directClient{&Server{Impl: action}}}
+
+			got := &Processes{}
+			_, _, err := c.RunStep(Call{With: map[string]any{}, Processes: got})
+			if (err != nil) != (tt.err != nil || tt.result != nil) {
+				t.Fatalf("RunStep() error = %v", err)
+			}
+			if list := got.List(); !reflect.DeepEqual(list, tt.want) && (len(list) != 0 || len(tt.want) != 0) {
+				t.Errorf("gathered %v, want %v", list, tt.want)
+			}
+		})
+	}
+
+	// A runner that does not hear of them is not told.
+	c := &Client{client: directClient{&Server{Impl: &backgroundAction{procs: procs}}}}
+	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err != nil {
+		t.Errorf("RunStep() without Processes error = %v", err)
+	}
+}
+
+func TestProcesses(t *testing.T) {
+	var none *Processes
+	none.Add(Process{PID: 1})
+	if got := none.List(); got != nil {
+		t.Errorf("a nil Processes lists %v", got)
+	}
+	p := &Processes{}
+	p.Add(Process{PID: 1, Log: "a"})
+	p.Add(Process{PID: 2})
+	got := p.List()
+	want := []Process{{PID: 1, Log: "a"}, {PID: 2}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
+	}
+	got[0].PID = 99
+	if got := p.List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("List() = %v after the list it returned was changed, want %v", got, want)
+	}
+}
+
 func TestClientCleanup(t *testing.T) {
 	action := &cleaningAction{}
 	c := &Client{client: directClient{&Server{Impl: action, log: hclog.NewNullLogger()}}}

@@ -74,6 +74,17 @@ message RunResponse {
     // run is over, each as a step's uses names it in full, for an action that
     // runs steps of its own. A local action is an absolute path here.
     repeated string cleanups = 4;
+    // The processes the action left running in the background, for the
+    // runner to stop once the run is over.
+    repeated Process processes = 5;
+}
+
+// Process is a process an action left running in the background.
+message Process {
+    // The process leads a process group of its own, which is stopped with it.
+    int64 pid = 1;
+    // The file its output goes to, removed once it is stopped; empty for none.
+    string log = 2;
 }
 
 // CleanupRequest tells an action that a run is over, for it to remove what

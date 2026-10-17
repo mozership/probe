@@ -16,7 +16,6 @@ import (
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/jsonutil"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
 )
 
@@ -208,21 +207,24 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	masker := jCtx.Printer.Masker()
 	masker.Learn(expW)
 
-	// A process the action starts in the background is tracked here rather
-	// than after the select, so that one started after the step timed out is
-	// still stopped with the others.
-	done := beginBackground(jCtx.background, st.Uses)
+	// A process the action leaves running in the background is tracked here
+	// rather than after the select, so that one started after the step timed
+	// out is still stopped with the others. Any action can leave one, as it
+	// says in what it returns.
+	done := jCtx.background.Begin()
 	// The call is made up here: an attempt that timed out is stopped, which
 	// takes a while, in the background while the next one changes the step.
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
 	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
-	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions}
+	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}}
 	go func() {
 		defer done()
 		ret, state, err := runAction(runner, st.Uses, call, opts)
-		if err == nil {
-			trackBackground(jCtx.background, st.Uses, ret)
+		// One left running is stopped once the run is over, whether or not
+		// the action failed after it started it.
+		for _, p := range call.Processes.List() {
+			jCtx.background.Track(p.PID, p.Log)
 		}
 		resultCh <- result{ret: ret, state: state, err: err}
 	}()
@@ -261,55 +263,6 @@ func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
 		Name:    st.expandedName,
 		Repeat:  jCtx.RepeatCurrent,
 		Attempt: attempt,
-	}
-}
-
-// beginBackground tells the tracker that an action that can start a
-// background process is about to run. Only the shell action starts one.
-func beginBackground(t *procgroup.Tracker, uses string) func() {
-	if uses != "shell" {
-		return func() {}
-	}
-	return t.Begin()
-}
-
-// trackBackground records the process an action left running, if it did.
-func trackBackground(t *procgroup.Tracker, uses string, ret map[string]any) {
-	if pid, log, ok := backgroundProcess(uses, ret); ok {
-		t.Track(pid, log)
-	}
-}
-
-// backgroundProcess returns the process group a step's action started in the
-// background, and the file its output goes to. Only a shell step asked to run
-// in the background starts one.
-func backgroundProcess(uses string, ret map[string]any) (pid int, log string, ok bool) {
-	if uses != "shell" {
-		return 0, "", false
-	}
-	req, _ := ret["req"].(map[string]any)
-	if bg, _ := req["background"].(bool); !bg {
-		return 0, "", false
-	}
-	res, _ := ret["res"].(map[string]any)
-	pid = toInt(res["pid"])
-	if pid <= 0 {
-		return 0, "", false
-	}
-	log, _ = res["log"].(string)
-	return pid, log, true
-}
-
-func toInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
 	}
 }
 

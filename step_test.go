@@ -2035,93 +2035,58 @@ func waitGroupGone(pid int) bool {
 	return true
 }
 
-func backgroundResult(pid int, log string) map[string]any {
-	return map[string]any{
-		"req": map[string]any{"cmd": "sleep 60", "background": true},
-		"res": map[string]any{"code": int64(-1), "pid": int64(pid), "log": log},
-	}
-}
-
-func TestBackgroundProcess(t *testing.T) {
-	tests := []struct {
-		name string
-		uses string
-		ret  map[string]any
-		want int
-		log  string
-	}{
-		{
-			name: "background shell step",
-			uses: "shell",
-			ret:  backgroundResult(123, "/tmp/a.log"),
-			want: 123,
-			log:  "/tmp/a.log",
-		},
-		{
-			name: "foreground shell step",
-			uses: "shell",
-			ret: map[string]any{
-				"req": map[string]any{"cmd": "true", "background": false},
-				"res": map[string]any{"code": int64(0), "pid": int64(123)},
-			},
-		},
-		{
-			name: "other action",
-			uses: "http",
-			ret:  backgroundResult(123, "/tmp/a.log"),
-		},
-		{
-			name: "no pid",
-			uses: "shell",
-			ret: map[string]any{
-				"req": map[string]any{"background": true},
-				"res": map[string]any{},
-			},
-		},
-		{
-			name: "empty result",
-			uses: "shell",
-			ret:  nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pid, log, ok := backgroundProcess(tt.uses, tt.ret)
-			if ok != (tt.want != 0) || pid != tt.want || log != tt.log {
-				t.Errorf("backgroundProcess() = (%d, %q, %v), want (%d, %q, %v)", pid, log, ok, tt.want, tt.log, tt.want != 0)
-			}
-		})
-	}
-}
-
-func TestBeginBackgroundOtherAction(t *testing.T) {
-	// Only shell actions start background processes, so nothing else is
-	// waited for.
-	b := procgroup.NewTracker()
-	done := beginBackground(b, "http")
-	defer done()
-
-	start := time.Now()
-	b.Stop()
-	if elapsed := time.Since(start); elapsed >= procgroup.StopGrace {
-		t.Errorf("stop waited %v for an action that cannot start a process", elapsed)
-	}
-}
-
-// lateBackgroundRunner starts a process the way a background shell step does,
-// but only after delay, so that the step has already timed out.
+// lateBackgroundRunner leaves a process running in the background, as a
+// background shell step does, after delay, and then fails with err when it
+// is not nil.
 type lateBackgroundRunner struct {
 	t     *testing.T
 	delay time.Duration
+	err   error
 	pid   chan int
 }
 
 func (r *lateBackgroundRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	result, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
+	return result, err
+}
+
+func (r *lateBackgroundRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	time.Sleep(r.delay)
 	pid := startGroup(r.t, "sleep 60")
+	call.Processes.Add(actionrpc.Process{PID: pid})
 	r.pid <- pid
-	return backgroundResult(pid, ""), nil
+	if r.err != nil {
+		return nil, nil, r.err
+	}
+	return map[string]any{"res": map[string]any{"code": -1}}, nil, nil
+}
+
+// A process any action says it left running is stopped once the workflow is
+// over, also when the action failed after it started it: the engine does not
+// know which actions start them.
+func TestStepTracksTheProcessesAnActionLeaves(t *testing.T) {
+	for name, err := range map[string]error{"succeeded": nil, "failed": errors.New("boom")} {
+		t.Run(name, func(t *testing.T) {
+			step := &stepRun{Step: &Step{Uses: "anything"}, expr: &expr.Expr{}}
+			runner := &lateBackgroundRunner{t: t, err: err, pid: make(chan int, 1)}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					background: procgroup.NewTracker(),
+				},
+			}
+
+			_, got := step.executeSingleAction(runner, map[string]any{}, jCtx, false)
+			if (got != nil) != (err != nil) {
+				t.Fatalf("executeSingleAction() error = %v, want %v", got, err)
+			}
+			pid := <-runner.pid
+
+			jCtx.background.Stop()
+			if !waitGroupGone(pid) {
+				t.Errorf("process group %d the action left is still running", pid)
+			}
+		})
+	}
 }
 
 func TestStepTimeoutStillTracksBackground(t *testing.T) {

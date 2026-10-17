@@ -351,7 +351,10 @@ type RunResponse struct {
 	// The external actions the action ran that are to be cleaned up once the
 	// run is over, each as a step's uses names it in full, for an action that
 	// runs steps of its own. A local action is an absolute path here.
-	Cleanups      []string `protobuf:"bytes,4,rep,name=cleanups,proto3" json:"cleanups,omitempty"`
+	Cleanups []string `protobuf:"bytes,4,rep,name=cleanups,proto3" json:"cleanups,omitempty"`
+	// The processes the action left running in the background, for the
+	// runner to stop once the run is over.
+	Processes     []*Process `protobuf:"bytes,5,rep,name=processes,proto3" json:"processes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -407,6 +410,68 @@ func (x *RunResponse) GetCleanups() []string {
 	return nil
 }
 
+func (x *RunResponse) GetProcesses() []*Process {
+	if x != nil {
+		return x.Processes
+	}
+	return nil
+}
+
+// Process is a process an action left running in the background.
+type Process struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The process leads a process group of its own, which is stopped with it.
+	Pid int64 `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	// The file its output goes to, removed once it is stopped; empty for none.
+	Log           string `protobuf:"bytes,2,opt,name=log,proto3" json:"log,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Process) Reset() {
+	*x = Process{}
+	mi := &file_pb_actions_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Process) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Process) ProtoMessage() {}
+
+func (x *Process) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_actions_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Process.ProtoReflect.Descriptor instead.
+func (*Process) Descriptor() ([]byte, []int) {
+	return file_pb_actions_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Process) GetPid() int64 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *Process) GetLog() string {
+	if x != nil {
+		return x.Log
+	}
+	return ""
+}
+
 // CleanupRequest tells an action that a run is over, for it to remove what
 // its steps left behind in it.
 type CleanupRequest struct {
@@ -419,7 +484,7 @@ type CleanupRequest struct {
 
 func (x *CleanupRequest) Reset() {
 	*x = CleanupRequest{}
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_pb_actions_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -431,7 +496,7 @@ func (x *CleanupRequest) String() string {
 func (*CleanupRequest) ProtoMessage() {}
 
 func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_pb_actions_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -444,7 +509,7 @@ func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupRequest.ProtoReflect.Descriptor instead.
 func (*CleanupRequest) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{5}
+	return file_pb_actions_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CleanupRequest) GetRunId() string {
@@ -462,7 +527,7 @@ type CleanupResponse struct {
 
 func (x *CleanupResponse) Reset() {
 	*x = CleanupResponse{}
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_pb_actions_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +539,7 @@ func (x *CleanupResponse) String() string {
 func (*CleanupResponse) ProtoMessage() {}
 
 func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_pb_actions_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +552,7 @@ func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupResponse.ProtoReflect.Descriptor instead.
 func (*CleanupResponse) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{6}
+	return file_pb_actions_proto_rawDescGZIP(), []int{7}
 }
 
 var File_pb_actions_proto protoreflect.FileDescriptor
@@ -527,11 +592,15 @@ const file_pb_actions_proto_rawDesc = "" +
 	"\x02id\x18\x05 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x06 \x01(\tR\x04name\x12\x16\n" +
 	"\x06repeat\x18\a \x01(\x03R\x06repeat\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattempt\"\x96\x01\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\"\xc1\x01\n" +
 	"\vRunResponse\x12/\n" +
 	"\x06result\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06result\x12-\n" +
 	"\x05state\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05state\x12\x1a\n" +
-	"\bcleanups\x18\x04 \x03(\tR\bcleanupsJ\x04\b\x02\x10\x03R\x05error\"'\n" +
+	"\bcleanups\x18\x04 \x03(\tR\bcleanups\x12)\n" +
+	"\tprocesses\x18\x05 \x03(\v2\v.pb.ProcessR\tprocessesJ\x04\b\x02\x10\x03R\x05error\"-\n" +
+	"\aProcess\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x03R\x03pid\x12\x10\n" +
+	"\x03log\x18\x02 \x01(\tR\x03log\"'\n" +
 	"\x0eCleanupRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\x11\n" +
 	"\x0fCleanupResponse2e\n" +
@@ -551,38 +620,40 @@ func file_pb_actions_proto_rawDescGZIP() []byte {
 	return file_pb_actions_proto_rawDescData
 }
 
-var file_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_pb_actions_proto_goTypes = []any{
 	(*RunRequest)(nil),      // 0: pb.RunRequest
 	(*Guard)(nil),           // 1: pb.Guard
 	(*GuardKinds)(nil),      // 2: pb.GuardKinds
 	(*Step)(nil),            // 3: pb.Step
 	(*RunResponse)(nil),     // 4: pb.RunResponse
-	(*CleanupRequest)(nil),  // 5: pb.CleanupRequest
-	(*CleanupResponse)(nil), // 6: pb.CleanupResponse
-	nil,                     // 7: pb.RunRequest.ActionsEntry
-	nil,                     // 8: pb.Guard.KeepsEntry
-	(*structpb.Struct)(nil), // 9: google.protobuf.Struct
+	(*Process)(nil),         // 5: pb.Process
+	(*CleanupRequest)(nil),  // 6: pb.CleanupRequest
+	(*CleanupResponse)(nil), // 7: pb.CleanupResponse
+	nil,                     // 8: pb.RunRequest.ActionsEntry
+	nil,                     // 9: pb.Guard.KeepsEntry
+	(*structpb.Struct)(nil), // 10: google.protobuf.Struct
 }
 var file_pb_actions_proto_depIdxs = []int32{
-	9,  // 0: pb.RunRequest.with:type_name -> google.protobuf.Struct
-	9,  // 1: pb.RunRequest.state:type_name -> google.protobuf.Struct
+	10, // 0: pb.RunRequest.with:type_name -> google.protobuf.Struct
+	10, // 1: pb.RunRequest.state:type_name -> google.protobuf.Struct
 	3,  // 2: pb.RunRequest.step:type_name -> pb.Step
 	1,  // 3: pb.RunRequest.guard:type_name -> pb.Guard
-	7,  // 4: pb.RunRequest.actions:type_name -> pb.RunRequest.ActionsEntry
-	8,  // 5: pb.Guard.keeps:type_name -> pb.Guard.KeepsEntry
-	9,  // 6: pb.RunResponse.result:type_name -> google.protobuf.Struct
-	9,  // 7: pb.RunResponse.state:type_name -> google.protobuf.Struct
-	2,  // 8: pb.Guard.KeepsEntry.value:type_name -> pb.GuardKinds
-	0,  // 9: pb.Actions.Run:input_type -> pb.RunRequest
-	5,  // 10: pb.Actions.Cleanup:input_type -> pb.CleanupRequest
-	4,  // 11: pb.Actions.Run:output_type -> pb.RunResponse
-	6,  // 12: pb.Actions.Cleanup:output_type -> pb.CleanupResponse
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	8,  // 4: pb.RunRequest.actions:type_name -> pb.RunRequest.ActionsEntry
+	9,  // 5: pb.Guard.keeps:type_name -> pb.Guard.KeepsEntry
+	10, // 6: pb.RunResponse.result:type_name -> google.protobuf.Struct
+	10, // 7: pb.RunResponse.state:type_name -> google.protobuf.Struct
+	5,  // 8: pb.RunResponse.processes:type_name -> pb.Process
+	2,  // 9: pb.Guard.KeepsEntry.value:type_name -> pb.GuardKinds
+	0,  // 10: pb.Actions.Run:input_type -> pb.RunRequest
+	6,  // 11: pb.Actions.Cleanup:input_type -> pb.CleanupRequest
+	4,  // 12: pb.Actions.Run:output_type -> pb.RunResponse
+	7,  // 13: pb.Actions.Cleanup:output_type -> pb.CleanupResponse
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pb_actions_proto_init() }
@@ -596,7 +667,7 @@ func file_pb_actions_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_actions_proto_rawDesc), len(file_pb_actions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

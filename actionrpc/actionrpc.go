@@ -105,6 +105,62 @@ func (c *Cleanups) List() []string {
 	return slices.Clone(c.uses)
 }
 
+// Process is a process an action left running in the background, for the
+// runner to stop once the run is over.
+type Process struct {
+	// PID leads a process group of its own, which is stopped with it.
+	PID int
+	// Log is the file its output goes to, which is removed once it is
+	// stopped; empty for none.
+	Log string
+}
+
+// Processes gathers the processes an action leaves running in the
+// background, which the runner stops once the run is over: an action runs in
+// a process that exits once its step is done, and one it starts in a session
+// of its own to outlive it would otherwise run on. A nil Processes gathers
+// nothing.
+type Processes struct {
+	mu    sync.Mutex
+	procs []Process
+}
+
+// Add records processes the action left running.
+func (p *Processes) Add(procs ...Process) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.procs = append(p.procs, procs...)
+}
+
+// List returns the processes recorded so far, in the order they were added.
+func (p *Processes) List() []Process {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.procs)
+}
+
+func processesToPB(procs []Process) []*pb.Process {
+	out := make([]*pb.Process, len(procs))
+	for i, p := range procs {
+		out[i] = &pb.Process{Pid: int64(p.PID), Log: p.Log}
+	}
+	return out
+}
+
+func processesFromPB(procs []*pb.Process) []Process {
+	out := make([]Process, len(procs))
+	for i, p := range procs {
+		out[i] = Process{PID: int(p.GetPid()), Log: p.GetLog()}
+	}
+	return out
+}
+
 // Call is what a StepAction is given to run once for a step.
 type Call struct {
 	// With holds the step's with parameters, as Action.Run is given them.
@@ -131,6 +187,11 @@ type Call struct {
 	// Probe from before there was a cleanup, under which what a step leaves
 	// behind stays; an action can refuse to leave anything then.
 	Cleanups *Cleanups
+	// Processes records the processes the action leaves running in the
+	// background, for the runner to stop once the run is over. A runner
+	// from before there were processes does not hear of them, and leaves
+	// them running.
+	Processes *Processes
 }
 
 // Step tells an action about the step it runs for.
@@ -233,10 +294,14 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 
 	runRes, err := m.client.Run(ctx, req)
 	if err != nil {
-		call.Cleanups.Add(cleanupsOf(err)...)
+		if d := detailsOf(err); d != nil {
+			call.Cleanups.Add(d.GetCleanups()...)
+			call.Processes.Add(processesFromPB(d.GetProcesses())...)
+		}
 		return nil, nil, fromStatus(err)
 	}
 	call.Cleanups.Add(runRes.GetCleanups()...)
+	call.Processes.Add(processesFromPB(runRes.GetProcesses())...)
 
 	// Convert protobuf.Struct back to map[string]any
 	// Apply convertFloatToInt to restore integer types that were converted to float64 by protobuf
@@ -258,32 +323,34 @@ func (m *Client) Cleanup(ctx context.Context, call CleanupCall) error {
 	return err
 }
 
-// withCleanups returns err carrying the actions to clean up, which the
-// response would have carried had the action not failed: the steps an action
-// ran before it failed are to be cleaned up after all the same.
-func withCleanups(err error, uses []string) error {
-	if len(uses) == 0 {
+// withLeftBehind returns err carrying the actions to clean up and the
+// processes left running, which the response would have carried had the
+// action not failed: what an action left behind before it failed is to be
+// undone all the same.
+func withLeftBehind(err error, uses []string, procs []Process) error {
+	if len(uses) == 0 && len(procs) == 0 {
 		return err
 	}
 	s, ok := status.FromError(err)
 	if !ok {
 		s = status.New(codes.Unknown, err.Error())
 	}
-	if d, detailErr := s.WithDetails(&pb.RunResponse{Cleanups: uses}); detailErr == nil {
+	if d, detailErr := s.WithDetails(&pb.RunResponse{Cleanups: uses, Processes: processesToPB(procs)}); detailErr == nil {
 		return d.Err()
 	}
 	return err
 }
 
-// cleanupsOf returns the actions to clean up that err carries.
-func cleanupsOf(err error) []string {
+// detailsOf returns what err carries of the response withLeftBehind gave
+// it, or nil when it carries none.
+func detailsOf(err error) *pb.RunResponse {
 	s, ok := status.FromError(err)
 	if !ok {
 		return nil
 	}
 	for _, d := range s.Details() {
 		if res, ok := d.(*pb.RunResponse); ok {
-			return res.GetCleanups()
+			return res
 		}
 	}
 	return nil
@@ -311,11 +378,12 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	if req.GetCleanup() {
 		cleanups = &Cleanups{}
 	}
-	// The steps an action ran are to be cleaned up after however the call
-	// fails, also when it is its result that cannot be sent.
+	processes := &Processes{}
+	// What an action left behind is to be undone however the call fails,
+	// also when it is its result that cannot be sent.
 	defer func() {
 		if err != nil {
-			err = withCleanups(err, cleanups.List())
+			err = withLeftBehind(err, cleanups.List(), processes.List())
 		}
 	}()
 
@@ -334,7 +402,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 
 	var v, newState map[string]any
 	if sa, ok := m.Impl.(StepAction); ok {
-		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups}
+		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups, Processes: processes}
 		if req.State != nil {
 			call.State = structToMap(req.State)
 		}
@@ -383,7 +451,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	if m.log != nil {
 		m.log.Debug("ActionsServer final result struct", "result", forLog(resultMap))
 	}
-	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List()}
+	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List(), Processes: processesToPB(processes.List())}
 	if newState != nil {
 		convertedState, err := convertForProtobuf(newState)
 		if err != nil {
