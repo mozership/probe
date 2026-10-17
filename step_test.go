@@ -189,7 +189,9 @@ func TestStep_handleWait(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			step := newStepRun(&Step{Wait: tt.wait}, nil)
 			jCtx := &JobContext{
-				Printer: &Printer{},
+				runEnv: &runEnv{
+					Printer: &Printer{},
+				},
 			}
 
 			start := time.Now()
@@ -255,8 +257,11 @@ func TestStep_SkipIfWithWaitTiming(t *testing.T) {
 			}
 
 			jCtx := &JobContext{
-				Printer: newBufferPrinter(), // Silent printer
-				Config:  Config{},
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+					// Silent printer
+					Config: Config{},
+				},
 			}
 
 			start := time.Now()
@@ -375,7 +380,9 @@ func TestStep_shouldSkip(t *testing.T) {
 				expr: &expr.Expr{},
 			}
 			jCtx := &JobContext{
-				Printer: &Printer{},
+				runEnv: &runEnv{
+					Printer: &Printer{},
+				},
 			}
 
 			result := step.shouldSkip(jCtx)
@@ -393,7 +400,9 @@ func TestStep_createSkippedStepResult(t *testing.T) {
 		},
 		idx: 1,
 	}
-	jCtx := &JobContext{}
+	jCtx := &JobContext{
+		runEnv: &runEnv{},
+	}
 	name := "Test Step"
 
 	result := step.createSkippedStepResult(name, jCtx)
@@ -436,8 +445,10 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 		},
 	}
 	jCtx := &JobContext{
-		Config:  Config{Timing: true},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Timing: true},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	result := step.createStepResult("Test Step", jCtx)
@@ -473,7 +484,9 @@ func TestStep_createFailedStepResult(t *testing.T) {
 		},
 	}
 	jCtx := &JobContext{
-		Config: Config{Timing: true},
+		runEnv: &runEnv{
+			Config: Config{Timing: true},
+		},
 	}
 	name := "Failed Step"
 
@@ -519,7 +532,9 @@ func TestStep_createFailedStepResult_NoTest(t *testing.T) {
 		idx: 1,
 		ctx: StepContext{},
 	}
-	jCtx := &JobContext{}
+	jCtx := &JobContext{
+		runEnv: &runEnv{},
+	}
 	name := "No Test Step"
 
 	result := step.createFailedStepResult(name, jCtx)
@@ -543,7 +558,11 @@ func TestStep_waitMessage(t *testing.T) {
 	} {
 		step := newStepRun(&Step{Name: tt.name}, nil)
 		step.ctx = StepContext{Vars: map[string]any{"n": 3}}
-		jCtx := &JobContext{Printer: newBufferPrinter()}
+		jCtx := &JobContext{
+			runEnv: &runEnv{
+				Printer: newBufferPrinter(),
+			},
+		}
 		if _, ok := step.prepare(jCtx); !ok {
 			t.Fatalf("prepare() of %q did not continue", tt.name)
 		}
@@ -652,7 +671,10 @@ func TestStep_prepare(t *testing.T) {
 			}
 
 			jCtx := &JobContext{
-				Printer: newBufferPrinter(), // Use silent printer to avoid output during tests
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
+				// Use silent printer to avoid output during tests
 			}
 
 			name, shouldContinue := step.prepare(jCtx)
@@ -690,7 +712,9 @@ func TestStep_executeAction(t *testing.T) {
 
 		// Create minimal job context
 		jCtx := &JobContext{
-			Config: Config{Verbose: false},
+			runEnv: &runEnv{
+				Config: Config{Verbose: false},
+			},
 		}
 
 		// Initialize step context
@@ -733,7 +757,9 @@ func TestStep_executeAction(t *testing.T) {
 
 		// Create minimal job context
 		jCtx := &JobContext{
-			Config: Config{Verbose: false},
+			runEnv: &runEnv{
+				Config: Config{Verbose: false},
+			},
 		}
 
 		// Initialize step context
@@ -808,7 +834,9 @@ func TestStep_processActionResult(t *testing.T) {
 				expr: &expr.Expr{},
 			}
 
-			jCtx := &JobContext{}
+			jCtx := &JobContext{
+				runEnv: &runEnv{},
+			}
 
 			step.processActionResult(tt.actionResult, jCtx)
 		})
@@ -824,7 +852,9 @@ func TestStep_handleActionError(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	originalErr := fmt.Errorf("test error")
@@ -904,13 +934,15 @@ func TestStep_finalize(t *testing.T) {
 			}
 
 			jCtx := &JobContext{
-				Config: Config{
-					Verbose: tt.verbose,
+				runEnv: &runEnv{
+					Config: Config{
+						Verbose: tt.verbose,
+					},
+					Printer: newBufferPrinter(),
 				},
-				IsRepeating:  tt.isRepeating,
-				Printer:      newBufferPrinter(),
-				StepCounters: make(map[int]StepRepeatCounter),
-				countersMu:   &sync.Mutex{},
+			}
+			if tt.isRepeating {
+				jCtx.repeat = newJobRepeat(1, 0)
 			}
 
 			// Note: This test mainly verifies that the correct code path is taken
@@ -937,7 +969,9 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		jobContext := JobContext{
-			Printer: newBufferPrinter(),
+			runEnv: &runEnv{
+				Printer: newBufferPrinter(),
+			},
 		}
 
 		// Execute the step (should be skipped)
@@ -973,8 +1007,10 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		jobContext := JobContext{
-			Config:  Config{Verbose: false},
-			Printer: newBufferPrinter(),
+			runEnv: &runEnv{
+				Config:  Config{Verbose: false},
+				Printer: newBufferPrinter(),
+			},
 		}
 
 		// Execute the step
@@ -1014,8 +1050,10 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		jobContext := JobContext{
-			Config:  Config{Verbose: false},
-			Printer: newBufferPrinter(),
+			runEnv: &runEnv{
+				Config:  Config{Verbose: false},
+				Printer: newBufferPrinter(),
+			},
 		}
 
 		// Execute the step
@@ -1284,7 +1322,9 @@ func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
 	mock.SetResult("test-action", map[string]any{"status": 0})
 
 	jCtx := &JobContext{
-		Config: Config{Verbose: false},
+		runEnv: &runEnv{
+			Config: Config{Verbose: false},
+		},
 	}
 
 	start := time.Now()
@@ -1316,7 +1356,9 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	slowMock := &SlowMockActionRunner{delay: 3 * time.Second}
 
 	jCtx := &JobContext{
-		Config: Config{Verbose: false},
+		runEnv: &runEnv{
+			Config: Config{Verbose: false},
+		},
 	}
 
 	start := time.Now()
@@ -1366,7 +1408,9 @@ func TestStep_executeSingleAction_TimeoutStopsTheAction(t *testing.T) {
 		}
 		runner := &stoppableRunner{stopped: make(chan struct{}), err: err}
 
-		_, got := step.executeSingleAction(runner, map[string]any{}, &JobContext{}, false)
+		_, got := step.executeSingleAction(runner, map[string]any{}, &JobContext{
+			runEnv: &runEnv{},
+		}, false)
 		if got == nil || got.Error() != "action execution timed out after 100ms" {
 			t.Errorf("executeSingleAction() error = %v, want the timeout", got)
 		}
@@ -1383,7 +1427,9 @@ func TestStep_executeSingleAction_ContextOfAnActionDoneInTime(t *testing.T) {
 	step := &stepRun{Step: &Step{Uses: "test-action", Timeout: Interval{Duration: time.Second}}, expr: &expr.Expr{}}
 	runner := &contextRecordingRunner{}
 
-	if _, err := step.executeSingleAction(runner, map[string]any{}, &JobContext{}, false); err != nil {
+	if _, err := step.executeSingleAction(runner, map[string]any{}, &JobContext{
+		runEnv: &runEnv{},
+	}, false); err != nil {
 		t.Fatalf("executeSingleAction() error = %v", err)
 	}
 	if runner.ctx == nil {
@@ -1419,7 +1465,9 @@ func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
 	slowMock := &SlowMockActionRunner{delay: 1 * time.Second}
 
 	jCtx := &JobContext{
-		Config: Config{Verbose: false},
+		runEnv: &runEnv{
+			Config: Config{Verbose: false},
+		},
 	}
 
 	start := time.Now()
@@ -1460,8 +1508,10 @@ func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
 	slowMock := &SlowMockActionRunner{delay: 1 * time.Second}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	start := time.Now()
@@ -1510,8 +1560,10 @@ func TestStep_executeActionWithRetry_NoTest(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	result, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
@@ -1559,8 +1611,10 @@ func TestStep_executeActionWithRetry_TestFailThenPass(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	result, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
@@ -1598,8 +1652,10 @@ func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	result, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
@@ -1650,11 +1706,14 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Printer:      newBufferPrinter(),
-		StepCounters: make(map[int]StepRepeatCounter),
-		countersMu:   &sync.Mutex{},
-		RepeatTotal:  3,
-		Result:       NewResult(),
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+		repeat: &jobRepeat{
+			counters: make(map[int]StepRepeatCounter),
+			total:    3,
+		},
 		CurrentJobID: "job-1",
 	}
 	jCtx.Result.Jobs["job-1"] = &JobResult{JobID: "job-1"}
@@ -1668,7 +1727,7 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 		step.handleRepeatExecution(jCtx, "Repeat Step", false)
 	}
 
-	counter, ok := jCtx.StepCounters[step.idx]
+	counter, ok := jCtx.repeat.counters[step.idx]
 	if !ok {
 		t.Fatal("StepCounters[1] missing")
 	}
@@ -1784,8 +1843,10 @@ func TestStep_executeActionWithRetry_QuietsNonFinalAttempts(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	if _, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test"); err != nil {
@@ -1825,8 +1886,10 @@ func TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	if _, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test"); err == nil {
@@ -1865,8 +1928,10 @@ func TestStep_executeActionWithRetry_VerboseOverridesQuiet(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: true},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: true},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	if _, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test"); err != nil {
@@ -1896,8 +1961,10 @@ func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
 	}
 
 	jCtx := &JobContext{
-		Config:  Config{Verbose: false},
-		Printer: newBufferPrinter(),
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: newBufferPrinter(),
+		},
 	}
 
 	if _, err := step.executeSingleAction(mock, map[string]any{}, jCtx, false); err != nil {
@@ -1922,7 +1989,12 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	errOut := new(bytes.Buffer)
 	printer := NewPrinter(false, nil)
 	printer.errWriter = errOut
-	jCtx := &JobContext{Outputs: NewOutputs(), Printer: printer}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: printer,
+		},
+		Outputs: NewOutputs(),
+	}
 	_ = jCtx.Outputs.Set("first", map[string]any{"token": "one"})
 
 	st := &stepRun{Step: &Step{ID: "second", Outputs: map[string]string{"token": "res.v"}}, expr: &expr.Expr{}}
@@ -2063,7 +2135,11 @@ func TestStepTimeoutStillTracksBackground(t *testing.T) {
 		expr: &expr.Expr{},
 	}
 	runner := &lateBackgroundRunner{t: t, delay: 300 * time.Millisecond, pid: make(chan int, 1)}
-	jCtx := &JobContext{background: procgroup.NewTracker()}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			background: procgroup.NewTracker(),
+		},
+	}
 
 	if _, err := step.executeSingleAction(runner, map[string]any{}, jCtx, false); err == nil {
 		t.Fatal("expected the step to time out")
@@ -2116,7 +2192,11 @@ func TestStep_processActionResultStdoutJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout, hadStdout := tt.res["stdout"]
 			step := &stepRun{Step: &Step{}, expr: &expr.Expr{}}
-			jCtx := &JobContext{Printer: newBufferPrinter()}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
+			}
 			step.processActionResult(map[string]any{"res": tt.res}, jCtx)
 
 			got, ok := step.ctx.Res["json"]
@@ -2283,7 +2363,12 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			st := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
-			jCtx := &JobContext{Printer: newBufferPrinter(), Result: NewResult()}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+					Result:  NewResult(),
+				},
+			}
 
 			result := st.createStepResult("Contract", jCtx)
 			if result.Status != tt.wantStatus {
@@ -2331,7 +2416,11 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 		},
 		expr: &expr.Expr{},
 	}
-	jCtx := &JobContext{Printer: newBufferPrinter()}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
+	}
 
 	if _, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2346,11 +2435,14 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 	step := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}}
 	jCtx := &JobContext{
-		Printer:      newBufferPrinter(),
-		StepCounters: make(map[int]StepRepeatCounter),
-		countersMu:   &sync.Mutex{},
-		RepeatTotal:  2,
-		Result:       NewResult(),
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+		repeat: &jobRepeat{
+			counters: make(map[int]StepRepeatCounter),
+			total:    2,
+		},
 	}
 
 	step.ctx = StepContext{Res: violationsRes()}
@@ -2358,7 +2450,7 @@ func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 	step.ctx = StepContext{Res: violationsRes(map[string]any{"in": "response", "message": "body failed"})}
 	step.handleRepeatExecution(jCtx, "Contract", false)
 
-	counter := jCtx.StepCounters[0]
+	counter := jCtx.repeat.counters[0]
 	if counter.SuccessCount != 1 || counter.FailureCount != 1 {
 		t.Errorf("counts = %d/%d, want 1 success and 1 failure", counter.SuccessCount, counter.FailureCount)
 	}
@@ -2451,7 +2543,12 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 	res := violationsRes()
 	res["contract"] = map[string]any{"spec": "openapi.yml", "operation": "GET /users/{id}", "response": "200"}
 	st := &stepRun{Step: &Step{}, expr: &expr.Expr{}, ctx: StepContext{Res: res}}
-	jCtx := &JobContext{Printer: newBufferPrinter(), Result: NewResult()}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+	}
 
 	result := st.createStepResult("Get a user", jCtx)
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
@@ -2463,11 +2560,14 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	step := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}}
 	jCtx := &JobContext{
-		Printer:      newBufferPrinter(),
-		StepCounters: make(map[int]StepRepeatCounter),
-		countersMu:   &sync.Mutex{},
-		RepeatTotal:  2,
-		Result:       NewResult(),
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+		repeat: &jobRepeat{
+			counters: make(map[int]StepRepeatCounter),
+			total:    2,
+		},
 		CurrentJobID: "job-1",
 	}
 	jCtx.Result.Jobs["job-1"] = &JobResult{JobID: "job-1"}
@@ -2481,7 +2581,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 
 	// The first iteration's is kept, as its failure is.
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /items", Response: "200"}
-	if got := jCtx.StepCounters[0].Contract; !reflect.DeepEqual(got, want) {
+	if got := jCtx.repeat.counters[0].Contract; !reflect.DeepEqual(got, want) {
 		t.Errorf("Contract = %+v, want %+v", got, want)
 	}
 
@@ -2527,7 +2627,11 @@ func TestStep_executeActionWithRetry_ContractOnly(t *testing.T) {
 				},
 				expr: &expr.Expr{},
 			}
-			jCtx := &JobContext{Printer: newBufferPrinter()}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
+			}
 
 			if _, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test"); err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -2559,7 +2663,11 @@ func TestStep_executeActionWithRetry_UncheckedRunsOnce(t *testing.T) {
 				},
 				expr: &expr.Expr{},
 			}
-			jCtx := &JobContext{Printer: newBufferPrinter()}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Printer: newBufferPrinter(),
+				},
+			}
 
 			_, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
 			if (err != nil) != (tt.err != nil) {
@@ -2594,7 +2702,12 @@ func TestStep_executeAction_Guard(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockActionRunner()
 			st := &stepRun{Step: &Step{Uses: tt.uses, With: map[string]any{}, actionRunner: mock}, expr: &expr.Expr{}}
-			jCtx := &JobContext{Config: Config{Guard: tt.guard}, Printer: newBufferPrinter()}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Config:  Config{Guard: tt.guard},
+					Printer: newBufferPrinter(),
+				},
+			}
 
 			_, err := st.executeAction("Step", jCtx)
 			if tt.refused {
@@ -2633,7 +2746,12 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 		},
 		expr: &expr.Expr{},
 	}
-	jCtx := &JobContext{Config: Config{Guard: actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}}, Printer: newBufferPrinter()}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Config:  Config{Guard: actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}},
+			Printer: newBufferPrinter(),
+		},
+	}
 
 	_, err := st.executeAction("Step", jCtx)
 	if !actionrpc.IsRefused(err) {
@@ -2713,7 +2831,14 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		printer.SetMasker(mask.New(nil, nil))
 		result := NewResult()
 		result.Jobs["job"] = &JobResult{JobID: "job"}
-		jCtx := &JobContext{Printer: printer, Result: result, CurrentJobID: "job", Config: Config{Verbose: true}}
+		jCtx := &JobContext{
+			runEnv: &runEnv{
+				Printer: printer,
+				Result:  result,
+				Config:  Config{Verbose: true},
+			},
+			CurrentJobID: "job",
+		}
 
 		st := &stepRun{Step: &Step{Name: "Skipped", SkipIf: "true"}, expr: &expr.Expr{}}
 		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)

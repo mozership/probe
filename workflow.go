@@ -5,13 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/mozership/probe/actionrpc"
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
@@ -648,18 +648,19 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 	rs.SetReporter(w.printer.Reporter())
 
 	return JobContext{
-		Vars:         vars,
-		Config:       c,
-		Printer:      w.printer,
-		Result:       rs,
-		JobScheduler: scheduler,
-		Outputs:      w.outputs,
-		countersMu:   &sync.Mutex{},
-		background:   procgroup.NewTracker(),
-		cleanups:     newCleanups(w.runID, w.printer),
-		baseDir:      w.basePath,
-		runID:        w.runID,
-		actions:      w.named,
+		runEnv: &runEnv{
+			Config:       c,
+			Printer:      w.printer,
+			Result:       rs,
+			JobScheduler: scheduler,
+			background:   procgroup.NewTracker(),
+			cleanups:     newCleanups(w.runID, w.printer),
+			baseDir:      w.basePath,
+			runID:        w.runID,
+			actions:      w.named,
+		},
+		Vars:    vars,
+		Outputs: w.outputs,
 	}
 }
 

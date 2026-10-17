@@ -1155,25 +1155,27 @@ func TestStepRepeatCounter(t *testing.T) {
 
 func TestJobContextRepeatTracking(t *testing.T) {
 	ctx := JobContext{
-		IsRepeating:   true,
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
+		repeat: &jobRepeat{
+			total:    10,
+			counters: make(map[int]StepRepeatCounter),
+		},
 		RepeatCurrent: 5,
-		RepeatTotal:   10,
-		StepCounters:  make(map[int]StepRepeatCounter),
-		Printer:       newBufferPrinter(),
-		countersMu:    &sync.Mutex{},
 	}
 
 	// Test initial state
-	if !ctx.IsRepeating {
-		t.Error("expected IsRepeating to be true")
+	if !ctx.repeating() {
+		t.Error("expected the runs to be counted")
 	}
 
 	if ctx.RepeatCurrent != 5 {
 		t.Errorf("expected RepeatCurrent to be 5, got %d", ctx.RepeatCurrent)
 	}
 
-	if ctx.RepeatTotal != 10 {
-		t.Errorf("expected RepeatTotal to be 10, got %d", ctx.RepeatTotal)
+	if ctx.repeat.total != 10 {
+		t.Errorf("expected the total to be 10, got %d", ctx.repeat.total)
 	}
 
 	// Test step counter initialization
@@ -1184,26 +1186,28 @@ func TestJobContextRepeatTracking(t *testing.T) {
 		LastResult:   true,
 	}
 
-	ctx.StepCounters[0] = counter
+	ctx.repeat.counters[0] = counter
 
-	if len(ctx.StepCounters) != 1 {
-		t.Errorf("expected 1 step counter, got %d", len(ctx.StepCounters))
+	if len(ctx.repeat.counters) != 1 {
+		t.Errorf("expected 1 step counter, got %d", len(ctx.repeat.counters))
 	}
 
-	if ctx.StepCounters[0].SuccessCount != 3 {
-		t.Errorf("expected SuccessCount to be 3, got %d", ctx.StepCounters[0].SuccessCount)
+	if ctx.repeat.counters[0].SuccessCount != 3 {
+		t.Errorf("expected SuccessCount to be 3, got %d", ctx.repeat.counters[0].SuccessCount)
 	}
 }
 
 func TestStepRepeatCounterUpdate(t *testing.T) {
 	// Test counter update logic
 	jCtx := &JobContext{
-		IsRepeating:   true,
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
+		repeat: &jobRepeat{
+			total:    10,
+			counters: make(map[int]StepRepeatCounter),
+		},
 		RepeatCurrent: 3,
-		RepeatTotal:   10,
-		StepCounters:  make(map[int]StepRepeatCounter),
-		Printer:       newBufferPrinter(),
-		countersMu:    &sync.Mutex{},
 	}
 
 	step := &stepRun{
@@ -1227,7 +1231,7 @@ func TestStepRepeatCounterUpdate(t *testing.T) {
 	}
 
 	// Check final counter state
-	counter := jCtx.StepCounters[0]
+	counter := jCtx.repeat.counters[0]
 	if counter.SuccessCount != 3 {
 		t.Errorf("Expected SuccessCount to be 3, got %d", counter.SuccessCount)
 	}
@@ -1722,11 +1726,12 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 		result := NewResult()
 		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
 		failed, err := job.run(JobContext{
-			Printer:       printer,
-			Result:        result,
+			runEnv: &runEnv{
+				Printer: printer,
+				Result:  result,
+			},
 			Outputs:       NewOutputs(),
 			RepeatCurrent: i,
-			countersMu:    &sync.Mutex{},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -1914,12 +1919,15 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	result := NewResult()
 	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
 	ctx := &JobContext{
-		Result:      result,
-		RepeatTotal: 3,
-		countersMu:  &sync.Mutex{},
-		StepCounters: map[int]StepRepeatCounter{
-			0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
-			1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+		runEnv: &runEnv{
+			Result: result,
+		},
+		repeat: &jobRepeat{
+			total: 3,
+			counters: map[int]StepRepeatCounter{
+				0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
+				1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+			},
 		},
 	}
 	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
@@ -1942,7 +1950,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	failed := NewResult()
 	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
 	ctx.Result = failed
-	ctx.StepCounters = map[int]StepRepeatCounter{
+	ctx.repeat.counters = map[int]StepRepeatCounter{
 		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
 	}
 	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)

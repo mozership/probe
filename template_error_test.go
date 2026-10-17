@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -30,12 +29,13 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 	rs := NewResult()
 	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
 	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  rs,
+		},
 		Vars:         vars,
 		CurrentJobID: "j",
-		Printer:      newBufferPrinter(),
-		Result:       rs,
 		Outputs:      NewOutputs(),
-		countersMu:   &sync.Mutex{},
 	}
 
 	st.SetCtx(*jCtx, nil)
@@ -414,11 +414,12 @@ func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
 	rs := NewResult()
 	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
 	ctx := JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  rs,
+		},
 		CurrentJobID: "j",
-		Printer:      newBufferPrinter(),
-		Result:       rs,
 		Outputs:      NewOutputs(),
-		countersMu:   &sync.Mutex{},
 	}
 	if _, err := job.run(ctx); err != nil {
 		t.Fatal(err)

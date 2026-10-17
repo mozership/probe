@@ -21,6 +21,59 @@ func TestJobExecutor_Creation(t *testing.T) {
 	})
 }
 
+// The runs of a job are counted only when it is repeated, warmed up or
+// tested over its runs, and then the warmup runs are left out of the total.
+// What the runs share is pointed to by the context each is given, and not
+// copied with it.
+func TestExecutor_setupContext(t *testing.T) {
+	tests := []struct {
+		name       string
+		repeat     *Repeat
+		wantCount  bool
+		wantTotal  int
+		wantWarmup int
+	}{
+		{name: "run once", repeat: nil},
+		{name: "a count of one", repeat: &Repeat{Count: 1}},
+		{name: "repeated", repeat: &Repeat{Count: 3}, wantCount: true, wantTotal: 3},
+		{name: "warmed up", repeat: &Repeat{Count: 1, Warmup: 2}, wantCount: true, wantTotal: 1, wantWarmup: 2},
+		{name: "tested over a run", repeat: &Repeat{Count: 1, Test: "true"}, wantCount: true, wantTotal: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &Job{Name: "job", ID: "job", Repeat: tt.repeat}
+			scheduler := NewJobScheduler()
+			if err := scheduler.AddJob(job); err != nil {
+				t.Fatal(err)
+			}
+			env := &runEnv{Printer: newBufferPrinter(), JobScheduler: scheduler}
+			ctx := NewExecutor(&Workflow{}, job).setupContext(JobContext{runEnv: env})
+
+			if ctx.runEnv != env {
+				t.Error("the job should run with the workflow's environment, not a copy of it")
+			}
+			if got := ctx.repeating(); got != tt.wantCount {
+				t.Fatalf("repeating() = %v, want %v", got, tt.wantCount)
+			}
+			if !tt.wantCount {
+				return
+			}
+			if ctx.repeat.total != tt.wantTotal || ctx.repeat.warmup != tt.wantWarmup {
+				t.Errorf("total, warmup = %d, %d, want %d, %d", ctx.repeat.total, ctx.repeat.warmup, tt.wantTotal, tt.wantWarmup)
+			}
+			run := ctx
+			run.RepeatCurrent = 1
+			run.SetFailed()
+			if run.repeat != ctx.repeat {
+				t.Error("a run should count in the job's counters, not a copy of them")
+			}
+			if ctx.Failed || ctx.RepeatCurrent != 0 {
+				t.Error("a run should not change the context it was copied from")
+			}
+		})
+	}
+}
+
 // TestExecutionResult_Structure is no longer needed as ExecutionResult has been removed
 
 // TestExecutionConfig_Structure is no longer needed as ExecutionConfig has been removed
@@ -49,18 +102,21 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 
 	// Create test context with step counters
 	ctx := JobContext{
-		StepCounters: map[int]StepRepeatCounter{
-			0: {
-				SuccessCount: 3,
-				FailureCount: 1,
-				Name:         "test-step",
-				LastResult:   true,
+		runEnv: &runEnv{
+			Config:  Config{Verbose: false},
+			Printer: NewPrinter(false, []string{}),
+			Result:  result,
+		},
+		repeat: &jobRepeat{
+			counters: map[int]StepRepeatCounter{
+				0: {
+					SuccessCount: 3,
+					FailureCount: 1,
+					Name:         "test-step",
+					LastResult:   true,
+				},
 			},
 		},
-		Config:     Config{Verbose: false},
-		Printer:    NewPrinter(false, []string{}),
-		Result:     result,
-		countersMu: &sync.Mutex{},
 	}
 
 	// Call the method

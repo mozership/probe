@@ -49,43 +49,43 @@ type StepContext struct {
 	RepeatIndex int            `expr:"repeat_index"`
 }
 
-// JobContext provides context data for job execution
+// JobContext is what a run of a job runs with. It is copied for each run,
+// and holds by value only what is the run's own; what the jobs of the
+// workflow share is in runEnv, and what the runs of a repeated job share in
+// jobRepeat, which a copy points to as the context it was copied from does.
 type JobContext struct {
+	*runEnv
+	// repeat is what the runs of the job share when they are counted, as
+	// they are for a repeated job, or nil when the job is run once as it is.
+	repeat *jobRepeat
+
 	Vars map[string]any `expr:"vars"`
-	Config
+	// Outputs are those the run reads and writes (accessible via expressions
+	// as "outputs"): the workflow's, or a store of the run's own in front of
+	// them for a run that overlaps others.
+	Outputs *Outputs `expr:"outputs"`
+
 	Failed bool
 	// Current job ID for this context
 	CurrentJobID string
-	// Repeat tracking
-	IsRepeating   bool
+	// RepeatCurrent is the index of the run, from 0, warmup runs included.
 	RepeatCurrent int
-	RepeatTotal   int
-	// RepeatWarmup is the number of runs before those counted; see
-	// Repeat.Warmup. RepeatCurrent counts them, and RepeatTotal does not.
-	RepeatWarmup int
-	// repeatTested is whether the job has a test over its runs; see
-	// Repeat.Test.
-	repeatTested bool
-	// baselineTested is whether the job has a test against the run compared
-	// to; see Repeat.BaselineTest.
-	baselineTested bool
-	// baselineSkipped is why that test is skipped, or empty when it is
-	// checked; see baselineSkip.
-	baselineSkipped string
-	// repeatReads are the ids of the steps the tests over the runs read,
-	// which they check as a step's own test does. Those that only a skipped
-	// test reads are left out, as nothing checks them.
-	repeatReads  map[string]bool
-	StepCounters map[int]StepRepeatCounter // step index -> counter
-	countersMu   *sync.Mutex               // protects StepCounters for concurrent access
+	// The state each action keeps in this run of the job
+	states *actionStates
+	// The name of the job, with its templates evaluated
+	jobName string
+}
+
+// runEnv is what every job of a workflow, and every run of each, runs with.
+// It is set up once, before any job starts.
+type runEnv struct {
+	Config
 	// Print writer
 	Printer *Printer
 	// Result for managing job-level output
 	Result *Result
 	// Job scheduler for managing job dependencies and execution
 	JobScheduler *JobScheduler
-	// Shared outputs across all jobs (accessible via expressions as "outputs")
-	Outputs *Outputs `expr:"outputs"`
 	// Processes that steps left running in the background, stopped once the
 	// workflow is over
 	background *procgroup.Tracker
@@ -94,15 +94,42 @@ type JobContext struct {
 	cleanups *cleanups
 	// Directory of the workflow file, which local actions are relative to
 	baseDir string
-	// The state each action keeps in this run of the job
-	states *actionStates
 	// The run of probe, which actions are told about
 	runID string
-	// The name of the job, with its templates evaluated
-	jobName string
 	// The names the workflow gives its external actions, which an action
 	// that runs steps of its own is told
 	actions map[string]string
+}
+
+// jobRepeat is what the runs of a repeated job share: how they are counted,
+// and the counts of each step over them.
+type jobRepeat struct {
+	// total is the number of runs counted; warmup runs are not.
+	total int
+	// warmup is the number of runs before those counted; see Repeat.Warmup.
+	warmup int
+	// tested is whether the job has a test over its runs; see Repeat.Test.
+	tested bool
+	// baselineTested is whether the job has a test against the run compared
+	// to; see Repeat.BaselineTest.
+	baselineTested bool
+	// baselineSkipped is why that test is skipped, or empty when it is
+	// checked; see baselineSkip.
+	baselineSkipped string
+	// reads are the ids of the steps the tests over the runs read, which
+	// they check as a step's own test does. Those that only a skipped test
+	// reads are left out, as nothing checks them.
+	reads map[string]bool
+
+	mu sync.Mutex
+	// counters are the counts of each step, by Step.counterKey.
+	counters map[int]StepRepeatCounter
+}
+
+// newJobRepeat returns the counts for total runs of a job, warmup runs
+// among them.
+func newJobRepeat(total, warmup int) *jobRepeat {
+	return &jobRepeat{total: total - warmup, warmup: warmup, counters: make(map[int]StepRepeatCounter)}
 }
 
 // SetFailed marks the job context as failed
@@ -110,17 +137,23 @@ func (j *JobContext) SetFailed() {
 	j.Failed = true
 }
 
+// repeating reports whether the runs of the job are counted, rather than
+// each step's result reported as it is.
+func (j *JobContext) repeating() bool {
+	return j.repeat != nil
+}
+
 // warmingUp reports whether the run is one of the warmup runs of a repeated
 // job, which the job's result leaves out.
 func (j *JobContext) warmingUp() bool {
-	return j.RepeatCurrent < j.RepeatWarmup
+	return j.repeat != nil && j.RepeatCurrent < j.repeat.warmup
 }
 
 // countedOnly reports whether a failure in the run is counted and fails
 // nothing by itself: in a warmup run, or in a run of a job whose test over
 // its runs decides whether it passed.
 func (j *JobContext) countedOnly() bool {
-	return j.warmingUp() || j.repeatTested
+	return j.warmingUp() || (j.repeat != nil && j.repeat.tested)
 }
 
 // recordFailure notes the kind of a failure of a step for the exit code of

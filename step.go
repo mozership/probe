@@ -434,7 +434,7 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	}
 
 	// Handle repeat execution
-	if jCtx.IsRepeating {
+	if jCtx.repeating() {
 		st.handleRepeatExecution(jCtx, name, true) // true = hasError
 		return
 	}
@@ -507,7 +507,7 @@ func (st *stepRun) finalize(name string, actionResult map[string]any, jCtx *JobC
 	st.saveOutputs(jCtx)
 
 	// Handle repeat execution
-	if jCtx.IsRepeating {
+	if jCtx.repeating() {
 		st.handleRepeatExecution(jCtx, name, false) // false = no error
 		return
 	}
@@ -628,14 +628,14 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	}
 
 	// Update counter atomically with lock held throughout
-	jCtx.countersMu.Lock()
-	counter, exists := jCtx.StepCounters[st.counterKey()]
+	jCtx.repeat.mu.Lock()
+	counter, exists := jCtx.repeat.counters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
 			ID:          st.repeatID(),
 			Name:        name,
 			Test:        st.Test,
-			RepeatTotal: jCtx.RepeatTotal,
+			RepeatTotal: jCtx.repeat.total,
 		}
 	}
 
@@ -667,8 +667,8 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 
 	// Store updated counter back to map. The step's result is made from the
 	// counter once every run is done (Executor.appendRepeatStepResults).
-	jCtx.StepCounters[st.counterKey()] = counter
-	jCtx.countersMu.Unlock()
+	jCtx.repeat.counters[st.counterKey()] = counter
+	jCtx.repeat.mu.Unlock()
 
 	if st.Echo != "" {
 		if echoErr != nil {
@@ -1159,7 +1159,7 @@ func (st *stepRun) handleSkip(name, reason string, notRun bool, jCtx *JobContext
 	}
 
 	// Handle repeat execution for skipped steps
-	if jCtx.IsRepeating {
+	if jCtx.repeating() {
 		st.handleSkipRepeatExecution(jCtx, name, notRun)
 		return
 	}
@@ -1183,14 +1183,14 @@ func (st *stepRun) handleSkipRepeatExecution(jCtx *JobContext, name string, notR
 		return
 	}
 	// Update counter atomically with lock held throughout
-	jCtx.countersMu.Lock()
-	counter, exists := jCtx.StepCounters[st.counterKey()]
+	jCtx.repeat.mu.Lock()
+	counter, exists := jCtx.repeat.counters[st.counterKey()]
 	if !exists {
 		counter = StepRepeatCounter{
 			ID:          st.repeatID(),
 			Name:        name,
 			Test:        st.Test,
-			RepeatTotal: jCtx.RepeatTotal,
+			RepeatTotal: jCtx.repeat.total,
 		}
 	}
 
@@ -1204,8 +1204,8 @@ func (st *stepRun) handleSkipRepeatExecution(jCtx *JobContext, name string, notR
 
 	// Store updated counter back to map. The step's result is made from the
 	// counter once every run is done (Executor.appendRepeatStepResults).
-	jCtx.StepCounters[st.counterKey()] = counter
-	jCtx.countersMu.Unlock()
+	jCtx.repeat.counters[st.counterKey()] = counter
+	jCtx.repeat.mu.Unlock()
 }
 
 // createSkippedStepResult creates a StepResult for a skipped step

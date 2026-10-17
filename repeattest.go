@@ -217,7 +217,7 @@ func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter)
 // a step the test reads.
 func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounter) bool {
 	test := e.job.Repeat.BaselineTest
-	res := &RepeatTestResult{Test: test, Passed: true, Skipped: ctx.baselineSkipped}
+	res := &RepeatTestResult{Test: test, Passed: true, Skipped: ctx.repeat.baselineSkipped}
 	if res.Skipped == "" {
 		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Printer.baseline, e.job.ID)}}
 		res = evalRepeatTest(ctx, test, env)
