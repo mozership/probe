@@ -733,6 +733,7 @@ type Call struct {
     Guard   Guard             // what the run allows the action to do
     Actions map[string]string // the names the workflow gives its external actions
     Cleanups *Cleanups        // not nil under a Probe that cleans up once the run is over
+    Processes *Processes      // the processes the action leaves running in the background
 }
 
 type Step struct {
@@ -774,7 +775,7 @@ Probe calls `Cleanup` once the workflow is over, whether it passed, failed, or w
 
 - **Once for each action**, however many steps and jobs used it, and by whichever name. It is not called for an action no step ran.
 - **With the run alone.** The action has to find what to remove by `RunID`, so its steps mark what they make with it, as a container takes a label. Two runs at the same time have different IDs, and neither removes what the other made.
-- **After the background commands of the shell action are stopped**, and the action first used last, so that what a later step started is gone before what it may depend on.
+- **After the processes the steps left running in the background are stopped**, and the action first used last, so that what a later step started is gone before what it may depend on.
 - **With 30 seconds for each action.** A cleanup that fails or takes longer is told as a warning and changes neither the result nor the exit status of the run.
 
 `Cleanup` must not fail for what is already gone. It can be called for a run in which the step left nothing, more than once for the same run, and, when a signal ends the run, while a step of the action is still running.
@@ -782,6 +783,8 @@ Probe calls `Cleanup` once the workflow is over, whether it passed, failed, or w
 What the steps of a job run by the embedded action leave behind stays until the workflow that embeds the job is over, as it does for the jobs of the workflow itself.
 
 `Call.Cleanups` is not nil under a Probe that cleans up, which calls `Cleanup` of an action whose `action.yml` sets `cleanup`. It is nil under a Probe from before there was a cleanup; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
+
+An action that leaves a process running in the background, as the shell action does for `background: true`, starts it in a session of its own, so that it outlives the action, and tells Probe of it with `Call.Processes.Add(actionrpc.Process{PID: pid, Log: logFile})`, also when the step then fails. Probe stops the process group it leads once the workflow is over, or when Ctrl+C, `SIGTERM` or `SIGHUP` ends it, and removes the log file, if any. A Probe from before there were processes does not hear of them, and leaves them running.
 
 A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 
