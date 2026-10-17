@@ -71,7 +71,6 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 		ctx.Printer.PrintError("job %q: name: %v", j.Name, err)
 		return false, NewExecutionError("job_start", "failed to expand job name", err)
 	}
-	ctxPtr.jobName = j.Name
 
 	// Check if job should be skipped
 	if j.shouldSkip(ev, *ctxPtr) {
@@ -154,10 +153,12 @@ func cloneValue(v any) any {
 	return v
 }
 
-// expandJobName evaluates and sets the job name, printing it if appropriate
+// expandJobName evaluates the job name for the run ctx is of, which keeps
+// it, and gives it to the job's result. The job keeps the name as written,
+// so that each run evaluates it anew.
 func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 	if j.Name == "" {
-		j.Name = "Unknown Job"
+		ctx.jobName = "Unknown Job"
 		return nil
 	}
 
@@ -166,7 +167,7 @@ func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 		return err
 	}
 
-	j.Name = name
+	ctx.jobName = name
 
 	// Update the job name in the result as well. Async repeat shares the
 	// JobResult across iterations, so writers must take the mutex.
@@ -179,24 +180,6 @@ func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 	}
 
 	return nil
-}
-
-// cloneForAsync returns a copy of the job with its own Steps slice so that
-// each iteration of an async repeat can mutate per-execution state
-// (Job.Name, Step.Expr, Step.ctx, Step.Idx, Step.startedAt, Step.err,
-// Step.retryAttempt) without racing with sibling iterations or the
-// originally configured Job. Pointer-indirected configuration fields
-// (Repeat, Outputs, Retry, Vars, With, Iteration, Defaults, actionRunner)
-// remain shared because they are read-only at execution time or already
-// guarded by their own synchronization.
-func (j *Job) cloneForAsync() *Job {
-	cloned := *j
-	cloned.Steps = make([]*Step, len(j.Steps))
-	for i, s := range j.Steps {
-		stepCopy := *s
-		cloned.Steps[i] = &stepCopy
-	}
-	return &cloned
 }
 
 // validateRepeatIDs checks that no two steps of a job with a test over its
@@ -226,24 +209,27 @@ func (j *Job) validateRepeatIDs() error {
 func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 	idx := 0
 	for pos, st := range j.Steps {
-		st.Expr = ev
-		st.pos, st.ordinal, st.placed = pos, 0, true
+		place := func(ordinal int) *stepRun {
+			r := newStepRun(st, ev)
+			r.pos, r.ordinal, r.placed = pos, ordinal, true
+			return r
+		}
 
 		switch {
 		case st.Iteration.Expr != "":
-			j.executeStepWithIterationExpr(st, &idx, ctx)
+			j.executeStepWithIterationExpr(place, &idx, ctx)
 		case len(st.Iteration.Entries) == 0:
-			j.executeStep(st, &idx, ctx, nil)
+			j.executeStep(place(0), &idx, ctx, nil)
 		default:
-			j.executeStepWithIterations(st, st.Iteration.Entries, &idx, ctx)
+			j.executeStepWithIterations(place, st.Iteration.Entries, &idx, ctx)
 		}
 	}
 }
 
 // executeStep executes a single step without iterations. In a job with
 // fail_fast, a step after one that failed is reported as skipped instead.
-func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]any) {
-	st.Idx = *idx
+func (j *Job) executeStep(st *stepRun, idx *int, ctx *JobContext, vars map[string]any) {
+	st.idx = *idx
 	*idx++
 	st.SetCtx(*ctx, vars)
 	if j.FailFast && ctx.Failed {
@@ -253,11 +239,11 @@ func (j *Job) executeStep(st *Step, idx *int, ctx *JobContext, vars map[string]a
 	st.Do(ctx)
 }
 
-// executeStepWithIterations executes a step multiple times with different variable sets
-func (j *Job) executeStepWithIterations(st *Step, entries []map[string]any, idx *int, ctx *JobContext) {
+// executeStepWithIterations executes a step multiple times with different
+// variable sets, each in a run of its own that place begins for the entry.
+func (j *Job) executeStepWithIterations(place func(ordinal int) *stepRun, entries []map[string]any, idx *int, ctx *JobContext) {
 	for ordinal, vars := range entries {
-		st.ordinal = ordinal
-		j.executeStep(st, idx, ctx, vars)
+		j.executeStep(place(ordinal), idx, ctx, vars)
 	}
 }
 
@@ -267,7 +253,8 @@ func (j *Job) executeStepWithIterations(st *Step, entries []map[string]any, idx 
 // the step, and a list without entries skips it: there is nothing to run
 // it with. Neither is found out in a job with fail_fast after a step that
 // failed, where the step is skipped as any other is.
-func (j *Job) executeStepWithIterationExpr(st *Step, idx *int, ctx *JobContext) {
+func (j *Job) executeStepWithIterationExpr(place func(ordinal int) *stepRun, idx *int, ctx *JobContext) {
+	st := place(0)
 	if j.FailFast && ctx.Failed {
 		j.executeStep(st, idx, ctx, nil)
 		return
@@ -276,11 +263,11 @@ func (j *Job) executeStepWithIterationExpr(st *Step, idx *int, ctx *JobContext) 
 	st.SetCtx(*ctx, nil)
 	entries, err := st.iterationEntries()
 	if err == nil && len(entries) > 0 {
-		j.executeStepWithIterations(st, entries, idx, ctx)
+		j.executeStepWithIterations(place, entries, idx, ctx)
 		return
 	}
 
-	st.Idx = *idx
+	st.idx = *idx
 	*idx++
 	if err != nil {
 		st.failBeforeRun(&expr.FieldError{Path: "iteration", Err: err}, ctx)
@@ -374,7 +361,7 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 // handleSkip handles the skipped job logic
 func (j *Job) handleSkip(ctx JobContext) {
 	if ctx.Verbose {
-		ctx.Printer.LogDebug("Job '%s' (SKIPPED)", j.Name)
+		ctx.Printer.LogDebug("Job '%s' (SKIPPED)", ctx.jobName)
 		ctx.Printer.LogDebug("Skip condition: %s", j.SkipIf)
 		ctx.Printer.PrintSeparator()
 	}

@@ -69,7 +69,7 @@ func TestStep_parseWaitDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{}
+			step := newStepRun(&Step{}, nil)
 			duration, err := step.parseWaitDuration(tt.wait)
 
 			if tt.hasError {
@@ -113,7 +113,7 @@ func TestStep_formatWaitTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{}
+			step := newStepRun(&Step{}, nil)
 			result := step.formatWaitTime(tt.duration)
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
@@ -152,7 +152,7 @@ func TestStep_getWaitTimeForDisplay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{Wait: tt.wait}
+			step := newStepRun(&Step{Wait: tt.wait}, nil)
 			result := step.getWaitTimeForDisplay()
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
@@ -187,7 +187,7 @@ func TestStep_handleWait(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{Wait: tt.wait}
+			step := newStepRun(&Step{Wait: tt.wait}, nil)
 			jCtx := &JobContext{
 				Printer: &Printer{},
 			}
@@ -244,12 +244,14 @@ func TestStep_SkipIfWithWaitTiming(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				Name:   "Test Step",
-				Uses:   "hello",
-				Wait:   tt.wait,
-				SkipIf: tt.skipif,
-				Expr:   &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{
+					Name:   "Test Step",
+					Uses:   "hello",
+					Wait:   tt.wait,
+					SkipIf: tt.skipif,
+				},
+				expr: &expr.Expr{},
 			}
 
 			jCtx := &JobContext{
@@ -365,10 +367,12 @@ func TestStep_shouldSkip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				SkipIf: tt.skipif,
-				ctx:    tt.context,
-				Expr:   &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{
+					SkipIf: tt.skipif,
+				},
+				ctx:  tt.context,
+				expr: &expr.Expr{},
 			}
 			jCtx := &JobContext{
 				Printer: &Printer{},
@@ -383,9 +387,11 @@ func TestStep_shouldSkip(t *testing.T) {
 }
 
 func TestStep_createSkippedStepResult(t *testing.T) {
-	step := &Step{
-		Idx:  1,
-		Wait: "2s",
+	step := &stepRun{
+		Step: &Step{
+			Wait: "2s",
+		},
+		idx: 1,
 	}
 	jCtx := &JobContext{}
 	name := "Test Step"
@@ -413,12 +419,14 @@ func TestStep_createSkippedStepResult(t *testing.T) {
 }
 
 func TestStep_createStepResult_Timing(t *testing.T) {
-	step := &Step{
-		Idx:  1,
-		Test: "res.status == 200",
-		Echo: "Hello World",
-		Wait: "1s",
-		Expr: &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Test: "res.status == 200",
+			Echo: "Hello World",
+			Wait: "1s",
+		},
+		idx:  1,
+		expr: &expr.Expr{},
 		ctx: StepContext{
 			Res: map[string]any{"status": 200},
 			RT: ResponseTime{
@@ -449,11 +457,13 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 }
 func TestStep_createFailedStepResult(t *testing.T) {
 	testErr := fmt.Errorf("test error message")
-	step := &Step{
-		Idx:  2,
-		Test: "res.code == 200",
-		Wait: "3s",
-		err:  testErr,
+	step := &stepRun{
+		Step: &Step{
+			Test: "res.code == 200",
+			Wait: "3s",
+		},
+		idx: 2,
+		err: testErr,
 		ctx: StepContext{
 			RT: ResponseTime{
 				Duration: "500ms",
@@ -502,9 +512,11 @@ func TestStep_createFailedStepResult(t *testing.T) {
 }
 
 func TestStep_createFailedStepResult_NoTest(t *testing.T) {
-	step := &Step{
-		Idx: 1,
-		// No Test field
+	step := &stepRun{
+		Step: &Step{
+			// No Test field
+		},
+		idx: 1,
 		ctx: StepContext{},
 	}
 	jCtx := &JobContext{}
@@ -602,11 +614,13 @@ func TestStep_prepare(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				Name:   tt.stepName,
-				Wait:   tt.wait,
-				SkipIf: tt.skipif,
-				Expr:   &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{
+					Name:   tt.stepName,
+					Wait:   tt.wait,
+					SkipIf: tt.skipif,
+				},
+				expr: &expr.Expr{},
 			}
 
 			// Set up context
@@ -636,10 +650,12 @@ func TestStep_prepare(t *testing.T) {
 
 func TestStep_executeAction(t *testing.T) {
 	t.Run("with mock runner", func(t *testing.T) {
-		step := &Step{
-			Uses: "http",
-			With: map[string]any{"url": "http://example.com"},
-			Expr: &expr.Expr{},
+		step := &stepRun{
+			Step: &Step{
+				Uses: "http",
+				With: map[string]any{"url": "http://example.com"},
+			},
+			expr: &expr.Expr{},
 		}
 
 		// Set up mock runner
@@ -682,10 +698,12 @@ func TestStep_executeAction(t *testing.T) {
 	})
 
 	t.Run("with mock runner error", func(t *testing.T) {
-		step := &Step{
-			Uses: "failing-action",
-			With: map[string]any{},
-			Expr: &expr.Expr{},
+		step := &stepRun{
+			Step: &Step{
+				Uses: "failing-action",
+				With: map[string]any{},
+			},
+			expr: &expr.Expr{},
 		}
 
 		// Set up mock runner with error
@@ -713,10 +731,12 @@ func TestStep_executeAction(t *testing.T) {
 	})
 
 	t.Run("uses default plugin runner when none set", func(t *testing.T) {
-		step := &Step{
-			Uses: "test-action",
-			With: map[string]any{},
-			Expr: &expr.Expr{},
+		step := &stepRun{
+			Step: &Step{
+				Uses: "test-action",
+				With: map[string]any{},
+			},
+			expr: &expr.Expr{},
 		}
 		// Don't set actionRunner - should use default PluginActionRunner
 
@@ -764,8 +784,9 @@ func TestStep_processActionResult(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				Expr: &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{},
+				expr: &expr.Expr{},
 			}
 
 			jCtx := &JobContext{}
@@ -776,9 +797,11 @@ func TestStep_processActionResult(t *testing.T) {
 }
 
 func TestStep_handleActionError(t *testing.T) {
-	step := &Step{
-		Uses: "mock-action-for-error-test",
-		Expr: &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "mock-action-for-error-test",
+		},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -856,8 +879,9 @@ func TestStep_finalize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				Expr: &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{},
+				expr: &expr.Expr{},
 			}
 
 			jCtx := &JobContext{
@@ -883,12 +907,11 @@ func TestStep_finalize(t *testing.T) {
 // Integration test for the refactored Do() method
 func TestStep_Do_Integration(t *testing.T) {
 	t.Run("step with skip condition", func(t *testing.T) {
-		step := Step{
+		step := newStepRun(&Step{
 			Name:   "Skipped Step",
 			Uses:   "", // Empty action since this step should be skipped anyway
 			SkipIf: "true",
-			Expr:   &expr.Expr{},
-		}
+		}, nil)
 
 		step.ctx = StepContext{
 			Vars: map[string]any{},
@@ -908,12 +931,11 @@ func TestStep_Do_Integration(t *testing.T) {
 	})
 
 	t.Run("successful step execution with mock", func(t *testing.T) {
-		step := Step{
+		step := newStepRun(&Step{
 			Name: "Test Step",
 			Uses: "http",
 			With: map[string]any{"url": "http://example.com"},
-			Expr: &expr.Expr{},
-		}
+		}, nil)
 
 		// Set up mock runner for successful execution
 		mock := NewMockActionRunner()
@@ -957,11 +979,10 @@ func TestStep_Do_Integration(t *testing.T) {
 	})
 
 	t.Run("failed step execution with mock", func(t *testing.T) {
-		step := Step{
+		step := newStepRun(&Step{
 			Name: "Failed Step",
 			Uses: "failing-action",
-			Expr: &expr.Expr{},
-		}
+		}, nil)
 
 		// Set up mock runner for failed execution
 		mock := NewMockActionRunner()
@@ -1115,10 +1136,12 @@ func TestStep_getEchoOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &Step{
-				Echo: tt.echo,
+			step := &stepRun{
+				Step: &Step{
+					Echo: tt.echo,
+				},
 				ctx:  tt.context,
-				Expr: &expr.Expr{},
+				expr: &expr.Expr{},
 			}
 			printer := newBufferPrinter()
 
@@ -1132,10 +1155,12 @@ func TestStep_getEchoOutput(t *testing.T) {
 }
 
 func TestStep_getEchoOutput_Error(t *testing.T) {
-	step := &Step{
-		Echo: "{{invalid_expression + }}", // Invalid syntax that will cause template error
+	step := &stepRun{
+		Step: &Step{
+			Echo: "{{invalid_expression + }}", // Invalid syntax that will cause template error
+		},
 		ctx:  StepContext{},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 	printer := newBufferPrinter()
 
@@ -1227,10 +1252,12 @@ func (m *SlowMockActionRunner) RunActions(name string, with map[string]any, opts
 }
 
 func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
-	step := &Step{
-		Uses: "test-action",
-		Expr: &expr.Expr{},
-		// No Timeout specified - should use DefaultStepTimeout
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			// No Timeout specified - should use DefaultStepTimeout
+		},
+		expr: &expr.Expr{},
 	}
 
 	// Mock runner that completes quickly
@@ -1258,10 +1285,12 @@ func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
 }
 
 func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
-	step := &Step{
-		Uses:    "test-action",
-		Timeout: Interval{Duration: 2 * time.Second},
-		Expr:    &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Uses:    "test-action",
+			Timeout: Interval{Duration: 2 * time.Second},
+		},
+		expr: &expr.Expr{},
 	}
 
 	// Mock runner that takes 3 seconds (longer than timeout)
@@ -1309,10 +1338,12 @@ func (r *stoppableRunner) RunActions(name string, with map[string]any, opts RunO
 // returns on being stopped.
 func TestStep_executeSingleAction_TimeoutStopsTheAction(t *testing.T) {
 	for _, err := range []error{context.DeadlineExceeded, errors.New("rpc error: code = DeadlineExceeded")} {
-		step := &Step{
-			Uses:    "test-action",
-			Timeout: Interval{Duration: 100 * time.Millisecond},
-			Expr:    &expr.Expr{},
+		step := &stepRun{
+			Step: &Step{
+				Uses:    "test-action",
+				Timeout: Interval{Duration: 100 * time.Millisecond},
+			},
+			expr: &expr.Expr{},
 		}
 		runner := &stoppableRunner{stopped: make(chan struct{}), err: err}
 
@@ -1330,7 +1361,7 @@ func TestStep_executeSingleAction_TimeoutStopsTheAction(t *testing.T) {
 
 // An action that is done in time is not told to stop while it runs.
 func TestStep_executeSingleAction_ContextOfAnActionDoneInTime(t *testing.T) {
-	step := &Step{Uses: "test-action", Timeout: Interval{Duration: time.Second}, Expr: &expr.Expr{}}
+	step := &stepRun{Step: &Step{Uses: "test-action", Timeout: Interval{Duration: time.Second}}, expr: &expr.Expr{}}
 	runner := &contextRecordingRunner{}
 
 	if _, err := step.executeSingleAction(runner, map[string]any{}, &JobContext{}, false); err != nil {
@@ -1357,10 +1388,12 @@ func (r *contextRecordingRunner) RunActions(name string, with map[string]any, op
 }
 
 func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
-	step := &Step{
-		Uses:    "test-action",
-		Timeout: Interval{Duration: 3 * time.Second},
-		Expr:    &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Uses:    "test-action",
+			Timeout: Interval{Duration: 3 * time.Second},
+		},
+		expr: &expr.Expr{},
 	}
 
 	// Mock runner that takes 1 second (less than timeout)
@@ -1391,15 +1424,17 @@ func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
 }
 
 func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
-	step := &Step{
-		Uses:    "test-action",
-		Test:    "res.code == 200",
-		Timeout: Interval{Duration: 500 * time.Millisecond},
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: 100 * time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses:    "test-action",
+			Test:    "res.code == 200",
+			Timeout: Interval{Duration: 500 * time.Millisecond},
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: 100 * time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	// Mock runner that takes 1 second per attempt (longer than timeout)
@@ -1443,14 +1478,16 @@ func TestStep_executeActionWithRetry_NoTest(t *testing.T) {
 		callCount: &callCount,
 	}
 
-	step := &Step{
-		Uses: "test-action",
-		// No Test field - should execute once without retry
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: 10 * time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			// No Test field - should execute once without retry
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: 10 * time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1490,14 +1527,16 @@ func TestStep_executeActionWithRetry_TestFailThenPass(t *testing.T) {
 		},
 	}
 
-	step := &Step{
-		Uses: "test-action",
-		Test: "res.code == 200 && res.body.messages == []",
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: 10 * time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			Test: "res.code == 200 && res.body.messages == []",
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: 10 * time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1527,14 +1566,16 @@ func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 		},
 	}
 
-	step := &Step{
-		Uses: "test-action",
-		Test: "res.code == 500",
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: 10 * time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			Test: "res.code == 500",
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: 10 * time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1581,10 +1622,12 @@ func TestStep_DefaultStepTimeout_Value(t *testing.T) {
 }
 
 func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
-	step := &Step{
-		Idx:  1,
-		Echo: "iteration {{vars.i}}",
-		Expr: &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Echo: "iteration {{vars.i}}",
+		},
+		idx:  1,
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1606,7 +1649,7 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 		step.handleRepeatExecution(jCtx, "Repeat Step", false)
 	}
 
-	counter, ok := jCtx.StepCounters[step.Idx]
+	counter, ok := jCtx.StepCounters[step.idx]
 	if !ok {
 		t.Fatal("StepCounters[1] missing")
 	}
@@ -1625,7 +1668,7 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 	if got := len(jCtx.Result.Jobs["job-1"].StepResults); got != 0 {
 		t.Fatalf("StepResults length = %d after the runs, want 0", got)
 	}
-	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{{Name: "first"}, step}}}
+	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{{Name: "first"}, step.Step}}}
 	e.appendRepeatStepResults(jCtx)
 
 	stepResults := jCtx.Result.Jobs["job-1"].StepResults
@@ -1709,14 +1752,16 @@ func (m *OptionsRecordingActionRunner) recorded() []RunOptions {
 func TestStep_executeActionWithRetry_QuietsNonFinalAttempts(t *testing.T) {
 	mock := &OptionsRecordingActionRunner{failUntil: 2}
 
-	step := &Step{
-		Uses: "test-action",
-		Test: "res.code == 200",
-		Retry: &StepRetry{
-			MaxAttempts: 4,
-			Interval:    Interval{Duration: time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			Test: "res.code == 200",
+			Retry: &StepRetry{
+				MaxAttempts: 4,
+				Interval:    Interval{Duration: time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1748,14 +1793,16 @@ func TestStep_executeActionWithRetry_QuietsNonFinalAttempts(t *testing.T) {
 func TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet(t *testing.T) {
 	mock := &OptionsRecordingActionRunner{failUntil: 3}
 
-	step := &Step{
-		Uses: "test-action",
-		Test: "res.code == 200",
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			Test: "res.code == 200",
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1786,14 +1833,16 @@ func TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet(t *testing.T) {
 func TestStep_executeActionWithRetry_VerboseOverridesQuiet(t *testing.T) {
 	mock := &OptionsRecordingActionRunner{failUntil: 1}
 
-	step := &Step{
-		Uses: "test-action",
-		Test: "res.code == 200",
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+			Test: "res.code == 200",
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1820,9 +1869,11 @@ func TestStep_executeActionWithRetry_VerboseOverridesQuiet(t *testing.T) {
 func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
 	mock := &OptionsRecordingActionRunner{}
 
-	step := &Step{
-		Uses: "test-action",
-		Expr: &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "test-action",
+		},
+		expr: &expr.Expr{},
 	}
 
 	jCtx := &JobContext{
@@ -1855,7 +1906,7 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	jCtx := &JobContext{Outputs: NewOutputs(), Printer: printer}
 	_ = jCtx.Outputs.Set("first", map[string]any{"token": "one"})
 
-	st := &Step{ID: "second", Outputs: map[string]string{"token": "res.v"}, Expr: &expr.Expr{}}
+	st := &stepRun{Step: &Step{ID: "second", Outputs: map[string]string{"token": "res.v"}}, expr: &expr.Expr{}}
 	st.ctx = StepContext{Res: map[string]any{"v": "two"}}
 	st.saveOutputs(jCtx)
 
@@ -1985,10 +2036,12 @@ func (r *lateBackgroundRunner) RunActions(name string, with map[string]any, opts
 }
 
 func TestStepTimeoutStillTracksBackground(t *testing.T) {
-	step := &Step{
-		Uses:    "shell",
-		Timeout: Interval{Duration: 100 * time.Millisecond},
-		Expr:    &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Uses:    "shell",
+			Timeout: Interval{Duration: 100 * time.Millisecond},
+		},
+		expr: &expr.Expr{},
 	}
 	runner := &lateBackgroundRunner{t: t, delay: 300 * time.Millisecond, pid: make(chan int, 1)}
 	jCtx := &JobContext{background: procgroup.NewTracker()}
@@ -2043,7 +2096,7 @@ func TestStep_processActionResultStdoutJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout, hadStdout := tt.res["stdout"]
-			step := &Step{Expr: &expr.Expr{}}
+			step := &stepRun{Step: &Step{}, expr: &expr.Expr{}}
 			jCtx := &JobContext{Printer: newBufferPrinter()}
 			step.processActionResult(map[string]any{"res": tt.res}, jCtx)
 
@@ -2139,7 +2192,7 @@ func TestStep_check_Contract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &Step{Test: tt.test, Expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
+			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
 			if got := st.checked(); got != tt.wantChecked {
 				t.Fatalf("checked() = %v, want %v", got, tt.wantChecked)
 			}
@@ -2164,13 +2217,16 @@ func TestStep_check_Contract(t *testing.T) {
 }
 
 func TestStep_contractFailure(t *testing.T) {
-	st := &Step{ctx: StepContext{
-		Req: map[string]any{"url": "http://example.com/v1/users/2"},
-		Res: violationsRes(
-			map[string]any{"in": "response", "reason": "missing property 'name'", "message": "body failed"},
-			map[string]any{"in": "response", "field": "$.id", "reason": "got string, want integer", "message": "body failed"},
-		),
-	}}
+	st := &stepRun{
+		Step: &Step{},
+		ctx: StepContext{
+			Req: map[string]any{"url": "http://example.com/v1/users/2"},
+			Res: violationsRes(
+				map[string]any{"in": "response", "reason": "missing property 'name'", "message": "body failed"},
+				map[string]any{"in": "response", "field": "$.id", "reason": "got string, want integer", "message": "body failed"},
+			),
+		},
+	}
 
 	f := st.contractFailure()
 	if f == nil {
@@ -2207,7 +2263,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &Step{Idx: 0, Expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
+			st := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}, ctx: StepContext{Res: tt.res}}
 			jCtx := &JobContext{Printer: newBufferPrinter(), Result: NewResult()}
 
 			result := st.createStepResult("Contract", jCtx)
@@ -2245,14 +2301,16 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 			return map[string]any{"status": 0, "res": res}
 		},
 	}
-	step := &Step{
-		Uses: "http",
-		Test: "res.code == 200",
-		Retry: &StepRetry{
-			MaxAttempts: 3,
-			Interval:    Interval{Duration: 10 * time.Millisecond},
+	step := &stepRun{
+		Step: &Step{
+			Uses: "http",
+			Test: "res.code == 200",
+			Retry: &StepRetry{
+				MaxAttempts: 3,
+				Interval:    Interval{Duration: 10 * time.Millisecond},
+			},
 		},
-		Expr: &expr.Expr{},
+		expr: &expr.Expr{},
 	}
 	jCtx := &JobContext{Printer: newBufferPrinter()}
 
@@ -2267,7 +2325,7 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 }
 
 func TestStep_handleRepeatExecution_Contract(t *testing.T) {
-	step := &Step{Idx: 0, Expr: &expr.Expr{}}
+	step := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}}
 	jCtx := &JobContext{
 		Printer:      newBufferPrinter(),
 		StepCounters: make(map[int]StepRepeatCounter),
@@ -2324,7 +2382,7 @@ func TestStep_contractFailure_Kind(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &Step{ctx: StepContext{Res: violationsRes(tt.violations...)}}
+			st := &stepRun{Step: &Step{}, ctx: StepContext{Res: violationsRes(tt.violations...)}}
 			f := st.contractFailure()
 			if f == nil {
 				t.Fatal("contractFailure() = nil, want a failure")
@@ -2362,7 +2420,7 @@ func TestStep_contractMatched(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &Step{ctx: StepContext{Res: tt.res}}
+			st := &stepRun{Step: &Step{}, ctx: StepContext{Res: tt.res}}
 			if got := st.contractMatched(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("contractMatched() = %+v, want %+v", got, tt.want)
 			}
@@ -2373,7 +2431,7 @@ func TestStep_contractMatched(t *testing.T) {
 func TestStep_createStepResult_ContractMatched(t *testing.T) {
 	res := violationsRes()
 	res["contract"] = map[string]any{"spec": "openapi.yml", "operation": "GET /users/{id}", "response": "200"}
-	st := &Step{Expr: &expr.Expr{}, ctx: StepContext{Res: res}}
+	st := &stepRun{Step: &Step{}, expr: &expr.Expr{}, ctx: StepContext{Res: res}}
 	jCtx := &JobContext{Printer: newBufferPrinter(), Result: NewResult()}
 
 	result := st.createStepResult("Get a user", jCtx)
@@ -2384,7 +2442,7 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 }
 
 func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
-	step := &Step{Idx: 0, Expr: &expr.Expr{}}
+	step := &stepRun{Step: &Step{}, idx: 0, expr: &expr.Expr{}}
 	jCtx := &JobContext{
 		Printer:      newBufferPrinter(),
 		StepCounters: make(map[int]StepRepeatCounter),
@@ -2409,7 +2467,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	}
 
 	// The step's result, made from the counter, carries it.
-	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{step}}}
+	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{step.Step}}}
 	e.appendRepeatStepResults(jCtx)
 	results := jCtx.Result.Jobs["job-1"].StepResults
 	if len(results) != 1 || !reflect.DeepEqual(results[0].Contract, want) {
@@ -2443,10 +2501,12 @@ func TestStep_executeActionWithRetry_ContractOnly(t *testing.T) {
 				},
 			}
 			// No test: the contract alone checks the step.
-			step := &Step{
-				Uses:  "http",
-				Retry: &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
-				Expr:  &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{
+					Uses:  "http",
+					Retry: &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
+				},
+				expr: &expr.Expr{},
 			}
 			jCtx := &JobContext{Printer: newBufferPrinter()}
 
@@ -2473,10 +2533,12 @@ func TestStep_executeActionWithRetry_UncheckedRunsOnce(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			callCount := 0
 			mock := &CountingMockActionRunner{callCount: &callCount, result: tt.result, err: tt.err}
-			step := &Step{
-				Uses:  "http",
-				Retry: &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
-				Expr:  &expr.Expr{},
+			step := &stepRun{
+				Step: &Step{
+					Uses:  "http",
+					Retry: &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
+				},
+				expr: &expr.Expr{},
 			}
 			jCtx := &JobContext{Printer: newBufferPrinter()}
 
@@ -2512,7 +2574,7 @@ func TestStep_executeAction_Guard(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockActionRunner()
-			st := &Step{Uses: tt.uses, With: map[string]any{}, Expr: &expr.Expr{}, actionRunner: mock}
+			st := &stepRun{Step: &Step{Uses: tt.uses, With: map[string]any{}, actionRunner: mock}, expr: &expr.Expr{}}
 			jCtx := &JobContext{Config: Config{Guard: tt.guard}, Printer: newBufferPrinter()}
 
 			_, err := st.executeAction("Step", jCtx)
@@ -2542,13 +2604,15 @@ func TestStep_executeAction_Guard(t *testing.T) {
 func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 	mock := NewMockActionRunner()
 	mock.SetError("http", actionrpc.Refuse("POST may write"))
-	st := &Step{
-		Uses:         "http",
-		With:         map[string]any{},
-		Test:         "res.code == 201",
-		Retry:        &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
-		Expr:         &expr.Expr{},
-		actionRunner: mock,
+	st := &stepRun{
+		Step: &Step{
+			Uses:         "http",
+			With:         map[string]any{},
+			Test:         "res.code == 201",
+			Retry:        &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
+			actionRunner: mock,
+		},
+		expr: &expr.Expr{},
 	}
 	jCtx := &JobContext{Config: Config{Guard: actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}}, Printer: newBufferPrinter()}
 
@@ -2601,7 +2665,7 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := NewPrinter(false, []string{})
 			printer.SetMasker(mask.New(nil, nil))
-			st := &Step{Test: tt.test, Expr: &expr.Expr{}}
+			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}}
 			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}
 
 			out, ok := st.DoTest(printer)
@@ -2632,7 +2696,7 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		result.Jobs["job"] = &JobResult{JobID: "job"}
 		jCtx := &JobContext{Printer: printer, Result: result, CurrentJobID: "job", Config: Config{Verbose: true}}
 
-		st := &Step{Name: "Skipped", Expr: &expr.Expr{}, SkipIf: "true"}
+		st := &stepRun{Step: &Step{Name: "Skipped", SkipIf: "true"}, expr: &expr.Expr{}}
 		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
 
 		steps := result.Jobs["job"].StepResults

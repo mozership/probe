@@ -369,9 +369,11 @@ func TestStep_DoTestRecordsFailure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := &Step{
-				Test: tt.test,
-				Expr: &expr.Expr{},
+			st := &stepRun{
+				Step: &Step{
+					Test: tt.test,
+				},
+				expr: &expr.Expr{},
 				ctx: StepContext{
 					Req: map[string]any{"path": "/"},
 					Res: map[string]any{"code": 200},

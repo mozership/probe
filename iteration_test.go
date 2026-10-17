@@ -371,12 +371,12 @@ func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
 
 func TestStep_counterKey(t *testing.T) {
 	// A step run without a job is kept by its index.
-	if got := (&Step{Idx: 3}).counterKey(); got != 3 {
+	if got := (&stepRun{Step: &Step{}, idx: 3}).counterKey(); got != 3 {
 		t.Errorf("counterKey() = %d, want the index", got)
 	}
-	a := &Step{Idx: 5, pos: 1, ordinal: 0, placed: true}
-	b := &Step{Idx: 5, pos: 2, ordinal: 0, placed: true}
-	c := &Step{Idx: 1, pos: 1, ordinal: 4, placed: true}
+	a := &stepRun{Step: &Step{}, idx: 5, pos: 1, ordinal: 0, placed: true}
+	b := &stepRun{Step: &Step{}, idx: 5, pos: 2, ordinal: 0, placed: true}
+	c := &stepRun{Step: &Step{}, idx: 1, pos: 1, ordinal: 4, placed: true}
 	if a.counterKey() == b.counterKey() || a.counterKey() == c.counterKey() {
 		t.Errorf("keys = %d, %d, %d, want one for each place", a.counterKey(), b.counterKey(), c.counterKey())
 	}
@@ -384,7 +384,7 @@ func TestStep_counterKey(t *testing.T) {
 		t.Errorf("keys = %d, %d, %d, want them in the order the steps run in", a.counterKey(), c.counterKey(), b.counterKey())
 	}
 	// The last entry an iteration takes is not taken for the next step's.
-	last := &Step{pos: 1, ordinal: maxIterationEntries - 1, placed: true}
+	last := &stepRun{Step: &Step{}, pos: 1, ordinal: maxIterationEntries - 1, placed: true}
 	if last.counterKey() >= b.counterKey() || last.counterKey() <= c.counterKey() {
 		t.Errorf("key = %d, want it before that of the next step, %d", last.counterKey(), b.counterKey())
 	}

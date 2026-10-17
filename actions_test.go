@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/expr"
 )
 
 func TestMockActionRunner(t *testing.T) {
@@ -58,11 +57,11 @@ func TestMockActionRunner(t *testing.T) {
 
 func TestStepWithMockRunner(t *testing.T) {
 	// Create a step with mock runner
-	step := &Step{
+	step := newStepRun(&Step{
 		Name: "Test Step",
 		Uses: "http",
 		With: map[string]any{"url": "http://example.com"},
-	}
+	}, nil)
 
 	// Set up mock runner
 	mock := NewMockActionRunner()
@@ -82,8 +81,6 @@ func TestStepWithMockRunner(t *testing.T) {
 		Config: Config{Verbose: false},
 	}
 
-	// Initialize expression evaluator
-	step.Expr = &expr.Expr{}
 	step.ctx = StepContext{}
 
 	// Execute action
@@ -366,7 +363,7 @@ func (unsendableStateRunner) RunStep(name string, call actionrpc.Call, opts RunO
 
 func TestActionStateThatCannotBeSentFailsTheStep(t *testing.T) {
 	jCtx := &JobContext{Printer: newBufferPrinter(), states: newActionStates()}
-	st := &Step{Name: "s", Uses: "unsendable"}
+	st := newStepRun(&Step{Name: "s", Uses: "unsendable"}, nil)
 	_, err := st.executeSingleAction(unsendableStateRunner{}, map[string]any{}, jCtx, false)
 	if err == nil || !strings.Contains(err.Error(), "cannot keep the action's state") {
 		t.Errorf("error = %v, want one about the state", err)

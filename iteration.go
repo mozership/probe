@@ -128,11 +128,11 @@ func kindOf(v any) string {
 // iterationEntries returns the entries the step runs once for each of: those
 // written in the workflow, or what the template comes to against the step's
 // vars and the outputs published so far.
-func (st *Step) iterationEntries() ([]map[string]any, error) {
+func (st *stepRun) iterationEntries() ([]map[string]any, error) {
 	if st.Iteration.Expr == "" {
 		return st.Iteration.Entries, nil
 	}
-	out, err := st.Expr.EvalTemplateWithTypePreservation(st.Iteration.Expr, st.ctx)
+	out, err := st.expr.EvalTemplateWithTypePreservation(st.Iteration.Expr, st.ctx)
 	if err != nil {
 		return nil, err
 	}
