@@ -1989,3 +1989,80 @@ func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
 		t.Errorf("%d entries are reported as passed in both runs, want the three of the iteration:\n%s", got, report)
 	}
 }
+
+// timingRunner records when each call of an action began and ended, and
+// takes the time its with says.
+type timingRunner struct {
+	mu    sync.Mutex
+	begun map[string]time.Time
+	ended map[string]time.Time
+}
+
+func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	key, _ := with["key"].(string)
+	r.mu.Lock()
+	r.begun[key] = time.Now()
+	r.mu.Unlock()
+	if d, ok := with["take"].(string); ok {
+		take, _ := time.ParseDuration(d)
+		time.Sleep(take)
+	}
+	r.mu.Lock()
+	r.ended[key] = time.Now()
+	r.mu.Unlock()
+	return map[string]any{"status": 0, "res": map[string]any{"code": 200}}, nil
+}
+
+// A job starts once the jobs it needs are done, and does not wait for one
+// that started with them but that it does not need.
+func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
+	runner := &timingRunner{begun: map[string]time.Time{}, ended: map[string]time.Time{}}
+	step := func(key, take string) []*Step {
+		return []*Step{{Name: key, Uses: "hello", Test: "res.code == 200", actionRunner: runner, With: map[string]any{"key": key, "take": take}}}
+	}
+	w := &Workflow{Name: "needs", Jobs: []Job{
+		{ID: "slow", Name: "Slow", Steps: step("slow", "1s")},
+		{ID: "fast", Name: "Fast", Steps: step("fast", "0s")},
+		{ID: "after", Name: "After", Needs: []string{"fast"}, Steps: step("after", "0s")},
+		{ID: "last", Name: "Last", Needs: []string{"slow", "after"}, Steps: step("last", "0s")},
+	}}
+	report := startCapturing(t, w, OutputModeSpinner)
+
+	if w.exitStatus != 0 {
+		t.Fatalf("exit status = %d, want 0:\n%s", w.exitStatus, report)
+	}
+	if !runner.begun["after"].Before(runner.ended["slow"]) {
+		t.Errorf("after began at %s, once slow ended at %s; want it to begin once fast is done", runner.begun["after"], runner.ended["slow"])
+	}
+	if runner.begun["last"].Before(runner.ended["slow"]) || runner.begun["last"].Before(runner.ended["after"]) {
+		t.Errorf("last began before the jobs it needs were done")
+	}
+}
+
+// A job whose dependency can no longer be done fails the run rather than be
+// waited for for ever.
+func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) {
+	w := &Workflow{Name: "stuck", Jobs: []Job{
+		{ID: "a", Name: "A", Steps: []*Step{{Uses: "hello"}}},
+		{ID: "b", Name: "B", Needs: []string{"a"}, Steps: []*Step{{Uses: "hello"}}},
+	}}
+	w.printer = newBufferPrinter()
+	w.outputs = NewOutputs()
+	scheduler, err := w.initJobScheduler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a is taken for running, but nothing runs it.
+	scheduler.SetJobStatus("a", JobRunning, false)
+
+	errc := make(chan error, 1)
+	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler)) }()
+	select {
+	case err := <-errc:
+		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {
+			t.Errorf("startJobsWithDependencies() error = %v, want that b cannot run", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("startJobsWithDependencies() waited for a job that nothing runs")
+	}
+}

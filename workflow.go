@@ -241,40 +241,35 @@ func (w *Workflow) setupResult() *Result {
 	return rs
 }
 
-// startJobsWithDependencies runs the main job execution loop with dependency management
+// startJobsWithDependencies runs the jobs, each as soon as the jobs it needs
+// are done, rather than once every job started with them is: a job does not
+// wait for one it does not need. A job whose dependency failed is skipped as
+// soon as that is known.
 func (w *Workflow) startJobsWithDependencies(ctx JobContext) error {
+	done := make(chan struct{})
+	running := 0
 
-	for !ctx.JobScheduler.AllJobsCompleted() {
-		runnableJobs := ctx.JobScheduler.GetRunnableJobs()
-
-		if len(runnableJobs) == 0 {
-			if err := w.handleNoRunnableJobs(ctx); err != nil {
-				return err
-			}
-			continue
+	for {
+		skippedJobs := ctx.JobScheduler.MarkJobsWithFailedDependencies()
+		if ctx.Result != nil {
+			w.updateSkippedJobsOutput(skippedJobs, ctx.Result)
 		}
 
-		w.processRunnableJobs(runnableJobs, ctx)
-		ctx.JobScheduler.wg.Wait()
+		running += w.processRunnableJobs(ctx.JobScheduler.GetRunnableJobs(), ctx, done)
+		if running == 0 {
+			break
+		}
+
+		// Whichever job ends, the jobs that need it may be able to run now.
+		<-done
+		running--
 	}
 
-	return nil
-}
-
-// handleNoRunnableJobs handles the case when no jobs can be run (failed dependencies or deadlock)
-func (w *Workflow) handleNoRunnableJobs(ctx JobContext) error {
-	skippedJobs := ctx.JobScheduler.MarkJobsWithFailedDependencies()
-
-	// Update skipped jobs in workflow printer
-	if ctx.Result != nil {
-		w.updateSkippedJobsOutput(skippedJobs, ctx.Result)
+	// With no job running, a job not over yet would never run: what it
+	// waits for will not change any more.
+	if pending := ctx.JobScheduler.PendingJobs(); len(pending) > 0 {
+		return fmt.Errorf("jobs %s cannot run: the jobs they need will not be done", strings.Join(pending, ", "))
 	}
-
-	if len(skippedJobs) == 0 {
-		// If no jobs were skipped, we might have a deadlock
-		time.Sleep(100 * time.Millisecond)
-	}
-
 	return nil
 }
 
@@ -295,23 +290,24 @@ func (w *Workflow) updateSkippedJobsOutput(skippedJobs []string, rs *Result) {
 	}
 }
 
-// processRunnableJobs starts execution of all currently runnable jobs
-func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext) {
+// processRunnableJobs starts each of runnableJobs, and returns how many it
+// started. Each job sends to done once it is over and its status says so.
+func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, done chan<- struct{}) int {
 	for _, jobID := range runnableJobs {
 		job := ctx.JobScheduler.jobs[jobID]
 		ctx.JobScheduler.SetJobStatus(jobID, JobRunning, false)
-		ctx.JobScheduler.wg.Add(1)
 
-		go func(j *Job, id string) {
-			defer ctx.JobScheduler.wg.Done()
+		go func(j *Job) {
+			defer func() { done <- struct{}{} }()
 
 			executor := NewExecutor(w, j)
 			success := executor.Execute(ctx)
 			if !success {
 				w.SetExitStatus(true)
 			}
-		}(job, jobID)
+		}(job)
 	}
+	return len(runnableJobs)
 }
 
 func (w *Workflow) SetExitStatus(isErr bool) {

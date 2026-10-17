@@ -2,6 +2,7 @@ package probe
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,6 @@ type JobScheduler struct {
 	repeatCounters map[string]int // Track repeat execution count
 	repeatTargets  map[string]int // Target repeat count
 	mutex          sync.RWMutex
-	wg             sync.WaitGroup
 }
 
 func NewJobScheduler() *JobScheduler {
@@ -266,6 +266,21 @@ func (js *JobScheduler) AllJobsCompleted() bool {
 	}
 
 	return true
+}
+
+// PendingJobs returns the jobs that have not started, sorted.
+func (js *JobScheduler) PendingJobs() []string {
+	js.mutex.RLock()
+	defer js.mutex.RUnlock()
+
+	var pending []string
+	for jobID, status := range js.status {
+		if status == JobPending {
+			pending = append(pending, jobID)
+		}
+	}
+	slices.Sort(pending)
+	return pending
 }
 
 // MarkJobsWithFailedDependencies marks jobs as failed if their dependencies have failed,

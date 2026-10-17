@@ -33,7 +33,7 @@ Workflow
 
 ## Job Execution Model
 
-Jobs without a `needs` declaration run at the same time. Adding `needs` is what turns that set into an ordered graph.
+Jobs without a `needs` declaration run at the same time. Adding `needs` is what turns that set into an ordered graph. A job starts as soon as the jobs it needs are done, without waiting for the other jobs that are running.
 
 ### Independent Job Execution
 
