@@ -17,15 +17,15 @@ import (
 
 // runStepForTemplateError runs st in a job context of its own and returns
 // how many times the action ran, the step's result and whether the job failed.
-func runStepForTemplateError(t *testing.T, st *Step, vars map[string]any) (int, StepResult, bool) {
+func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int, StepResult, bool) {
 	t.Helper()
 
 	calls := 0
-	st.actionRunner = &CountingMockActionRunner{
+	step.actionRunner = &CountingMockActionRunner{
 		result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}},
 		callCount: &calls,
 	}
-	st.Expr = &expr.Expr{}
+	st := newStepRun(step, nil)
 
 	rs := NewResult()
 	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
@@ -395,23 +395,47 @@ func TestWorkflow_VarsTemplateErrorHidesSecrets(t *testing.T) {
 	}
 }
 
+// An iteration runs the same step again. A run whose template cannot be
+// evaluated does not report what the run before it left, such as the time
+// and the attempts of an action that it did not run itself.
 func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
-	st := &Step{
-		Name:  "again",
-		Uses:  "http",
-		Vars:  map[string]any{"x": "{{outputs.a.b}}"},
-		Retry: &StepRetry{MaxAttempts: 3},
+	calls := 0
+	job := &Job{ID: "j", Name: "j", Steps: []*Step{{
+		Name:      "again {{vars.k.y}}",
+		Uses:      "http",
+		Retry:     &StepRetry{MaxAttempts: 3},
+		Test:      "true",
+		Iteration: Iteration{Entries: []map[string]any{{"k": map[string]any{"y": 1}}, {}}},
+		actionRunner: &CountingMockActionRunner{
+			result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}, "rt": "10ms"},
+			callCount: &calls,
+		},
+	}}}
+	rs := NewResult()
+	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
+	ctx := JobContext{
+		CurrentJobID: "j",
+		Printer:      newBufferPrinter(),
+		Result:       rs,
+		Outputs:      NewOutputs(),
+		countersMu:   &sync.Mutex{},
 	}
-	// What a run that retried and took an hour leaves behind.
-	st.startedAt = time.Now().Add(-time.Hour)
-	st.retryAttempt = 3
+	if _, err := job.run(ctx); err != nil {
+		t.Fatal(err)
+	}
 
-	_, result, _ := runStepForTemplateError(t, st, nil)
-	if result.Elapsed != 0 {
-		t.Errorf("elapsed = %v, want 0 for a step whose action did not run", result.Elapsed)
+	results := rs.Jobs["j"].StepResults
+	if calls != 1 || len(results) != 2 {
+		t.Fatalf("the action ran %d times with %d results, want once with 2", calls, len(results))
 	}
-	if result.RetryAttempt != 0 {
-		t.Errorf("retry attempt = %d, want 0", result.RetryAttempt)
+	if results[0].RetryAttempt != 1 {
+		t.Fatalf("the first run's retry attempt = %d, want 1", results[0].RetryAttempt)
+	}
+	if results[1].Elapsed != 0 {
+		t.Errorf("elapsed = %v, want 0 for a step whose action did not run", results[1].Elapsed)
+	}
+	if results[1].RetryAttempt != 0 {
+		t.Errorf("retry attempt = %d, want 0", results[1].RetryAttempt)
 	}
 }
 

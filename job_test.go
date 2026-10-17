@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 )
 
 func TestJob_validateSteps(t *testing.T) {
@@ -801,5 +803,56 @@ func TestRunStandaloneWithoutARefusal(t *testing.T) {
 	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", t.TempDir())
 	if run.Success || run.Refused != nil {
 		t.Errorf("Success = %v, Refused = %+v; want a failure that is not a refusal", run.Success, run.Refused)
+	}
+}
+
+// Running a job leaves it as written: each run evaluates the job's name and
+// its steps anew, and what a run finds out is the run's alone.
+func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
+	runner := NewMockActionRunner()
+	runner.SetResult("hello", map[string]any{"status": 0, "res": map[string]any{"code": 200}, "rt": "10ms"})
+	job := &Job{ID: "work", Name: "Work {{vars.n}}", Steps: []*Step{
+		{Name: "Greet {{vars.n}}", Uses: "hello", Test: "res.code == 200", actionRunner: runner},
+		{Uses: "hello", actionRunner: runner, Iteration: Iteration{Entries: []map[string]any{{"x": 1}, {"x": 2}}}},
+	}}
+	written := &Job{Name: job.Name, Steps: []*Step{{}, {}}}
+	for i, st := range job.Steps {
+		*written.Steps[i] = *st
+	}
+
+	for _, n := range []int{1, 2} {
+		printer := newBufferPrinter()
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		failed, err := job.run(JobContext{
+			Vars:       map[string]any{"n": n},
+			Printer:    printer,
+			Result:     result,
+			Outputs:    NewOutputs(),
+			countersMu: &sync.Mutex{},
+		})
+		if err != nil || failed {
+			t.Fatalf("run %d: failed = %v, err = %v", n, failed, err)
+		}
+		jr := result.Jobs[job.ID]
+		if want := fmt.Sprintf("Work %d", n); jr.JobName != want {
+			t.Errorf("run %d: job name = %q, want %q", n, jr.JobName, want)
+		}
+		if want := fmt.Sprintf("Greet %d", n); jr.StepResults[0].Name != want {
+			t.Errorf("run %d: step name = %q, want %q", n, jr.StepResults[0].Name, want)
+		}
+		if jr.StepResults[1].Name != "Unknown Step" {
+			t.Errorf("run %d: the name of a step without one = %q, want Unknown Step", n, jr.StepResults[1].Name)
+		}
+	}
+
+	if job.Name != written.Name {
+		t.Errorf("job name = %q, want it as written, %q", job.Name, written.Name)
+	}
+	for i, st := range job.Steps {
+		if !reflect.DeepEqual(*st, *written.Steps[i]) {
+			t.Errorf("step %d = %+v, want it as written, %+v", i, *st, *written.Steps[i])
+		}
 	}
 }

@@ -1206,11 +1206,13 @@ func TestStepRepeatCounterUpdate(t *testing.T) {
 		countersMu:    &sync.Mutex{},
 	}
 
-	step := &Step{
-		Name: "Test Step",
-		Test: "true", // Always success
-		Idx:  0,
-		Expr: &expr.Expr{},
+	step := &stepRun{
+		Step: &Step{
+			Name: "Test Step",
+			Test: "true", // Always success
+		},
+		idx:  0,
+		expr: &expr.Expr{},
 	}
 
 	// Capture stdout to avoid test output noise

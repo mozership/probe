@@ -39,6 +39,16 @@ type Step struct {
 	Outputs      map[string]string `yaml:"outputs,omitempty"`
 	Retry        *StepRetry        `yaml:"retry,omitempty"`
 	Timeout      Interval          `yaml:"timeout,omitempty"`
+	actionRunner ActionRunner      `yaml:"-"`
+}
+
+// stepRun is one run of a step: with one entry of its iteration, in one run
+// of its job. What the run finds out and leaves is kept here, and the step is
+// left as it is written, so that the runs of a job repeated at once share it
+// and a run starts with nothing an earlier one left.
+type stepRun struct {
+	*Step
+	expr         *expr.Expr
 	err          error
 	ctx          StepContext
 	retryAttempt int
@@ -49,6 +59,9 @@ type Step struct {
 	expandedName string
 	startedAt    time.Time
 	failure      *StepFailure
+	// idx is where the run is among the steps the job ran, counting each
+	// entry of an iteration.
+	idx int
 	// pos is where the step is among the steps the job is written with,
 	// and ordinal which entry of its iteration it is running with. placed
 	// is whether the job set them, as it does before it runs a step.
@@ -57,20 +70,28 @@ type Step struct {
 	// templateErr holds the templates of the step's name and vars that
 	// could not be evaluated, so that the step fails rather than run with
 	// them.
-	templateErr  error
-	Idx          int          `yaml:"-"`
-	Expr         *expr.Expr   `yaml:"-"`
-	actionRunner ActionRunner `yaml:"-"`
+	templateErr error
 }
 
-func (st *Step) Do(jCtx *JobContext) {
-	// An iteration runs the same Step again, so what the last run left must
-	// not be reported as this one's, above all when it fails before its
-	// action runs.
-	st.startedAt = time.Time{}
-	st.retryAttempt = 0
-	st.err = nil
+// newStepRun begins a run of st whose templates ev evaluates, or a new
+// evaluator when ev is nil.
+func newStepRun(st *Step, ev *expr.Expr) *stepRun {
+	if ev == nil {
+		ev = &expr.Expr{}
+	}
+	return &stepRun{Step: st, expr: ev}
+}
 
+// writtenName is the name the step is written with, or a stand-in when it
+// has none.
+func (st *stepRun) writtenName() string {
+	if st.Name == "" {
+		return "Unknown Step"
+	}
+	return st.Name
+}
+
+func (st *stepRun) Do(jCtx *JobContext) {
 	// 1. Preparation phase: validation, wait, skip check
 	name, shouldContinue := st.prepare(jCtx)
 	if !shouldContinue {
@@ -99,17 +120,12 @@ func (st *Step) Do(jCtx *JobContext) {
 
 // prepare handles step preparation: validation, skip check, and wait
 // Returns (stepName, shouldContinue)
-func (st *Step) prepare(jCtx *JobContext) (string, bool) {
-	// Set default name if empty
-	if st.Name == "" {
-		st.Name = "Unknown Step"
-	}
-
+func (st *stepRun) prepare(jCtx *JobContext) (string, bool) {
 	// Evaluate step name. A name that cannot be evaluated is shown as
 	// written, and fails the step unless it is skipped.
-	name, err := st.Expr.EvalTemplate(st.Name, st.ctx)
+	name, err := st.expr.EvalTemplate(st.writtenName(), st.ctx)
 	if err != nil {
-		name = st.Name
+		name = st.writtenName()
 		st.templateErr = errors.Join(&expr.FieldError{Path: "name", Err: err}, st.templateErr)
 	}
 
@@ -130,8 +146,8 @@ func (st *Step) prepare(jCtx *JobContext) (string, bool) {
 
 // executeAction executes the step action and returns the result
 // If retry is configured, it will retry until status == 0 or max attempts reached
-func (st *Step) executeAction(name string, jCtx *JobContext) (map[string]any, error) {
-	expW, err := st.Expr.EvalTemplateMap(st.With, st.ctx)
+func (st *stepRun) executeAction(name string, jCtx *JobContext) (map[string]any, error) {
+	expW, err := st.expr.EvalTemplateMap(st.With, st.ctx)
 	if err != nil {
 		// The credentials that could be evaluated are learned, so that an
 		// error about another value cannot show them, and the details of a
@@ -168,7 +184,7 @@ func (st *Step) executeAction(name string, jCtx *JobContext) (map[string]any, er
 // executeSingleAction executes action once without retry
 // quiet marks an attempt whose failure will be retried, so that the action's
 // own error records stay out of the log.
-func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (map[string]any, error) {
+func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (map[string]any, error) {
 	// Determine timeout duration
 	timeout := DefaultStepTimeout
 	if st.Timeout.Duration > 0 {
@@ -234,13 +250,13 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 }
 
 // stepInfo tells an action about the step it runs for.
-func (st *Step) stepInfo(jCtx *JobContext) actionrpc.Step {
+func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
 	attempt := max(st.attempt, 1)
 	return actionrpc.Step{
 		RunID:   jCtx.runID,
 		JobID:   jCtx.CurrentJobID,
 		JobName: jCtx.jobName,
-		Index:   st.Idx,
+		Index:   st.idx,
 		ID:      st.ID,
 		Name:    st.expandedName,
 		Repeat:  jCtx.RepeatCurrent,
@@ -299,7 +315,7 @@ func toInt(v any) int {
 
 // executeActionWithRetry executes action with retry logic based on test assertion results.
 // If no test is configured, retry is not performed and the action is executed once.
-func (st *Step) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (map[string]any, error) {
+func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (map[string]any, error) {
 	retry := st.Retry
 	st.retryAttempt = 0
 
@@ -392,7 +408,7 @@ func (st *Step) executeActionWithRetry(runner ActionRunner, expW map[string]any,
 // handleActionError handles a step that failed before its test could run:
 // the action returned an error, or a template the action needed could not be
 // evaluated, in which case the action did not run.
-func (st *Step) handleActionError(err error, name string, jCtx *JobContext) {
+func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	kind := failureKindOf(err)
 	switch kind {
 	case FailureTemplate:
@@ -414,7 +430,7 @@ func (st *Step) handleActionError(err error, name string, jCtx *JobContext) {
 
 	// Create and add step result for failed action execution
 	if jCtx.Verbose {
-		jCtx.Printer.PrintRequestResponse(st.Idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
+		jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
 	}
 
 	// Handle repeat execution
@@ -437,7 +453,7 @@ func (st *Step) handleActionError(err error, name string, jCtx *JobContext) {
 }
 
 // processActionResult processes the action result and updates context
-func (st *Step) processActionResult(actionResult map[string]any, jCtx *JobContext) {
+func (st *stepRun) processActionResult(actionResult map[string]any, jCtx *JobContext) {
 	// Parse and process JSON response
 	req, _ := actionResult["req"].(map[string]any)
 	res, okres := actionResult["res"].(map[string]any)
@@ -481,9 +497,9 @@ func decodeStdoutJSON(stdout any) (any, bool) {
 }
 
 // finalize handles the final phase: test, echo, output save, and result creation
-func (st *Step) finalize(name string, actionResult map[string]any, jCtx *JobContext) {
+func (st *stepRun) finalize(name string, actionResult map[string]any, jCtx *JobContext) {
 	if jCtx.Verbose {
-		jCtx.Printer.PrintRequestResponse(st.Idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
+		jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
 	}
 
 	// Outputs are saved before the test and echo, as always; a repeated job
@@ -510,9 +526,9 @@ func (st *Step) finalize(name string, actionResult map[string]any, jCtx *JobCont
 }
 
 // createStepResult creates a StepResult from step execution
-func (st *Step) createStepResult(name string, jCtx *JobContext) StepResult {
+func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
 	result := StepResult{
-		Index:    st.Idx,
+		Index:    st.idx,
 		ID:       st.repeatID(),
 		Name:     name,
 		HasTest:  st.checked(),
@@ -567,12 +583,12 @@ func (st *Step) createStepResult(name string, jCtx *JobContext) StepResult {
 }
 
 // getEchoOutput returns the echo output as string
-func (st *Step) getEchoOutput(printer *Printer) string {
-	exprOut, err := st.Expr.EvalTemplate(st.Echo, st.ctx)
+func (st *stepRun) getEchoOutput(printer *Printer) string {
+	exprOut, err := st.expr.EvalTemplate(st.Echo, st.ctx)
 	return printer.generateEchoOutput(exprOut, err)
 }
 
-func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bool) {
+func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError bool) {
 	// Execute test first (outside of lock)
 	hasTest := st.checked()
 	testResult := true
@@ -607,7 +623,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 	var echoRaw, echoFormatted string
 	var echoErr error
 	if st.Echo != "" {
-		echoRaw, echoErr = st.Expr.EvalTemplate(st.Echo, st.ctx)
+		echoRaw, echoErr = st.expr.EvalTemplate(st.Echo, st.ctx)
 		echoFormatted = jCtx.Printer.generateEchoOutput(echoRaw, echoErr)
 	}
 
@@ -666,7 +682,7 @@ func (st *Step) handleRepeatExecution(jCtx *JobContext, name string, hasError bo
 // contractChecked reports whether the action checked the response against
 // a contract, such as an OpenAPI document. It then returns res.violations,
 // empty when the response keeps to the contract.
-func (st *Step) contractChecked() bool {
+func (st *stepRun) contractChecked() bool {
 	_, ok := st.ctx.Res["violations"].([]any)
 	return ok
 }
@@ -674,7 +690,7 @@ func (st *Step) contractChecked() bool {
 // contractMatched returns what the action matched the response to in the
 // contract it checked it against, or nil when it checked none or the
 // contract has nothing the response matches.
-func (st *Step) contractMatched() *report.Contract {
+func (st *stepRun) contractMatched() *report.Contract {
 	m, ok := st.ctx.Res["contract"].(map[string]any)
 	if !ok {
 		return nil
@@ -688,14 +704,14 @@ func (st *Step) contractMatched() *report.Contract {
 
 // checked reports whether anything checks the step: its test, or a contract
 // the action checked the response against.
-func (st *Step) checked() bool {
+func (st *stepRun) checked() bool {
 	return st.Test != "" || st.contractChecked()
 }
 
 // contractFailure returns why the request or the response breaks its
 // contract, or nil when both keep to it or the action checked them against
 // none.
-func (st *Step) contractFailure() *StepFailure {
+func (st *stepRun) contractFailure() *StepFailure {
 	list, _ := st.ctx.Res["violations"].([]any)
 	if len(list) == 0 {
 		return nil
@@ -750,7 +766,7 @@ func places(n int) string {
 
 // check checks the step: the request and the response against their
 // contract, then the test, which is not evaluated when either breaks it.
-func (st *Step) check(printer *Printer) (string, bool) {
+func (st *stepRun) check(printer *Printer) (string, bool) {
 	if f := st.contractFailure(); f != nil {
 		st.failure = f
 		return printer.generateContractFailure(f), false
@@ -764,11 +780,11 @@ func (st *Step) check(printer *Printer) (string, bool) {
 
 // evalTest evaluates the test expression and returns the raw result
 // without generating any formatted output.
-func (st *Step) evalTest() (any, error) {
-	return st.Expr.Eval(st.Test, st.ctx)
+func (st *stepRun) evalTest() (any, error) {
+	return st.expr.Eval(st.Test, st.ctx)
 }
 
-func (st *Step) DoTest(printer *Printer) (string, bool) {
+func (st *stepRun) DoTest(printer *Printer) (string, bool) {
 	st.failure = nil
 
 	exprOut, err := st.evalTest()
@@ -795,7 +811,7 @@ func (st *Step) DoTest(printer *Printer) (string, bool) {
 		// compared, unless the action keeps its response out of the report.
 		message := "test evaluated to false"
 		var detail string
-		if clause, ok := st.Expr.FalseClause(st.Test, st.ctx); ok {
+		if clause, ok := st.expr.FalseClause(st.Test, st.ctx); ok {
 			if dump, isBool := st.ctx.Res["dump"].(bool); isBool && !dump {
 				clause.Operands = nil
 			}
@@ -814,7 +830,7 @@ func (st *Step) DoTest(printer *Printer) (string, bool) {
 
 // newFailure builds a StepFailure carrying the request and response, unless
 // the action opted out of dumping them with res.dump: false.
-func (st *Step) newFailure(kind, message string) *StepFailure {
+func (st *stepRun) newFailure(kind, message string) *StepFailure {
 	f := &StepFailure{Kind: kind, Message: message}
 	if dump, ok := st.ctx.Res["dump"].(bool); ok && !dump {
 		return f
@@ -825,14 +841,14 @@ func (st *Step) newFailure(kind, message string) *StepFailure {
 }
 
 // elapsed is the time since the action started, or zero if it never did.
-func (st *Step) elapsed() time.Duration {
+func (st *stepRun) elapsed() time.Duration {
 	if st.startedAt.IsZero() {
 		return 0
 	}
 	return time.Since(st.startedAt)
 }
 
-func (st *Step) SetCtx(j JobContext, override map[string]any) {
+func (st *stepRun) SetCtx(j JobContext, override map[string]any) {
 	// Use outputs from the unified Outputs structure
 	var outputs map[string]any
 	if j.Outputs != nil {
@@ -906,7 +922,7 @@ func parseExitStatus(status any) int {
 	}
 }
 
-func (st *Step) updateCtx(logs []map[string]any, req, res map[string]any, rt string, status int) {
+func (st *stepRun) updateCtx(logs []map[string]any, req, res map[string]any, rt string, status int) {
 	st.ctx.Req = req
 	st.ctx.Res = res
 	st.ctx.Status = status
@@ -925,13 +941,13 @@ func (st *Step) updateCtx(logs []map[string]any, req, res map[string]any, rt str
 }
 
 // handleWait processes the wait field and sleeps if necessary
-func (st *Step) handleWait(jCtx *JobContext) {
+func (st *stepRun) handleWait(jCtx *JobContext) {
 	if st.Wait == "" {
 		return
 	}
 
 	// Evaluate wait expression template first
-	waitExpr, err := st.Expr.EvalTemplate(st.Wait, st.ctx)
+	waitExpr, err := st.expr.EvalTemplate(st.Wait, st.ctx)
 	if err != nil {
 		jCtx.Printer.PrintError("wait expression evaluation error: %v", err)
 		return
@@ -944,10 +960,15 @@ func (st *Step) handleWait(jCtx *JobContext) {
 	}
 
 	if duration > 0 {
-		msg := colorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
-		msg = fmt.Sprintf("%s %s", msg, st.Name)
-		sleepWithMessage(duration, msg, jCtx.Printer.AddSpinnerSuffix)
+		sleepWithMessage(duration, st.waitMessage(duration), jCtx.Printer.AddSpinnerSuffix)
 	}
+}
+
+// waitMessage is what the spinner shows while the step waits for duration:
+// the wait and the name of the step, evaluated as prepare evaluated it.
+func (st *stepRun) waitMessage(duration time.Duration) string {
+	msg := colorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
+	return fmt.Sprintf("%s %s", msg, st.expandedName)
 }
 
 func sleepWithMessage(d time.Duration, m string, fn func(m string)) {
@@ -973,7 +994,7 @@ func sleepWithMessage(d time.Duration, m string, fn func(m string)) {
 }
 
 // parseWaitDuration parses wait string to time.Duration
-func (st *Step) parseWaitDuration(wait string) (time.Duration, error) {
+func (st *stepRun) parseWaitDuration(wait string) (time.Duration, error) {
 	// Check if it's a plain number (treat as seconds for backward compatibility)
 	if matched, _ := regexp.MatchString(`^\d+$`, wait); matched {
 		if seconds, err := strconv.Atoi(wait); err == nil {
@@ -992,7 +1013,7 @@ func (st *Step) parseWaitDuration(wait string) (time.Duration, error) {
 }
 
 // formatWaitTime formats duration for display
-func (st *Step) formatWaitTime(duration time.Duration) string {
+func (st *stepRun) formatWaitTime(duration time.Duration) string {
 	if duration < time.Second {
 		return duration.String()
 	}
@@ -1003,7 +1024,7 @@ func (st *Step) formatWaitTime(duration time.Duration) string {
 }
 
 // getWaitTimeForDisplay returns formatted wait time for display
-func (st *Step) getWaitTimeForDisplay() string {
+func (st *stepRun) getWaitTimeForDisplay() string {
 	if st.Wait == "" {
 		return ""
 	}
@@ -1011,8 +1032,8 @@ func (st *Step) getWaitTimeForDisplay() string {
 	// Note: st.ctx might not be fully initialized when this is called during result creation
 	// So we need to handle template evaluation carefully
 	waitExpr := st.Wait
-	if st.Expr != nil {
-		if evaluated, err := st.Expr.EvalTemplate(st.Wait, st.ctx); err == nil {
+	if st.expr != nil {
+		if evaluated, err := st.expr.EvalTemplate(st.Wait, st.ctx); err == nil {
 			waitExpr = evaluated
 		}
 	}
@@ -1031,12 +1052,12 @@ func (st *Step) getWaitTimeForDisplay() string {
 }
 
 // shouldSkip evaluates the skipif expression and returns true if step should be skipped
-func (st *Step) shouldSkip(jCtx *JobContext) bool {
+func (st *stepRun) shouldSkip(jCtx *JobContext) bool {
 	if st.SkipIf == "" {
 		return false
 	}
 
-	result, err := st.Expr.Eval(st.SkipIf, st.ctx)
+	result, err := st.expr.Eval(st.SkipIf, st.ctx)
 	if err != nil {
 		jCtx.Printer.PrintError("skipif evaluation error: %v", err)
 		return false // Don't skip on evaluation error
@@ -1062,9 +1083,9 @@ const counterEntries = maxIterationEntries
 // another number of entries in each run gives the steps after it another
 // index in each, and their counters would then count one another's runs.
 // A step run without a job, as a test runs one, is kept by its index.
-func (st *Step) counterKey() int {
+func (st *stepRun) counterKey() int {
 	if !st.placed {
-		return st.Idx
+		return st.idx
 	}
 	return st.pos*counterEntries + st.ordinal
 }
@@ -1073,11 +1094,11 @@ func (st *Step) counterKey() int {
 // and a later run's report finds the step by: its id, or step_ and where it
 // is written in the job when it has none, as a loaded workflow gives it.
 // Every entry of an iteration has the same.
-func (st *Step) repeatID() string {
+func (st *stepRun) repeatID() string {
 	if st.ID != "" {
 		return st.ID
 	}
-	pos := st.Idx
+	pos := st.idx
 	if st.placed {
 		pos = st.pos
 	}
@@ -1092,7 +1113,7 @@ func defaultStepID(pos int) string {
 
 // skipAfterFailure reports the step as skipped without running it, as a job
 // with fail_fast does each step after one that failed.
-func (st *Step) skipAfterFailure(jCtx *JobContext) {
+func (st *stepRun) skipAfterFailure(jCtx *JobContext) {
 	st.skipWithoutRun("An earlier step of the job failed, and the job has fail_fast", jCtx)
 }
 
@@ -1101,15 +1122,13 @@ func (st *Step) skipAfterFailure(jCtx *JobContext) {
 // no entry. Its name is the only thing of it that is evaluated. Neither is
 // the step's own doing, as a skipif is, so in a repeated job the run counts
 // as neither a success nor a failure of it.
-func (st *Step) skipWithoutRun(reason string, jCtx *JobContext) {
+func (st *stepRun) skipWithoutRun(reason string, jCtx *JobContext) {
 	st.handleSkip(st.nameWithoutRun(), reason, true, jCtx)
 }
 
 // failBeforeRun reports the step as failed with err before any of it ran,
 // as when what it would run with cannot be worked out.
-func (st *Step) failBeforeRun(err error, jCtx *JobContext) {
-	st.startedAt = time.Time{}
-	st.retryAttempt = 0
+func (st *stepRun) failBeforeRun(err error, jCtx *JobContext) {
 	name := st.nameWithoutRun()
 	jCtx.Printer.StepStart(jCtx.CurrentJobID, name)
 	st.handleActionError(err, name, jCtx)
@@ -1117,13 +1136,10 @@ func (st *Step) failBeforeRun(err error, jCtx *JobContext) {
 
 // nameWithoutRun evaluates and returns the name of a step that is reported
 // without being run. A name that cannot be evaluated is shown as written.
-func (st *Step) nameWithoutRun() string {
-	if st.Name == "" {
-		st.Name = "Unknown Step"
-	}
-	name, err := st.Expr.EvalTemplate(st.Name, st.ctx)
+func (st *stepRun) nameWithoutRun() string {
+	name, err := st.expr.EvalTemplate(st.writtenName(), st.ctx)
 	if err != nil {
-		name = st.Name
+		name = st.writtenName()
 	}
 	st.expandedName = name
 	return name
@@ -1133,11 +1149,11 @@ func (st *Step) nameWithoutRun() string {
 // for the verbose log, and notRun whether it is for something other than
 // its own skipif: a step that failed before it, or an iteration without an
 // entry.
-func (st *Step) handleSkip(name, reason string, notRun bool, jCtx *JobContext) {
+func (st *stepRun) handleSkip(name, reason string, notRun bool, jCtx *JobContext) {
 	// The step is logged and then recorded: a verbose run reports the
 	// steps it skipped as any other run does.
 	if jCtx.Verbose {
-		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.Idx, name))
+		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.idx, name))
 		jCtx.Printer.LogDebug("%s", reason)
 		jCtx.Printer.PrintSeparator()
 	}
@@ -1162,7 +1178,7 @@ func (st *Step) handleSkip(name, reason string, notRun bool, jCtx *JobContext) {
 // counts as a success of it. One skipped after a failure, or for an
 // iteration without an entry, was given nothing to do, and the run counts
 // as neither a success nor a failure of it.
-func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun bool) {
+func (st *stepRun) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun bool) {
 	if jCtx.warmingUp() {
 		return
 	}
@@ -1193,9 +1209,9 @@ func (st *Step) handleSkipRepeatExecution(jCtx *JobContext, name string, notRun 
 }
 
 // createSkippedStepResult creates a StepResult for a skipped step
-func (st *Step) createSkippedStepResult(name string, jCtx *JobContext) StepResult {
+func (st *stepRun) createSkippedStepResult(name string, jCtx *JobContext) StepResult {
 	return StepResult{
-		Index:    st.Idx,
+		Index:    st.idx,
 		ID:       st.repeatID(),
 		Name:     name + " (SKIPPED)",
 		Status:   StatusSkipped,
@@ -1206,9 +1222,9 @@ func (st *Step) createSkippedStepResult(name string, jCtx *JobContext) StepResul
 }
 
 // createFailedStepResult creates a StepResult for a failed step
-func (st *Step) createFailedStepResult(name string, jCtx *JobContext) StepResult {
+func (st *stepRun) createFailedStepResult(name string, jCtx *JobContext) StepResult {
 	result := StepResult{
-		Index:    st.Idx,
+		Index:    st.idx,
 		ID:       st.repeatID(),
 		Name:     name,
 		Status:   StatusError,
@@ -1360,7 +1376,7 @@ func unwrapJoined(err error) []error {
 }
 
 // saveOutputs evaluates and saves step outputs to JobContext
-func (st *Step) saveOutputs(jCtx *JobContext) {
+func (st *stepRun) saveOutputs(jCtx *JobContext) {
 	if len(st.Outputs) == 0 || st.ID == "" {
 		return // No outputs to save or no ID (should be caught by validation)
 	}
@@ -1368,7 +1384,7 @@ func (st *Step) saveOutputs(jCtx *JobContext) {
 	// Evaluate each output expression
 	outputs := make(map[string]any)
 	for outputName, outputExpr := range st.Outputs {
-		result, err := st.Expr.Eval(outputExpr, st.ctx)
+		result, err := st.expr.Eval(outputExpr, st.ctx)
 		if err != nil {
 			jCtx.Printer.PrintError("output '%s' evaluation error: %v", outputName, err)
 			continue // Skip this output but continue with others
