@@ -70,6 +70,9 @@ type stepRun struct {
 	// could not be evaluated, so that the step fails rather than run with
 	// them.
 	templateErr error
+	// contract is the check the action made of the last attempt against a
+	// contract, or nil when it checked it against none.
+	contract *actionrpc.ContractCheck
 }
 
 // newStepRun begins a run of st whose templates ev evaluates, or a new
@@ -196,9 +199,10 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 
 	// Execute action in goroutine
 	type result struct {
-		ret   map[string]any
-		state map[string]any
-		err   error
+		ret      map[string]any
+		state    map[string]any
+		contract *actionrpc.ContractCheck
+		err      error
 	}
 	resultCh := make(chan result, 1)
 
@@ -217,7 +221,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
 	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
-	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}}
+	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}, Contract: &actionrpc.Contract{}}
 	go func() {
 		defer done()
 		ret, state, err := runAction(runner, st.Uses, call, opts)
@@ -226,12 +230,13 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 		for _, p := range call.Processes.List() {
 			jCtx.background.Track(p.PID, p.Log)
 		}
-		resultCh <- result{ret: ret, state: state, err: err}
+		resultCh <- result{ret: ret, state: state, contract: call.Contract.Check(), err: err}
 	}()
 
 	// Wait for either completion or timeout. The state of an action that
 	// timed out is not kept, as its result is not.
 	timedOut := errors.New("action execution timed out after " + timeout.String())
+	st.contract = nil
 	select {
 	case res := <-resultCh:
 		// An action stopped for the timeout can return before the timeout
@@ -244,6 +249,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 			if err := jCtx.states.set(st.Uses, res.state); err != nil {
 				return nil, err
 			}
+			st.contract = res.contract
 		}
 		return res.ret, res.err
 	case <-ctx.Done():
@@ -632,27 +638,21 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	}
 }
 
-// contractChecked reports whether the action checked the response against
-// a contract, such as an OpenAPI document. It then returns res.violations,
-// empty when the response keeps to the contract.
+// contractChecked reports whether the action checked the step against a
+// contract, such as an OpenAPI document.
 func (st *stepRun) contractChecked() bool {
-	_, ok := st.ctx.Res["violations"].([]any)
-	return ok
+	return st.contract != nil
 }
 
-// contractMatched returns what the action matched the response to in the
+// contractMatched returns what the action matched the step to in the
 // contract it checked it against, or nil when it checked none or the
-// contract has nothing the response matches.
+// contract has nothing the step matches.
 func (st *stepRun) contractMatched() *report.Contract {
-	m, ok := st.ctx.Res["contract"].(map[string]any)
-	if !ok {
+	if st.contract == nil || st.contract.Matched == nil {
 		return nil
 	}
-	str := func(k string) string {
-		s, _ := m[k].(string)
-		return s
-	}
-	return &report.Contract{Spec: str("spec"), Operation: str("operation"), Response: str("response")}
+	m := st.contract.Matched
+	return &report.Contract{Spec: m.Spec, Operation: m.Operation, Response: m.Response}
 }
 
 // checked reports whether anything checks the step: its test, or a contract
@@ -665,23 +665,12 @@ func (st *stepRun) checked() bool {
 // contract, or nil when both keep to it or the action checked them against
 // none.
 func (st *stepRun) contractFailure() *StepFailure {
-	list, _ := st.ctx.Res["violations"].([]any)
-	if len(list) == 0 {
+	if st.contract == nil || len(st.contract.Violations) == 0 {
 		return nil
 	}
-	vs := make([]report.Violation, 0, len(list))
-	for _, item := range list {
-		m, _ := item.(map[string]any)
-		str := func(k string) string {
-			s, _ := m[k].(string)
-			return s
-		}
-		vs = append(vs, report.Violation{
-			In:      str("in"),
-			Field:   str("field"),
-			Reason:  str("reason"),
-			Message: str("message"),
-		})
+	vs := make([]report.Violation, 0, len(st.contract.Violations))
+	for _, v := range st.contract.Violations {
+		vs = append(vs, report.Violation{In: v.In, Field: v.Field, Reason: v.Reason, Message: v.Message})
 	}
 	// A request that breaks the contract is the workflow's to fix, and the
 	// response to it may break the contract only because of it, so the

@@ -354,7 +354,11 @@ type RunResponse struct {
 	Cleanups []string `protobuf:"bytes,4,rep,name=cleanups,proto3" json:"cleanups,omitempty"`
 	// The processes the action left running in the background, for the
 	// runner to stop once the run is over.
-	Processes     []*Process `protobuf:"bytes,5,rep,name=processes,proto3" json:"processes,omitempty"`
+	Processes []*Process `protobuf:"bytes,5,rep,name=processes,proto3" json:"processes,omitempty"`
+	// The check of the step against a contract, such as an OpenAPI
+	// document, which the runner takes as the step's test; none when the
+	// action checked it against none.
+	Contract      *Contract `protobuf:"bytes,6,opt,name=contract,proto3" json:"contract,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -417,6 +421,207 @@ func (x *RunResponse) GetProcesses() []*Process {
 	return nil
 }
 
+func (x *RunResponse) GetContract() *Contract {
+	if x != nil {
+		return x.Contract
+	}
+	return nil
+}
+
+// Contract is the check of a step against a contract.
+type Contract struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the contract matched the step to; none when it has nothing that
+	// matches it.
+	Matched *ContractMatch `protobuf:"bytes,1,opt,name=matched,proto3" json:"matched,omitempty"`
+	// What the contract does not allow in the request and the response,
+	// empty when it allows all of it.
+	Violations    []*Violation `protobuf:"bytes,2,rep,name=violations,proto3" json:"violations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Contract) Reset() {
+	*x = Contract{}
+	mi := &file_pb_actions_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Contract) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Contract) ProtoMessage() {}
+
+func (x *Contract) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_actions_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Contract.ProtoReflect.Descriptor instead.
+func (*Contract) Descriptor() ([]byte, []int) {
+	return file_pb_actions_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Contract) GetMatched() *ContractMatch {
+	if x != nil {
+		return x.Matched
+	}
+	return nil
+}
+
+func (x *Contract) GetViolations() []*Violation {
+	if x != nil {
+		return x.Violations
+	}
+	return nil
+}
+
+// ContractMatch is what a contract matched a step to.
+type ContractMatch struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The contract, such as the path of an OpenAPI document.
+	Spec string `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	// The operation, such as GET /users/{id}.
+	Operation string `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The response the operation declares for the step, such as 200; empty
+	// when it declares none.
+	Response      string `protobuf:"bytes,3,opt,name=response,proto3" json:"response,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContractMatch) Reset() {
+	*x = ContractMatch{}
+	mi := &file_pb_actions_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContractMatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContractMatch) ProtoMessage() {}
+
+func (x *ContractMatch) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_actions_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContractMatch.ProtoReflect.Descriptor instead.
+func (*ContractMatch) Descriptor() ([]byte, []int) {
+	return file_pb_actions_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ContractMatch) GetSpec() string {
+	if x != nil {
+		return x.Spec
+	}
+	return ""
+}
+
+func (x *ContractMatch) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ContractMatch) GetResponse() string {
+	if x != nil {
+		return x.Response
+	}
+	return ""
+}
+
+// Violation is what a contract does not allow in a request or a response.
+type Violation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where it is: request or response.
+	In string `protobuf:"bytes,1,opt,name=in,proto3" json:"in,omitempty"`
+	// The field, such as $.id; empty when it is not in one.
+	Field string `protobuf:"bytes,2,opt,name=field,proto3" json:"field,omitempty"`
+	// The kind of violation; empty when there is no kind to tell.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Message       string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Violation) Reset() {
+	*x = Violation{}
+	mi := &file_pb_actions_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Violation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Violation) ProtoMessage() {}
+
+func (x *Violation) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_actions_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Violation.ProtoReflect.Descriptor instead.
+func (*Violation) Descriptor() ([]byte, []int) {
+	return file_pb_actions_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Violation) GetIn() string {
+	if x != nil {
+		return x.In
+	}
+	return ""
+}
+
+func (x *Violation) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *Violation) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *Violation) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 // Process is a process an action left running in the background.
 type Process struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -430,7 +635,7 @@ type Process struct {
 
 func (x *Process) Reset() {
 	*x = Process{}
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_pb_actions_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +647,7 @@ func (x *Process) String() string {
 func (*Process) ProtoMessage() {}
 
 func (x *Process) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_pb_actions_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +660,7 @@ func (x *Process) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Process.ProtoReflect.Descriptor instead.
 func (*Process) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{5}
+	return file_pb_actions_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Process) GetPid() int64 {
@@ -484,7 +689,7 @@ type CleanupRequest struct {
 
 func (x *CleanupRequest) Reset() {
 	*x = CleanupRequest{}
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_pb_actions_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -496,7 +701,7 @@ func (x *CleanupRequest) String() string {
 func (*CleanupRequest) ProtoMessage() {}
 
 func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_pb_actions_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -509,7 +714,7 @@ func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupRequest.ProtoReflect.Descriptor instead.
 func (*CleanupRequest) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{6}
+	return file_pb_actions_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CleanupRequest) GetRunId() string {
@@ -527,7 +732,7 @@ type CleanupResponse struct {
 
 func (x *CleanupResponse) Reset() {
 	*x = CleanupResponse{}
-	mi := &file_pb_actions_proto_msgTypes[7]
+	mi := &file_pb_actions_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +744,7 @@ func (x *CleanupResponse) String() string {
 func (*CleanupResponse) ProtoMessage() {}
 
 func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[7]
+	mi := &file_pb_actions_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +757,7 @@ func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupResponse.ProtoReflect.Descriptor instead.
 func (*CleanupResponse) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{7}
+	return file_pb_actions_proto_rawDescGZIP(), []int{10}
 }
 
 var File_pb_actions_proto protoreflect.FileDescriptor
@@ -592,12 +797,27 @@ const file_pb_actions_proto_rawDesc = "" +
 	"\x02id\x18\x05 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x06 \x01(\tR\x04name\x12\x16\n" +
 	"\x06repeat\x18\a \x01(\x03R\x06repeat\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattempt\"\xc1\x01\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\"\xeb\x01\n" +
 	"\vRunResponse\x12/\n" +
 	"\x06result\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06result\x12-\n" +
 	"\x05state\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05state\x12\x1a\n" +
 	"\bcleanups\x18\x04 \x03(\tR\bcleanups\x12)\n" +
-	"\tprocesses\x18\x05 \x03(\v2\v.pb.ProcessR\tprocessesJ\x04\b\x02\x10\x03R\x05error\"-\n" +
+	"\tprocesses\x18\x05 \x03(\v2\v.pb.ProcessR\tprocesses\x12(\n" +
+	"\bcontract\x18\x06 \x01(\v2\f.pb.ContractR\bcontractJ\x04\b\x02\x10\x03R\x05error\"f\n" +
+	"\bContract\x12+\n" +
+	"\amatched\x18\x01 \x01(\v2\x11.pb.ContractMatchR\amatched\x12-\n" +
+	"\n" +
+	"violations\x18\x02 \x03(\v2\r.pb.ViolationR\n" +
+	"violations\"]\n" +
+	"\rContractMatch\x12\x12\n" +
+	"\x04spec\x18\x01 \x01(\tR\x04spec\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1a\n" +
+	"\bresponse\x18\x03 \x01(\tR\bresponse\"c\n" +
+	"\tViolation\x12\x0e\n" +
+	"\x02in\x18\x01 \x01(\tR\x02in\x12\x14\n" +
+	"\x05field\x18\x02 \x01(\tR\x05field\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"-\n" +
 	"\aProcess\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x03R\x03pid\x12\x10\n" +
 	"\x03log\x18\x02 \x01(\tR\x03log\"'\n" +
@@ -620,40 +840,46 @@ func file_pb_actions_proto_rawDescGZIP() []byte {
 	return file_pb_actions_proto_rawDescData
 }
 
-var file_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_pb_actions_proto_goTypes = []any{
 	(*RunRequest)(nil),      // 0: pb.RunRequest
 	(*Guard)(nil),           // 1: pb.Guard
 	(*GuardKinds)(nil),      // 2: pb.GuardKinds
 	(*Step)(nil),            // 3: pb.Step
 	(*RunResponse)(nil),     // 4: pb.RunResponse
-	(*Process)(nil),         // 5: pb.Process
-	(*CleanupRequest)(nil),  // 6: pb.CleanupRequest
-	(*CleanupResponse)(nil), // 7: pb.CleanupResponse
-	nil,                     // 8: pb.RunRequest.ActionsEntry
-	nil,                     // 9: pb.Guard.KeepsEntry
-	(*structpb.Struct)(nil), // 10: google.protobuf.Struct
+	(*Contract)(nil),        // 5: pb.Contract
+	(*ContractMatch)(nil),   // 6: pb.ContractMatch
+	(*Violation)(nil),       // 7: pb.Violation
+	(*Process)(nil),         // 8: pb.Process
+	(*CleanupRequest)(nil),  // 9: pb.CleanupRequest
+	(*CleanupResponse)(nil), // 10: pb.CleanupResponse
+	nil,                     // 11: pb.RunRequest.ActionsEntry
+	nil,                     // 12: pb.Guard.KeepsEntry
+	(*structpb.Struct)(nil), // 13: google.protobuf.Struct
 }
 var file_pb_actions_proto_depIdxs = []int32{
-	10, // 0: pb.RunRequest.with:type_name -> google.protobuf.Struct
-	10, // 1: pb.RunRequest.state:type_name -> google.protobuf.Struct
+	13, // 0: pb.RunRequest.with:type_name -> google.protobuf.Struct
+	13, // 1: pb.RunRequest.state:type_name -> google.protobuf.Struct
 	3,  // 2: pb.RunRequest.step:type_name -> pb.Step
 	1,  // 3: pb.RunRequest.guard:type_name -> pb.Guard
-	8,  // 4: pb.RunRequest.actions:type_name -> pb.RunRequest.ActionsEntry
-	9,  // 5: pb.Guard.keeps:type_name -> pb.Guard.KeepsEntry
-	10, // 6: pb.RunResponse.result:type_name -> google.protobuf.Struct
-	10, // 7: pb.RunResponse.state:type_name -> google.protobuf.Struct
-	5,  // 8: pb.RunResponse.processes:type_name -> pb.Process
-	2,  // 9: pb.Guard.KeepsEntry.value:type_name -> pb.GuardKinds
-	0,  // 10: pb.Actions.Run:input_type -> pb.RunRequest
-	6,  // 11: pb.Actions.Cleanup:input_type -> pb.CleanupRequest
-	4,  // 12: pb.Actions.Run:output_type -> pb.RunResponse
-	7,  // 13: pb.Actions.Cleanup:output_type -> pb.CleanupResponse
-	12, // [12:14] is the sub-list for method output_type
-	10, // [10:12] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	11, // 4: pb.RunRequest.actions:type_name -> pb.RunRequest.ActionsEntry
+	12, // 5: pb.Guard.keeps:type_name -> pb.Guard.KeepsEntry
+	13, // 6: pb.RunResponse.result:type_name -> google.protobuf.Struct
+	13, // 7: pb.RunResponse.state:type_name -> google.protobuf.Struct
+	8,  // 8: pb.RunResponse.processes:type_name -> pb.Process
+	5,  // 9: pb.RunResponse.contract:type_name -> pb.Contract
+	6,  // 10: pb.Contract.matched:type_name -> pb.ContractMatch
+	7,  // 11: pb.Contract.violations:type_name -> pb.Violation
+	2,  // 12: pb.Guard.KeepsEntry.value:type_name -> pb.GuardKinds
+	0,  // 13: pb.Actions.Run:input_type -> pb.RunRequest
+	9,  // 14: pb.Actions.Cleanup:input_type -> pb.CleanupRequest
+	4,  // 15: pb.Actions.Run:output_type -> pb.RunResponse
+	10, // 16: pb.Actions.Cleanup:output_type -> pb.CleanupResponse
+	15, // [15:17] is the sub-list for method output_type
+	13, // [13:15] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_pb_actions_proto_init() }
@@ -667,7 +893,7 @@ func file_pb_actions_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_actions_proto_rawDesc), len(file_pb_actions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

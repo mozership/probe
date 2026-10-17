@@ -948,6 +948,7 @@ type Call struct {
     Actions map[string]string // ワークフローが外部アクションに付けた名前
     Cleanups *Cleanups        // 実行の終わりにProbeが後始末をする場合はnilでない
     Processes *Processes      // アクションがバックグラウンドで動かし続けるプロセス
+    Contract *Contract        // OpenAPIドキュメントなどの契約に対するステップの検証
 }
 
 type Step struct {
@@ -999,6 +1000,8 @@ embeddedアクションで実行するジョブのステップが残したもの
 `Call.Cleanups`は、後始末をするProbeの下ではnilではありません。そのProbeは、`action.yml`に`cleanup`を書いたアクションの`Cleanup`を呼びます。後始末の仕組みができる前のProbeの下ではnilです。残したものが消されないままになるアクションは、そのときエラーを返せます。embeddedアクションのように自分でステップを実行するアクションは、そのステップが実行した外部アクションを`Call.Cleanups.Add`で伝え、Probeに呼ばせます。
 
 shellアクションの`background: true`のように、バックグラウンドでプロセスを動かし続けるアクションは、アクションより長く残るように、そのプロセスを独立したセッションで起動します。そして、`Call.Processes.Add(actionrpc.Process{PID: pid, Log: logFile})`でProbeに伝えます。その後でステップが失敗する場合も伝えます。Probeは、ワークフローが終わったとき、またはCtrl+C、`SIGTERM`、`SIGHUP`で終わったときに、そのプロセスが率いるプロセスグループを止め、ログファイルがあれば削除します。この仕組みができる前のProbeには伝わらないので、プロセスは動いたまま残ります。
+
+httpアクションの`openapi`のように、ステップを契約に照らして検証するアクションは、`Call.Contract.Report(actionrpc.ContractCheck{Matched: matched, Violations: violations})`でその結果をProbeに伝えます。契約がリクエストとレスポンスをすべて許可していれば、`Violations`は空です。Probeはこの結果をステップのテストとして扱います。違反があれば、`test`が成り立っていても、ステップは`contract_request`または`contract_response`として失敗します。`test`のないステップは、契約だけで検証されます。`Matched`は契約がステップに対応づけたもので、`probe coverage`が数えます。対応するものがなければnilです。この仕組みができる前のProbeには伝わらないので、ステップは検証されていないものとして扱われます。`probe check`は外部アクションのどのキーが検証を求めるのかを知らないので、そのようなステップに`test`がなければ、何も検証していないと警告します。
 
 `SIGKILL`のように即座に終了させられたProbeは、何も呼びません。アクションは、後の実行のステップが始まるときに以前の実行が残したものを消すことで、これを補えます。
 

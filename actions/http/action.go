@@ -77,6 +77,12 @@ func Keeps() []string {
 	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
 }
 
+// Contracts returns the keys of with that ask the action to check a step
+// against a contract: openapi, an OpenAPI document.
+func Contracts() []string {
+	return []string{"openapi"}
+}
+
 // Params returns the keys the http action takes in with: those of Req,
 // the method shorthands, such as get and post, and those it reads apart
 // from Req.

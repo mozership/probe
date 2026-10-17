@@ -44,7 +44,10 @@ func checkFindings(t *testing.T, findings []Finding, wants []want) {
 	}
 }
 
-var checkActions = CheckOptions{Actions: []string{"embedded", "grpc", "hello", "http", "shell"}}
+var checkActions = CheckOptions{
+	Actions:   []string{"embedded", "grpc", "hello", "http", "shell"},
+	Contracts: map[string][]string{"grpc": {"proto"}, "http": {"openapi"}},
+}
 
 func TestCheck(t *testing.T) {
 	tests := []struct {
@@ -544,6 +547,24 @@ jobs:
 			}
 		})
 	}
+}
+
+// A key asks an action to check a step against a contract only when the
+// action says so: the checker knows of no such key by itself.
+func TestCheck_ContractsFromTheActions(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", "name: a\njobs:\n- name: J\n  steps:\n  - name: Contract\n    uses: http\n    with:\n      get: /users\n      openapi:\n        spec: ./openapi.yml\n")
+
+	findings, err := Check(path, CheckOptions{Actions: []string{"http"}, Contracts: map[string][]string{"http": {"openapi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, nil)
+
+	findings, err = Check(path, CheckOptions{Actions: []string{"http"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{{SeverityWarning, 5, "nothing checks this step: it has no test"}})
 }
 
 func TestCheck_WithoutActions(t *testing.T) {

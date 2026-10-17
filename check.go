@@ -65,6 +65,11 @@ type CheckOptions struct {
 	// of an action it does not name, which may take any key, is not
 	// checked.
 	Params map[string][]string
+	// Contracts are the keys of with that ask each action to check a step
+	// against a contract, which checks it as a test does, by its name: as
+	// openapi asks the http action. A step with such a key and no test is
+	// not warned of as unchecked.
+	Contracts map[string][]string
 	// Manifest reads the action.yml of an external action, a local one
 	// relative to baseDir, so that its with is checked against the params
 	// it declares. When it is nil, the with of an external action is not
@@ -1001,7 +1006,7 @@ func (c *checker) checkTests() {
 			}
 			switch {
 			case strings.TrimSpace(st.Test) == "":
-				if !checkedByContract(st.Uses, st.With) && !tested[id] {
+				if !c.checkedByContract(st.Uses, st.With) && !tested[id] {
 					c.add(SeverityWarning, c.line(path), c.stepWhere(i, j), "nothing checks this step: it has no test")
 				}
 			case expr.Parse(st.Test) == nil && expr.ReadsNothing(st.Test):
@@ -1011,17 +1016,12 @@ func (c *checker) checkTests() {
 	}
 }
 
-// contracts are the keys of with that ask an action to check a step
-// against a contract, by the action that does.
-var contracts = map[string]string{"openapi": "http", "proto": "grpc"}
-
 // checkedByContract reports whether with asks the action uses to check the
-// step against a contract, as openapi asks the http action and proto the
-// grpc action, which checks it as a test does. The same key given to
-// another action asks it nothing of the kind.
-func checkedByContract(uses string, with map[string]any) bool {
-	for key, action := range contracts {
-		if _, ok := with[key].(map[string]any); ok && uses == action {
+// step against a contract, as CheckOptions.Contracts says. The same key
+// given to another action asks it nothing of the kind.
+func (c *checker) checkedByContract(uses string, with map[string]any) bool {
+	for _, key := range c.opts.Contracts[uses] {
+		if _, ok := with[key].(map[string]any); ok {
 			return true
 		}
 	}

@@ -87,6 +87,29 @@ func TestParams(t *testing.T) {
 	}
 }
 
+// TestContracts checks that each key asking a built-in action to check a
+// step against a contract is a key the action takes.
+func TestContracts(t *testing.T) {
+	want := map[string][]string{"grpc": {"proto"}, "http": {"openapi"}}
+	got := Contracts()
+	if len(got) != len(want) {
+		t.Errorf("Contracts() = %v, want %v", got, want)
+	}
+	for name, keys := range want {
+		if !slices.Equal(got[name], keys) {
+			t.Errorf("Contracts()[%s] = %v, want %v", name, got[name], keys)
+		}
+	}
+	for name, keys := range got {
+		params, _ := Params(name)
+		for _, key := range keys {
+			if !slices.Contains(params, key) {
+				t.Errorf("%s checks against a contract by %q, which is not among its params %v", name, key, params)
+			}
+		}
+	}
+}
+
 // TestParamsCoverTheDocs checks that each key the reference page of an
 // action lists in its parameters is one Params gives, so that probe check
 // does not refuse a key the action takes. Keys of a map nested in with,
