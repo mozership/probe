@@ -217,8 +217,9 @@ func (st *Step) executeSingleAction(runner ActionRunner, expW map[string]any, jC
 	select {
 	case res := <-resultCh:
 		// An action stopped for the timeout can return before the timeout
-		// is seen here, with an error that says less.
-		if res.err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		// is seen here, with an error that says less, even before ctx's own
+		// timer has gone off.
+		if d, _ := ctx.Deadline(); res.err != nil && !time.Now().Before(d) {
 			return nil, timedOut
 		}
 		if res.err == nil {

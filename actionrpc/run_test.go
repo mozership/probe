@@ -42,6 +42,25 @@ func TestStoppedLoggerLeavesOutTheExitOfAStoppedAction(t *testing.T) {
 	}
 }
 
+func TestOver(t *testing.T) {
+	if over(context.Background()) {
+		t.Error("a context without a deadline should not be over")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	if over(ctx) {
+		t.Error("a context before its deadline should not be over")
+	}
+	cancel()
+	if !over(ctx) {
+		t.Error("a canceled context should be over")
+	}
+	past, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	if !over(past) || !errors.Is(past.Err(), context.DeadlineExceeded) {
+		t.Errorf("a context past its deadline should be over, with the deadline exceeded: %v", past.Err())
+	}
+}
+
 // An action that does not return in time is stopped, given SIGTERM first so
 // that it can stop what it started, and the call returns once ctx is done.
 func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {

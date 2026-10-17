@@ -97,7 +97,7 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
 	cl, action, err := start(cmd, secure, stoppedLogger{Logger: log, ctx: ctx})
 	if err != nil {
-		if ctx.Err() != nil {
+		if over(ctx) {
 			return nil, nil, ctx.Err()
 		}
 		return nil, nil, err
@@ -105,7 +105,7 @@ func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call C
 	defer func() {
 		// Kill would have the action shut down without a signal, before the
 		// SIGTERM it is sent once ctx is done has reached it.
-		if ctx.Err() != nil {
+		if over(ctx) {
 			awaitExit(cl)
 		}
 		cl.Kill()
@@ -113,13 +113,23 @@ func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call C
 
 	result, newState, err := action.RunStepContext(ctx, call)
 	if err != nil {
-		if ctx.Err() != nil {
+		if over(ctx) {
 			return nil, nil, ctx.Err()
 		}
 		return nil, nil, err
 	}
 
 	return result, newState, nil
+}
+
+// over reports whether ctx is done, waiting for it to be once its deadline
+// has passed: gRPC gives up on a call by the deadline, and can do so before
+// ctx's own timer has gone off, when ctx.Err is still nil.
+func over(ctx context.Context) bool {
+	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+		<-ctx.Done()
+	}
+	return ctx.Err() != nil
 }
 
 // stoppedLogger is the log go-plugin is given for an action that is stopped
