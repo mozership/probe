@@ -2,6 +2,8 @@ package probe
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"reflect"
@@ -1287,6 +1289,71 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	if duration < 1900*time.Millisecond || duration > 2500*time.Millisecond {
 		t.Errorf("Expected timeout around 2s, took %v", duration)
 	}
+}
+
+// stoppableRunner is an action that runs until the step gives up on it, and
+// tells when it was told to stop.
+type stoppableRunner struct {
+	stopped chan struct{}
+	err     error
+}
+
+func (r *stoppableRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	<-opts.context().Done()
+	close(r.stopped)
+	return nil, r.err
+}
+
+// An action that times out is told to stop, rather than run on unseen. One
+// that stops at once still fails for the timeout, and not for whatever it
+// returns on being stopped.
+func TestStep_executeSingleAction_TimeoutStopsTheAction(t *testing.T) {
+	for _, err := range []error{context.DeadlineExceeded, errors.New("rpc error: code = DeadlineExceeded")} {
+		step := &Step{
+			Uses:    "test-action",
+			Timeout: Interval{Duration: 100 * time.Millisecond},
+			Expr:    &expr.Expr{},
+		}
+		runner := &stoppableRunner{stopped: make(chan struct{}), err: err}
+
+		_, got := step.executeSingleAction(runner, map[string]any{}, &JobContext{}, false)
+		if got == nil || got.Error() != "action execution timed out after 100ms" {
+			t.Errorf("executeSingleAction() error = %v, want the timeout", got)
+		}
+		select {
+		case <-runner.stopped:
+		case <-time.After(time.Second):
+			t.Fatal("the action was not told to stop")
+		}
+	}
+}
+
+// An action that is done in time is not told to stop while it runs.
+func TestStep_executeSingleAction_ContextOfAnActionDoneInTime(t *testing.T) {
+	step := &Step{Uses: "test-action", Timeout: Interval{Duration: time.Second}, Expr: &expr.Expr{}}
+	runner := &contextRecordingRunner{}
+
+	if _, err := step.executeSingleAction(runner, map[string]any{}, &JobContext{}, false); err != nil {
+		t.Fatalf("executeSingleAction() error = %v", err)
+	}
+	if runner.ctx == nil {
+		t.Fatal("the action was given no context")
+	}
+	if runner.during != nil {
+		t.Errorf("the context was done while the action ran: %v", runner.during)
+	}
+}
+
+// contextRecordingRunner records the context an action is given, and whether
+// it was done while the action ran.
+type contextRecordingRunner struct {
+	ctx    context.Context
+	during error
+}
+
+func (r *contextRecordingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	r.ctx, r.during = opts.ctx, opts.context().Err()
+	return map[string]any{"status": 0}, nil
 }
 
 func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {

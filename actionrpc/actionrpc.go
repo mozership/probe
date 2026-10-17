@@ -213,6 +213,11 @@ func (m *Client) Run(with map[string]any) (map[string]any, error) {
 // which is nil when the action keeps none. An action that is not a
 // StepAction is run with the parameters alone.
 func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
+	return m.RunStepContext(context.Background(), call)
+}
+
+// RunStepContext is RunStep that gives up on the call once ctx is done.
+func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any, map[string]any, error) {
 	// Convert map[string]any directly to protobuf.Struct
 	withStruct, err := structpb.NewStruct(call.With)
 	if err != nil {
@@ -226,7 +231,7 @@ func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
 		}
 	}
 
-	runRes, err := m.client.Run(context.Background(), req)
+	runRes, err := m.client.Run(ctx, req)
 	if err != nil {
 		call.Cleanups.Add(cleanupsOf(err)...)
 		return nil, nil, fromStatus(err)

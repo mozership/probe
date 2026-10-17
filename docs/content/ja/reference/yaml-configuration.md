@@ -522,7 +522,7 @@ jobs:
 | `outputs` | Object | 任意 | 後続のステップやジョブへ渡す値 |
 | `skipif` | Expression | 任意 | 真ならステップをスキップ |
 | `wait` | Duration | 任意 | 実行前の待機時間 |
-| `timeout` | Duration | 任意 | ステップのタイムアウト（既定5m） |
+| `timeout` | Duration | 任意 | ステップのタイムアウト（既定5m）。その時点で実行中のアクションは停止され、ステップは失敗する |
 | `iteration` | Array またはテンプレート | 任意 | 要素ごとにステップを繰り返す。値は`vars`から参照します |
 | `retry` | Object | 任意 | 失敗時のリトライ |
 

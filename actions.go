@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -29,6 +30,18 @@ type RunOptions struct {
 	// cleanups are told of the actions that are to clean up once the run
 	// is over. Without them no action is told that the runner cleans up.
 	cleanups *cleanups
+	// ctx is done once the step gives up on the action, as it does when the
+	// step times out, and the action is stopped then. Without it the action
+	// runs until it returns.
+	ctx context.Context
+}
+
+// context returns the context the action runs in.
+func (o RunOptions) context() context.Context {
+	if o.ctx == nil {
+		return context.Background()
+	}
+	return o.ctx
 }
 
 // logLevel returns the level the action's log records are filtered at.
@@ -85,7 +98,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return actionrpc.RunStep(name, call, log)
+		return actionrpc.RunStepContext(opts.context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -98,7 +111,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		}
 		defer opts.cleanups.begin(full)()
 	}
-	return actionrpc.RunExecutableStep(exe.Path, exe.SHA256, call, log)
+	return actionrpc.RunExecutableStepContext(opts.context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks

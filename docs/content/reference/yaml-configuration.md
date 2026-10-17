@@ -522,7 +522,7 @@ A step definition takes the properties below.
 | `outputs` | Object | No | Values published for later steps and jobs |
 | `skipif` | Expression | No | Skip the step when true |
 | `wait` | Duration | No | Wait before running the step |
-| `timeout` | Duration | No | Step timeout (default 5m) |
+| `timeout` | Duration | No | Step timeout (default 5m). An action still running then is stopped, and the step fails |
 | `iteration` | Array or template | No | Run the step once per entry, exposed as `vars` |
 | `retry` | Object | No | Retry the step on failure |
 
