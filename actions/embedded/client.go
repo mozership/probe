@@ -1,20 +1,15 @@
 package embedded
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/mozership/probe/actionrpc"
-	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/mapping"
-	"gopkg.in/go-playground/validator.v9"
 )
 
 type Req struct {
@@ -85,7 +80,7 @@ func (r *Req) Do() (*Result, error) {
 	if r.cb != nil {
 		names = r.cb.actions
 	}
-	job, err := loadJob(absPath, names)
+	job, err := probe.ReadJobFile(absPath, names)
 	if err != nil {
 		return result, err
 	}
@@ -147,35 +142,6 @@ func (r *Req) Do() (*Result, error) {
 	}
 
 	return result, nil
-}
-
-// loadJob reads the job file at path, reads it by names, the names the
-// workflow that embeds it gives its external actions, and applies the job's
-// defaults to its steps.
-func loadJob(path string, names map[string]string) (*probe.Job, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("embedded steps file does not exist: %s", path)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded steps file: %w", err)
-	}
-
-	job := &probe.Job{}
-	dec := yaml.NewDecoder(bytes.NewReader(data), yaml.Validator(validator.New()), yaml.AllowDuplicateMapKey())
-	if err := dec.Decode(job); err != nil {
-		return nil, fmt.Errorf("failed to decode YAML job: %w", err)
-	}
-	if len(job.Steps) == 0 {
-		return nil, fmt.Errorf("no steps found in embedded file: %s", path)
-	}
-
-	// Before the defaults, which are keyed by what a step's uses says.
-	if err := job.UseActions(names); err != nil {
-		return nil, fmt.Errorf("embedded steps file %s: %w", path, err)
-	}
-	job.ApplyDefaults()
-	return job, nil
 }
 
 func Execute(data map[string]any, opts ...Option) (map[string]any, error) {

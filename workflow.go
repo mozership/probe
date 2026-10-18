@@ -749,16 +749,17 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 	var found error
 	for _, job := range w.Jobs {
 		for _, st := range job.Steps {
-			if st == nil || st.Uses != "embedded" {
+			path, ok := embeddedJobFile(st)
+			if !ok {
 				continue
 			}
 			// A path the vars of the workflow give is known by now.
-			if path, ok := st.With["path"].(string); ok && len(expr.TemplateExprs(path)) > 0 {
+			if len(expr.TemplateExprs(path)) > 0 {
 				expanded, err := ev.EvalTemplate(path, env)
 				if err != nil {
 					continue
 				}
-				st = &Step{Uses: st.Uses, With: map[string]any{"path": expanded}}
+				st = &Step{Uses: embeddedAction, With: map[string]any{"path": expanded}}
 			}
 			eachEmbeddedStep(st, map[string]bool{}, func(file string, i int, es *Step) {
 				uses := es.Uses

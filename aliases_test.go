@@ -397,6 +397,9 @@ func TestWorkflow_CheckEmbeddedJobs(t *testing.T) {
 	// A job file that embeds the bad one, and itself, which ends.
 	outerPath := filepath.Join(dir, "outer.yml")
 	outer := writeWorkflow(t, dir, "outer.yml", "name: outer\nsteps:\n- uses: embedded\n  with:\n    path: "+outerPath+"\n- uses: embedded\n  with:\n    path: "+bad+"\n")
+	// A job file whose step is given the path by the job's defaults, as the
+	// embedded action reads it.
+	byDefaults := writeWorkflow(t, dir, "defaults.yml", "name: defaults\ndefaults:\n  embedded:\n    path: "+bad+"\nsteps:\n- uses: embedded\n")
 	embed := func(path string) string {
 		return `name: w
 actions:
@@ -422,6 +425,7 @@ jobs:
 		{"a uses that is none", bad, bad + `, step 1: unknown action "cash"`},
 		{"in a file a var names", "{{vars.bad}}", bad + `, step 1: unknown action "cash"`},
 		{"in a file that file embeds", outer, bad + `, step 1: unknown action "cash"`},
+		{"in a file the defaults of that file name", byDefaults, bad + `, step 1: unknown action "cash"`},
 		{"a path only the run knows", "{{outputs.find.job}}", ""},
 		{"a file that is not there", filepath.Join(dir, "none.yml"), ""},
 	}
