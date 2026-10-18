@@ -281,20 +281,12 @@ func (p *Probe) validateIDs() error {
 	return nil
 }
 
-// initializeEmptyIDs gives each job and step without an ID its default one,
-// by where it is written: defaultJobID and defaultStepID.
+// initializeEmptyIDs gives each job without an ID its default one, by where
+// it is written. A step without an ID is left without one, so that what
+// needs one, such as its outputs, is refused: it is read as defaultStepID
+// where it is read by where it is written.
 func (p *Probe) initializeEmptyIDs() error {
-	if err := p.workflow.assignJobIDs(); err != nil {
-		return err
-	}
-	for _, job := range p.workflow.Jobs {
-		for stepIdx, step := range job.Steps {
-			if step.ID == "" {
-				step.ID = defaultStepID(stepIdx)
-			}
-		}
-	}
-	return nil
+	return p.workflow.assignJobIDs()
 }
 
 // validateRepeatLimits validates repeat count and max_attempts against configured limits

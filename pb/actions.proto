@@ -55,7 +55,8 @@ message Step {
     string job_name = 3;
     // The position of the step in the job, from 0.
     int64 index = 4;
-    // The id the step is given, or empty.
+    // The id the step is given, or step_ and where it is written in its job
+    // when it has none, as step_1.
     string id = 5;
     string name = 6;
     // Which run of a repeated job, from 0.

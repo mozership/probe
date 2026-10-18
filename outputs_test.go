@@ -389,3 +389,36 @@ func TestRunOutputs(t *testing.T) {
 		t.Errorf("parent v = %v after publish, want the run's", v)
 	}
 }
+
+// A step without an id publishes its outputs by their names alone, and
+// keeps a name it published first as a step with an id does.
+func TestOutputs_SetFlat(t *testing.T) {
+	o := NewOutputs()
+	if err := o.SetFlat("job_0.step_0", map[string]any{"pid": 1}); err != nil {
+		t.Fatalf("SetFlat() error = %v", err)
+	}
+	if v, ok := o.GetFlat("pid"); !ok || v != 1 {
+		t.Errorf("GetFlat(pid) = %v, %v, want 1", v, ok)
+	}
+	if _, ok := o.Get(""); ok {
+		t.Error("the outputs are kept under an empty id")
+	}
+
+	// The same step publishing again replaces its value.
+	if err := o.SetFlat("job_0.step_0", map[string]any{"pid": 2}); err != nil {
+		t.Fatalf("SetFlat() again error = %v", err)
+	}
+	if v, _ := o.GetFlat("pid"); v != 2 {
+		t.Errorf("GetFlat(pid) = %v, want the step's latest, 2", v)
+	}
+
+	// Another step of the same position in another job does not.
+	err := o.SetFlat("job_1.step_0", map[string]any{"pid": 3})
+	var taken *NameTakenError
+	if !errors.As(err, &taken) || !strings.Contains(err.Error(), "give the step an id to read this one through it") {
+		t.Errorf("SetFlat() of another step error = %v, want the name taken", err)
+	}
+	if v, _ := o.GetFlat("pid"); v != 2 {
+		t.Errorf("GetFlat(pid) = %v, want the first step's, 2", v)
+	}
+}

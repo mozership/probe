@@ -264,7 +264,7 @@ func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
 		JobID:   jCtx.CurrentJobID,
 		JobName: jCtx.jobName,
 		Index:   st.idx,
-		ID:      st.ID,
+		ID:      st.repeatID(),
 		Name:    st.expandedName,
 		Repeat:  jCtx.RepeatCurrent,
 		Attempt: attempt,
@@ -1242,8 +1242,8 @@ func unwrapJoined(err error) []error {
 
 // saveOutputs evaluates and saves step outputs to JobContext
 func (st *stepRun) saveOutputs(jCtx *JobContext) {
-	if len(st.Outputs) == 0 || st.ID == "" {
-		return // No outputs to save or no ID (should be caught by validation)
+	if len(st.Outputs) == 0 {
+		return
 	}
 
 	// Evaluate each output expression
@@ -1262,7 +1262,7 @@ func (st *stepRun) saveOutputs(jCtx *JobContext) {
 		// A name taken before is a warning; the step's value is still kept.
 		// A step id taken by an output name is an error: the step's outputs
 		// cannot be read through it.
-		if err := jCtx.Outputs.Set(st.ID, outputs); err != nil {
+		if err := st.publishOutputs(jCtx, outputs); err != nil {
 			for _, e := range unwrapJoined(err) {
 				var taken *NameTakenError
 				if errors.As(e, &taken) {
@@ -1275,6 +1275,16 @@ func (st *stepRun) saveOutputs(jCtx *JobContext) {
 	}
 
 	if jCtx.Verbose {
-		jCtx.Printer.LogDebug("Step '%s' outputs saved: %v", st.ID, outputs)
+		jCtx.Printer.LogDebug("Step '%s' outputs saved: %v", st.repeatID(), outputs)
 	}
+}
+
+// publishOutputs publishes outputs by their names, and under the step's id
+// when it has one. A step without one is named in what is reported by its
+// job and where it is written, which is the same each time it publishes.
+func (st *stepRun) publishOutputs(jCtx *JobContext, outputs map[string]any) error {
+	if st.ID != "" {
+		return jCtx.Outputs.Set(st.ID, outputs)
+	}
+	return jCtx.Outputs.SetFlat(jCtx.CurrentJobID+"."+st.repeatID(), outputs)
 }

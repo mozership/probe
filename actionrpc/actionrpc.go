@@ -208,7 +208,8 @@ type Step struct {
 	JobName string
 	// Index is the position of the step in the job, from 0.
 	Index int
-	// ID is the id the step is given, or empty.
+	// ID is the id the step is given, or step_ and where it is written in
+	// its job when it has none, as step_1.
 	ID   string
 	Name string
 	// Repeat is which run of a repeated job this is, from 0.

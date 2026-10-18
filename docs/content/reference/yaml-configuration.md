@@ -37,7 +37,7 @@ jobs:                         # Required: a list of jobs
       baseline_test: expression # Optional: assertion against an earlier run
     steps:                    # Required: a list of steps
       - name: string          # Optional: step name
-        id: string            # Optional: step id, required to publish outputs
+        id: string            # Optional: step id, to read its outputs through
         uses: string          # Required: action name, or a name given under actions
         with:                 # Optional: action parameters
           key: value
@@ -530,7 +530,7 @@ The key is `uses`, not `action`, and the conditional key is `skipif`, not `if`.
 
 #### `outputs`
 
-Values published for use by later steps and jobs. **A step only publishes outputs when it has an `id`** - without one the `outputs` block is discarded.
+Values published for use by later steps and jobs. Each is read by its name, as `outputs.token`, and, when the step has an `id`, through it as well, as `outputs.auth.token`. Give the step an `id` when another step publishes the same name, so that each value can be read.
 
 Each value is an expression, not a template, so it is written without <span v-pre>`{{ }}`</span>.
 
@@ -742,7 +742,6 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 - A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
 - `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.
-- A step must have an `id` for its `outputs` to be published.
 
 `probe check` reports these without running the workflow, together with keys a workflow does not take, expressions that do not parse and outputs read before they are published. See the [CLI Reference](/reference/cli-reference#check).
 

@@ -61,9 +61,9 @@ func validHeaderName(s string) bool {
 // escaped as in a query, so that one holding a space, a semicolon or a letter
 // outside ASCII cannot break the header.
 func traceValue(s actionrpc.Step) string {
-	// A step without an id, such as one in a job run by the embedded action,
-	// which probe does not give ids to, is named as probe names one in a
-	// workflow, step_<index>.
+	// Probe tells a step without an id as step_ and where it is written; a
+	// probe from before it did sends none for one in a job run by the
+	// embedded action, which is named the same way here.
 	step := s.ID
 	if step == "" {
 		step = "step_" + strconv.Itoa(s.Index)

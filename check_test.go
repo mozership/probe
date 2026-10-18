@@ -311,7 +311,9 @@ jobs:
 			},
 		},
 		{
-			name: "an id a step without one is given in another job",
+			// A step without an id publishes its outputs by their names
+			// alone, and is not read by where it is written.
+			name: "outputs of a step without an id",
 			workflow: `name: given ids
 jobs:
 - name: A
@@ -340,9 +342,12 @@ jobs:
       v: "{{ outputs.step_0.v }} {{ outputs.step_1.w }}"
     test: res.code == 0
 `,
+			want: []want{
+				{SeverityError, 26, `with: outputs.step_1.w is not published by any step; did you mean "step_0"?`},
+			},
 		},
 		{
-			name: "one id given to publishing steps of two jobs",
+			name: "publishing steps of two jobs without an id",
 			workflow: `name: shared ids
 jobs:
 - name: A
@@ -369,10 +374,10 @@ jobs:
     test: res.code == 0
 `,
 			want: []want{
-				{SeverityWarning, 19, `with: outputs.step_0.a may not be published yet: job "C" does not need job "A"`},
-				{SeverityWarning, 19, `with: outputs.step_0.b may not be published yet: job "C" does not need job "B"`},
-				{SeverityError, 19, `with: outputs.step_0.c is not published: step "step_0" publishes a, b`},
-				{SeverityWarning, 23, `with: outputs.step_0 may not be published yet: job "C" does not need the jobs whose steps publish it`},
+				{SeverityError, 19, `with: outputs.step_0.a is not published by any step`},
+				{SeverityError, 19, `with: outputs.step_0.b is not published by any step`},
+				{SeverityError, 19, `with: outputs.step_0.c is not published by any step`},
+				{SeverityError, 23, `with: outputs.step_0 is not published by any step`},
 			},
 		},
 		{

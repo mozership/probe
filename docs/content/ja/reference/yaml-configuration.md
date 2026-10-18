@@ -37,7 +37,7 @@ jobs:                         # 必須: ジョブのリスト
       baseline_test: expression # 任意: 以前の実行と比べるアサーション
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
-        id: string            # 任意: ステップ ID。outputs の公開に必要
+        id: string            # 任意: ステップ ID。outputs をこの ID から読める
         uses: string          # 必須: アクション名、または actions で付けた名前
         with:                 # 任意: アクション引数
           key: value
@@ -530,7 +530,7 @@ jobs:
 
 #### `outputs`
 
-後続のステップやジョブへ渡す値です。**`id`を持つステップだけがoutputsを公開します。** `id`が無いと`outputs`ブロックは捨てられます。
+後続のステップやジョブへ渡す値です。`outputs.token`のように名前で読めます。ステップに`id`があれば、`outputs.auth.token`のように`id`からも読めます。ほかのステップが同じ名前を公開する場合は、それぞれの値を読めるようにステップに`id`を付けてください。
 
 値はテンプレートではなく式なので、波カッコは書きません。
 
@@ -742,7 +742,6 @@ headers:
 - `actions`の名前はProbeのアクションの名前であってはならず、コミットで固定した外部アクションかローカルのパスを指す必要があります
 - `needs`は存在するジョブIDを指し、依存関係は循環していない必要があります
 - `repeat.count`と`repeat.warmup`は0以上、`retry.max_attempts`は1以上である必要があります
-- ステップに`id`が無いと`outputs`は公開されません
 
 `probe check`は、受け付けないキー、解析できない式、公開される前に読む出力とあわせて、これらをワークフローを実行せずに報告します。[CLIリファレンス](/ja/reference/cli-reference#check)を参照してください。
 

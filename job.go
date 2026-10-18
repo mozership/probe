@@ -284,14 +284,6 @@ func (j *Job) validateSteps() error {
 			stepIDs[step.ID] = i
 		}
 
-		// Validate that outputs require an ID
-		if len(step.Outputs) > 0 && step.ID == "" {
-			stepName := step.Name
-			if stepName == "" {
-				stepName = fmt.Sprintf("step %d", i)
-			}
-			return fmt.Errorf("%s: step with outputs must have an 'id' field", stepName)
-		}
 	}
 
 	return nil

@@ -2207,8 +2207,8 @@ func TestStepTellsTheActionAboutTheStep(t *testing.T) {
 	first := func(repeat int) []actionrpc.Step {
 		return []actionrpc.Step{
 			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 0, ID: "auth", Name: "Post as alice", Repeat: repeat, Attempt: 1},
-			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, Name: "Retried", Repeat: repeat, Attempt: 1},
-			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, Name: "Retried", Repeat: repeat, Attempt: 2},
+			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, ID: "step_1", Name: "Retried", Repeat: repeat, Attempt: 1},
+			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, ID: "step_1", Name: "Retried", Repeat: repeat, Attempt: 2},
 		}
 	}
 	want := append(first(0), first(1)...)
