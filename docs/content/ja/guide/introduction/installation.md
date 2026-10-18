@@ -44,7 +44,7 @@ go install github.com/mozership/probe/cmd/probe@latest
 - **macOS arm64**: `probe_darwin_arm64.tar.gz`
 
 次のコマンドは、最新のアーカイブをダウンロードして`checksums.txt`と照合し、`probe`をPATHが通ったディレクトリに置きます。
-何も尋ねないので、Dockerfileやサンドボックスのセットアップスクリプトにそのまま書けます。
+途中で入力を求めないので、Dockerfileやサンドボックスのセットアップスクリプトにそのまま書けます。
 
 ```bash
 curl -fsSLO https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz

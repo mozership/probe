@@ -380,7 +380,7 @@ probe monitoring.yml
 vars:
   API_BASE_URL: "http://localhost:3000"
   API_VERSION: "v1"
-  MAX_RESPONSE_TIME: 5000  # 開発環境では寛容
+  MAX_RESPONSE_TIME: 5000  # 開発環境では緩い上限
   CRITICAL_RESPONSE_TIME: 10000
 
 jobs:
@@ -485,7 +485,7 @@ crontab -e
 
 ## テストと検証
 
-監視を任せきりにする前に、各部分が動くことを確認します。個々のジョブと、障害時に届くはずのアラートです。
+監視を定期実行に切り替える前に、各部分が動くことを確認します。個々のジョブと、障害時に届くはずのアラートです。
 
 ### 個別コンポーネントのテスト
 

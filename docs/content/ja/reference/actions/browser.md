@@ -4,7 +4,7 @@ Browserアクションは[chromedp](https://github.com/chromedp/chromedp)を通�
 
 [外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-browser](https://github.com/mozership/probe-browser)で公開しています。Probe v1.21.0までは組み込みアクションでした。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。各[リリース](https://github.com/mozership/probe-browser/releases)のノートの先頭に、コピーして使う`uses`の行があります。
 
-このアクションはページが何をするかを判定できないため、[ガード](/ja/guide/concepts/guard)を守りません。`--read-only`や`--allow-host`の下では、`--allow-action`で指定しない限り、このアクションを使うステップを拒否します。
+このアクションはページが何をするかを判定できないため、[ガード](/ja/guide/concepts/guard)に従いません。`--read-only`や`--allow-host`の下では、`--allow-action`で指定しない限り、このアクションを使うステップを拒否します。
 
 ## 基本的な構文
 
@@ -216,7 +216,7 @@ jobs:
 
 ### 失敗時のページ
 
-アクションが失敗すると、Probeはその時点のページを保存します。ページ全体のPNGのスクリーンショットと、文書のHTMLです。2つのファイルは`probe-browser-failure-1947177907.png`と`.html`のように同じ名前を共有します。失敗のメッセージには、ページのURLとあわせて両方のファイルのパスが入ります。
+アクションが失敗すると、Probeはその時点のページを保存します。ページ全体のPNGのスクリーンショットと、文書のHTMLです。2つのファイルには`probe-browser-failure-1947177907.png`と`.html`のように同じ名前が付きます。失敗のメッセージには、ページのURLとあわせて両方のファイルのパスが入ります。
 
 ```
 action error in step_execute: action execution failed (caused by: ... context deadline exceeded (page at failure: url http://localhost:8090/, screenshot /tmp/probe-browser-failure-1947177907.png, html /tmp/probe-browser-failure-1947177907.html))

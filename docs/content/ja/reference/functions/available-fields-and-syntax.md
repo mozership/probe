@@ -16,14 +16,14 @@ workflow | name         | -              | -        | ワークフロー名
 workflow | description  | -              | -        | ワークフロー説明
 workflow | vars         | ✅             | -        | グローバル変数。環境変数は変数名そのままで参照します
 job      | name         | ✅             | -        | ジョブ名
-job      | skipif       | -              | ✅       | ジョブスルーの条件式
+job      | skipif       | -              | ✅       | ジョブをスキップする条件式
 step     | name         | ✅             | -        | ステップ名
 step     | with         | ✅             | -        | アクション引数
 step     | test         | -              | ✅       | アサーション
 step     | echo         | ✅             | -        | レポート出力
 step     | vars         | ✅             | -        | ステップ変数
 step     | outputs      | ✅             | -        | ワークフロー間共有変数
-step     | skipif       | -              | ✅       | ステップスルーの条件式
+step     | skipif       | -              | ✅       | ステップをスキップする条件式
 step     | iter         | -              | -        | イテレーション変数
 
 ## 関数の構文

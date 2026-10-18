@@ -142,12 +142,12 @@ steps:
 
 ## ガードの下での動作
 
-このアクションは実行のガードを守り、`action.yml`で`guard: [read-only, allow-host]`を宣言しています。そのため、どちらの下でも`--allow-action`なしで実行されます。アクションが拒否したステップは、接続する前に種別`refused`で失敗します。
+このアクションは実行のガードに従い、`action.yml`で`guard: [read-only, allow-host]`を宣言しています。そのため、どちらの下でも`--allow-action`なしで実行されます。アクションが拒否したステップは、接続する前に種別`refused`で失敗します。
 
-- `--read-only`の下では、すべてのコマンドが読み取りだけと分かっているステップだけを実行します。そうでなければステップ全体を拒否し、拒否のメッセージにコマンドを示します。
+- `--read-only`の下では、すべてのコマンドが下にある読み取り専用のコマンドの一覧に含まれるステップだけを実行します。そうでなければステップ全体を拒否し、拒否のメッセージにコマンドを示します。
 - `--allow-host`の下では、`url`のホストとポートが、実行で許可されている必要があります。ポートのないURLは`6379`として扱います。アクションはほかのホストには接続しません。
 
-読み取りだけと分かっているコマンドは次のとおりです。`STORE`を付けた`SORT`のように、書き方によって読み取りにも書き込みにもなるコマンドは含みません。コマンドから効果を判定できないスクリプトと関数も含みません。`_RO`の形があるものは、そちらを使ってください。
+読み取り専用として扱うコマンドは次のとおりです。`STORE`を付けた`SORT`のように、書き方によって読み取りにも書き込みにもなるコマンドは含みません。コマンドから効果を判定できないスクリプトと関数も含みません。`_RO`の形があるものは、そちらを使ってください。
 
 | グループ | コマンド |
 |-------|----------|
@@ -162,7 +162,7 @@ steps:
 | 接続とサーバー | `PING`, `ECHO`, `TIME`, `INFO`, `SELECT`, `HELLO`, `CLIENT ID`, `CLIENT GETNAME`, `CLIENT INFO`, `CLIENT LIST`, `COMMAND`とその`COUNT`、`INFO`、`DOCS`、`LIST`、`GETKEYS`、`GETKEYSANDFLAGS`, `PUBSUB CHANNELS`, `PUBSUB NUMSUB`, `PUBSUB NUMPAT`, `PUBSUB SHARDCHANNELS`, `PUBSUB SHARDNUMSUB` |
 | トランザクション | `MULTI`, `EXEC`, `DISCARD`, `WATCH`, `UNWATCH`。間に置いたコマンドは、ほかと同じように1つずつ確かめます |
 
-`OBJECT`、`MEMORY`、`XINFO`、`CLIENT`、`COMMAND`、`PUBSUB`は`HELP`も受け付けます。`JSON.GET`や`FT.SEARCH`のようなモジュールのコマンドはアクションが知らないので、それを使うステップは`--allow-action`で許可する必要があります。
+`OBJECT`、`MEMORY`、`XINFO`、`CLIENT`、`COMMAND`、`PUBSUB`は`HELP`も受け付けます。`JSON.GET`や`FT.SEARCH`のようなモジュールのコマンドはこの一覧にないので、それを使うステップは`--allow-action`で許可する必要があります。
 
 [ガード](/ja/guide/concepts/guard)を参照してください。
 
