@@ -53,7 +53,7 @@ SSHのステップには、接続先のホスト、ユーザー、認証方法�
 | `strict_host_check` | bool | true | Host Keyの厳密検証 |
 | `known_hosts` | string | `~/.ssh/known_hosts`と`/etc/ssh/ssh_known_hosts` | Known Hostsファイルのパス。既定では2つのうち存在するファイルを読み、どちらもなければホストの検証に失敗する |
 
-`timeout`を過ぎても終わらないコマンドには`SIGTERM`を送り、ステップはテストできる結果を受け取ります。`res.timed_out`が`true`になり、`res.stdout`と`res.stderr`にはそれまでに書いた内容が、`res.code`にはシグナルを受けて終了したときの終了コード（多くは`143`）が入ります。その後5秒経っても終わらないコマンドは待つのをやめ、`res.code`は`-1`になります。
+`timeout`を過ぎても終わらないコマンドには`SIGTERM`を送り、ステップにはテストできる結果が残ります。`res.timed_out`が`true`になり、`res.stdout`と`res.stderr`にはそれまでに書いた内容が、`res.code`にはシグナルを受けて終了したときの終了コード（多くは`143`）が入ります。その後5秒経っても終わらないコマンドは待つのをやめ、`res.code`は`-1`になります。
 
 ### 環境変数
 

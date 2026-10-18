@@ -100,8 +100,8 @@ vars:
   API_BASE_URL: "https://api-dev.example.com"
   WEB_BASE_URL: "https://web-dev.example.com"
   
-  # 寛容なパフォーマンスしきい値
-  RESPONSE_TIME_THRESHOLD: 5000    # 5秒（より寛容）
+  # 緩いパフォーマンスしきい値
+  RESPONSE_TIME_THRESHOLD: 5000    # 5秒（より緩い）
   CRITICAL_RESPONSE_TIME: 10000    # 10秒
   
   # 開発環境固有設定
@@ -110,7 +110,7 @@ vars:
   SKIP_PERFORMANCE_TESTS: false   # 開発環境でもパフォーマンステスト
   SKIP_LOAD_TESTS: true           # 重い負荷テストはスキップ
   
-  # 機能フラグ（開発環境は全機能を取得）
+  # 機能フラグ（開発環境は全機能を有効化）
   ENABLE_NEW_FEATURES: true
   ENABLE_EXPERIMENTAL_FEATURES: true
   ENABLE_DEBUG_ENDPOINTS: true

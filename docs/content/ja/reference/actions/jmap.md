@@ -2,7 +2,7 @@
 
 JMAPアクションは、[JMAP](https://jmap.io/)（[RFC 8620](https://www.rfc-editor.org/rfc/rfc8620)、[RFC 8621](https://www.rfc-editor.org/rfc/rfc8621)）のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、呼び出しを1回のリクエストで送ります。レスポンスは呼び出しのidごとに返し、メソッドのエラーは1つのリストにまとめます。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-jmap](https://github.com/mozership/probe-jmap)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。このバージョンから、`action.yml`が申告するガードとパラメータを読みます。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-jmap](https://github.com/mozership/probe-jmap)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。このバージョンから、`action.yml`が宣言するガードとパラメータを読みます。
 
 ## 基本的な構文
 
@@ -74,7 +74,7 @@ steps:
 
 これ以外の型のメソッドには`using`が必要です。`using`を指定したときは、書いたとおりに送ります。
 
-上記のパラメータ以外のキーを`with`に書くと、何も送る前にステップが失敗します。`action.yml`はパラメータを`params`として申告しているため、`probe check`がそのキーを行番号とともに報告します。
+上記のパラメータ以外のキーを`with`に書くと、何も送る前にステップが失敗します。`action.yml`はパラメータを`params`として宣言しているため、`probe check`がそのキーを行番号とともに報告します。
 
 ## レスポンスオブジェクト
 
@@ -93,7 +93,7 @@ steps:
 | `rt` | Duration | セッションとAPIのリクエストを合わせた時間 |
 | `status` | Integer | APIが2xxでメソッドのレスポンスを返し、`res.errors`が空なら`0`。それ以外は`1` |
 
-JMAPのサーバーは、実行できなかったメソッドにもHTTP 200で応答します。そのため、`res.code`だけでは呼び出しが成功したかわかりません。`res.errors`はすべての失敗を集めます。各要素は、サーバーが返したエラーオブジェクトに次のフィールドを加えたものです。
+JMAPのサーバーは、実行できなかったメソッドにもHTTP 200で応答します。そのため、`res.code`だけでは呼び出しが成功したかわかりません。`res.errors`にはすべての失敗が入ります。各要素は、サーバーが返したエラーオブジェクトに次のフィールドを加えたものです。
 
 | `kind` | 失敗したもの | 加えるフィールド |
 |---|---|---|
@@ -185,7 +185,7 @@ steps:
 
 ## ガード
 
-`--read-only`を指定した実行では、`/get`、`/query`、`/changes`、`/queryChanges`、`/lookup`、`/echo`以外のメソッドを含むステップを、何も送る前に拒否します。`--allow-host`が許可しないホストは、セッション、APIのURL、リダイレクト先のいずれでも拒否します。`action.yml`は`guard: [read-only, allow-host]`を申告しているため、どちらのガードの下でも`--allow-action`なしで実行します。[ガード](/ja/guide/concepts/guard)を参照してください。
+`--read-only`を指定した実行では、`/get`、`/query`、`/changes`、`/queryChanges`、`/lookup`、`/echo`以外のメソッドを含むステップを、何も送る前に拒否します。`--allow-host`が許可しないホストは、セッション、APIのURL、リダイレクト先のいずれでも拒否します。`action.yml`は`guard: [read-only, allow-host]`を宣言しているため、どちらのガードの下でも`--allow-action`なしで実行します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
 ## 関連項目
 

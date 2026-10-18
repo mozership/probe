@@ -34,7 +34,7 @@ steps:
 | `headers` | Object | いいえ | - | `Authorization`などのリクエストヘッダー。下記の既定値を上書きします |
 | `timeout` | Duration | いいえ | `30s` | リクエストの制限時間。`10s`のような形式か秒数で指定します。`0`を指定すると制限しません |
 
-これら以外のキーを`with`に書くと、何も送る前にステップが失敗します。`action.yml`はこれらを`params`として申告しているため、`probe check`がそのキーを行番号とともに報告します。
+これら以外のキーを`with`に書くと、何も送る前にステップが失敗します。`action.yml`はこれらを`params`として宣言しているため、`probe check`がそのキーを行番号とともに報告します。
 
 リクエストはJSONのボディを持つ`POST`で、`Content-Type: application/json`、`Accept: application/graphql-response+json, application/json`、`User-Agent: probe-graphql/<version>`を付けて送ります。
 
@@ -67,7 +67,7 @@ steps:
 
 ## ガードの下での動作
 
-このアクションは実行のガードを守り、`action.yml`で`guard: [read-only, allow-host]`を申告しています。そのため、どちらのガードの下でも`--allow-action`なしで実行します。拒否したステップは、何も送る前に種類`refused`で失敗します。
+このアクションは実行のガードに従い、`action.yml`で`guard: [read-only, allow-host]`を宣言しています。そのため、どちらのガードの下でも`--allow-action`なしで実行します。拒否したステップは、何も送る前に種類`refused`で失敗します。
 
 - `--read-only`の下では、クエリだけを送ります。実行する操作（`operation_name`が指すもの、または文書の中の唯一の操作）をGraphQLのパーサーで読み、ミューテーションとサブスクリプションは拒否します。文書を解析できない場合、操作が複数あるのに`operation_name`がない場合、`operation_name`が指す操作が文書にない場合も拒否します。
 - `--allow-host`の下では、`url`のホストと、各リダイレクト先のホストが、実行が許可するものでなければなりません。ポートのないURLは、スキームの既定のポートとして扱います。
