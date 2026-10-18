@@ -745,8 +745,7 @@ func TestPrinter_generateReport(t *testing.T) {
 		JobName:   "Successful Job",
 		StartTime: startTime1,
 		EndTime:   endTime1,
-		Success:   true,
-		Status:    "Completed",
+		Status:    StatusSuccess,
 		StepResults: []StepResult{
 			{
 				Index:  1,
@@ -765,8 +764,7 @@ func TestPrinter_generateReport(t *testing.T) {
 		JobName:   "Failed Job",
 		StartTime: startTime2,
 		EndTime:   endTime2,
-		Success:   false,
-		Status:    "Failed",
+		Status:    StatusError,
 		StepResults: []StepResult{
 			{
 				Index:  1,
@@ -819,8 +817,7 @@ func TestPrinter_generateReport_WithRepeatStep(t *testing.T) {
 		JobName:   "Job with Repeat",
 		StartTime: startTime,
 		EndTime:   endTime,
-		Success:   true,
-		Status:    "Completed",
+		Status:    StatusSuccess,
 		StepResults: []StepResult{
 			{
 				Index:   1,
@@ -1311,7 +1308,6 @@ func TestReportRenderer_MasksTheReport(t *testing.T) {
 	rs.Jobs["job"] = &JobResult{
 		JobID:   "job",
 		JobName: "Job hunter2",
-		Success: true,
 		StepResults: []StepResult{
 			{Index: 0, Name: "Log in as hunter2", Status: StatusSuccess, RT: "1ms"},
 		},

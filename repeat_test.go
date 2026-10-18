@@ -185,6 +185,7 @@ func TestRepeatFunctionality_Intervals(t *testing.T) {
 				Name: "repeat-interval-test",
 				Jobs: []Job{
 					{
+						ID:    "repeat-job",
 						Name:  "repeat-job",
 						Steps: []*Step{}, // Empty steps to avoid external dependencies
 						Repeat: &Repeat{
@@ -252,6 +253,7 @@ func TestRepeatFunctionality_DifferentTimeUnits(t *testing.T) {
 				Name: "time-unit-test",
 				Jobs: []Job{
 					{
+						ID:    "time-unit-job",
 						Name:  "time-unit-job",
 						Steps: []*Step{},
 						Repeat: &Repeat{
@@ -289,6 +291,7 @@ func TestRepeatFunctionality_ParallelVsSequential(t *testing.T) {
 			Name: "parallel-repeat-test",
 			Jobs: []Job{
 				{
+					ID:    "parallel-repeat-job1",
 					Name:  "parallel-repeat-job1",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -297,6 +300,7 @@ func TestRepeatFunctionality_ParallelVsSequential(t *testing.T) {
 					},
 				},
 				{
+					ID:    "parallel-repeat-job2",
 					Name:  "parallel-repeat-job2",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -330,6 +334,7 @@ func TestRepeatFunctionality_ParallelVsSequential(t *testing.T) {
 			Name: "sequential-repeat-test",
 			Jobs: []Job{
 				{
+					ID:    "first-repeat-job",
 					Name:  "first-repeat-job",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -338,6 +343,7 @@ func TestRepeatFunctionality_ParallelVsSequential(t *testing.T) {
 					},
 				},
 				{
+					ID:    "second-repeat-job",
 					Name:  "second-repeat-job",
 					Needs: []string{"first-repeat-job"},
 					Steps: []*Step{},
@@ -374,6 +380,7 @@ func TestRepeatFunctionality_EdgeCases(t *testing.T) {
 			Name: "zero-count-test",
 			Jobs: []Job{
 				{
+					ID:    "zero-count-job",
 					Name:  "zero-count-job",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -399,6 +406,7 @@ func TestRepeatFunctionality_EdgeCases(t *testing.T) {
 			Name: "high-count-test",
 			Jobs: []Job{
 				{
+					ID:    "high-count-job",
 					Name:  "high-count-job",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -432,6 +440,7 @@ func TestRepeatFunctionality_EdgeCases(t *testing.T) {
 			Name: "negative-interval-test",
 			Jobs: []Job{
 				{
+					ID:    "negative-interval-job",
 					Name:  "negative-interval-job",
 					Steps: []*Step{},
 					Repeat: &Repeat{

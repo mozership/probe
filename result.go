@@ -117,12 +117,14 @@ type StepFailure struct {
 
 // JobResult stores execution results for a job
 type JobResult struct {
-	JobName     string
-	JobID       string
-	Status      string
+	JobName string
+	JobID   string
+	// Status is how the job ended: StatusSuccess, StatusError or
+	// StatusSkipped, which a job skipped by its skipif or by a job it needs
+	// is. It is StatusSuccess while the job runs.
+	Status      StatusType
 	StartTime   time.Time
 	EndTime     time.Time
-	Success     bool
 	StepResults []StepResult // Store all step results for this job
 	// RepeatTest is the outcome of the test of a repeated job over its
 	// runs; nil when it has none.
@@ -131,6 +133,12 @@ type JobResult struct {
 	// run compared to; nil when it has none.
 	BaselineTest *RepeatTestResult
 	mutex        sync.Mutex
+}
+
+// Succeeded reports whether the job did not fail, which a skipped job did
+// not. Callers hold jr.mutex.
+func (jr *JobResult) Succeeded() bool {
+	return jr.Status != StatusError
 }
 
 // RepeatTestResult is the outcome of the test of a repeated job.

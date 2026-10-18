@@ -33,10 +33,10 @@ func buildJobReport(jr *JobResult) report.Job {
 	defer jr.mutex.Unlock()
 
 	status := report.Passed
-	switch {
-	case jr.Status == "skipped":
+	switch jr.Status {
+	case StatusSkipped:
 		status = report.Skipped
-	case !jr.Success:
+	case StatusError:
 		status = report.Failed
 	}
 

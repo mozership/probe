@@ -34,8 +34,7 @@ func newTestResult(base time.Time) *Result {
 		JobName:   "First Job",
 		StartTime: base,
 		EndTime:   base.Add(1 * time.Second),
-		Success:   true,
-		Status:    "Completed",
+		Status:    StatusSuccess,
 		StepResults: []StepResult{
 			{Index: 0, Name: "First Step", Status: StatusSuccess, RT: "100ms"},
 		},
@@ -46,8 +45,7 @@ func newTestResult(base time.Time) *Result {
 		JobName:   "Second Job",
 		StartTime: base.Add(1 * time.Second),
 		EndTime:   base.Add(3 * time.Second),
-		Success:   false,
-		Status:    "Failed",
+		Status:    StatusError,
 		StepResults: []StepResult{
 			{Index: 0, Name: "Second Step", Status: StatusError},
 		},
@@ -58,8 +56,7 @@ func newTestResult(base time.Time) *Result {
 		JobName:   "Third Job",
 		StartTime: base.Add(3 * time.Second),
 		EndTime:   base.Add(3 * time.Second),
-		Success:   true,
-		Status:    "skipped",
+		Status:    StatusSkipped,
 	}
 
 	return rs

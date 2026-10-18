@@ -10,7 +10,7 @@ import (
 
 func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 	t.Run("multi-level dependency failures are properly marked", func(t *testing.T) {
-		// This test verifies that jobs with JobFailed dependencies are also marked as failed
+		// This test verifies that jobs with JobSkipped dependencies are also marked as failed
 		// Previously, only JobCompleted with !results was checked, causing deadlock
 		scheduler := NewJobScheduler()
 
@@ -47,11 +47,11 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 		}
 
 		// Simulate level1 completing with failure
-		scheduler.SetJobStatus("level1", JobCompleted, false)
+		scheduler.FinishJob("level1", false)
 
 		// Call MarkJobsWithFailedDependencies
 		// With the fix, this should mark both level2 and level3 as failed in a single pass
-		// because MarkJobsWithFailedDependencies now checks for both JobFailed and JobCompleted+!results
+		// because MarkJobsWithFailedDependencies now checks for both JobSkipped and JobCompleted+!results
 		skipped := scheduler.MarkJobsWithFailedDependencies()
 
 		// Both level2 and level3 should be skipped
@@ -68,12 +68,12 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 			t.Errorf("Expected level2 and level3 to be skipped, got: %v", skipped)
 		}
 
-		// Verify both are marked as JobFailed
-		if scheduler.status["level2"] != JobFailed {
-			t.Errorf("Expected level2 status to be JobFailed, got: %v", scheduler.status["level2"])
+		// Verify both are marked as JobSkipped
+		if scheduler.status["level2"] != JobSkipped {
+			t.Errorf("Expected level2 status to be JobSkipped, got: %v", scheduler.status["level2"])
 		}
-		if scheduler.status["level3"] != JobFailed {
-			t.Errorf("Expected level3 status to be JobFailed, got: %v", scheduler.status["level3"])
+		if scheduler.status["level3"] != JobSkipped {
+			t.Errorf("Expected level3 status to be JobSkipped, got: %v", scheduler.status["level3"])
 		}
 
 		// Second call should return no skipped jobs (all are already failed)
@@ -123,7 +123,7 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 		}
 
 		// Simulate job1 completing with failure
-		scheduler.SetJobStatus("job1", JobCompleted, false)
+		scheduler.FinishJob("job1", false)
 
 		// Mark failed dependencies
 		skipped := scheduler.MarkJobsWithFailedDependencies()
@@ -179,7 +179,7 @@ func TestJobScheduler_NoDeadlockOnConcurrentReadAndWrite(t *testing.T) {
 	//
 	// To reproduce reliably, we spam GetRunnableJobs from many goroutines
 	// while concurrently calling Lock-acquiring methods such as
-	// SetJobStatus and IncrementRepeatCounter. With the bug present, the
+	// StartJob and IncrementRepeatCounter. With the bug present, the
 	// scheduler hangs and the timeout below trips.
 	scheduler := NewJobScheduler()
 	const jobCount = 5
@@ -207,7 +207,7 @@ func TestJobScheduler_NoDeadlockOnConcurrentReadAndWrite(t *testing.T) {
 			}()
 			go func(idx int) {
 				defer wg.Done()
-				scheduler.SetJobStatus(fmt.Sprintf("id-%d", idx%jobCount), JobRunning, false)
+				scheduler.StartJob(fmt.Sprintf("id-%d", idx%jobCount))
 			}(i)
 			go func(idx int) {
 				defer wg.Done()
@@ -357,7 +357,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		if s.CanRunJob("cleanup") {
 			t.Error("cleanup can run before work has started")
 		}
-		s.SetJobStatus("work", JobRunning, false)
+		s.StartJob("work")
 		if s.CanRunJob("cleanup") {
 			t.Error("cleanup can run while work is running")
 		}
@@ -369,7 +369,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
 		)
 		s.IncrementRepeatCounter("work")
-		s.SetJobStatus("work", JobCompleted, true)
+		s.FinishJob("work", true)
 		if !s.CanRunJob("cleanup") {
 			t.Error("cleanup cannot run after work succeeded")
 		}
@@ -382,7 +382,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
 		)
 		s.IncrementRepeatCounter("work")
-		s.SetJobStatus("work", JobCompleted, false)
+		s.FinishJob("work", false)
 
 		if !s.CanRunJob("cleanup") {
 			t.Error("cleanup cannot run after work failed")
@@ -406,7 +406,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			&Job{ID: "after", Needs: []string{"cleanup"}},
 		)
 		s.IncrementRepeatCounter("setup")
-		s.SetJobStatus("setup", JobCompleted, false)
+		s.FinishJob("setup", false)
 		if s.CanRunJob("cleanup") {
 			t.Error("cleanup can run while work is still pending")
 		}
@@ -420,7 +420,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		// A job that needs the one that always runs is held to how that
 		// one ends, as it is to any other.
 		s.IncrementRepeatCounter("cleanup")
-		s.SetJobStatus("cleanup", JobCompleted, true)
+		s.FinishJob("cleanup", true)
 		if !s.CanRunJob("after") {
 			t.Error("after cannot run although cleanup succeeded")
 		}
@@ -432,7 +432,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
 		)
 		s.IncrementRepeatCounter("work")
-		s.SetJobStatus("work", JobCompleted, false)
+		s.FinishJob("work", false)
 		if s.CanRunJob("cleanup") {
 			t.Error("cleanup can run before the second run of work")
 		}
@@ -441,4 +441,12 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			t.Error("cleanup cannot run after both runs of work")
 		}
 	})
+}
+
+// A job is given its ID before it is scheduled, so the scheduler does not
+// make one up.
+func TestJobScheduler_AddJob_WithoutID(t *testing.T) {
+	if err := NewJobScheduler().AddJob(&Job{Name: "a"}); err == nil {
+		t.Error("AddJob() of a job without an ID succeeded")
+	}
 }

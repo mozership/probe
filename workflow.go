@@ -77,9 +77,12 @@ func (w *Workflow) Start(c Config) error {
 		return err
 	}
 
-	// Build the scheduler first: it assigns an ID to every job that omits one,
-	// and the result, the report order and the scheduler all index jobs by ID,
-	// so they have to agree before anything keys off them.
+	// The result, the report order and the scheduler all index jobs by ID,
+	// so every job has one before anything keys off them. A loaded workflow
+	// has them already; one made in code is given them here.
+	if err := w.assignJobIDs(); err != nil {
+		return err
+	}
 	scheduler, err := w.initJobScheduler()
 	if err != nil {
 		return err
@@ -118,9 +121,7 @@ func (w *Workflow) Start(c Config) error {
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
 
 	// A reporter tracks how far the report has been emitted, which is state
-	// for this run alone, so every run gets a fresh one. A caller cannot know
-	// a generated ID in advance, so the report is rendered in the order of
-	// the IDs the jobs have now.
+	// for this run alone, so every run gets a fresh one.
 	render := newReportRenderer(jobIDs, c.Baseline, w.printer.Masker())
 	reporter := newReporter(c.Output, w.printer, render)
 	w.printer.SetReporter(reporter)
@@ -200,6 +201,39 @@ func (w *Workflow) writeReports(targets []report.Target, baseline *report.Report
 	return errors.Join(errs...)
 }
 
+// defaultJobID is the ID of the job at index i of a workflow, when it is
+// given none.
+func defaultJobID(i int) string {
+	return fmt.Sprintf("job_%d", i)
+}
+
+// assignJobIDs gives each job without an ID the ID defaultJobID makes of
+// where it is in the workflow. The ID a job is given is not one another job
+// is given in the workflow, which a run could not tell from it.
+func (w *Workflow) assignJobIDs() error {
+	taken := make(map[string]int, len(w.Jobs))
+	for i, job := range w.Jobs {
+		if _, ok := taken[job.ID]; job.ID != "" && !ok {
+			taken[job.ID] = i
+		}
+	}
+	for i := range w.Jobs {
+		job := &w.Jobs[i]
+		if job.ID != "" {
+			continue
+		}
+		id := defaultJobID(i)
+		if k, ok := taken[id]; ok {
+			return NewConfigurationError("duplicate_job_id",
+				fmt.Sprintf("job %d has no ID, and '%s', the ID it would be given, is the ID of job %d; give job %d an ID",
+					i, id, k, i), nil)
+		}
+		job.ID = id
+		taken[id] = i
+	}
+	return nil
+}
+
 // initJobScheduler creates and sets up the job scheduler with dependencies
 func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
 	scheduler := NewJobScheduler()
@@ -224,16 +258,11 @@ func (w *Workflow) setupResult() *Result {
 	rs := NewResult()
 	// Initialize job outputs
 	for _, job := range w.Jobs {
-		jobID := job.ID
-		if jobID == "" {
-			jobID = job.Name
-		}
-		jr := &JobResult{
+		rs.Jobs[job.ID] = &JobResult{
 			JobName:   job.Name,
-			JobID:     jobID,
+			JobID:     job.ID,
 			StartTime: time.Now(),
 		}
-		rs.Jobs[jobID] = jr
 	}
 
 	return rs
@@ -277,8 +306,7 @@ func (w *Workflow) updateSkippedJobsOutput(skippedJobs []string, rs *Result) {
 		if jr, exists := rs.Jobs[jobID]; exists {
 			jr.mutex.Lock()
 			jr.EndTime = jr.StartTime // Set end time same as start time (0 duration)
-			jr.Status = "skipped"
-			jr.Success = true // Skipped jobs are considered successful (same as skipif)
+			jr.Status = StatusSkipped
 			jr.mutex.Unlock()
 
 			// These jobs never reach Executor.finalize, so announce them here
@@ -293,7 +321,7 @@ func (w *Workflow) updateSkippedJobsOutput(skippedJobs []string, rs *Result) {
 func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, done chan<- struct{}) int {
 	for _, jobID := range runnableJobs {
 		job := ctx.JobScheduler.jobs[jobID]
-		ctx.JobScheduler.SetJobStatus(jobID, JobRunning, false)
+		ctx.JobScheduler.StartJob(jobID)
 
 		go func(j *Job) {
 			defer func() { done <- struct{}{} }()
