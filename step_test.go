@@ -702,10 +702,10 @@ func TestStep_executeAction(t *testing.T) {
 		// Set up mock runner
 		mock := NewMockActionRunner()
 		mock.SetResult("http", map[string]any{
-			"code": 0,
-			"results": map[string]any{
-				"status": 200,
-				"body":   "OK",
+			"status": 0,
+			"res": map[string]any{
+				"code": 200,
+				"body": "OK",
 			},
 		})
 		step.actionRunner = mock
@@ -726,17 +726,11 @@ func TestStep_executeAction(t *testing.T) {
 			t.Errorf("Expected no error, got %v", err)
 		}
 
-		if result["code"] != 0 {
-			t.Errorf("Expected code=0, got %v", result["code"])
+		if result.Status != 0 {
+			t.Errorf("Expected status=0, got %v", result.Status)
 		}
-
-		results, ok := result["results"].(map[string]any)
-		if !ok {
-			t.Errorf("Expected results to be map[string]any")
-		} else {
-			if results["status"] != 200 {
-				t.Errorf("Expected status=200, got %v", results["status"])
-			}
+		if result.Res["code"] != 200 {
+			t.Errorf("Expected res.code=200, got %v", result.Res["code"])
 		}
 	})
 
@@ -770,8 +764,8 @@ func TestStep_executeAction(t *testing.T) {
 		if err != testErr {
 			t.Errorf("Expected test error, got %v", err)
 		}
-		if result != nil {
-			t.Errorf("Expected nil result on error, got %v", result)
+		if !reflect.DeepEqual(result, actionResult{}) {
+			t.Errorf("Expected no result on error, got %+v", result)
 		}
 	})
 
@@ -838,7 +832,7 @@ func TestStep_processActionResult(t *testing.T) {
 				runEnv: &runEnv{},
 			}
 
-			step.processActionResult(tt.actionResult, jCtx)
+			step.processActionResult(readActionResult(tt.actionResult), jCtx)
 		})
 	}
 }
@@ -947,7 +941,7 @@ func TestStep_finalize(t *testing.T) {
 
 			// Note: This test mainly verifies that the correct code path is taken
 			// More detailed testing of each path should be done in their specific test functions
-			step.finalize("test-step", tt.actionResult, jCtx)
+			step.finalize("test-step", jCtx)
 
 			// For now, we just verify the method doesn't panic
 			// In a more complete test, we might track which methods were called
@@ -1326,14 +1320,11 @@ func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	result, err := step.executeSingleAction(mock, map[string]any{}, jCtx, false)
+	_, err := step.executeSingleAction(mock, map[string]any{}, jCtx, false)
 	duration := time.Since(start)
 
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
-	}
-	if result == nil {
-		t.Error("Expected result, got nil")
 	}
 	// Should complete quickly (well under default timeout)
 	if duration > 1*time.Second {
@@ -1370,8 +1361,8 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	if !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("Expected timeout error, got: %v", err)
 	}
-	if result != nil {
-		t.Errorf("Expected nil result on timeout, got %v", result)
+	if !reflect.DeepEqual(result, actionResult{}) {
+		t.Errorf("Expected no result on timeout, got %+v", result)
 	}
 	// Should timeout around 2 seconds
 	if duration < 1900*time.Millisecond || duration > 2500*time.Millisecond {
@@ -1476,11 +1467,8 @@ func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if result == nil {
-		t.Error("Expected result, got nil")
-	}
-	if result["status"] != 0 {
-		t.Errorf("Expected status=0, got %v", result["status"])
+	if result.Status != 0 {
+		t.Errorf("Expected status=0, got %v", result.Status)
 	}
 	// Should complete around 1 second
 	if duration < 900*time.Millisecond || duration > 1500*time.Millisecond {
@@ -1533,8 +1521,8 @@ func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
 	}
 
 	// On timeout, result should be nil
-	if result != nil {
-		t.Errorf("Expected nil result on timeout, got %v", result)
+	if !reflect.DeepEqual(result, actionResult{}) {
+		t.Errorf("Expected no result on timeout, got %+v", result)
 	}
 }
 
@@ -1564,12 +1552,9 @@ func TestStep_executeActionWithRetry_NoTest(t *testing.T) {
 		},
 	}
 
-	result, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
+	_, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
-	}
-	if result == nil {
-		t.Error("Expected result, got nil")
 	}
 	if callCount != 1 {
 		t.Errorf("Expected action to be called once (no test = no retry), got %d calls", callCount)
@@ -1615,12 +1600,9 @@ func TestStep_executeActionWithRetry_TestFailThenPass(t *testing.T) {
 		},
 	}
 
-	result, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
+	_, err := step.executeActionWithRetry(mock, map[string]any{}, jCtx, "test")
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
-	}
-	if result == nil {
-		t.Error("Expected result, got nil")
 	}
 	if callCount != 3 {
 		t.Errorf("Expected 3 attempts (2 test failures + 1 success), got %d", callCount)
@@ -1660,8 +1642,8 @@ func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error (test failure is not an action error), got: %v", err)
 	}
-	if result == nil {
-		t.Error("Expected result (last attempt), got nil")
+	if result.Res == nil {
+		t.Error("Expected the result of the last attempt, got none")
 	}
 	if callCount != 3 {
 		t.Errorf("Expected all 3 attempts to be tried, got %d", callCount)
@@ -2173,7 +2155,7 @@ func TestStep_processActionResultStdoutJSON(t *testing.T) {
 					Printer: newBufferPrinter(),
 				},
 			}
-			step.processActionResult(map[string]any{"res": tt.res}, jCtx)
+			step.processActionResult(readActionResult(map[string]any{"res": tt.res}), jCtx)
 
 			got, ok := step.ctx.Res["json"]
 			if ok != tt.wantOK {

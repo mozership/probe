@@ -2,7 +2,6 @@ package probe
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
-	"github.com/mozership/probe/jsonutil"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -107,17 +105,17 @@ func (st *stepRun) Do(jCtx *JobContext) {
 
 	// 2. Action execution phase
 	st.startedAt = time.Now()
-	actionResult, err := st.executeAction(name, jCtx)
+	result, err := st.executeAction(name, jCtx)
 	if err != nil {
 		st.handleActionError(err, name, jCtx)
 		return
 	}
 
 	// 3. Result processing phase
-	st.processActionResult(actionResult, jCtx)
+	st.processActionResult(result, jCtx)
 
 	// 4. Finalization phase: test, echo, output save, result creation
-	st.finalize(name, actionResult, jCtx)
+	st.finalize(name, jCtx)
 }
 
 // prepare handles step preparation: validation, skip check, and wait
@@ -148,14 +146,14 @@ func (st *stepRun) prepare(jCtx *JobContext) (string, bool) {
 
 // executeAction executes the step action and returns the result
 // If retry is configured, it will retry until status == 0 or max attempts reached
-func (st *stepRun) executeAction(name string, jCtx *JobContext) (map[string]any, error) {
+func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, error) {
 	expW, err := st.expr.EvalTemplateMap(st.With, st.ctx)
 	if err != nil {
 		// The credentials that could be evaluated are learned, so that an
 		// error about another value cannot show them, and the details of a
 		// credential's own error are left out.
 		jCtx.Printer.Masker().Learn(expW)
-		return nil, redactCredentialErrors(prefixFieldErrors(err, "with."), st.With)
+		return actionResult{}, redactCredentialErrors(prefixFieldErrors(err, "with."), st.With)
 	}
 
 	runner := st.actionRunner
@@ -171,7 +169,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (map[string]any,
 		for _, kind := range jCtx.Guard.Missing(st.Uses) {
 			flags = append(flags, "--"+kind)
 		}
-		return nil, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
+		return actionResult{}, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
 	}
 
 	// If no retry configuration, execute once
@@ -186,7 +184,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (map[string]any,
 // executeSingleAction executes action once without retry
 // quiet marks an attempt whose failure will be retried, so that the action's
 // own error records stay out of the log.
-func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (map[string]any, error) {
+func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (actionResult, error) {
 	// Determine timeout duration
 	timeout := DefaultStepTimeout
 	if st.Timeout.Duration > 0 {
@@ -243,17 +241,18 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 		// is seen here, with an error that says less, even before ctx's own
 		// timer has gone off.
 		if d, _ := ctx.Deadline(); res.err != nil && !time.Now().Before(d) {
-			return nil, timedOut
+			return actionResult{}, timedOut
 		}
-		if res.err == nil {
-			if err := jCtx.states.set(st.Uses, res.state); err != nil {
-				return nil, err
-			}
-			st.contract = res.contract
+		if res.err != nil {
+			return actionResult{}, res.err
 		}
-		return res.ret, res.err
+		if err := jCtx.states.set(st.Uses, res.state); err != nil {
+			return actionResult{}, err
+		}
+		st.contract = res.contract
+		return readActionResult(res.ret), nil
 	case <-ctx.Done():
-		return nil, timedOut
+		return actionResult{}, timedOut
 	}
 }
 
@@ -274,7 +273,7 @@ func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
 
 // executeActionWithRetry executes action with retry logic based on test assertion results.
 // If no test is configured, retry is not performed and the action is executed once.
-func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (map[string]any, error) {
+func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (actionResult, error) {
 	retry := st.Retry
 	st.retryAttempt = 0
 
@@ -286,7 +285,7 @@ func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]a
 		time.Sleep(retry.InitialDelay.Duration)
 	}
 
-	var lastResult map[string]any
+	var lastResult actionResult
 	var lastErr error
 
 	// Retry loop
@@ -411,52 +410,20 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	}
 }
 
-// processActionResult processes the action result and updates context
-func (st *stepRun) processActionResult(actionResult map[string]any, jCtx *JobContext) {
-	// Parse and process JSON response
-	req, _ := actionResult["req"].(map[string]any)
-	res, okres := actionResult["res"].(map[string]any)
-	rt, _ := actionResult["rt"].(string)
-
-	status := parseExitStatus(actionResult["status"])
-
-	if okres {
-		body, okbody := res["body"].(string)
-		if okbody && jsonutil.LooksLikeJSON(body) {
-			res["rawbody"] = body
-			res["body"] = jsonutil.Decode(body)
-		}
-
-		// A command that prints a JSON object or array, such as a CLI asked
-		// for JSON output, is read as res.json. stdout is kept as it is, for
-		// tests that read the text.
-		if _, taken := res["json"]; !taken {
-			if v, ok := decodeStdoutJSON(res["stdout"]); ok {
-				res["json"] = v
-			}
-		}
-	}
-
+// processActionResult sets the context the step's test and echo are
+// evaluated in from what the action returned.
+func (st *stepRun) processActionResult(r actionResult, jCtx *JobContext) {
 	// A response can hand out a credential too, such as a session cookie.
-	jCtx.Printer.Masker().Learn(res)
+	jCtx.Printer.Masker().Learn(r.Res)
 
-	// Update context with status
-	st.updateCtx(nil, req, res, rt, status)
-}
-
-// decodeStdoutJSON decodes stdout when the whole of it is one JSON object or
-// array, surrounding whitespace aside. Anything else, such as plain text,
-// JSON Lines or a scalar, is not decoded.
-func decodeStdoutJSON(stdout any) (any, bool) {
-	s, ok := stdout.(string)
-	if !ok || !jsonutil.LooksLikeJSON(s) || !json.Valid([]byte(s)) {
-		return nil, false
-	}
-	return jsonutil.Decode(s), true
+	st.ctx.Req = r.Req
+	st.ctx.Res = r.Res
+	st.ctx.Status = r.Status
+	st.ctx.RT = r.RT
 }
 
 // finalize handles the final phase: test, echo, output save, and result creation
-func (st *stepRun) finalize(name string, actionResult map[string]any, jCtx *JobContext) {
+func (st *stepRun) finalize(name string, jCtx *JobContext) {
 	if jCtx.Verbose {
 		jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
 	}
@@ -835,52 +802,6 @@ func (st *stepRun) SetCtx(j JobContext, override map[string]any) {
 		Vars:        vers,
 		Outputs:     outputs,
 		RepeatIndex: j.RepeatCurrent,
-	}
-}
-
-// parseExitStatus converts various status representations to int
-func parseExitStatus(status any) int {
-	if status == nil {
-		return int(ExitStatusFailure) // default to failure if status is nil
-	}
-
-	switch v := status.(type) {
-	case int:
-		return v
-	case int64:
-		// Handle integers converted from protobuf float64 by the actionrpc client
-		return int(v)
-	case float64:
-		// Handle JSON numbers which are parsed as float64
-		return int(v)
-	case string:
-		if v == "0" {
-			return int(ExitStatusSuccess)
-		} else {
-			return int(ExitStatusFailure)
-		}
-	case ExitStatus:
-		return int(v)
-	default:
-		return int(ExitStatusFailure) // default to failure for unknown types
-	}
-}
-
-func (st *stepRun) updateCtx(logs []map[string]any, req, res map[string]any, rt string, status int) {
-	st.ctx.Req = req
-	st.ctx.Res = res
-	st.ctx.Status = status
-
-	// Parse RT string to populate RT structure
-	if rt != "" {
-		if duration, err := time.ParseDuration(rt); err == nil {
-			st.ctx.RT = ResponseTime{
-				Duration: rt,
-				Sec:      duration.Seconds(),
-			}
-		}
-	} else {
-		st.ctx.RT = ResponseTime{}
 	}
 }
 

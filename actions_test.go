@@ -66,10 +66,10 @@ func TestStepWithMockRunner(t *testing.T) {
 	// Set up mock runner
 	mock := NewMockActionRunner()
 	mock.SetResult("http", map[string]any{
-		"code": 0,
-		"results": map[string]any{
-			"status": 200,
-			"body":   "OK",
+		"status": 0,
+		"res": map[string]any{
+			"code": 200,
+			"body": "OK",
 		},
 	})
 
@@ -91,17 +91,11 @@ func TestStepWithMockRunner(t *testing.T) {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
-	if result["code"] != 0 {
-		t.Errorf("Expected code=0, got %v", result["code"])
+	if result.Status != 0 {
+		t.Errorf("Expected status=0, got %v", result.Status)
 	}
-
-	results, ok := result["results"].(map[string]any)
-	if !ok {
-		t.Errorf("Expected results to be map[string]any")
-	} else {
-		if results["status"] != 200 {
-			t.Errorf("Expected status=200, got %v", results["status"])
-		}
+	if result.Res["code"] != 200 {
+		t.Errorf("Expected res.code=200, got %v", result.Res["code"])
 	}
 }
 
