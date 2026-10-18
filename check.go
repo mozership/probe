@@ -125,8 +125,10 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// What is wrong with the names of external actions is told on the line
 	// of each, with whatever else is wrong, rather than ending the check.
 	var aliases []aliasProblem
+	var problems []problem
 	p.Config.Actions = opts.Actions
 	p.aliasProblems = &aliases
+	p.problems = &problems
 	if err := p.Load(); err != nil {
 		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
 		return c.sorted(), nil
@@ -137,8 +139,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.checkEmbedded()
 	c.checkWith()
 	c.checkNeeds()
-	c.checkSteps()
-	c.checkExpressions()
+	c.checkProblems(problems)
 	c.checkOutputs()
 	c.checkTests()
 	c.checkRepeatTests()
@@ -466,15 +467,11 @@ func firstLine(s string) string {
 }
 
 func (c *checker) jobWhere(i int) string {
-	return fmt.Sprintf("job %d %q", i, c.wf.Jobs[i].Name)
+	return jobWhere(c.wf.Jobs, i)
 }
 
 func (c *checker) stepWhere(i, j int) string {
-	st := c.wf.Jobs[i].Steps[j]
-	if st.Name == "" {
-		return fmt.Sprintf("%s, step %d", c.jobWhere(i), j)
-	}
-	return fmt.Sprintf("%s, step %d %q", c.jobWhere(i), j, st.Name)
+	return stepWhere(c.jobWhere(i), j, c.wf.Jobs[i].Steps[j])
 }
 
 // checkAliases tells what is wrong with the names the workflow's actions
@@ -725,71 +722,20 @@ func (c *checker) checkNeeds() {
 	}
 }
 
-func (c *checker) checkSteps() {
-	for i := range c.wf.Jobs {
-		if err := c.wf.Jobs[i].validateSteps(); err != nil {
-			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d].steps", i)), c.jobWhere(i), "%s", firstLine(err.Error()))
-		}
+// checkProblems tells what keeps the jobs from running as they are written,
+// which a run is refused for as the workflow is loaded, and the templates of
+// the workflow's vars that do not parse.
+func (c *checker) checkProblems(problems []problem) {
+	for _, p := range templateProblems("vars", "", "vars", c.wf.Vars) {
+		c.addProblem(p)
+	}
+	for _, p := range problems {
+		c.addProblem(p)
 	}
 }
 
-// expression checks that an expression parses.
-func (c *checker) expression(path, where, field, input string) {
-	if strings.TrimSpace(input) == "" {
-		return
-	}
-	if err := expr.Parse(input); err != nil {
-		c.add(SeverityError, c.line(path), where, "%s: %s", field, firstLine(err.Error()))
-	}
-}
-
-// templates checks that the templates in v, a string or a map or list of
-// them at any depth, keys too, parse.
-func (c *checker) templates(path, where, field string, v any) {
-	switch v := v.(type) {
-	case string:
-		for _, e := range expr.TemplateExprs(v) {
-			if err := expr.Parse(e); err != nil {
-				c.add(SeverityError, c.line(path), where, "%s: template {{%s}}: %s", field, e, firstLine(err.Error()))
-			}
-		}
-	case map[string]any:
-		for _, k := range slices.Sorted(maps.Keys(v)) {
-			c.templates(path+"."+k, where, field+"."+k, k)
-			c.templates(path+"."+k, where, field+"."+k, v[k])
-		}
-	case []any:
-		for i, e := range v {
-			c.templates(fmt.Sprintf("%s[%d]", path, i), where, fmt.Sprintf("%s[%d]", field, i), e)
-		}
-	}
-}
-
-func (c *checker) checkExpressions() {
-	c.templates("vars", "", "vars", c.wf.Vars)
-	for i, job := range c.wf.Jobs {
-		jp := fmt.Sprintf("jobs[%d]", i)
-		c.templates(jp+".name", c.jobWhere(i), "name", job.Name)
-		c.expression(jp+".skipif", c.jobWhere(i), "skipif", job.SkipIf)
-		if job.Repeat != nil {
-			c.expression(jp+".repeat.test", c.jobWhere(i), "repeat.test", job.Repeat.Test)
-			c.expression(jp+".repeat.baseline_test", c.jobWhere(i), "repeat.baseline_test", job.Repeat.BaselineTest)
-		}
-		for j, st := range job.Steps {
-			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
-			where := c.stepWhere(i, j)
-			c.templates(sp+".name", where, "name", st.Name)
-			c.templates(sp+".with", where, "with", st.With)
-			c.templates(sp+".vars", where, "vars", st.Vars)
-			c.templates(sp+".echo", where, "echo", st.Echo)
-			c.templates(sp+".iteration", where, "iteration", st.Iteration.Expr)
-			c.expression(sp+".test", where, "test", st.Test)
-			c.expression(sp+".skipif", where, "skipif", st.SkipIf)
-			for _, k := range slices.Sorted(maps.Keys(st.Outputs)) {
-				c.expression(sp+".outputs."+k, where, "outputs."+k, st.Outputs[k])
-			}
-		}
-	}
+func (c *checker) addProblem(p problem) {
+	c.add(SeverityError, c.line(p.path), p.where, "%s", firstLine(p.err.Error()))
 }
 
 // publisher is a step that publishes outputs.

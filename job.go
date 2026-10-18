@@ -47,7 +47,6 @@ func errStepsFailed(jobName string) error {
 // run runs the job. It reports whether a step failed separately from the
 // error that kept the job from running at all, such as an invalid step.
 func (j *Job) run(ctx JobContext) (failed bool, err error) {
-	// Set current job ID in context (already set by Executor.setJobID())
 	ctx.CurrentJobID = j.ID
 	// Each run of the job starts with no state, as a repeated run is a run
 	// of its own and an embedded job a job of its own.
@@ -56,14 +55,6 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 	// Use local pointer instead of j.ctx to avoid race conditions in async mode
 	ctxPtr := &ctx
 	ev := &expr.Expr{}
-
-	// Validate steps before execution. The job shows only as failed in the
-	// report, so the reason is printed here.
-	if err := j.validateSteps(); err != nil {
-		ctx.Result.recordFailure(failureConfig)
-		ctx.Printer.PrintError("job %q: %v", j.Name, err)
-		return false, NewExecutionError("job_start", "step validation failed", err)
-	}
 
 	if err := j.expandJobName(ev, ctxPtr); err != nil {
 		ctx.Result.recordFailure(failureConfig)
@@ -555,9 +546,17 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 
 	// External actions are resolved before any step runs, as a workflow
 	// does, so that a bad reference stops the job before it changes anything.
+	// What keeps the job from running is found before any step runs, as a
+	// workflow finds it when it is loaded. The job shows only as failed in
+	// the report, so the reason is printed here.
 	var failed bool
 	var err error
-	if resolveFirst {
+	if found := j.problems("", fmt.Sprintf("job %q", j.Name)); len(found) > 0 {
+		err = NewExecutionError("job_start", "step validation failed", problemsError(found))
+		ctx.Result.recordFailure(failureConfig)
+		ctx.Printer.PrintError("%v", err)
+	}
+	if err == nil && resolveFirst {
 		ctx.Guard, err = resolveExternalActions([]*Job{j}, baseDir, ctx.Guard, cfg.builtin)
 	}
 	if err == nil {

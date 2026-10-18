@@ -83,6 +83,11 @@ func (w *Workflow) Start(c Config) error {
 	if err := w.assignJobIDs(); err != nil {
 		return err
 	}
+	// A loaded workflow was refused for these as it was loaded; one made in
+	// code is refused here, before any job starts.
+	if found := w.problems(); len(found) > 0 {
+		return problemsError(found)
+	}
 	scheduler, err := w.initJobScheduler()
 	if err != nil {
 		return err

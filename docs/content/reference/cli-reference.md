@@ -764,7 +764,7 @@ The exit code says not only whether a run failed but what has to be looked at, s
 |-----------|---------|-------------|
 | `0` | Success | Every job completed and every test passed |
 | `1` | Test failed | A `test` evaluated to false, could not be evaluated, or did not evaluate to a boolean, a template a step needed could not be evaluated, or a request or response broke the OpenAPI document the http action checked it against |
-| `2` | Configuration error | The workflow or the command line is wrong: a missing file, invalid YAML, an unknown `needs`, an invalid step ID, an unknown flag or report format. A step the guard of the run refused, and a report file that cannot be written, also exit `2` |
+| `2` | Configuration error | The workflow or the command line is wrong: a missing file, invalid YAML, an unknown `needs`, an invalid step ID, an expression or a template that does not parse, a `wait` that is not a time, an unknown flag or report format. What is wrong with the workflow is found as it is read, before any job runs. A step the guard of the run refused, and a report file that cannot be written, also exit `2` |
 | `3` | Action error | An action returned an error, such as a refused connection or a timeout, so its test could not be checked |
 
 When a run has more than one kind of failure, the code is the first of `2`, `3`, `1` that applies. A target that is down usually makes the tests against it fail too, so `3` is reported over `1`.
