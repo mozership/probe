@@ -25,8 +25,9 @@ type Outputs struct {
 
 // publication is one Set call of a run.
 type publication struct {
-	stepID  string
-	outputs map[string]any
+	stepID    string
+	publisher string
+	outputs   map[string]any
 }
 
 // NewOutputs creates a new Outputs instance
@@ -54,7 +55,7 @@ func (o *Outputs) publish(run *Outputs) error {
 
 	var errs []error
 	for _, p := range published {
-		errs = append(errs, o.Set(p.stepID, p.outputs))
+		errs = append(errs, o.set(p.stepID, p.publisher, p.outputs))
 	}
 	return errors.Join(errs...)
 }
@@ -91,17 +92,30 @@ func (o *Outputs) ownerLocked(name string) (string, bool) {
 
 // Set stores outputs for a step with flat access support
 func (o *Outputs) Set(stepID string, outputs map[string]any) error {
+	return o.set(stepID, stepID, outputs)
+}
+
+// SetFlat stores the outputs of a step without an id, which are read by
+// their names alone. owner names the step, the same each time it
+// publishes, for a later step's name to be told from its own.
+func (o *Outputs) SetFlat(owner string, outputs map[string]any) error {
+	return o.set("", owner, outputs)
+}
+
+// set stores outputs under stepID, unless it is empty, and by their names
+// alone, as publisher published them.
+func (o *Outputs) set(stepID, publisher string, outputs map[string]any) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	if o.parent != nil {
-		o.published = append(o.published, publication{stepID: stepID, outputs: outputs})
+		o.published = append(o.published, publication{stepID: stepID, publisher: publisher, outputs: outputs})
 	}
 
 	// Check if stepID conflicts with existing flat data
 	stepIDConflictsWithFlat := false
 	var conflictError error
-	if existingValue, exists := o.lookupLocked(stepID); exists {
+	if existingValue, exists := o.lookupLocked(stepID); stepID != "" && exists {
 		if _, isMap := existingValue.(map[string]any); !isMap {
 			// stepID conflicts with existing flat data - this will prevent step-based access
 			stepIDConflictsWithFlat = true
@@ -110,7 +124,7 @@ func (o *Outputs) Set(stepID string, outputs map[string]any) error {
 	}
 
 	// Store step-based outputs only if no conflict with flat data
-	if !stepIDConflictsWithFlat {
+	if stepID != "" && !stepIDConflictsWithFlat {
 		o.data[stepID] = outputs
 	}
 
@@ -134,24 +148,27 @@ func (o *Outputs) Set(stepID string, outputs map[string]any) error {
 		// Where this value can still be read when the name alone is taken:
 		// through the step's id, unless that was taken as well above.
 		instead := fmt.Sprintf("read outputs.%s.%s for this one", stepID, outputName)
-		if stepIDConflictsWithFlat {
+		switch {
+		case stepID == "":
+			instead = "give the step an id to read this one through it"
+		case stepIDConflictsWithFlat:
 			instead = fmt.Sprintf("this one cannot be read, since outputs.%s is an output name too", stepID)
 		}
 		switch {
-		case owned && owner == stepID:
+		case owned && owner == publisher:
 			// The same step publishing again keeps the name, with its
 			// latest value, as outputs.<step_id>.<name> has.
 			o.data[outputName] = outputs[outputName]
 		case owned:
 			errs = append(errs, &NameTakenError{fmt.Sprintf("output '%s' of '%s' is also published by '%s', which came first, so outputs.%s keeps the value of '%s'; %s",
-				outputName, stepID, owner, outputName, owner, instead)})
+				outputName, publisher, owner, outputName, owner, instead)})
 		case isStep:
 			// A step ID of the same name keeps the name for its outputs.
 			errs = append(errs, &NameTakenError{fmt.Sprintf("output '%s' of '%s' has the name of the step '%s', so outputs.%s is that step's outputs; %s",
-				outputName, stepID, outputName, outputName, instead)})
+				outputName, publisher, outputName, outputName, instead)})
 		default:
 			o.data[outputName] = outputs[outputName]
-			o.owners[outputName] = stepID
+			o.owners[outputName] = publisher
 		}
 	}
 

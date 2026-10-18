@@ -746,15 +746,15 @@ type publisher struct {
 }
 
 func (c *checker) checkOutputs() {
-	// A step without an id is given one by its index, step_0 and so on, in
-	// each job, so one id may name steps of several jobs. Only the steps
-	// that publish outputs are kept under it, each of them.
+	// A step without an id publishes its outputs by their names alone, so it
+	// is kept under none. Only the steps that publish outputs are kept under
+	// an id.
 	byID := map[string][]publisher{}
 	byKey := map[string][]publisher{}
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
 			p := publisher{job: i, step: j, id: st.ID, keys: slices.Sorted(maps.Keys(st.Outputs))}
-			if len(p.keys) > 0 {
+			if len(p.keys) > 0 && st.ID != "" {
 				byID[st.ID] = append(byID[st.ID], p)
 			}
 			for _, k := range p.keys {

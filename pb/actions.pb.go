@@ -246,7 +246,8 @@ type Step struct {
 	JobName string `protobuf:"bytes,3,opt,name=job_name,json=jobName,proto3" json:"job_name,omitempty"`
 	// The position of the step in the job, from 0.
 	Index int64 `protobuf:"varint,4,opt,name=index,proto3" json:"index,omitempty"`
-	// The id the step is given, or empty.
+	// The id the step is given, or step_ and where it is written in its job
+	// when it has none, as step_1.
 	Id   string `protobuf:"bytes,5,opt,name=id,proto3" json:"id,omitempty"`
 	Name string `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
 	// Which run of a repeated job, from 0.

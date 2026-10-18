@@ -38,12 +38,12 @@ func TestJob_validateSteps(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "invalid: outputs without id",
+			// Its outputs are read by their names alone.
+			name: "valid: outputs without id",
 			steps: []*Step{
-				{Name: "Step with outputs but no id", Uses: "http", Outputs: map[string]string{"data": "{{ res.body }}"}},
+				{Name: "Step with outputs but no id", Uses: "http", Outputs: map[string]string{"data": "res.body"}},
 			},
-			expectErr: true,
-			errMsg:    "step with outputs must have an 'id' field",
+			expectErr: false,
 		},
 		{
 			name: "invalid step id format - uppercase",

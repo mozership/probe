@@ -121,3 +121,51 @@ func TestWaitProblems(t *testing.T) {
 		})
 	}
 }
+
+// A loaded step without an id keeps none, and an action is told it by where
+// it is written, as a step made in code is.
+func TestProbe_Load_StepWithoutAnID(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: ids
+jobs:
+- name: Steps
+  steps:
+  - uses: hello
+    test: res.code == 0
+`)
+	p := New(path, false)
+	if err := p.Load(); err != nil {
+		t.Fatal(err)
+	}
+	st := p.workflow.Jobs[0].Steps[0]
+	if st.ID != "" {
+		t.Errorf("ID = %q, want none", st.ID)
+	}
+	if got := newStepRun(st, nil).repeatID(); got != "step_0" {
+		t.Errorf("repeatID() = %q, want step_0", got)
+	}
+}
+
+// The outputs of a step without an id are read by their names alone, by the
+// steps of later jobs too, and not by where the step is written.
+func TestWorkflow_OutputsOfAStepWithoutAnID(t *testing.T) {
+	runner := NewMockActionRunner()
+	runner.SetResult("publish", map[string]any{"res": map[string]any{"pid": 42}, "status": 0})
+	w := &Workflow{
+		Name: "outputs",
+		Jobs: []Job{
+			{ID: "start", Name: "Start", Steps: []*Step{
+				{Name: "Publish", Uses: "publish", Test: "res.pid == 42", Outputs: map[string]string{"pid": "res.pid"}, actionRunner: runner},
+			}},
+			{ID: "use", Name: "Use", Needs: []string{"start"}, Steps: []*Step{
+				{Name: "Read", Uses: "read", Test: "outputs.pid == 42 && outputs.step_0 == nil", actionRunner: runner},
+			}},
+		},
+		printer: newBufferPrinter(),
+	}
+	if err := w.Start(Config{}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if w.exitStatus != ExitOK {
+		t.Errorf("exit status = %d, want %d: the outputs were not read by name", w.exitStatus, ExitOK)
+	}
+}

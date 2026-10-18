@@ -504,7 +504,7 @@ func TestProbe_initializeEmptyIDs(t *testing.T) {
 		expectedStepIDs [][]string // stepIDs per job
 	}{
 		{
-			name: "initialize all empty IDs",
+			name: "initialize empty job IDs, and leave the steps without",
 			workflow: Workflow{
 				Jobs: []Job{
 					{
@@ -526,8 +526,8 @@ func TestProbe_initializeEmptyIDs(t *testing.T) {
 			},
 			expectedJobIDs: []string{"job_0", "job_1"},
 			expectedStepIDs: [][]string{
-				{"step_0", "step_1"},
-				{"step_0"},
+				{"", ""},
+				{""},
 			},
 		},
 		{
@@ -554,8 +554,8 @@ func TestProbe_initializeEmptyIDs(t *testing.T) {
 			},
 			expectedJobIDs: []string{"custom_job", "job_1"},
 			expectedStepIDs: [][]string{
-				{"custom_step", "step_1"},
-				{"step_0", "another_custom"},
+				{"custom_step", ""},
+				{"", "another_custom"},
 			},
 		},
 		{
@@ -650,8 +650,8 @@ func TestProbe_validateAndInitializeIDs_Integration(t *testing.T) {
 			expectValidationErr: false,
 			expectedJobIDs:      []string{"job_0", "custom_job"},
 			expectedStepIDs: [][]string{
-				{"step_0", "custom_step"},
-				{"step_0"},
+				{"", "custom_step"},
+				{""},
 			},
 		},
 		{
