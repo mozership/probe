@@ -1,11 +1,8 @@
 package probe
 
 import (
-	"bytes"
-	"os"
 	"path/filepath"
 
-	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
 )
@@ -47,27 +44,6 @@ func (b *graphBuilder) expandPath(path string) string {
 	return expanded
 }
 
-// LoadEmbeddedJob loads a job definition from an embedded YAML file
-func LoadEmbeddedJob(path string) (*Job, error) {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		return nil, err
-	}
-
-	job := &Job{}
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	if err = dec.Decode(job); err != nil {
-		return nil, err
-	}
-
-	return job, nil
-}
-
 // Graph returns the jobs and steps of the workflow in the form the DAG
 // renderers draw. The steps of an embedded job are read from its file, at the
 // path its `with.path` names after the workflow's vars are expanded, relative
@@ -91,22 +67,19 @@ func (w *Workflow) Graph() dag.Graph {
 
 // step returns the graph step for st, with the steps of the job it embeds.
 func (b *graphBuilder) step(st *Step) dag.Step {
-	s := dag.Step{Name: st.Name, Embedded: st.Uses == "embedded"}
+	s := dag.Step{Name: st.Name, Embedded: st.Uses == embeddedAction}
 	if s.Name == "" {
 		s.Name = st.Uses
 	}
-	if !s.Embedded {
-		return s
-	}
-	path, ok := st.With["path"].(string)
+	path, ok := embeddedJobFile(st)
 	if !ok {
 		return s
 	}
 	// The path is taken from the working directory, as the embedded action
 	// takes it when the workflow runs, so the graph shows the file that runs.
 	expanded := b.expandPath(path)
-	job, err := LoadEmbeddedJob(expanded)
-	if err != nil || len(job.Steps) == 0 {
+	job, err := ReadJobFile(expanded, nil)
+	if err != nil {
 		return s
 	}
 	s.EmbeddedFile = filepath.Base(expanded)
@@ -129,11 +102,8 @@ func (b *graphBuilder) step(st *Step) dag.Step {
 // Only what can be told before a run is read: a path that is a template is
 // not followed, and nor is a file that cannot be read.
 func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
-	if st == nil || st.Uses != "embedded" {
-		return
-	}
-	file, ok := st.With["path"].(string)
-	if !ok || file == "" || len(expr.TemplateExprs(file)) > 0 {
+	file, ok := embeddedJobFile(st)
+	if !ok || len(expr.TemplateExprs(file)) > 0 {
 		return
 	}
 	abs, err := filepath.Abs(file)
@@ -141,7 +111,7 @@ func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, in
 		return
 	}
 	seen[abs] = true
-	job, err := LoadEmbeddedJob(file)
+	job, err := ReadJobFile(file, nil)
 	if err != nil {
 		return
 	}
