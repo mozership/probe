@@ -5,23 +5,29 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mozership/probe/dag"
 )
 
+// JobStatus is where a job is in the run, for the scheduler to tell which
+// jobs can start. How a job ended is its JobResult's Status.
 type JobStatus int
 
 const (
 	JobPending JobStatus = iota
 	JobRunning
+	// JobCompleted is a job that ran, whether or not it succeeded.
 	JobCompleted
-	JobFailed
+	// JobSkipped is a job that is not run, as a job it needs did not
+	// succeed. The jobs that need it are skipped in turn.
+	JobSkipped
 )
 
 type JobScheduler struct {
-	jobs           map[string]*Job
-	status         map[string]JobStatus
+	jobs   map[string]*Job
+	status map[string]JobStatus
+	// results are whether each job that is over succeeded, which the jobs
+	// that need it wait for; a skipped job did not.
 	results        map[string]bool
 	repeatCounters map[string]int // Track repeat execution count
 	repeatTargets  map[string]int // Target repeat count
@@ -42,12 +48,11 @@ func (js *JobScheduler) AddJob(job *Job) error {
 	js.mutex.Lock()
 	defer js.mutex.Unlock()
 
-	// Generate unique ID if not provided
+	// The jobs of a workflow are given their IDs before they are added,
+	// by assignJobIDs.
 	if job.ID == "" {
-		job.ID = js.generateUniqueID(job.Name)
+		return fmt.Errorf("job %q has no ID", job.Name)
 	}
-
-	// Check for duplicate IDs
 	if _, exists := js.jobs[job.ID]; exists {
 		return fmt.Errorf("duplicate job ID: %s", job.ID)
 	}
@@ -65,34 +70,6 @@ func (js *JobScheduler) AddJob(job *Job) error {
 	}
 
 	return nil
-}
-
-// generateUniqueID generates a unique ID based on the job name
-// If the name is already taken, it appends a number to make it unique
-func (js *JobScheduler) generateUniqueID(baseName string) string {
-	if baseName == "" {
-		baseName = "job"
-	}
-
-	// First try the base name
-	if _, exists := js.jobs[baseName]; !exists {
-		return baseName
-	}
-
-	// If base name exists, try with incrementing numbers
-	counter := 1
-	for {
-		candidateID := fmt.Sprintf("%s-%d", baseName, counter)
-		if _, exists := js.jobs[candidateID]; !exists {
-			return candidateID
-		}
-		counter++
-
-		// Safety check to prevent infinite loop (though very unlikely)
-		if counter > 10000 {
-			return fmt.Sprintf("%s-%d", baseName, int(time.Now().UnixNano()))
-		}
-	}
 }
 
 func (js *JobScheduler) ValidateDependencies() error {
@@ -178,11 +155,11 @@ func (js *JobScheduler) canRunJobLocked(jobID string) bool {
 
 // isJobOverLocked is the lock-free check for whether a job is over: it ran
 // all of its repeat executions, whether or not they succeeded, or it was
-// marked as failed because a job it needs did not succeed. Callers must
+// skipped because a job it needs did not succeed. Callers must
 // already hold js.mutex.
 func (js *JobScheduler) isJobOverLocked(jobID string) bool {
 	switch js.status[jobID] {
-	case JobFailed:
+	case JobSkipped:
 		return true
 	case JobCompleted:
 		return js.repeatCounters[jobID] >= js.repeatTargets[jobID]
@@ -204,14 +181,21 @@ func (js *JobScheduler) isJobFullyCompletedLocked(jobID string) bool {
 	return counter >= target && js.results[jobID]
 }
 
-func (js *JobScheduler) SetJobStatus(jobID string, status JobStatus, success bool) {
+// StartJob marks the job of jobID as running.
+func (js *JobScheduler) StartJob(jobID string) {
 	js.mutex.Lock()
 	defer js.mutex.Unlock()
 
-	js.status[jobID] = status
-	if status == JobCompleted || status == JobFailed {
-		js.results[jobID] = success
-	}
+	js.status[jobID] = JobRunning
+}
+
+// FinishJob marks the job of jobID as over, and whether it succeeded.
+func (js *JobScheduler) FinishJob(jobID string, success bool) {
+	js.mutex.Lock()
+	defer js.mutex.Unlock()
+
+	js.status[jobID] = JobCompleted
+	js.results[jobID] = success
 }
 
 // IncrementRepeatCounter increments the repeat counter for a job
@@ -260,7 +244,7 @@ func (js *JobScheduler) AllJobsCompleted() bool {
 	defer js.mutex.RUnlock()
 
 	for _, status := range js.status {
-		if status != JobCompleted && status != JobFailed {
+		if status != JobCompleted && status != JobSkipped {
 			return false
 		}
 	}
@@ -283,8 +267,8 @@ func (js *JobScheduler) PendingJobs() []string {
 	return pending
 }
 
-// MarkJobsWithFailedDependencies marks jobs as failed if their dependencies have failed,
-// except those that always run.
+// MarkJobsWithFailedDependencies skips the jobs a job they need did not
+// succeed in, except those that always run, and returns them.
 // It iterates until no more jobs are newly marked, propagating failures transitively
 // through multi-level dependency chains.
 func (js *JobScheduler) MarkJobsWithFailedDependencies() []string {
@@ -309,14 +293,14 @@ func (js *JobScheduler) MarkJobsWithFailedDependencies() []string {
 			// Check if any dependency has failed
 			hasFailedDependency := false
 			for _, dep := range job.Needs {
-				if js.status[dep] == JobFailed || (js.status[dep] == JobCompleted && !js.results[dep]) {
+				if js.status[dep] == JobSkipped || (js.status[dep] == JobCompleted && !js.results[dep]) {
 					hasFailedDependency = true
 					break
 				}
 			}
 
 			if hasFailedDependency {
-				js.status[jobID] = JobFailed
+				js.status[jobID] = JobSkipped
 				js.results[jobID] = false
 				skippedJobs = append(skippedJobs, jobID)
 				changed = true

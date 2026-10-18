@@ -22,23 +22,12 @@ func NewExecutor(w *Workflow, job *Job) *Executor {
 	}
 }
 
-// setJobID ensures the job has a valid ID, using Name if ID is empty
-func (e *Executor) setJobID() {
-	if e.job.ID == "" {
-		e.job.ID = e.job.Name
-	}
-}
-
 // Execute runs a job with buffered output
 func (e *Executor) Execute(ctx JobContext) bool {
-	e.setJobID()
-	jobID := e.job.ID
-
-	jr := ctx.Result.Jobs[jobID]
+	jr := ctx.Result.Jobs[e.job.ID]
 
 	jr.mutex.Lock()
 	jr.StartTime = time.Now()
-	jr.Status = "Running"
 	jr.mutex.Unlock()
 
 	// Use the existing buffered execution logic
@@ -228,19 +217,14 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	jr.mutex.Lock()
 	duration := time.Since(jr.StartTime)
 	jr.EndTime = jr.StartTime.Add(duration)
-	jr.Success = overallSuccess
-	if overallSuccess {
-		// Don't overwrite "skipped" status
-		if jr.Status != "skipped" {
-			jr.Status = "Completed"
-		}
-	} else {
-		jr.Status = "Failed"
+	// A job that passed keeps the status it has, which is skipped when its
+	// skipif skipped it.
+	if !overallSuccess {
+		jr.Status = StatusError
 	}
 	jr.mutex.Unlock()
 
-	// Mark job as completed
-	ctx.JobScheduler.SetJobStatus(jobID, JobCompleted, overallSuccess)
+	ctx.JobScheduler.FinishJob(jobID, overallSuccess)
 
 	// The job's report block is final now, so it can be streamed out.
 	ctx.Result.notifyJobDone(jobID)

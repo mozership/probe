@@ -25,10 +25,9 @@ func newReportResult() (*Result, []string) {
 	rs.Jobs["api"] = &JobResult{
 		JobID:     "api",
 		JobName:   "API",
-		Status:    "Failed",
+		Status:    StatusError,
 		StartTime: start,
 		EndTime:   start.Add(1500 * time.Millisecond),
-		Success:   false,
 		StepResults: []StepResult{
 			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, EchoOutput: "       line 1\n       line 2\n"},
 			{Index: 1, Name: "Create", Status: StatusError, Test: "res.code == 201", Elapsed: 80 * time.Millisecond,
@@ -47,18 +46,16 @@ func newReportResult() (*Result, []string) {
 	rs.Jobs["after"] = &JobResult{
 		JobID:     "after",
 		JobName:   "After | API",
-		Status:    "skipped",
+		Status:    StatusSkipped,
 		StartTime: start,
 		EndTime:   start,
-		Success:   true,
 	}
 	rs.Jobs["poll"] = &JobResult{
 		JobID:     "poll",
 		JobName:   "Poll",
-		Status:    "Failed",
+		Status:    StatusError,
 		StartTime: start,
 		EndTime:   start.Add(3 * time.Second),
-		Success:   false,
 		StepResults: []StepResult{
 			{Index: 0, Name: "Tick", Status: StatusWarning, HasTest: true, Test: "res.code == 0",
 				RepeatCounter: &StepRepeatCounter{Name: "Tick", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3}},
@@ -67,10 +64,9 @@ func newReportResult() (*Result, []string) {
 	rs.Jobs["setup"] = &JobResult{
 		JobID:     "setup",
 		JobName:   "Setup",
-		Status:    "Failed",
+		Status:    StatusError,
 		StartTime: start,
 		EndTime:   start.Add(10 * time.Millisecond),
-		Success:   false,
 	}
 
 	return rs, []string{"api", "after", "poll", "setup"}

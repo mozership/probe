@@ -32,10 +32,12 @@ func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
 			name: "jobs without dependencies",
 			jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job2",
 					Name:  "job2",
 					Steps: []*Step{},
 				},
@@ -46,10 +48,12 @@ func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
 			name: "jobs with valid dependencies",
 			jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job2",
 					Name:  "job2",
 					Needs: []string{"job1"},
 					Steps: []*Step{},
@@ -61,11 +65,13 @@ func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
 			name: "jobs with circular dependencies",
 			jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Needs: []string{"job2"},
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job2",
 					Name:  "job2",
 					Needs: []string{"job1"},
 					Steps: []*Step{},
@@ -77,6 +83,7 @@ func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
 			name: "jobs with missing dependencies",
 			jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Needs: []string{"nonexistent"},
 					Steps: []*Step{},
@@ -113,14 +120,17 @@ func TestWorkflowExecutor_ParallelExecution(t *testing.T) {
 			Name: "parallel-test",
 			Jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job2",
 					Name:  "job2",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job3",
 					Name:  "job3",
 					Steps: []*Step{},
 				},
@@ -151,15 +161,18 @@ func TestWorkflowExecutor_SequentialWithDependencies(t *testing.T) {
 			Name: "sequential-test",
 			Jobs: []Job{
 				{
+					ID:    "first",
 					Name:  "first",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "second",
 					Name:  "second",
 					Needs: []string{"first"},
 					Steps: []*Step{},
 				},
 				{
+					ID:    "third",
 					Name:  "third",
 					Needs: []string{"second"},
 					Steps: []*Step{},
@@ -183,10 +196,12 @@ func TestWorkflowExecutor_BufferedOutput(t *testing.T) {
 			Name: "buffered-test",
 			Jobs: []Job{
 				{
+					ID:    "job1",
 					Name:  "job1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "job2",
 					Name:  "job2",
 					Needs: []string{"job1"},
 					Steps: []*Step{},
@@ -213,6 +228,7 @@ func TestWorkflowExecutor_RepeatJobs(t *testing.T) {
 			Name: "repeat-test",
 			Jobs: []Job{
 				{
+					ID:    "repeat-job",
 					Name:  "repeat-job",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -247,10 +263,12 @@ func TestWorkflowExecutor_MixedScenarios(t *testing.T) {
 			Name: "complex-test",
 			Jobs: []Job{
 				{
+					ID:    "setup",
 					Name:  "setup",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "worker1",
 					Name:  "worker1",
 					Needs: []string{"setup"},
 					Steps: []*Step{},
@@ -260,11 +278,13 @@ func TestWorkflowExecutor_MixedScenarios(t *testing.T) {
 					},
 				},
 				{
+					ID:    "worker2",
 					Name:  "worker2",
 					Needs: []string{"setup"},
 					Steps: []*Step{},
 				},
 				{
+					ID:    "cleanup",
 					Name:  "cleanup",
 					Needs: []string{"worker1", "worker2"},
 					Steps: []*Step{},
@@ -290,10 +310,12 @@ func TestWorkflowExecutor_ErrorHandling(t *testing.T) {
 			Name: "error-handling-test",
 			Jobs: []Job{
 				{
+					ID:    "might-fail",
 					Name:  "might-fail",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "depends-on-failed",
 					Name:  "depends-on-failed",
 					Needs: []string{"might-fail"},
 					Steps: []*Step{},
@@ -318,6 +340,7 @@ func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
 			Name: "detailed-results-test",
 			Jobs: []Job{
 				{
+					ID:    "test-job",
 					Name:  "test-job",
 					Steps: []*Step{},
 				},
@@ -330,10 +353,9 @@ func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
 		jobResult := &JobResult{
 			JobName:   "test-job",
 			JobID:     "test-job",
-			Status:    "Completed",
+			Status:    StatusSuccess,
 			StartTime: time.Now().Add(-100 * time.Millisecond),
 			EndTime:   time.Now(),
-			Success:   true,
 		}
 		result.Jobs["test-job"] = jobResult
 
@@ -365,6 +387,7 @@ func TestParallelExecution_EdgeCases(t *testing.T) {
 			Name: "single-job",
 			Jobs: []Job{
 				{
+					ID:    "solo",
 					Name:  "solo",
 					Steps: []*Step{},
 				},
@@ -418,6 +441,7 @@ func TestBufferedExecution_EdgeCases(t *testing.T) {
 			Name: "single-buffered",
 			Jobs: []Job{
 				{
+					ID:    "buffered-job",
 					Name:  "buffered-job",
 					Needs: []string{}, // Force dependency path but no actual dependencies
 					Steps: []*Step{},
@@ -440,14 +464,17 @@ func TestBufferedExecution_EdgeCases(t *testing.T) {
 			Name: "concurrent-buffered",
 			Jobs: []Job{
 				{
+					ID:    "producer1",
 					Name:  "producer1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "producer2",
 					Name:  "producer2",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "consumer",
 					Name:  "consumer",
 					Needs: []string{"producer1", "producer2"},
 					Steps: []*Step{},
@@ -471,6 +498,7 @@ func TestRepeatExecution_EdgeCases(t *testing.T) {
 			Name: "zero-interval-repeat",
 			Jobs: []Job{
 				{
+					ID:    "fast-repeat",
 					Name:  "fast-repeat",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -502,6 +530,7 @@ func TestRepeatExecution_EdgeCases(t *testing.T) {
 			Name: "short-interval-repeat",
 			Jobs: []Job{
 				{
+					ID:    "quick-repeat",
 					Name:  "quick-repeat",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -534,6 +563,7 @@ func TestRepeatExecution_EdgeCases(t *testing.T) {
 			Name: "single-repeat",
 			Jobs: []Job{
 				{
+					ID:    "once-repeat",
 					Name:  "once-repeat",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -560,13 +590,13 @@ func TestExecutor_ConcurrencyEdgeCases(t *testing.T) {
 		workflow := &Workflow{
 			Name: "high-concurrency",
 			Jobs: []Job{
-				{Name: "root", Steps: []*Step{}},
-				{Name: "level1-a", Needs: []string{"root"}, Steps: []*Step{}},
-				{Name: "level1-b", Needs: []string{"root"}, Steps: []*Step{}},
-				{Name: "level1-c", Needs: []string{"root"}, Steps: []*Step{}},
-				{Name: "level2-a", Needs: []string{"level1-a", "level1-b"}, Steps: []*Step{}},
-				{Name: "level2-b", Needs: []string{"level1-b", "level1-c"}, Steps: []*Step{}},
-				{Name: "final", Needs: []string{"level2-a", "level2-b"}, Steps: []*Step{}},
+				{ID: "root", Name: "root", Steps: []*Step{}},
+				{ID: "level1-a", Name: "level1-a", Needs: []string{"root"}, Steps: []*Step{}},
+				{ID: "level1-b", Name: "level1-b", Needs: []string{"root"}, Steps: []*Step{}},
+				{ID: "level1-c", Name: "level1-c", Needs: []string{"root"}, Steps: []*Step{}},
+				{ID: "level2-a", Name: "level2-a", Needs: []string{"level1-a", "level1-b"}, Steps: []*Step{}},
+				{ID: "level2-b", Name: "level2-b", Needs: []string{"level1-b", "level1-c"}, Steps: []*Step{}},
+				{ID: "final", Name: "final", Needs: []string{"level2-a", "level2-b"}, Steps: []*Step{}},
 			},
 			printer: newBufferPrinter(),
 		}
@@ -584,10 +614,12 @@ func TestExecutor_ConcurrencyEdgeCases(t *testing.T) {
 			Name: "mixed-execution",
 			Jobs: []Job{
 				{
+					ID:    "parallel1",
 					Name:  "parallel1",
 					Steps: []*Step{},
 				},
 				{
+					ID:    "repeat1",
 					Name:  "repeat1",
 					Steps: []*Step{},
 					Repeat: &Repeat{
@@ -596,6 +628,7 @@ func TestExecutor_ConcurrencyEdgeCases(t *testing.T) {
 					},
 				},
 				{
+					ID:    "parallel2",
 					Name:  "parallel2",
 					Steps: []*Step{},
 				},
@@ -1565,6 +1598,7 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 		env:     map[string]string{"API_KEY": "sekret-key"},
 		Vars:    map[string]any{"key": "{{API_KEY}}"},
 		Jobs: []Job{{
+			ID:   "job",
 			Name: "job",
 			Steps: []*Step{{
 				Name: "call {{vars.key}}",
@@ -2061,7 +2095,7 @@ func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) 
 		t.Fatal(err)
 	}
 	// a is taken for running, but nothing runs it.
-	scheduler.SetJobStatus("a", JobRunning, false)
+	scheduler.StartJob("a")
 
 	errc := make(chan error, 1)
 	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler)) }()
@@ -2072,5 +2106,79 @@ func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) 
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("startJobsWithDependencies() waited for a job that nothing runs")
+	}
+}
+
+func TestWorkflow_assignJobIDs(t *testing.T) {
+	tests := []struct {
+		name    string
+		jobs    []Job
+		want    []string
+		wantErr string
+	}{
+		{name: "none given", jobs: []Job{{Name: "a"}, {Name: "b"}}, want: []string{"job_0", "job_1"}},
+		{name: "some given", jobs: []Job{{ID: "build", Name: "a"}, {Name: "b"}}, want: []string{"build", "job_1"}},
+		// The name of a job is not its ID, so two jobs of one name are told
+		// apart.
+		{name: "one name twice", jobs: []Job{{Name: "a"}, {Name: "a"}}, want: []string{"job_0", "job_1"}},
+		{
+			name:    "an ID that is another job's default",
+			jobs:    []Job{{ID: "job_1", Name: "a"}, {Name: "b"}},
+			wantErr: "job 1 has no ID, and 'job_1', the ID it would be given, is the ID of job 0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &Workflow{Jobs: tt.jobs}
+			err := w.assignJobIDs()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("assignJobIDs() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("assignJobIDs() error = %v", err)
+			}
+			got := make([]string, len(w.Jobs))
+			for i, job := range w.Jobs {
+				got[i] = job.ID
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("IDs = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// A workflow made in code gives its jobs the IDs a loaded one does, and its
+// result, its report and its graph name them by those.
+func TestWorkflow_Start_JobIDsOfAWorkflowMadeInCode(t *testing.T) {
+	w := &Workflow{
+		Name: "made in code",
+		Jobs: []Job{
+			{Name: "first", Steps: []*Step{}},
+			{Name: "first", Steps: []*Step{}},
+		},
+		printer: newBufferPrinter(),
+	}
+	if g := w.Graph(); g.Jobs[0].ID != "job_0" || g.Jobs[1].ID != "job_1" {
+		t.Errorf("Graph() IDs = %q, %q before the run, want job_0, job_1", g.Jobs[0].ID, g.Jobs[1].ID)
+	}
+
+	out := filepath.Join(t.TempDir(), "report.json")
+	if err := w.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: out}}}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r report.Report
+	if err := json.Unmarshal(data, &r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Jobs) != 2 || r.Jobs[0].ID != "job_0" || r.Jobs[1].ID != "job_1" {
+		t.Errorf("report jobs = %+v, want job_0 and job_1", r.Jobs)
 	}
 }

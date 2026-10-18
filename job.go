@@ -371,8 +371,7 @@ func (j *Job) handleSkip(ctx JobContext) {
 	if ctx.Result != nil {
 		if jobResult, exists := ctx.Result.Jobs[j.ID]; exists {
 			jobResult.mutex.Lock()
-			jobResult.Status = "skipped"
-			jobResult.Success = true // Skipped jobs are considered successful
+			jobResult.Status = StatusSkipped
 			jobResult.mutex.Unlock()
 		}
 	}
@@ -569,12 +568,9 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	ctx.cleanups.passOn(cfg.cleanups)
 
 	run := JobRun{Err: err, Success: err == nil && !failed}
-	if run.Success {
-		jr.Status = "Completed"
-	} else {
-		jr.Status = "Failed"
+	if !run.Success {
+		jr.Status = StatusError
 	}
-	jr.Success = run.Success
 
 	run.Refused = firstRefusal(jr)
 

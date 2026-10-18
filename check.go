@@ -1002,7 +1002,7 @@ func (c *checker) checkTests() {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
 			id := st.ID
 			if id == "" {
-				id = fmt.Sprintf("step_%d", j)
+				id = defaultStepID(j)
 			}
 			switch {
 			case strings.TrimSpace(st.Test) == "":
@@ -1050,7 +1050,7 @@ func (c *checker) checkRepeatTests() {
 		for j, st := range job.Steps {
 			id := st.ID
 			if id == "" {
-				id = fmt.Sprintf("step_%d", j)
+				id = defaultStepID(j)
 			}
 			ids = append(ids, id)
 		}

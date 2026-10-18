@@ -152,9 +152,7 @@ func (p *Probe) Load() error {
 		return err
 	}
 
-	p.initializeEmptyIDs()
-
-	return nil
+	return p.initializeEmptyIDs()
 }
 
 func (p *Probe) readYamlFiles(paths []string) (string, error) {
@@ -268,23 +266,20 @@ func (p *Probe) validateIDs() error {
 	return nil
 }
 
-// initializeEmptyIDs initializes empty job IDs and step IDs with index numbers
-func (p *Probe) initializeEmptyIDs() {
-	for jobIdx := range p.workflow.Jobs {
-		job := &p.workflow.Jobs[jobIdx]
-
-		// Initialize empty job ID with index number
-		if job.ID == "" {
-			job.ID = fmt.Sprintf("job_%d", jobIdx)
-		}
-
-		// Initialize empty step IDs with index numbers
+// initializeEmptyIDs gives each job and step without an ID its default one,
+// by where it is written: defaultJobID and defaultStepID.
+func (p *Probe) initializeEmptyIDs() error {
+	if err := p.workflow.assignJobIDs(); err != nil {
+		return err
+	}
+	for _, job := range p.workflow.Jobs {
 		for stepIdx, step := range job.Steps {
 			if step.ID == "" {
-				step.ID = fmt.Sprintf("step_%d", stepIdx)
+				step.ID = defaultStepID(stepIdx)
 			}
 		}
 	}
+	return nil
 }
 
 // validateRepeatLimits validates repeat count and max_attempts against configured limits

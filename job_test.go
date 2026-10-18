@@ -313,8 +313,7 @@ func TestJob_handleSkip(t *testing.T) {
 	jobResult := &JobResult{
 		JobID:   "test-job",
 		JobName: "Test Job",
-		Status:  "running",
-		Success: false,
+		Status:  StatusSuccess,
 	}
 	result.Jobs["test-job"] = jobResult
 
@@ -330,11 +329,11 @@ func TestJob_handleSkip(t *testing.T) {
 	job.handleSkip(ctx)
 
 	// Verify the job was marked as skipped
-	if jobResult.Status != "skipped" {
-		t.Errorf("Expected job status to be 'skipped', got '%s'", jobResult.Status)
+	if jobResult.Status != StatusSkipped {
+		t.Errorf("Expected job status to be StatusSkipped, got %v", jobResult.Status)
 	}
 
-	if !jobResult.Success {
+	if !jobResult.Succeeded() {
 		t.Errorf("Expected skipped job to be marked as successful")
 	}
 }

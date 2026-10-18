@@ -582,7 +582,9 @@ func TestProbe_initializeEmptyIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Probe{workflow: tt.workflow}
-			p.initializeEmptyIDs()
+			if err := p.initializeEmptyIDs(); err != nil {
+				t.Fatalf("initializeEmptyIDs() error = %v", err)
+			}
 
 			// Check job IDs
 			for i, expectedJobID := range tt.expectedJobIDs {
@@ -696,7 +698,9 @@ func TestProbe_validateAndInitializeIDs_Integration(t *testing.T) {
 			}
 
 			// Run initialization
-			p.initializeEmptyIDs()
+			if err := p.initializeEmptyIDs(); err != nil {
+				t.Fatalf("initializeEmptyIDs() error = %v", err)
+			}
 
 			// Check results
 			for i, expectedJobID := range tt.expectedJobIDs {

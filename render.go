@@ -210,15 +210,9 @@ func (r *reportRenderer) generateJobReport(jr *JobResult) (string, bool, time.Ti
 
 	duration := jr.EndTime.Sub(jr.StartTime)
 
-	status := StatusSuccess
-	succeeded := true
-	if jr.Status == "skipped" {
-		// Skipped jobs are considered successful.
-		status = StatusSkipped
-	} else if !jr.Success {
-		status = StatusError
-		succeeded = false
-	}
+	// A skipped job did not fail.
+	status := jr.Status
+	succeeded := jr.Succeeded()
 
 	r.generateJobStatus(jr.JobID, jr.JobName, status, duration.Seconds(), &output)
 	r.generateJobResults(jr.JobID, r.generateJobResultsFromStepResults(jr.JobID, jr.StepResults)+r.generateRepeatTest("repeat test", jr.RepeatTest)+r.generateRepeatTest("baseline test", jr.BaselineTest), &output)

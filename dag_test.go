@@ -25,7 +25,7 @@ func TestWorkflow_Graph(t *testing.T) {
 			{Name: "Compile"},
 			{Name: "http"},
 		}},
-		{ID: "Test", Name: "Test", Needs: []string{"build"}, Steps: []dag.Step{
+		{ID: "job_1", Name: "Test", Needs: []string{"build"}, Steps: []dag.Step{
 			{Name: "Without path", Embedded: true},
 		}},
 	}}

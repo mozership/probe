@@ -186,7 +186,7 @@ func (e *Executor) skipped(ctx JobContext) bool {
 	jr := ctx.Result.Jobs[e.job.ID]
 	jr.mutex.Lock()
 	defer jr.mutex.Unlock()
-	return jr.Status == "skipped"
+	return jr.Status == StatusSkipped
 }
 
 // unskip takes back the skipped status that a run skipped by the job's
@@ -195,8 +195,8 @@ func (e *Executor) unskip(ctx JobContext) {
 	jr := ctx.Result.Jobs[e.job.ID]
 	jr.mutex.Lock()
 	defer jr.mutex.Unlock()
-	if jr.Status == "skipped" {
-		jr.Status = "Running"
+	if jr.Status == StatusSkipped {
+		jr.Status = StatusSuccess
 	}
 }
 

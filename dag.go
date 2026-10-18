@@ -51,10 +51,12 @@ func (b *graphBuilder) expandPath(path string) string {
 func (w *Workflow) Graph() dag.Graph {
 	b := &graphBuilder{workflow: w}
 	g := dag.Graph{Jobs: make([]dag.Job, 0, len(w.Jobs))}
-	for _, job := range w.Jobs {
+	for i, job := range w.Jobs {
+		// A job made in code without an ID is drawn by the one a run
+		// gives it.
 		id := job.ID
 		if id == "" {
-			id = job.Name
+			id = defaultJobID(i)
 		}
 		gj := dag.Job{ID: id, Name: job.Name, Needs: job.Needs, Steps: make([]dag.Step, 0, len(job.Steps))}
 		for _, st := range job.Steps {
