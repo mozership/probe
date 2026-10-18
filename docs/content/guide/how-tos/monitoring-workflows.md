@@ -505,28 +505,29 @@ A check that nobody reads is not monitoring. Adding notification steps makes the
 
 ### Monitoring with Email Alerts
 
-A notification job that depends on the checks runs only when one of them has failed.
+A job that `needs` a failed job is skipped, so the alerts are steps of the same job as the checks. A step after a failed one still runs, so the alerts are reached, and each runs only when the summary of the checks calls for it.
 
 ```yaml
 name: Monitoring with Email Alerts
 description: Health monitoring with automated email notifications
 
 vars:
+  # Services
+  USER_SERVICE_URL: https://users.yourcompany.com
+  PAYMENT_SERVICE_URL: https://payments.yourcompany.com
+  ORDER_SERVICE_URL: https://orders.yourcompany.com
+
   # SMTP Configuration
-  SMTP_HOST: smtp.gmail.com
+  SMTP_HOST: smtp.yourcompany.com
   SMTP_PORT: 587
-  SMTP_USERNAME: alerts@yourcompany.com
-  ALERT_RECIPIENTS: ["ops@yourcompany.com", "dev-team@yourcompany.com"]
-  
-  # Monitoring Configuration
-  CRITICAL_SERVICES: ["user-service", "payment-service", "order-service"]
+  ALERT_FROM: alerts@yourcompany.com
+  ALERT_RECIPIENTS: ops@yourcompany.com, dev-team@yourcompany.com
 
 jobs:
-- id: health-monitoring
-  name: Health Monitoring
+- name: Health Monitoring
   steps:
     - name: User Service Check
-      id: user-service
+      id: user_service
       uses: http
       with:
         method: GET
@@ -534,11 +535,11 @@ jobs:
       test: res.code == 200
       outputs:
         healthy: res.code == 200
-        status_code: res.status
-        response_time: (rt.sec * 1000)
+        status_code: res.code
+        response_time: rt.sec * 1000
 
     - name: Payment Service Check
-      id: payment-service
+      id: payment_service
       uses: http
       with:
         method: GET
@@ -546,11 +547,11 @@ jobs:
       test: res.code == 200
       outputs:
         healthy: res.code == 200
-        status_code: res.status
-        response_time: (rt.sec * 1000)
+        status_code: res.code
+        response_time: rt.sec * 1000
 
     - name: Order Service Check
-      id: order-service
+      id: order_service
       uses: http
       with:
         method: GET
@@ -558,84 +559,57 @@ jobs:
       test: res.code == 200
       outputs:
         healthy: res.code == 200
-        status_code: res.status
-        response_time: (rt.sec * 1000)
+        status_code: res.code
+        response_time: rt.sec * 1000
 
-- id: alert-processing
-  name: Alert Processing
-  needs: [health-monitoring]
-  steps:
+    # A check whose request failed, such as a refused connection, publishes
+    # no outputs, so the fallbacks count it as down.
+    - name: Summarize the checks
+      id: summary
+      uses: hello
+      outputs:
+        all_healthy: (outputs.user_service?.healthy ?? false) && (outputs.payment_service?.healthy ?? false) && (outputs.order_service?.healthy ?? false)
+        slow: (outputs.user_service?.response_time ?? 0) > 2000 || (outputs.payment_service?.response_time ?? 0) > 2000 || (outputs.order_service?.response_time ?? 0) > 2000
+
     - name: Critical Service Alert
       uses: smtp
+      skipif: outputs.summary.all_healthy
       with:
         addr: "{{vars.SMTP_HOST}}:{{vars.SMTP_PORT}}"
-        from: "{{vars.SMTP_USERNAME}}"
+        from: "{{vars.ALERT_FROM}}"
         to: "{{vars.ALERT_RECIPIENTS}}"
-        subject: "🚨 CRITICAL: Service Health Alert - {{unixtime()}}"
-        session: 1
-        message: 1
-        length: 500
+        subject: "CRITICAL: Service Health Alert"
+      test: res.code == 0
       echo: |
         CRITICAL SERVICE HEALTH ALERT
-        =============================
-          
         Time: {{unixtime()}}
-        Environment: {{vars.ENVIRONMENT || "Production"}}
-          
-        Service Status:
-        User Service: {{outputs['user-service'].healthy ? "✅ Healthy" : "❌ DOWN (HTTP " + outputs['user-service'].status_code + ")"}}
-        Payment Service: {{outputs['payment-service'].healthy ? "✅ Healthy" : "❌ DOWN (HTTP " + outputs['payment-service'].status_code + ")"}}
-        Order Service: {{outputs['order-service'].healthy ? "✅ Healthy" : "❌ DOWN (HTTP " + outputs['order-service'].status_code + ")"}}
-          
-        Response Times:
-        User Service: {{outputs['user-service'].response_time}}ms
-        Payment Service: {{outputs['payment-service'].response_time}}ms
-        Order Service: {{outputs['order-service'].response_time}}ms
-          
-        IMMEDIATE ACTION REQUIRED
-          
-        Please investigate the failing services immediately.
-          
-        Monitoring Dashboard: {{vars.DASHBOARD_URL}}
-        Incident Management: {{vars.INCIDENT_URL}}
+        User Service: {{outputs.user_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.user_service?.status_code ?? "-"}})
+        Payment Service: {{outputs.payment_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.payment_service?.status_code ?? "-"}})
+        Order Service: {{outputs.order_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.order_service?.status_code ?? "-"}})
 
     - name: Performance Warning Alert
       uses: smtp
+      skipif: '!outputs.summary.slow'
       with:
         addr: "{{vars.SMTP_HOST}}:{{vars.SMTP_PORT}}"
-        from: "{{vars.SMTP_USERNAME}}"
+        from: "{{vars.ALERT_FROM}}"
         to: "{{vars.ALERT_RECIPIENTS}}"
-        subject: "⚠️ WARNING: Performance Degradation Detected"
-        session: 1
-        message: 1
-        length: 500
+        subject: "WARNING: Performance Degradation Detected"
+      test: res.code == 0
       echo: |
-        PERFORMANCE WARNING
-        ===================
-          
+        PERFORMANCE WARNING (threshold: 2000ms)
         Time: {{unixtime()}}
-        Environment: {{vars.ENVIRONMENT || "Production"}}
-          
-        Performance Issues Detected:
-        {{outputs['user-service'].response_time > 2000 ? "• User Service: " + outputs['user-service'].response_time + "ms (threshold: 2000ms)" : ""}}
-        {{outputs['payment-service'].response_time > 2000 ? "• Payment Service: " + outputs['payment-service'].response_time + "ms (threshold: 2000ms)" : ""}}
-        {{outputs['order-service'].response_time > 2000 ? "• Order Service: " + outputs['order-service'].response_time + "ms (threshold: 2000ms)" : ""}}
-          
-        While services are responding, performance degradation may impact user experience.
-        Please investigate at your earliest convenience.
+        User Service: {{outputs.user_service?.response_time ?? "-"}}ms
+        Payment Service: {{outputs.payment_service?.response_time ?? "-"}}ms
+        Order Service: {{outputs.order_service?.response_time ?? "-"}}ms
 
     - name: All Clear Notification
       uses: hello
-      echo: |
-        ✅ All Services Healthy
-          
-        All critical services are operating normally:
-        • User Service: {{outputs['user-service'].response_time}}ms
-        • Payment Service: {{outputs['payment-service'].response_time}}ms  
-        • Order Service: {{outputs['order-service'].response_time}}ms
-          
-        No alerts sent - system is healthy.
+      skipif: '!outputs.summary.all_healthy || outputs.summary.slow'
+      echo: All critical services are healthy; no alert sent.
 ```
+
+The smtp action sends a generated test message and has no parameter for a body, so the details go to `echo`, which puts them in the run's report.
 
 ## Environment-Specific Monitoring
 
