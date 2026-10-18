@@ -656,7 +656,7 @@ func (c *Cmd) runCheck() int {
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(c.SubCommandArgs[0], probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Manifest: actionref.ReadManifest})
+	findings, err := probe.Check(c.SubCommandArgs[0], probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Manifest: actionref.ReadManifest})
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError

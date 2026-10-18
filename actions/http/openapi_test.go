@@ -329,6 +329,47 @@ func TestRequestStepReportsWhatTheResponseWasMatchedTo(t *testing.T) {
 	}
 }
 
+// The check against the document is told to the runner, as res shows it,
+// and none is told for a request made without one.
+func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
+	srv := usersServer(t)
+	spec := writeSpec(t, srv.URL)
+
+	tests := []struct {
+		name string
+		with map[string]any
+	}{
+		{name: "kept", with: map[string]any{"get": "/users/1"}},
+		{name: "broken", with: map[string]any{"get": "/users/2"}},
+		{name: "by a path the document does not have", with: map[string]any{"get": "/teams"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			with := map[string]any{"url": srv.URL + "/v1", "openapi": map[string]any{"spec": spec}}
+			maps.Copy(with, tt.with)
+			contract := &actionrpc.Contract{}
+			ret, _, err := RequestStep(actionrpc.Call{With: with, Contract: contract})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			res := ret["res"].(map[string]any)
+			vs, _ := res["violations"].([]any)
+			matched, _ := res["contract"].(map[string]any)
+			if got, want := contract.Check(), actionrpc.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
+				t.Errorf("Check() = %+v, want %+v as res shows it", got, want)
+			}
+		})
+	}
+
+	contract := &actionrpc.Contract{}
+	if _, _, err := RequestStep(actionrpc.Call{With: map[string]any{"url": srv.URL + "/v1", "get": "/users/1"}, Contract: contract}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := contract.Check(); got != nil {
+		t.Errorf("Check() = %+v without openapi, want none", got)
+	}
+}
+
 func TestRequestStepNamesTheFieldThatBreaksTheSchema(t *testing.T) {
 	srv := usersServer(t)
 	ret, _, err := RequestStep(actionrpc.Call{With: map[string]any{

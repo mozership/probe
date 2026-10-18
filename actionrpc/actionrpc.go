@@ -192,6 +192,11 @@ type Call struct {
 	// from before there were processes does not hear of them, and leaves
 	// them running.
 	Processes *Processes
+	// Contract records the check the action made of the step against a
+	// contract, such as an OpenAPI document, which the runner takes as the
+	// step's test. A runner from before there were contracts to report
+	// does not hear of it, and takes the step as unchecked.
+	Contract *Contract
 }
 
 // Step tells an action about the step it runs for.
@@ -302,6 +307,9 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 	}
 	call.Cleanups.Add(runRes.GetCleanups()...)
 	call.Processes.Add(processesFromPB(runRes.GetProcesses())...)
+	if check := contractFromPB(runRes.GetContract()); check != nil {
+		call.Contract.Report(*check)
+	}
 
 	// Convert protobuf.Struct back to map[string]any
 	// Apply convertFloatToInt to restore integer types that were converted to float64 by protobuf
@@ -379,6 +387,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 		cleanups = &Cleanups{}
 	}
 	processes := &Processes{}
+	contract := &Contract{}
 	// What an action left behind is to be undone however the call fails,
 	// also when it is its result that cannot be sent.
 	defer func() {
@@ -402,7 +411,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 
 	var v, newState map[string]any
 	if sa, ok := m.Impl.(StepAction); ok {
-		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups, Processes: processes}
+		call := Call{With: withMap, Step: stepFromPB(req.GetStep()), Guard: guardFromPB(req.GetGuard()), Actions: req.GetActions(), Cleanups: cleanups, Processes: processes, Contract: contract}
 		if req.State != nil {
 			call.State = structToMap(req.State)
 		}
@@ -451,7 +460,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	if m.log != nil {
 		m.log.Debug("ActionsServer final result struct", "result", forLog(resultMap))
 	}
-	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List(), Processes: processesToPB(processes.List())}
+	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List(), Processes: processesToPB(processes.List()), Contract: contractToPB(contract.Check())}
 	if newState != nil {
 		convertedState, err := convertForProtobuf(newState)
 		if err != nil {

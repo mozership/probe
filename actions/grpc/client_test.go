@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bufbuild/protocompile"
+	"github.com/mozership/probe/actionrpc"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -544,6 +546,35 @@ func TestRequestThroughReflectionWithImports(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("violations = %v, want the server's definition compared", vs)
+	}
+}
+
+// The check against the .proto files is told to the runner, as res shows
+// it, and none is told for a call made without them.
+func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
+	addr, path := startClockServer(t)
+	with := map[string]any{"addr": addr, "service": "clock.v1.Clock", "method": "Now", "body": `{"zone": "Asia/Tokyo"}`}
+
+	contract := &actionrpc.Contract{}
+	if _, err := RequestStep(actionrpc.Call{With: with, Contract: contract}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := contract.Check(); got != nil {
+		t.Errorf("Check() = %+v without .proto files, want none", got)
+	}
+
+	checked := maps.Clone(with)
+	checked["proto"] = map[string]any{"files": []any{path}, "import_paths": []any{filepath.Dir(path)}}
+	contract = &actionrpc.Contract{}
+	ret, err := RequestStep(actionrpc.Call{With: checked, Contract: contract})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	res := ret["res"].(map[string]any)
+	vs, _ := res["violations"].([]any)
+	matched, _ := res["contract"].(map[string]any)
+	if got, want := contract.Check(), actionrpc.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
+		t.Errorf("Check() = %+v, want %+v as res shows it", got, want)
 	}
 }
 

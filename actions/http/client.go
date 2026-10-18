@@ -582,8 +582,12 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 		return nil, nil, err
 	}
 
-	// The violations, and what the response was matched to, are in res,
-	// where the runner looks for them.
+	// The violations, and what the response was matched to, are told to
+	// the runner, which takes them as the step's test, and are in res, for
+	// the step's own test to read.
+	if ret.violations != nil {
+		call.Contract.Report(actionrpc.ContractCheckOf(ret.violations, ret.matched))
+	}
 	if res, ok := mapRet["res"].(map[string]any); ok {
 		if ret.violations != nil {
 			res["violations"] = ret.violations

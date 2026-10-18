@@ -90,6 +90,24 @@ var params = map[string]func() []string{
 	"ssh":      ssh.Params,
 }
 
+// contracts are the keys of with that ask each built-in action to check a
+// step against a contract. An action that checks none is left out.
+var contracts = map[string]func() []string{
+	"grpc": grpc.Contracts,
+	"http": http.Contracts,
+}
+
+// Contracts returns the keys of with that ask each built-in action to check
+// a step against a contract, by its name, leaving out those that check
+// none.
+func Contracts() map[string][]string {
+	out := make(map[string][]string, len(contracts))
+	for name, f := range contracts {
+		out[name] = f()
+	}
+	return out
+}
+
 // Params returns the keys the built-in action name takes in with, and false
 // for an action that takes any key, or that is not built in.
 func Params(name string) ([]string, bool) {
