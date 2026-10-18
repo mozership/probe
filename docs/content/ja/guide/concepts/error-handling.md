@@ -192,17 +192,18 @@ jobs:
         url: "{{vars.API_URL}}/test"
       test: res.code == 200
 
-- id: notification
-  name: Send Notifications
-  needs: [infrastructure-check, application-test]
+- name: Performance Tests
+  needs: [application-test]  # application-testがスキップされた場合もスキップ
   steps:
-    - name: Alert on Failures
-      uses: hello
-      echo: |
-        Monitoring Alert:
-          
-          
+    - name: API Response Time
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/test"
+      test: res.code == 200 && rt.sec < 1
 ```
+
+インフラの確認が失敗するとApplication Testsはスキップされ、それに依存するPerformance Testsもスキップされます。実行全体は失敗します。そのため、失敗したときに実行する通知は、チェックに`needs`で依存するジョブには書けません。[エラー駆動通知](#エラー駆動通知)のように、チェックと同じジョブのステップとして書きます。
 
 ### 失敗後の後片付け
 

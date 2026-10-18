@@ -192,17 +192,18 @@ jobs:
         url: "{{vars.API_URL}}/test"
       test: res.code == 200
 
-- id: notification
-  name: Send Notifications
-  needs: [infrastructure-check, application-test]
+- name: Performance Tests
+  needs: [application-test]  # Skipped too when application-test is skipped
   steps:
-    - name: Alert on Failures
-      uses: hello
-      echo: |
-        Monitoring Alert:
-          
-          
+    - name: API Response Time
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/test"
+      test: res.code == 200 && rt.sec < 1
 ```
+
+When the infrastructure check fails, Application Tests is skipped, and so is Performance Tests, which needs it. The run fails. A notification that has to run on a failure therefore cannot be a job that `needs` the checks; it is a step of the same job, as in [Error-Driven Notifications](#error-driven-notifications).
 
 ### Cleaning Up After a Failure
 
