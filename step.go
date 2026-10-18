@@ -818,7 +818,7 @@ func (st *stepRun) handleWait(jCtx *JobContext) {
 		return
 	}
 
-	duration, err := st.parseWaitDuration(waitExpr)
+	duration, err := parseWaitDuration(waitExpr)
 	if err != nil {
 		jCtx.Printer.PrintError("wait duration parsing error: %v", err)
 		return
@@ -859,7 +859,7 @@ func sleepWithMessage(d time.Duration, m string, fn func(m string)) {
 }
 
 // parseWaitDuration parses wait string to time.Duration
-func (st *stepRun) parseWaitDuration(wait string) (time.Duration, error) {
+func parseWaitDuration(wait string) (time.Duration, error) {
 	// Check if it's a plain number (treat as seconds for backward compatibility)
 	if matched, _ := regexp.MatchString(`^\d+$`, wait); matched {
 		if seconds, err := strconv.Atoi(wait); err == nil {
@@ -903,7 +903,7 @@ func (st *stepRun) getWaitTimeForDisplay() string {
 		}
 	}
 
-	duration, err := st.parseWaitDuration(waitExpr)
+	duration, err := parseWaitDuration(waitExpr)
 	if err != nil {
 		// If template evaluation failed and we still have template syntax, return empty
 		// This prevents display errors during result creation

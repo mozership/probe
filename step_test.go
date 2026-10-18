@@ -69,8 +69,7 @@ func TestStep_parseWaitDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := newStepRun(&Step{}, nil)
-			duration, err := step.parseWaitDuration(tt.wait)
+			duration, err := parseWaitDuration(tt.wait)
 
 			if tt.hasError {
 				if err == nil {

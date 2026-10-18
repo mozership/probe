@@ -785,9 +785,9 @@ func TestWorkflowRepeatWarmupCannotStart(t *testing.T) {
 				Name: "Warmup",
 				Jobs: []Job{{
 					ID:     "search",
-					Name:   "Search",
+					Name:   "{{ nofunc() }}",
 					Repeat: &Repeat{Count: 0, Warmup: 1, Async: async, Interval: Interval{Duration: time.Millisecond}},
-					Steps:  []*Step{{Name: "Query", ID: "Bad.Id", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+					Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
 				}},
 				printer: newBufferPrinter(),
 			}

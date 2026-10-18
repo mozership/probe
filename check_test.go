@@ -244,6 +244,30 @@ jobs:
 			},
 		},
 		{
+			name: "a wait that is not a time",
+			workflow: `name: wait
+jobs:
+- name: Waits
+  steps:
+  - name: Bad
+    uses: hello
+    wait: soon
+    test: res.code == 0
+  - name: Templated
+    uses: hello
+    wait: "{{ vars.wait }}"
+    test: res.code == 0
+  - name: Broken template
+    uses: hello
+    wait: "{{ vars. }}"
+    test: res.code == 0
+`,
+			want: []want{
+				{SeverityError, 7, "wait: invalid wait format: soon"},
+				{SeverityError, 15, "wait: template {{ vars. }}"},
+			},
+		},
+		{
 			name: "outputs read before or without being published",
 			workflow: `name: outputs
 jobs:

@@ -23,6 +23,9 @@ type Probe struct {
 	// aliasProblems, when it is set, is given what is wrong with the names
 	// the workflow's actions give, in place of Load failing on the first.
 	aliasProblems *[]aliasProblem
+	// problems, when it is set, is given what keeps the jobs from running
+	// as they are written, in place of Load failing on them.
+	problems *[]problem
 }
 
 type Config struct {
@@ -152,7 +155,19 @@ func (p *Probe) Load() error {
 		return err
 	}
 
-	return p.initializeEmptyIDs()
+	if err := p.initializeEmptyIDs(); err != nil {
+		return err
+	}
+
+	// What keeps a job from running is found now, so that the run is
+	// refused before any job starts rather than when the job is reached.
+	found := p.workflow.problems()
+	if p.problems != nil {
+		*p.problems = found
+	} else if len(found) > 0 {
+		return problemsError(found)
+	}
+	return nil
 }
 
 func (p *Probe) readYamlFiles(paths []string) (string, error) {

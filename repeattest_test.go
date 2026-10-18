@@ -205,7 +205,7 @@ func TestWorkflow_RepeatTestOfOneRun(t *testing.T) {
 func TestWorkflow_RepeatTestCannotStart(t *testing.T) {
 	runner := &timedRunner{answers: []map[string]any{nil, nil}}
 	workflow := repeatTestWorkflow(runner, 2, "true")
-	workflow.Jobs[0].Steps[0].ID = "Bad.Id"
+	workflow.Jobs[0].Name = "{{ nofunc() }}"
 
 	if err := workflow.Start(Config{}); err != nil {
 		t.Fatalf("Start: %v", err)

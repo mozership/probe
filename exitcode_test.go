@@ -121,8 +121,8 @@ func TestWorkflow_ExitCode(t *testing.T) {
 			want: ExitActionError,
 		},
 		{
-			name: "a job whose steps are invalid",
-			jobs: []Job{{Name: "a", Steps: []*Step{{Name: "s", ID: "Bad ID", Uses: "ok", actionRunner: runner}}}},
+			name: "a job that cannot start",
+			jobs: []Job{{Name: "{{ nofunc() }}", Steps: []*Step{{Name: "s", Uses: "ok", actionRunner: runner}}}},
 			want: ExitConfigError,
 		},
 		{
