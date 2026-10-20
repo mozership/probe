@@ -135,7 +135,7 @@ When an action fails there is no response to test: the step fails with an action
 
 ## Examples
 
-Each example is one step, since a step's actions share one browser and the next step starts a new one.
+Each example is one step, since a step's actions share one browser and the next step starts a new one. [Carrying a login over](#carrying-a-login-over) is the exception: it has two steps, as it hands the login from one to the next.
 
 ### Logging in
 
