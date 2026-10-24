@@ -78,6 +78,10 @@ jobs:
 `get` `head` `post` `put` `patch` `delete` `connect` `options` `trace`は、メソッドとパスを1つのキーで指定します。値は完全なURLか、`url`からの相対パスです。ジョブの`defaults`と組み合わせると簡潔に書けます。
 
 ```yaml
+name: API
+vars:
+  api_url: "{{API_URL}}"
+  user_name: alice
 jobs:
   - name: API checks
     defaults:

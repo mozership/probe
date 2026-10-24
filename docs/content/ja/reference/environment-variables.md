@@ -110,14 +110,22 @@ export API_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```yaml
 # workflow.yml
 vars:
+  api_url: "{{API_URL}}"
   api_token: "{{API_TOKEN}}"
 
 jobs:
-- name: default
+- name: API checks
   defaults:
     http:
+      url: "{{vars.api_url}}"
       headers:
         Authorization: "Bearer {{vars.api_token}}"
+  steps:
+    - name: Check
+      uses: http
+      with:
+        get: /health
+      test: res.code == 200
 ```
 
 #### `USERNAME` / `PASSWORD`
@@ -136,55 +144,56 @@ vars:
   username: "{{API_USERNAME}}"
   password: "{{API_PASSWORD}}"
 
-steps:
-  - name: "Authenticated Request"
-    uses: http
-    with:
-      method: GET
-      url: "https://api.example.com/protected"
-      headers:
-        Authorization: "Basic {{base64(vars.username + ':' + vars.password)}}"
+jobs:
+- name: Protected API
+  steps:
+    - name: "Authenticated Request"
+      uses: http
+      with:
+        method: GET
+        url: "https://api.example.com/protected"
+        headers:
+          Authorization: "Basic {{encode_base64(vars.username + ':' + vars.password)}}"
+      test: res.code == 200
 ```
 
-### メール認証
+### メール配送
 
-メール関連のステップには、サーバー、ポート、認証に使うアカウントが必要です。
+[SMTPアクション](/ja/reference/actions/smtp)には認証のパラメータがありません。メール関連のステップに必要なのは、サーバーとアドレスだけです。
 
 #### SMTP設定
 
-メール関連のステップには、ホスト、ポート、認証に使うアカウントが必要です。
+メール関連のステップには、サーバーの`host:port`、送信者、宛先が必要です。
 
 ```bash
-# Gmailでアプリパスワード使用
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="alerts@example.com"
-export SMTP_PASSWORD="app-specific-password"
-
-# Office 365
-export SMTP_HOST="smtp.office365.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="alerts@company.com"
-export SMTP_PASSWORD="account-password"
+export SMTP_ADDR="mail.example.com:25"
+export MAIL_FROM="probe@example.com"
+export MAIL_TO="postmaster@example.com"
 ```
 
 ```yaml
 # workflow.yml
 vars:
-  smtp_host: "{{SMTP_HOST}}"
-  smtp_port: "{{SMTP_PORT}}"
-  smtp_username: "{{SMTP_USERNAME}}"
-  smtp_password: "{{SMTP_PASSWORD}}"
+  smtp_addr: "{{SMTP_ADDR ?? 'localhost:25'}}"
+  mail_from: "{{MAIL_FROM}}"
+  mail_to: "{{MAIL_TO}}"
 
 jobs:
-- name: default
+- name: Delivery check
   defaults:
     smtp:
-      host: "{{vars.smtp_host}}"
-      port: "{{vars.smtp_port}}"
-      username: "{{vars.smtp_username}}"
-      password: "{{vars.smtp_password}}"
-      from: "{{vars.smtp_username}}"
+      addr: "{{vars.smtp_addr}}"
+      from: "{{vars.mail_from}}"
+  steps:
+    - name: Send a probe mail
+      uses: smtp
+      with:
+        to: "{{vars.mail_to}}"
+        subject: "Delivery probe"
+        session: 1
+        message: 1
+        length: 500
+      test: res.code == 0
 ```
 
 ## アプリケーション設定変数
@@ -232,25 +241,32 @@ vars:
   slack_webhook_url: "{{SLACK_WEBHOOK_URL}}"
 
 jobs:
-- name: monitoring
+- id: monitoring
+  name: monitoring
+  skipif: vars.enable_monitoring != "true" || vars.enable_performance_tracking != "true"
   steps:
     - name: "Performance Check"
       uses: http
       with:
         method: GET
         url: "{{vars.api_base_url}}/metrics"
+      test: res.code == 200 && rt.sec < 1
 
-- name: notifications
+- id: notifications
+  name: notifications
   needs: [monitoring]
+  skipif: vars.enable_slack_notifications != "true"
   steps:
     - name: "Slack Alert"
       uses: http
       with:
         url: "{{vars.slack_webhook_url}}"
         method: "POST"
-        body: |
-          {
-          }
+        headers:
+          content-type: application/json
+        body:
+          text: "The performance check passed"
+      test: res.code == 200
 ```
 
 ## CI/CD統合変数
@@ -271,7 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Run Probe Tests
         env:
           API_TOKEN: ${{ secrets.API_TOKEN }}
@@ -507,24 +523,22 @@ vars:
   environment: "{{ENVIRONMENT}}"
   default_timeout: "{{DEFAULT_TIMEOUT ?? 'not set'}}"
 
-steps:
-  - name: "Debug Environment"
-    uses: hello
-    with:
-      message: |
+jobs:
+- name: Debug
+  steps:
+    - name: "Debug Environment"
+      uses: hello
+      echo: |
         Environment Debug:
         API_URL: "{{vars.api_base_url}}"
         Environment: "{{vars.environment}}"
         Timeout: "{{vars.default_timeout}}"
-        
-  - name: "Test Variable Access"
-    uses: echo
-    with:
-      message: |
+
+    - name: "Test Variable Access"
+      uses: hello
+      echo: |
         Available variables:
-        {{range $key, $value := vars}}
-          {{$key}}: {{$value}}
-        {{end}}
+        {{toJSON(vars)}}
 ```
 
 ## 一般的なパターン
@@ -576,16 +590,38 @@ export ENABLE_SLACK_ALERTS=$([[ "$ENVIRONMENT" == "production" ]] && echo "true"
 ```yaml
 # workflow.yml
 vars:
+  api_base_url: "{{API_BASE_URL}}"
+  slack_webhook_url: "{{SLACK_WEBHOOK_URL}}"
   skip_performance_tests: "{{SKIP_PERFORMANCE_TESTS}}"
   enable_slack_alerts: "{{ENABLE_SLACK_ALERTS}}"
 
 jobs:
-- name: performance-tests
-  # パフォーマンステストステップ
-    
-- name: alerts
+- id: performance-tests
+  name: performance-tests
+  skipif: vars.skip_performance_tests == "true"
+  steps:
+    - name: "Response time"
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.api_base_url}}/health"
+      test: res.code == 200 && rt.sec < 0.5
+
+- id: alerts
+  name: alerts
   needs: [performance-tests]
-  # アラートステップ
+  skipif: vars.enable_slack_alerts != "true"
+  steps:
+    - name: "Slack Alert"
+      uses: http
+      with:
+        url: "{{vars.slack_webhook_url}}"
+        method: "POST"
+        headers:
+          content-type: application/json
+        body:
+          text: "The performance tests passed"
+      test: res.code == 200
 ```
 
 ## 関連項目

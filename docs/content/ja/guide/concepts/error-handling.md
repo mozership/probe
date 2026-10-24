@@ -72,6 +72,9 @@ steps:
 ステップは前のステップが失敗していても実行されるので、どの検査もレポートに1行ずつ残ります。後のステップが前のステップの作ったものを使うだけの場合は、ジョブに[`fail_fast`](/ja/reference/yaml-configuration#fail_fast)を付けます。失敗したステップより後のステップはスキップされ、レポートにはそこから派生した失敗ではなく、原因の1件だけが残ります。
 
 ```yaml
+vars:
+  API: "{{API_URL}}"
+
 jobs:
 - name: Checkout flow
   fail_fast: true
@@ -99,6 +102,11 @@ jobs:
 重要でない障害を適切に処理します：
 
 ```yaml
+vars:
+  PRIMARY_SERVICE_URL: "{{PRIMARY_SERVICE_URL}}"
+  SECONDARY_SERVICE_URL: "{{SECONDARY_SERVICE_URL}}"
+  CACHE_SERVICE_URL: "{{CACHE_SERVICE_URL}}"
+
 jobs:
 - id: monitoring-with-fallbacks
   name: Monitoring with Graceful Degradation
@@ -117,6 +125,7 @@ jobs:
     - name: Secondary Service Check
       id: secondary
       uses: http
+      skipif: outputs.primary?.primary_healthy ?? false
       with:
         method: GET
         url: "{{vars.SECONDARY_SERVICE_URL}}/health"
@@ -139,17 +148,17 @@ jobs:
       uses: hello
       echo: |
         Service Health Summary:
-          
-        Primary Service: {{outputs.primary.primary_healthy ? "✅ Healthy" : "❌ Down"}}
-        {{outputs.primary.primary_healthy ? "Response Time: " + outputs.primary.primary_response_time + "ms" : ""}}
-          
-        {{outputs.secondary ? "Fallback Service: " + (outputs.secondary.secondary_healthy ? "✅ Healthy" : "❌ Down") : ""}}
-        {{outputs.secondary.secondary_healthy ? "Response Time: " + outputs.secondary.secondary_response_time + "ms" : ""}}
-          
-        Cache Service: {{outputs.cache.cache_healthy ? "✅ Healthy" : "❌ Down"}}
-          
+
+        Primary Service: {{(outputs.primary?.primary_healthy ?? false) ? "✅ Healthy" : "❌ Down"}}
+        {{(outputs.primary?.primary_healthy ?? false) ? "Response Time: " + string(outputs.primary.primary_response_time) + "ms" : ""}}
+
+        {{outputs.secondary == nil ? "" : "Fallback Service: " + (outputs.secondary.secondary_healthy ? "✅ Healthy" : "❌ Down")}}
+        {{(outputs.secondary?.secondary_healthy ?? false) ? "Response Time: " + string(outputs.secondary.secondary_response_time) + "ms" : ""}}
+
+        Cache Service: {{(outputs.cache?.cache_healthy ?? false) ? "✅ Healthy" : "❌ Down"}}
+
         Overall Status: {{
-          outputs.primary.primary_healthy || outputs.secondary.secondary_healthy ? 
+          (outputs.primary?.primary_healthy ?? false) || (outputs.secondary?.secondary_healthy ?? false) ?
           "✅ Operational" : "❌ Service Unavailable"
         }}
 ```
@@ -163,6 +172,11 @@ jobs:
 ジョブの失敗が依存ジョブにどう影響するかを制御します：
 
 ```yaml
+vars:
+  DB_URL: "{{DB_URL}}"
+  QUEUE_URL: "{{QUEUE_URL}}"
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: infrastructure-check
   name: Infrastructure Validation
@@ -210,6 +224,9 @@ jobs:
 他のジョブが作ったものを片付けるジョブは、それらが失敗したときにも実行する必要があります。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます：
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: tests
   name: Tests
@@ -240,6 +257,12 @@ jobs:
 `always`を除けば、他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブの`skipif`でその値を参照します。
 
 ```yaml
+vars:
+  service_url: "{{SERVICE_URL}}"
+  admin_api: "{{ADMIN_API}}"
+  smtp_addr: "{{SMTP_ADDR}}"
+  service_name: "{{SERVICE_NAME}}"
+
 jobs:
 - id: health-check
   name: Primary Health Check
@@ -250,6 +273,9 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+      # 503はサービスが異常を返したもので、outputsで報告する。
+      # それ以外の応答は、チェック自体が壊れていることを示す
+      test: res.code == 200 || res.code == 503
       outputs:
         service_healthy: res.code == 200
         error_body: 'res.code != 200 ? res.body : nil'
@@ -265,22 +291,25 @@ jobs:
       with:
         url: "{{vars.admin_api}}/restart"
         method: POST
+      test: res.code == 200
       outputs:
         restart_successful: res.code == 200
 
     - name: Verify Recovery
       id: verify
       uses: http
-      skipif: "!outputs.restart.restart_successful"
+      skipif: "!(outputs.restart?.restart_successful ?? false)"
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+      test: res.code == 200
       outputs:
         recovery_successful: res.code == 200
 
 - name: Escalate
   needs: [health-check, recovery-procedures]
-  skipif: outputs.health.service_healthy || (outputs.recovery_successful ?? false)
+  always: true
+  skipif: (outputs.health?.service_healthy ?? false) || (outputs.recovery_successful ?? false)
   steps:
     - name: Critical Alert
       uses: smtp
@@ -295,6 +324,7 @@ jobs:
       test: res.code == 0
 ```
 
+回復のステップは自分の処理結果をテストするため、再起動に失敗するとRecovery Proceduresは失敗します。Escalateは`always: true`を持つので、その場合も実行されます。その`skipif`は公開された値を参照し、失敗やスキップで公開されなかった値には`??`で既定値を与えます。
 
 ## リトライと回復力パターン
 
@@ -305,6 +335,10 @@ jobs:
 条件付き実行を使用してリトライロジックを実装します：
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  FALLBACK_API_URL: "{{FALLBACK_API_URL}}"
+
 jobs:
 - id: resilient-api-test
   name: Resilient API Testing
@@ -318,66 +352,79 @@ jobs:
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
+        attempt1_success: res.code == 200
+        attempt1_time: (rt.sec * 1000)
 
     - name: Retry After Brief Delay
       id: attempt2
       uses: http
+      skipif: outputs.attempt1_success ?? false
+      wait: 2s
       timeout: 15s
       with:
         method: GET
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
+        attempt2_success: res.code == 200
+        attempt2_time: (rt.sec * 1000)
 
     - name: Final Attempt with Extended Timeout
       id: attempt3
       uses: http
+      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false)
+      wait: 5s
       timeout: 30s
       with:
         method: GET
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
+        attempt3_success: res.code == 200
+        attempt3_time: (rt.sec * 1000)
 
     - name: Fallback to Alternative Endpoint
       id: fallback
       uses: http
+      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false) || (outputs.attempt3_success ?? false)
       timeout: 20s
       with:
         method: GET
         url: "{{vars.FALLBACK_API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
+        fallback_success: res.code == 200
+        fallback_time: (rt.sec * 1000)
 
     - name: Results Summary
       uses: hello
       echo: |
         API Test Results:
-          
-        Attempt 1: {{outputs.attempt1.success ? "✅ Success (" + outputs.attempt1.response_time + "ms)" : "❌ Failed"}}
-        {{outputs.attempt2 ? "Attempt 2: " + (outputs.attempt2.success ? "✅ Success (" + outputs.attempt2.response_time + "ms)" : "❌ Failed") : ""}}
-        {{outputs.attempt3 ? "Attempt 3: " + (outputs.attempt3.success ? "✅ Success (" + outputs.attempt3.response_time + "ms)" : "❌ Failed") : ""}}
-        {{outputs.fallback ? "Fallback: " + (outputs.fallback.success ? "✅ Success (" + outputs.fallback.response_time + "ms)" : "❌ Failed") : ""}}
-          
+
+        Attempt 1: {{(outputs.attempt1_success ?? false) ? "✅ Success (" + string(outputs.attempt1_time) + "ms)" : "❌ Failed"}}
+        {{outputs.attempt2_success == nil ? "" : "Attempt 2: " + (outputs.attempt2_success ? "✅ Success (" + string(outputs.attempt2_time) + "ms)" : "❌ Failed")}}
+        {{outputs.attempt3_success == nil ? "" : "Attempt 3: " + (outputs.attempt3_success ? "✅ Success (" + string(outputs.attempt3_time) + "ms)" : "❌ Failed")}}
+        {{outputs.fallback_success == nil ? "" : "Fallback: " + (outputs.fallback_success ? "✅ Success (" + string(outputs.fallback_time) + "ms)" : "❌ Failed")}}
+
         Final Result: {{
-          outputs.attempt1.success || outputs.attempt2.success || outputs.attempt3.success || outputs.fallback.success ?
+          (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false) ||
+          (outputs.attempt3_success ?? false) || (outputs.fallback_success ?? false) ?
           "✅ API Accessible" : "❌ All attempts failed"
         }}
 ```
+
+各試行は、それより前の試行がすべて失敗したときだけ実行され、`wait`で実行前に間を置きます。後の試行が成功しても、失敗した試行があればジョブは失敗します。同じリクエストを成功するまで繰り返し、すべての試行が失敗したときだけ失敗としたい場合は、代わりにステップの[`retry`](/ja/reference/yaml-configuration#retry)を使います。
 
 ### サーキットブレーカーパターン
 
 カスケード障害を防ぐためのサーキットブレーカーロジックを実装します：
 
 ```yaml
+vars:
+  MONITORING_API: "{{MONITORING_API}}"
+  SERVICE_NAME: "{{SERVICE_NAME}}"
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: circuit-breaker-test
   name: Circuit Breaker Pattern
@@ -399,12 +446,16 @@ jobs:
       id: circuit-decision
       echo: "Evaluating circuit breaker state"
       outputs:
-        circuit_open: "{{outputs['health-history'].error_rate > 50 || outputs['health-history'].recent_failures > 10}}"
-        should_test: "{{!outputs['health-history'].circuit_open || (unixtime() - outputs['health-history'].last_success) > 300}}"
+        circuit_open: outputs['health-history'].error_rate > 50 || outputs['health-history'].recent_failures > 10
+        # 開いたサーキットは、最後の成功から5分経つと再びテストする
+        should_test: |
+          !(outputs['health-history'].error_rate > 50 || outputs['health-history'].recent_failures > 10) ||
+          (unixtime() - outputs['health-history'].last_success) > 300
 
     - name: Service Test (Circuit Closed)
       id: normal-test
       uses: http
+      skipif: outputs['circuit-decision'].circuit_open
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/test"
@@ -415,6 +466,7 @@ jobs:
     - name: Probe Test (Circuit Open)
       id: probe-test
       uses: http
+      skipif: "!outputs['circuit-decision'].circuit_open || !outputs['circuit-decision'].should_test"
       timeout: 5s
       with:
         method: GET
@@ -427,16 +479,16 @@ jobs:
       uses: hello
       echo: |
         Circuit Breaker Status Report:
-          
+
         Error Rate: {{outputs['health-history'].error_rate}}%
         Recent Failures: {{outputs['health-history'].recent_failures}}
         Circuit State: {{outputs['circuit-decision'].circuit_open ? "🔴 OPEN (Service Degraded)" : "🟢 CLOSED (Normal Operation)"}}
-          
-        {{outputs['normal-test'] ? "Normal Test: " + (outputs['normal-test'].test_successful ? "✅ Passed" : "❌ Failed") : ""}}
-        {{outputs['probe-test'] ? "Probe Test: " + (outputs['probe-test'].probe_successful ? "✅ Passed" : "❌ Failed") : ""}}
-          
+
+        {{outputs['normal-test'] == nil ? "" : "Normal Test: " + (outputs['normal-test'].test_successful ? "✅ Passed" : "❌ Failed")}}
+        {{outputs['probe-test'] == nil ? "" : "Probe Test: " + (outputs['probe-test'].probe_successful ? "✅ Passed" : "❌ Failed")}}
+
         {{outputs['circuit-decision'].circuit_open && !outputs['circuit-decision'].should_test ? "⏸️ Skipping tests - circuit breaker active" : ""}}
-        {{outputs['probe-test'].probe_successful ? "🟢 Service recovery detected - circuit may close" : ""}}
+        {{(outputs['probe-test']?.probe_successful ?? false) ? "🟢 Service recovery detected - circuit may close" : ""}}
 ```
 
 ## エラーコンテキストとデバッグ
@@ -465,33 +517,35 @@ jobs:
     success: res.code == 200
     status_code: res.code
     response_time: (rt.sec * 1000)
-    response_size: res.body_size
+    # JSONのボディは受け取ったままの形がrawbodyにあり、それ以外のボディはres.bodyそのもの
+    response_size: len(res.rawbody ?? res.body)
     error_message: 'res.code != 200 ? res.body : nil'
     response_headers: res.headers
-    partial_response: 'res.code != 200 ? res.body[0:500] : nil'
+    partial_response: 'res.code != 200 ? (res.rawbody ?? res.body)[0:500] : nil'
 
 - name: Error Analysis and Reporting
+  uses: hello
   echo: |
     🚨 API Test Failure Analysis:
-    
+
     Request Details:
     - URL: {{vars.API_URL}}/complex-operation
     - Method: POST
     - User ID: {{vars.TEST_USER_ID}}
     - Timestamp: {{unixtime()}}
-    
+
     Response Details:
     - Status Code: {{outputs['api-test'].status_code}}
     - Response Time: {{outputs['api-test'].response_time}}ms
     - Response Size: {{outputs['api-test'].response_size}} bytes
-    - Content Type: {{outputs['api-test'].response_headers["content-type"]}}
-    
+    - Content Type: {{outputs['api-test'].response_headers["Content-Type"]}}
+
     Error Information:
-    {{outputs['api-test'].error_message ? outputs['api-test'].error_message : "No error message available"}}
-    
+    {{outputs['api-test'].error_message ?? "No error message available"}}
+
     Response Preview:
-    {{outputs['api-test'].partial_response ? outputs['api-test'].partial_response : "No response content"}}
-    
+    {{outputs['api-test'].partial_response ?? "No response content"}}
+
     Troubleshooting Suggestions:
     {{outputs['api-test'].status_code == 404 ? "- Check if the endpoint URL is correct" : ""}}
     {{outputs['api-test'].status_code == 401 ? "- Verify authentication credentials" : ""}}
@@ -505,6 +559,11 @@ jobs:
 複数のステップとジョブ間でエラーを追跡します：
 
 ```yaml
+vars:
+  SERVICE_A_URL: "{{SERVICE_A_URL}}"
+  SERVICE_B_URL: "{{SERVICE_B_URL}}"
+  SERVICE_C_URL: "{{SERVICE_C_URL}}"
+
 jobs:
 - id: distributed-test
   name: Distributed System Test
@@ -514,8 +573,8 @@ jobs:
       id: init
       echo: "Starting distributed test"
       outputs:
-        correlation_id: "test_{{unixtime()}}_{{random_str(8)}}"
-        start_time: "{{unixtime()}}"
+        correlation_id: '"test_" + string(unixtime()) + "_" + random_str(8)'
+        start_time: unixtime()
 
     - name: Service A Test
       id: service-a
@@ -527,9 +586,9 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        error_code: 'res.code != 200 ? res.code : nil'
-        trace_id: res.headers["X-Trace-Id"]
+        service_a_ok: res.code == 200
+        service_a_status: 'res.code != 200 ? res.status : nil'
+        service_a_trace: res.headers["X-Trace-Id"]
 
     - name: Service B Test
       id: service-b
@@ -541,9 +600,9 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        error_code: 'res.code != 200 ? res.code : nil'
-        trace_id: res.headers["X-Trace-Id"]
+        service_b_ok: res.code == 200
+        service_b_status: 'res.code != 200 ? res.status : nil'
+        service_b_trace: res.headers["X-Trace-Id"]
 
     - name: Service C Test
       id: service-c
@@ -555,34 +614,34 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        error_code: 'res.code != 200 ? res.code : nil'
-        trace_id: res.headers["X-Trace-Id"]
+        service_c_ok: res.code == 200
+        service_c_status: 'res.code != 200 ? res.status : nil'
+        service_c_trace: res.headers["X-Trace-Id"]
 
     - name: Error Correlation Report
       uses: hello
       echo: |
         🔍 Distributed Test Error Report
-          
+
         Correlation ID: {{outputs.init.correlation_id}}
         Test Duration: {{unixtime() - outputs.init.start_time}} seconds
-          
+
         Service Status Summary:
-        - Service A: {{outputs['service-a'].success ? "✅ Healthy" : "❌ Failed (HTTP " + outputs['service-a'].error_code + ")"}}
-          {{outputs['service-a'].trace_id ? "Trace ID: " + outputs['service-a'].trace_id : ""}}
-          
-        - Service B: {{outputs['service-b'].success ? "✅ Healthy" : "❌ Failed (HTTP " + outputs['service-b'].error_code + ")"}}
-          {{outputs['service-b'].trace_id ? "Trace ID: " + outputs['service-b'].trace_id : ""}}
-          
-        - Service C: {{outputs['service-c'].success ? "✅ Healthy" : "❌ Failed (HTTP " + outputs['service-c'].error_code + ")"}}
-          {{outputs['service-c'].trace_id ? "Trace ID: " + outputs['service-c'].trace_id : ""}}
-          
+        - Service A: {{(outputs.service_a_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_a_status ?? "no response") + ")"}}
+          {{outputs.service_a_trace == nil ? "" : "Trace ID: " + outputs.service_a_trace}}
+
+        - Service B: {{(outputs.service_b_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_b_status ?? "no response") + ")"}}
+          {{outputs.service_b_trace == nil ? "" : "Trace ID: " + outputs.service_b_trace}}
+
+        - Service C: {{(outputs.service_c_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_c_status ?? "no response") + ")"}}
+          {{outputs.service_c_trace == nil ? "" : "Trace ID: " + outputs.service_c_trace}}
+
         Error Pattern Analysis:
-        {{!outputs['service-a'].success && !outputs['service-b'].success && !outputs['service-c'].success ? "🚨 Total system failure - check infrastructure" : ""}}
-        {{!outputs['service-a'].success && outputs['service-b'].success && outputs['service-c'].success ? "⚠️ Service A isolated failure" : ""}}
-        {{outputs['service-a'].success && !outputs['service-b'].success && outputs['service-c'].success ? "⚠️ Service B isolated failure" : ""}}
-        {{outputs['service-a'].success && outputs['service-b'].success && !outputs['service-c'].success ? "⚠️ Service C isolated failure" : ""}}
-          
+        {{!(outputs.service_a_ok ?? false) && !(outputs.service_b_ok ?? false) && !(outputs.service_c_ok ?? false) ? "🚨 Total system failure - check infrastructure" : ""}}
+        {{!(outputs.service_a_ok ?? false) && (outputs.service_b_ok ?? false) && (outputs.service_c_ok ?? false) ? "⚠️ Service A isolated failure" : ""}}
+        {{(outputs.service_a_ok ?? false) && !(outputs.service_b_ok ?? false) && (outputs.service_c_ok ?? false) ? "⚠️ Service B isolated failure" : ""}}
+        {{(outputs.service_a_ok ?? false) && (outputs.service_b_ok ?? false) && !(outputs.service_c_ok ?? false) ? "⚠️ Service C isolated failure" : ""}}
+
         Investigation Steps:
         1. Check application logs with correlation ID: {{outputs.init.correlation_id}}
         2. Review distributed traces using trace IDs above
@@ -599,6 +658,11 @@ jobs:
 一般的な失敗シナリオに対して自動回復を実装します：
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+  ADMIN_API: "{{ADMIN_API}}"
+  SERVICE_NAME: "{{SERVICE_NAME}}"
+
 jobs:
 - id: self-healing-monitor
   name: Self-Healing Monitoring
@@ -612,7 +676,7 @@ jobs:
       test: res.code == 200
       outputs:
         healthy: res.code == 200
-        status_code: res.code
+        status_code: res.status
 
     - name: Memory Usage Check
       id: memory-check
@@ -628,29 +692,33 @@ jobs:
     - name: Restart Service (Health Failure)
       id: restart-health
       uses: http
+      skipif: outputs['health-check']?.healthy ?? false
       with:
         url: "{{vars.ADMIN_API}}/services/{{vars.SERVICE_NAME}}/restart"
         method: POST
       test: res.code == 200
       outputs:
-        restart_initiated: res.code == 200
-        restart_reason: "health_check_failed"
+        health_restart_initiated: res.code == 200
 
+    # ヘルスチェックの失敗で再起動したサービスは、もう一度は再起動しない
     - name: Restart Service (Memory Issue)
       id: restart-memory
       uses: http
+      skipif: (outputs['memory-check']?.memory_ok ?? true) || outputs['restart-health'] != nil
       with:
         url: "{{vars.ADMIN_API}}/services/{{vars.SERVICE_NAME}}/restart"
         method: POST
       test: res.code == 200
       outputs:
-        restart_initiated: res.code == 200
-        restart_reason: "high_memory_usage"
+        memory_restart_initiated: res.code == 200
 
     - name: Wait for Service Recovery
       id: recovery-wait
       uses: http
-      timeout: 60s
+      skipif: outputs['restart-health'] == nil && outputs['restart-memory'] == nil
+      retry:
+        max_attempts: 6
+        interval: 10s
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/health"
@@ -662,20 +730,20 @@ jobs:
       uses: hello
       echo: |
         🔄 Self-Healing Monitor Report
-          
-        Initial Health Check: {{outputs['health-check'].healthy ? "✅ Healthy" : "❌ Failed (" + outputs['health-check'].status_code + ")"}}
-        {{outputs['memory-check'] ? "Memory Usage: " + outputs['memory-check'].memory_usage + "% " + (outputs['memory-check'].memory_ok ? "✅ Normal" : "⚠️ High") : ""}}
-          
+
+        Initial Health Check: {{(outputs['health-check']?.healthy ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs['health-check']?.status_code ?? "no response") + ")"}}
+        {{outputs['memory-check'] == nil ? "" : "Memory Usage: " + string(outputs['memory-check'].memory_usage) + "% " + (outputs['memory-check'].memory_ok ? "✅ Normal" : "⚠️ High")}}
+
         Recovery Actions:
-        {{outputs['restart-health'].restart_initiated ? "🔄 Service restarted due to health check failure" : ""}}
-        {{outputs['restart-memory'].restart_initiated ? "🔄 Service restarted due to high memory usage (" + outputs['memory-check'].memory_usage + "%)" : ""}}
-          
+        {{(outputs.health_restart_initiated ?? false) ? "🔄 Service restarted due to health check failure" : ""}}
+        {{(outputs.memory_restart_initiated ?? false) ? "🔄 Service restarted due to high memory usage (" + string(outputs['memory-check'].memory_usage) + "%)" : ""}}
+
         Recovery Result:
-        {{outputs['recovery-wait'] ? (outputs['recovery-wait'].recovery_successful ? "✅ Service recovered successfully" : "❌ Service failed to recover") : "ℹ️ No recovery action needed"}}
-          
+        {{outputs['recovery-wait'] == nil ? "ℹ️ No recovery action needed" : (outputs['recovery-wait'].recovery_successful ? "✅ Service recovered successfully" : "❌ Service failed to recover")}}
+
         Next Actions:
-        {{outputs['recovery-wait'] && !outputs['recovery-wait'].recovery_successful ? "🚨 Manual intervention required - service did not recover" : ""}}
-        {{outputs['health-check'].healthy && (!outputs['memory-check'] || outputs['memory-check'].memory_ok) ? "✅ All systems normal - monitoring continues" : ""}}
+        {{outputs['recovery-wait'] != nil && !outputs['recovery-wait'].recovery_successful ? "🚨 Manual intervention required - service did not recover" : ""}}
+        {{(outputs['health-check']?.healthy ?? false) && (outputs['memory-check']?.memory_ok ?? true) ? "✅ All systems normal - monitoring continues" : ""}}
 ```
 
 ### 段階的回復テスト
@@ -683,6 +751,9 @@ jobs:
 回復中のシステムに過負荷をかけないよう段階的にテストします：
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: gradual-recovery-test
   name: Gradual Recovery Testing
@@ -701,6 +772,7 @@ jobs:
     - name: Health Endpoint Test
       id: health
       uses: http
+      skipif: "!(outputs.connectivity ?? false)"
       timeout: 10s
       with:
         method: GET
@@ -712,6 +784,7 @@ jobs:
     - name: Light Functional Test
       id: light-test
       uses: http
+      skipif: "!(outputs.health_ok ?? false)"
       timeout: 15s
       with:
         method: GET
@@ -723,39 +796,40 @@ jobs:
     - name: Standard Load Test
       id: standard-test
       uses: http
+      skipif: "!(outputs.light_test_passed ?? false)"
       timeout: 30s
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/api/users"
       test: res.code == 200 && res.body.users != nil
       outputs:
-        standard_test_passed: res.code == 200
+        standard_test_passed: res.code == 200 && res.body.users != nil
 
     - name: Recovery Assessment
       uses: hello
       echo: |
         🏥 Recovery Assessment Report
-          
+
         Recovery Progress:
-        1. Basic Connectivity: {{outputs.ping.connectivity ? "✅ Restored" : "❌ Failed"}}
-        {{outputs.ping.connectivity ? "2. Health Check: " + (outputs.health.health_ok ? "✅ Passed" : "❌ Failed") : "2. Health Check: ⏸️ Skipped"}}
-        {{outputs.health.health_ok ? "3. Light Function Test: " + (outputs['light-test'].light_test_passed ? "✅ Passed" : "❌ Failed") : "3. Light Function Test: ⏸️ Skipped"}}
-        {{outputs['light-test'].light_test_passed ? "4. Standard Load Test: " + (outputs['standard-test'].standard_test_passed ? "✅ Passed" : "❌ Failed") : "4. Standard Load Test: ⏸️ Skipped"}}
-          
+        1. Basic Connectivity: {{(outputs.connectivity ?? false) ? "✅ Restored" : "❌ Failed"}}
+        {{(outputs.connectivity ?? false) ? "2. Health Check: " + (outputs.health_ok ? "✅ Passed" : "❌ Failed") : "2. Health Check: ⏸️ Skipped"}}
+        {{(outputs.health_ok ?? false) ? "3. Light Function Test: " + (outputs.light_test_passed ? "✅ Passed" : "❌ Failed") : "3. Light Function Test: ⏸️ Skipped"}}
+        {{(outputs.light_test_passed ?? false) ? "4. Standard Load Test: " + (outputs.standard_test_passed ? "✅ Passed" : "❌ Failed") : "4. Standard Load Test: ⏸️ Skipped"}}
+
         Recovery Status: {{
-          outputs['standard-test'].standard_test_passed ? "🟢 FULLY RECOVERED" :
-          outputs['light-test'].light_test_passed ? "🟡 PARTIALLY RECOVERED" :
-          outputs.health.health_ok ? "🟡 BASIC FUNCTIONALITY RESTORED" :
-          outputs.ping.connectivity ? "🟡 CONNECTIVITY RESTORED" :
+          (outputs.standard_test_passed ?? false) ? "🟢 FULLY RECOVERED" :
+          (outputs.light_test_passed ?? false) ? "🟡 PARTIALLY RECOVERED" :
+          (outputs.health_ok ?? false) ? "🟡 BASIC FUNCTIONALITY RESTORED" :
+          (outputs.connectivity ?? false) ? "🟡 CONNECTIVITY RESTORED" :
           "🔴 SERVICE STILL DOWN"
         }}
-          
+
         Recommendations:
-        {{!outputs.ping.connectivity ? "- Check network connectivity and service deployment" : ""}}
-        {{outputs.ping.connectivity && !outputs.health.health_ok ? "- Service is starting but not ready - wait and retry" : ""}}
-        {{outputs.health.health_ok && !outputs['light-test'].light_test_passed ? "- Service health OK but functionality impaired - check dependencies" : ""}}
-        {{outputs['light-test'].light_test_passed && !outputs['standard-test'].standard_test_passed ? "- Service functional but may be under load - monitor performance" : ""}}
-        {{outputs['standard-test'].standard_test_passed ? "- Service fully operational - resume normal monitoring" : ""}}
+        {{!(outputs.connectivity ?? false) ? "- Check network connectivity and service deployment" : ""}}
+        {{(outputs.connectivity ?? false) && !(outputs.health_ok ?? false) ? "- Service is starting but not ready - wait and retry" : ""}}
+        {{(outputs.health_ok ?? false) && !(outputs.light_test_passed ?? false) ? "- Service health OK but functionality impaired - check dependencies" : ""}}
+        {{(outputs.light_test_passed ?? false) && !(outputs.standard_test_passed ?? false) ? "- Service functional but may be under load - monitor performance" : ""}}
+        {{(outputs.standard_test_passed ?? false) ? "- Service fully operational - resume normal monitoring" : ""}}
 ```
 
 ## 通知とアラート
@@ -767,6 +841,12 @@ jobs:
 `needs`で依存しているジョブが失敗するとそのジョブはスキップされるため、通知は、対象のチェックと同じジョブのステップとして書きます。各チェックの結果を出力し、通知はそれが異常を示すときだけ実行します。失敗したステップの後のステップも実行されるため、通知のステップも実行されます。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  smtp_host: "{{SMTP_HOST}}"
+  service_name: "{{SERVICE_NAME}}"
+  environment: "{{ENVIRONMENT}}"
+
 jobs:
 - name: Health with alerts
   steps:
@@ -839,13 +919,13 @@ smtpアクションが送るのは生成されたテストメッセージで、�
 outputs:
   success: res.code == 200
   error_details: |
-    {{res.code != 200 ? 
-      "HTTP " + res.code + ": " + res.body[0:200] : 
-      nil}}
+    res.code != 200 ?
+      "HTTP " + res.status + ": " + (res.rawbody ?? res.body)[0:200] :
+      nil
   debug_info: |
-    {{res.code != 200 ? 
-      "URL: " + vars.API_URL + ", Time: " + (rt.sec * 1000) + "ms" : 
-      nil}}
+    res.code != 200 ?
+      "URL: " + vars.API_URL + ", Time: " + string(rt.sec * 1000) + "ms" :
+      nil
 ```
 
 ### 3. 段階的応答
@@ -855,6 +935,7 @@ outputs:
 ```yaml
 # 良い例: 異なるエラータイプに対する異なる応答
 - name: Error Response Strategy
+  uses: hello
   echo: |
     Error Response:
     {{outputs['api-test'].status_code == 500 ? "🚨 Server error - escalate immediately" : ""}}
@@ -869,14 +950,15 @@ outputs:
 ```yaml
 # ワークフロー内で回復手順を文書化
 - name: Recovery Instructions
+  uses: hello
   echo: |
     🛠️ Recovery Procedures for {{vars.SERVICE_NAME}}:
-    
+
     1. Check service logs: kubectl logs -l app={{vars.SERVICE_NAME}}
     2. Verify configuration: check {{vars.CONFIG_PATH}}
     3. Restart service: kubectl rollout restart deployment/{{vars.SERVICE_NAME}}
     4. Monitor recovery: watch kubectl get pods -l app={{vars.SERVICE_NAME}}
-    
+
     Escalation: If service doesn't recover in 10 minutes, contact on-call team.
 ```
 

@@ -11,13 +11,12 @@
 このアクションはディレクトリ内のメールを読み、計測結果をCSVとして書き出します。
 
 ```yaml
-steps:
-  - name: Measure delivery latency
-    uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
-    with:
-      mail_dir: "/var/mail/probe/new"
-      output_dir: "./reports"
-    test: res.status == 0
+- name: Measure delivery latency
+  uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+  with:
+    mail_dir: "/var/mail/probe/new"
+    output_dir: "./reports"
+  test: res.status == 0
 ```
 
 ## パラメータ
@@ -59,6 +58,11 @@ CSVにはメール1通につき1行を書き出します。列は以下のとお
 SMTPで送ったメールが届くのを待ってから計測する例です。
 
 ```yaml
+name: Mail latency
+vars:
+  smtp_addr: localhost:25
+  run_id: "{{random_str(8)}}"
+  maildir: /var/mail/probe
 jobs:
   - name: Mail delivery latency
     steps:

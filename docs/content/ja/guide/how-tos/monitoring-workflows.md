@@ -57,7 +57,7 @@ probe health-check.yml
 
 ### マルチサービスヘルス監視
 
-複数のサービスを並列で監視します：
+複数のサービスを並列で監視します。集計のジョブには`always: true`があるため、チェックが失敗しても結果を報告します。接続できなかったチェックはoutputsを公開しないため、集計では各出力をデフォルト値付きで読みます。
 
 ```yaml
 name: Multi-Service Health Monitor
@@ -81,8 +81,8 @@ jobs:
         url: "{{vars.USER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        response_time: (rt.sec * 1000)
+        user_healthy: res.code == 200
+        user_response_time: (rt.sec * 1000)
         user_count: res.body.active_users
 
 - id: order-service
@@ -96,8 +96,8 @@ jobs:
         url: "{{vars.ORDER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        response_time: (rt.sec * 1000)
+        order_healthy: res.code == 200
+        order_response_time: (rt.sec * 1000)
         pending_orders: res.body.pending_orders
 
 - id: payment-service
@@ -111,8 +111,8 @@ jobs:
         url: "{{vars.PAYMENT_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        response_time: (rt.sec * 1000)
+        payment_healthy: res.code == 200
+        payment_response_time: (rt.sec * 1000)
         transaction_queue: res.body.queue_length
 
 - id: notification-service
@@ -126,13 +126,14 @@ jobs:
         url: "{{vars.NOTIFICATION_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        response_time: (rt.sec * 1000)
+        notification_healthy: res.code == 200
+        notification_response_time: (rt.sec * 1000)
         queue_size: res.body.notification_queue
 
 - id: summary-report
   name: Health Summary
   needs: [user-service, order-service, payment-service, notification-service]
+  always: true
   steps:
     - name: Generate Health Report
       uses: hello
@@ -140,23 +141,23 @@ jobs:
         🎯 Multi-Service Health Report
         ===============================
 
-        User Service: {{outputs['user-service'].healthy ? "✅" : "❌"}} ({{outputs['user-service'].response_time}}ms)
-          Active Users: {{outputs['user-service'].user_count}}
+        User Service: {{(outputs['user-service']?.user_healthy ?? false) ? "✅" : "❌"}} ({{outputs['user-service']?.user_response_time ?? "-"}}ms)
+          Active Users: {{outputs['user-service']?.user_count ?? "-"}}
 
-        Order Service: {{outputs['order-service'].healthy ? "✅" : "❌"}} ({{outputs['order-service'].response_time}}ms)
-          Pending Orders: {{outputs['order-service'].pending_orders}}
+        Order Service: {{(outputs['order-service']?.order_healthy ?? false) ? "✅" : "❌"}} ({{outputs['order-service']?.order_response_time ?? "-"}}ms)
+          Pending Orders: {{outputs['order-service']?.pending_orders ?? "-"}}
 
-        Payment Service: {{outputs['payment-service'].healthy ? "✅" : "❌"}} ({{outputs['payment-service'].response_time}}ms)
-          Transaction Queue: {{outputs['payment-service'].transaction_queue}}
+        Payment Service: {{(outputs['payment-service']?.payment_healthy ?? false) ? "✅" : "❌"}} ({{outputs['payment-service']?.payment_response_time ?? "-"}}ms)
+          Transaction Queue: {{outputs['payment-service']?.transaction_queue ?? "-"}}
 
-        Notification Service: {{outputs['notification-service'].healthy ? "✅" : "❌"}} ({{outputs['notification-service'].response_time}}ms)
-          Notification Queue: {{outputs['notification-service'].queue_size}}
+        Notification Service: {{(outputs['notification-service']?.notification_healthy ?? false) ? "✅" : "❌"}} ({{outputs['notification-service']?.notification_response_time ?? "-"}}ms)
+          Notification Queue: {{outputs['notification-service']?.queue_size ?? "-"}}
 
         Overall System Status: {{
-          outputs['user-service'].healthy &&
-          outputs['order-service'].healthy &&
-          outputs['payment-service'].healthy &&
-          outputs['notification-service'].healthy ?
+          (outputs['user-service']?.user_healthy ?? false) &&
+          (outputs['order-service']?.order_healthy ?? false) &&
+          (outputs['payment-service']?.payment_healthy ?? false) &&
+          (outputs['notification-service']?.notification_healthy ?? false) ?
           "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 ISSUES DETECTED"
         }}
 
@@ -551,9 +552,9 @@ jobs:
         url: "{{vars.USER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        status_code: res.code
-        response_time: rt.sec * 1000
+        user_healthy: res.code == 200
+        user_status_code: res.code
+        user_response_time: rt.sec * 1000
 
     - name: Payment Service Check
       id: payment_service
@@ -563,9 +564,9 @@ jobs:
         url: "{{vars.PAYMENT_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        status_code: res.code
-        response_time: rt.sec * 1000
+        payment_healthy: res.code == 200
+        payment_status_code: res.code
+        payment_response_time: rt.sec * 1000
 
     - name: Order Service Check
       id: order_service
@@ -575,9 +576,9 @@ jobs:
         url: "{{vars.ORDER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        healthy: res.code == 200
-        status_code: res.code
-        response_time: rt.sec * 1000
+        order_healthy: res.code == 200
+        order_status_code: res.code
+        order_response_time: rt.sec * 1000
 
     # 接続の拒否などでリクエスト自体が失敗したチェックはoutputsを公開しないため、
     # フォールバックでそれも停止として扱う
@@ -585,8 +586,8 @@ jobs:
       id: summary
       uses: hello
       outputs:
-        all_healthy: (outputs.user_service?.healthy ?? false) && (outputs.payment_service?.healthy ?? false) && (outputs.order_service?.healthy ?? false)
-        slow: (outputs.user_service?.response_time ?? 0) > 2000 || (outputs.payment_service?.response_time ?? 0) > 2000 || (outputs.order_service?.response_time ?? 0) > 2000
+        all_healthy: (outputs.user_service?.user_healthy ?? false) && (outputs.payment_service?.payment_healthy ?? false) && (outputs.order_service?.order_healthy ?? false)
+        slow: (outputs.user_service?.user_response_time ?? 0) > 2000 || (outputs.payment_service?.payment_response_time ?? 0) > 2000 || (outputs.order_service?.order_response_time ?? 0) > 2000
 
     - name: Critical Service Alert
       uses: smtp
@@ -600,9 +601,9 @@ jobs:
       echo: |
         CRITICAL SERVICE HEALTH ALERT
         Time: {{unixtime()}}
-        User Service: {{outputs.user_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.user_service?.status_code ?? "-"}})
-        Payment Service: {{outputs.payment_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.payment_service?.status_code ?? "-"}})
-        Order Service: {{outputs.order_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.order_service?.status_code ?? "-"}})
+        User Service: {{outputs.user_service?.user_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.user_service?.user_status_code ?? "-"}})
+        Payment Service: {{outputs.payment_service?.payment_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.payment_service?.payment_status_code ?? "-"}})
+        Order Service: {{outputs.order_service?.order_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.order_service?.order_status_code ?? "-"}})
 
     - name: Performance Warning Alert
       uses: smtp
@@ -616,9 +617,9 @@ jobs:
       echo: |
         PERFORMANCE WARNING (threshold: 2000ms)
         Time: {{unixtime()}}
-        User Service: {{outputs.user_service?.response_time ?? "-"}}ms
-        Payment Service: {{outputs.payment_service?.response_time ?? "-"}}ms
-        Order Service: {{outputs.order_service?.response_time ?? "-"}}ms
+        User Service: {{outputs.user_service?.user_response_time ?? "-"}}ms
+        Payment Service: {{outputs.payment_service?.payment_response_time ?? "-"}}ms
+        Order Service: {{outputs.order_service?.order_response_time ?? "-"}}ms
 
     - name: All Clear Notification
       uses: hello
@@ -635,7 +636,7 @@ smtpアクションが送るのは生成されたテストメッセージで、�
 ### マルチ環境設定
 
 **base-monitoring.yml:**
-```yaml fragment
+```yaml merge=env-monitoring base
 name: Service Health Monitor
 description: すべての環境用のベース監視ワークフロー
 
@@ -673,6 +674,7 @@ jobs:
 - id: monitoring-report
   name: Monitoring Report
   needs: [service-health]
+  always: true
   defaults:
     http:
       headers:
@@ -683,8 +685,8 @@ jobs:
       uses: hello
       echo: |
         Environment: {{vars.ENVIRONMENT}}
-        API: {{outputs['api-health'].api_healthy ? "✅" : "❌"}} ({{outputs['api-health'].response_time}}ms)
-        Database: {{outputs['database-health'].db_healthy ? "✅" : "❌"}} ({{outputs['database-health'].db_response_time}}ms)
+        API: {{(outputs['api-health']?.api_healthy ?? false) ? "✅" : "❌"}} ({{outputs['api-health']?.response_time ?? "-"}}ms)
+        Database: {{(outputs['database-health']?.db_healthy ?? false) ? "✅" : "❌"}} ({{outputs['database-health']?.db_response_time ?? "-"}}ms)
 
   # プロダクション固有のセキュリティ監視
 - id: security-monitoring
@@ -705,15 +707,16 @@ jobs:
 ```
 
 **development.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: development
   API_URL: http://localhost:3000
   DB_API_URL: http://localhost:5432
+  SECURITY_API_URL: http://localhost:4000  # 未使用: セキュリティチェックはプロダクションでのみ実行
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: production
   API_URL: https://api.yourcompany.com
@@ -730,7 +733,7 @@ probe base-monitoring.yml,development.yml
 probe base-monitoring.yml,production.yml
 ```
 
-後のファイルに`jobs`があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは`base-monitoring.yml`に置き、`skipif`で`ENVIRONMENT`が`production`のときだけ実行します。
+後のファイルに`jobs`があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは`base-monitoring.yml`に置き、`skipif`で`ENVIRONMENT`が`production`のときだけ実行します。`development.yml`にも`SECURITY_API_URL`を定義し、どちらの実行でもジョブが読む変数がすべて設定されるようにしています。`monitoring-report`には`always: true`があるため、チェックが失敗してもスキップされずに結果を報告します。
 
 ## ベストプラクティス
 
@@ -764,17 +767,37 @@ probe base-monitoring.yml,production.yml
 独立した確認は別々のジョブにします。そうすれば全体の所要時間は合計ではなく、最も遅いものの時間になります。
 
 ```yaml
+vars:
+  SERVICE_A_URL: https://service-a.yourcompany.com
+  SERVICE_B_URL: https://service-b.yourcompany.com
+
 # 良い例: 独立したチェックを並列実行
 jobs:
-  service-a-check:    # 並列実行
-  service-b-check:    # 並列実行
-  service-c-check:    # 並列実行
+- name: Service A Check  # 並列実行
+  steps:
+    - name: Service A Health
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_A_URL}}/health"
+      test: res.code == 200
+      # 良い例: 効率的な出力
+      outputs:
+        service_a_healthy: res.code == 200     # ブール値フラグ
+        service_a_time: (rt.sec * 1000)        # 特定のメトリクス
+        # 避ける: レスポンス全体の保存: full_response: res.body
 
-# 良い例: 効率的な出力
-outputs:
-  service_healthy: res.code == 200  # ブール値フラグ
-  response_time: (rt.sec * 1000)            # 特定のメトリクス
-  # 避ける: レスポンス全体の保存: full_response: res.body
+- name: Service B Check  # 並列実行
+  steps:
+    - name: Service B Health
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_B_URL}}/health"
+      test: res.code == 200
+      outputs:
+        service_b_healthy: res.code == 200
+        service_b_time: (rt.sec * 1000)
 ```
 
 ### 4. 文書化と保守

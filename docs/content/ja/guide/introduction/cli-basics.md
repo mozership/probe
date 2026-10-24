@@ -167,7 +167,7 @@ $ probe base.yml,overrides.yml
 **1. 環境固有の設定:**
 
 **base-workflow.yml:**
-```yaml fragment
+```yaml merge=env base
 name: API Health Check
 jobs:
 - id: health-check
@@ -182,14 +182,14 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=env
 # 本番環境固有の設定
 vars:
   API_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
-```yaml
+```yaml merge=env
 # ステージング環境固有の設定
 vars:
   API_URL: https://api.staging.example.com
@@ -207,7 +207,7 @@ $ probe base-workflow.yml,staging.yml
 **2. 共有設定:**
 
 **common-config.yml:**
-```yaml
+```yaml merge=anchors base
 # 共有するヘッダー。ワークフローからアンカーで参照する
 shared:
   common_headers: &common_headers
@@ -215,16 +215,21 @@ shared:
 ```
 
 **api-check.yml:**
-```yaml fragment
+```yaml merge=anchors
 name: API Monitoring
 jobs:
 - name: API checks
   defaults:
     http:
+      url: https://api.example.com
       headers:
         <<: *common_headers
   steps:
-    # ... ステップ定義
+    - name: Health
+      uses: http
+      with:
+        get: /health
+      test: res.code == 200
 ```
 
 ```bash

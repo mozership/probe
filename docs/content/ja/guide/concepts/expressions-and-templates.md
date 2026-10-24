@@ -72,13 +72,13 @@ Probeは2つのタイプの式を使用します：
 
 #### 環境変数 (`env`)
 
-環境の値は`vars`から読みます。値がない場合は`||`で既定値を与えます。
+環境変数は、トップレベルの`vars`のテンプレートで名前のまま読みます。値がない場合は`??`で既定値を与えます。ステップからは`vars.<name>`として読みます。
 
 ```yaml
-variables:
-  api_url: "{{vars.API_URL}}"                    # 環境変数
-  port: "{{vars.PORT || '3000'}}"               # デフォルト値付き
-  debug_mode: "{{vars.DEBUG == 'true'}}"        # ブール変換
+vars:
+  api_url: "{{API_URL}}"                    # 環境変数
+  port: "{{PORT ?? '3000'}}"               # デフォルト値付き
+  debug_mode: "{{DEBUG == 'true'}}"        # ブール変換
 ```
 
 #### ステップ出力 (`outputs`)
@@ -113,17 +113,22 @@ steps:
 
 #### ジョブ出力 (ジョブ間参照)
 
-ジョブをまたぐ場合は参照がジョブ名から始まります。そのため、読む側のジョブは`needs`でそのジョブを指定する必要があります。
+ジョブをまたぐ場合も、出力は公開したステップの`id`で同じように読みます。読む側のジョブは、そのステップのジョブを`needs`に指定して、その後に実行されるようにします。
 
 ```yaml
+name: Session
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: setup
   name: setup
   steps:
     - name: Initialize
-      id: setup
+      id: init
+      uses: hello
       outputs:
-        session_id: "{{random_str(16)}}"
+        session_id: random_str(16)
 
 - id: main-test
   name: main-test
@@ -132,8 +137,11 @@ jobs:
     - name: Use Session
       uses: http
       with:
+        url: "{{vars.api_url}}/session"
+        method: GET
         headers:
-          X-Session-ID: "{{outputs.setup.session_id}}"
+          X-Session-ID: "{{outputs.init.session_id}}"
+      test: res.code == 200
 ```
 
 ### 高度なテンプレートパターン
@@ -241,8 +249,8 @@ test: (rt.sec * 1000) < 1000                           # 1秒未満
 test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500      # 100-500ms の間
 
 # レスポンスサイズテスト
-test: res.body_size > 0                        # コンテンツあり
-test: res.body_size < 1048576                  # 1MB 未満
+test: len(res.rawbody) > 0                     # コンテンツあり
+test: len(res.rawbody) < 1048576               # 1MB 未満
 
 # ヘッダーテスト
 test: res.headers["Content-Type"] == "application/json"
@@ -399,6 +407,10 @@ Probeは一般的な操作のためのいくつかの組み込み関数を提供
 識別子を1度だけ生成して使い回せば、後続のステップは最初のステップが作成したレコードを指定できます。
 
 ```yaml
+name: User lifecycle
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: user-lifecycle-test
   name: user-lifecycle-test
@@ -407,7 +419,7 @@ jobs:
       id: create-user
       uses: http
       with:
-        url: "{{vars.API_URL}}/users"
+        url: "{{vars.api_url}}/users"
         method: POST
         body: |
           {
@@ -425,15 +437,15 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.API_URL}}/users/{{outputs['create-user'].user_id}}"
+        url: "{{vars.api_url}}/users/{{outputs['create-user'].user_id}}"
       test: |
         res.code == 200 &&
-        res.body.user.username == "{{outputs['create-user'].username}}"
+        res.body.user.username == outputs['create-user'].username
 
     - name: Clean Up User
       uses: http
       with:
-        url: "{{vars.API_URL}}/users/{{outputs['create-user'].user_id}}"
+        url: "{{vars.api_url}}/users/{{outputs['create-user'].user_id}}"
         method: DELETE
       test: res.code == 204
 ```
@@ -443,6 +455,12 @@ jobs:
 開始時に生成した値を全リクエストに付けて送ると、サーバー側のログで1回の実行のリクエストがまとまります。
 
 ```yaml
+name: Distributed trace
+vars:
+  service_a_url: "{{SERVICE_A_URL}}"
+  service_b_url: "{{SERVICE_B_URL}}"
+  tracing_url: "{{TRACING_URL}}"
+
 jobs:
 - id: distributed-trace-test
   name: distributed-trace-test
@@ -452,14 +470,14 @@ jobs:
       id: trace
       echo: "Starting distributed trace"
       outputs:
-        trace_id: "trace_{{unixtime()}}_{{random_str(16)}}"
-        correlation_id: "corr_{{random_str(32)}}"
+        trace_id: "'trace_' + string(unixtime()) + '_' + random_str(16)"
+        correlation_id: "'corr_' + random_str(32)"
 
     - name: Service A Call
       uses: http
       with:
         method: GET
-        url: "{{vars.SERVICE_A_URL}}/process"
+        url: "{{vars.service_a_url}}/process"
         headers:
           X-Trace-ID: "{{outputs.trace.trace_id}}"
           X-Correlation-ID: "{{outputs.trace.correlation_id}}"
@@ -469,7 +487,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.SERVICE_B_URL}}/process"
+        url: "{{vars.service_b_url}}/process"
         headers:
           X-Trace-ID: "{{outputs.trace.trace_id}}"
           X-Correlation-ID: "{{outputs.trace.correlation_id}}"
@@ -479,16 +497,16 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.TRACING_URL}}/traces/{{outputs.trace.trace_id}}"
+        url: "{{vars.tracing_url}}/traces/{{outputs.trace.trace_id}}"
       test: |
         res.code == 200 &&
         len(res.body.spans) >= 2 &&
-        res.body.correlation_id == "{{outputs.trace.correlation_id}}"
+        res.body.correlation_id == outputs.trace.correlation_id
 ```
 
 ## 条件付きロジックパターン
 
-`if`式は実行するかどうかを決めます。個々のステップにもジョブ全体にも指定でき、環境を参照する使い方が一般的です。
+`skipif`式はスキップするかどうかを決めます。個々のステップにもジョブ全体にも指定でき、環境を参照する使い方が一般的です。
 
 ### ステップレベル条件
 
@@ -528,9 +546,13 @@ steps:
 
 ### ジョブレベル条件
 
-ジョブの`skipif`からは`vars`と、依存しているジョブのoutputsを参照できます。
+ジョブの`skipif`からは`vars`と、依存しているジョブのoutputsを参照できます。依存先のジョブが失敗したジョブはスキップされるので、Health Checkが失敗したときのためのDetailed Analysisには`always: true`を付けています。接続できなかったチェックは出力を公開しないため、出力は`?.`と`??`で読みます。
 
 ```yaml
+name: Health
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: health-check
   name: Health Check
@@ -541,12 +563,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.api_url}}/health"
+      test: res.code == 200
       outputs:
         healthy: res.code == 200
 
 - name: Detailed Analysis
   needs: [health-check]
-  skipif: outputs.health.healthy
+  always: true
+  skipif: outputs.health?.healthy ?? false
   steps:
     - name: Deep Diagnostic
       uses: http
@@ -557,7 +581,7 @@ jobs:
 
 - name: Performance Test
   needs: [health-check]
-  skipif: "!outputs.health.healthy"
+  skipif: "!(outputs.health?.healthy ?? false)"
   steps:
     - name: Load Test
       uses: http

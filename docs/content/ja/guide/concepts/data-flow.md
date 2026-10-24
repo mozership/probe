@@ -106,23 +106,23 @@ steps:
     user_count: res.body.stats.user_count
     server_version: res.body.version
     is_healthy: res.body.health.status == "healthy"
-    
+
     # 複雑なオブジェクト
     user_profile: res.body.user
     configuration: res.body.config
     metrics: res.body.metrics
-    
+
     # 配列
     active_users: 'filter(res.body.users, #.active == true)'
     error_codes: 'map(res.body.errors, #.code)'
-    
+
     # 計算された値
     success_rate: (res.body.successful_requests / res.body.total_requests) * 100
     avg_response_time: sum(res.body.response_times) / len(res.body.response_times)
-    
+
     # レスポンスメタデータ
     response_time: (rt.sec * 1000)
-    response_size: res.body_size
+    response_size: len(res.rawbody ?? res.body)
     content_type: res.headers["Content-Type"]
 ```
 
@@ -176,6 +176,9 @@ steps:
 `needs`はジョブの順序を決めると同時に、先行するジョブの出力を参照できるようにします。
 
 ```yaml
+vars:
+  SETUP_API: "{{SETUP_API}}"
+
 jobs:
 - id: initialization
   name: System Initialization
@@ -203,22 +206,24 @@ jobs:
   needs: [initialization]  # initialization の完了を待つ
   steps:
     - name: Test User API
+      id: user-api
       uses: http
       with:
         method: GET
-        url: "{{outputs.initialization.api_endpoint}}/users"
+        url: "{{outputs['env-setup'].api_endpoint}}/users"
         headers:
-          X-Environment: "{{outputs.initialization.environment_id}}"
+          X-Environment: "{{outputs['env-setup'].environment_id}}"
       test: res.code == 200
       outputs:
         user_count: res.body.total_users
         api_response_time: (rt.sec * 1000)
 
     - name: Test Database Connectivity
+      id: db-check
       uses: http
       with:
         method: GET
-        url: "{{outputs.initialization.database_url}}/ping"
+        url: "{{outputs['env-setup'].database_url}}/ping"
       test: res.code == 200
       outputs:
         db_response_time: (rt.sec * 1000)
@@ -232,17 +237,17 @@ jobs:
       echo: |
         Test Execution Report
         =====================
-          
-        Environment: {{outputs.initialization.environment_name}}
-        Environment ID: {{outputs.initialization.environment_id}}
-          
+
+        Environment: {{outputs['env-setup'].environment_name}}
+        Environment ID: {{outputs['env-setup'].environment_id}}
+
         API Tests:
-        - User Count: {{outputs['api-tests'].user_count}}
-        - API Response Time: {{outputs['api-tests'].api_response_time}}ms
-          
+        - User Count: {{outputs['user-api'].user_count}}
+        - API Response Time: {{outputs['user-api'].api_response_time}}ms
+
         Database Tests:
-        - DB Response Time: {{outputs['api-tests'].db_response_time}}ms
-          
+        - DB Response Time: {{outputs['db-check'].db_response_time}}ms
+
         Overall Status: All tests completed successfully
 
 - id: cleanup
@@ -252,22 +257,30 @@ jobs:
     - name: Destroy Test Environment
       uses: http
       with:
-        url: "{{vars.SETUP_API}}/environments/{{outputs.initialization.environment_id}}"
+        url: "{{vars.SETUP_API}}/environments/{{outputs['env-setup'].environment_id}}"
         method: DELETE
       test: res.code == 204
 ```
 
 ### ジョブ間出力参照
 
-`outputs['job-name'].output-name`構文を使用して他のジョブの出力にアクセスします：
+他のジョブの出力は、ジョブのidではなく、公開したステップのidから`outputs['step-id'].output_name`のように読みます。この例ではジョブとステップが同じid`data-collection`を持っています：
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: data-collection
   name: data-collection
   steps:
     - name: Collect User Data
       id: data-collection
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/users/stats"
+      test: res.code == 200
       outputs:
         total_users: res.body.count
         active_users: res.body.active_count
@@ -294,6 +307,9 @@ jobs:
 複数のステップを通してデータを変換します：
 
 ```yaml
+vars:
+  DATA_API: "{{DATA_API}}"
+
 jobs:
 - id: data-processing-pipeline
   name: Data Processing Pipeline
@@ -304,6 +320,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.DATA_API}}/raw-data"
+      test: res.code == 200
       outputs:
         raw_records: res.body.records
         total_count: res.body.total
@@ -315,23 +332,23 @@ jobs:
       echo: "Filtering data..."
       outputs:
         # アクティブなレコードをフィルタ
-        active_records: "{{filter(outputs['raw-data'].raw_records, #.status == 'active')}}"
-        active_count: "{{len(filter(outputs['raw-data'].raw_records, #.status == 'active'))}}"
-          
+        active_records: "filter(outputs['raw-data'].raw_records, #.status == 'active')"
+        active_count: "len(filter(outputs['raw-data'].raw_records, #.status == 'active'))"
+
     - name: Aggregate Data
       uses: hello
       id: aggregated-data
       echo: "Aggregating data..."
       outputs:
         # カテゴリでグループ化してメトリクスを計算
-        categories: "{{groupBy(outputs['filtered-data'].active_records, #.category)}}"
-        avg_score: "{{sum(map(outputs['filtered-data'].active_records, #.score)) / outputs['filtered-data'].active_count}}"
-          
+        categories: "groupBy(outputs['filtered-data'].active_records, #.category)"
+        avg_score: "sum(map(outputs['filtered-data'].active_records, #.score)) / outputs['filtered-data'].active_count"
+
     - name: Generate Summary
       uses: hello
       echo: |
         Data Processing Summary:
-          
+
         Raw Records: {{outputs['raw-data'].total_count}}
         Active Records: {{outputs['filtered-data'].active_count}}
         Processing Rate: {{(outputs['filtered-data'].active_count / outputs['raw-data'].total_count) * 100}}%
@@ -344,6 +361,10 @@ jobs:
 条件に基づいてデータフローを制御します：
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  PROCESSING_API: "{{PROCESSING_API}}"
+
 jobs:
 - id: adaptive-processing
   name: adaptive-processing
@@ -354,11 +375,12 @@ jobs:
       with:
         method: GET
         url: "{{vars.API_URL}}/data-quality"
+      test: res.code == 200
       outputs:
         quality_score: res.body.quality_score
         has_errors: res.body.error_count > 0
         record_count: res.body.record_count
-          
+
     - name: Standard Processing
       id: standard-processing
       uses: http
@@ -371,10 +393,11 @@ jobs:
             "record_count": {{outputs['quality-check'].record_count}},
             "quality_mode": "standard"
           }
+      test: res.code == 200
       outputs:
-        processing_result: res.body.result
-        processing_time: (rt.sec * 1000)
-          
+        standard_result: res.body.result
+        standard_time: (rt.sec * 1000)
+
     - name: Enhanced Processing
       id: enhanced-processing
       uses: http
@@ -388,22 +411,23 @@ jobs:
             "quality_mode": "enhanced",
             "error_correction": true
           }
+      test: res.code == 200
       outputs:
-        processing_result: res.body.result
-        processing_time: (rt.sec * 1000)
+        enhanced_result: res.body.result
+        enhanced_time: (rt.sec * 1000)
         corrections_applied: res.body.corrections
-          
+
     - name: Processing Summary
       uses: hello
       echo: |
         Data Processing Complete:
-          
+
         Quality Score: {{outputs['quality-check'].quality_score}}
         Processing Mode: {{outputs['quality-check'].quality_score >= 0.8 ? "Standard" : "Enhanced"}}
-          
-        {{outputs['standard-processing'] ? "Standard Processing Time: " + outputs['standard-processing'].processing_time + "ms" : ""}}
-        {{outputs['enhanced-processing'] ? "Enhanced Processing Time: " + outputs['enhanced-processing'].processing_time + "ms" : ""}}
-        {{outputs['enhanced-processing'] ? "Corrections Applied: " + outputs['enhanced-processing'].corrections_applied : ""}}
+
+        {{outputs.standard_time != nil ? "Standard Processing Time: " + string(outputs.standard_time) + "ms" : ""}}
+        {{outputs.enhanced_time != nil ? "Enhanced Processing Time: " + string(outputs.enhanced_time) + "ms" : ""}}
+        {{outputs.corrections_applied != nil ? "Corrections Applied: " + string(outputs.corrections_applied) : ""}}
 ```
 
 ### データ蓄積パターン
@@ -411,6 +435,11 @@ jobs:
 複数のソースからデータを収集します：
 
 ```yaml
+vars:
+  SOURCE_A_URL: "{{SOURCE_A_URL}}"
+  SOURCE_B_URL: "{{SOURCE_B_URL}}"
+  SOURCE_C_URL: "{{SOURCE_C_URL}}"
+
 jobs:
 - id: multi-source-data-collection
   name: multi-source-data-collection
@@ -421,6 +450,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_A_URL}}/data"
+      test: res.code == 200
       outputs:
         source_a_count: res.body.count
         source_a_data: res.body.data
@@ -432,6 +462,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_B_URL}}/data"
+      test: res.code == 200
       outputs:
         source_b_count: res.body.count
         source_b_data: res.body.data
@@ -443,6 +474,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_C_URL}}/data"
+      test: res.code == 200
       outputs:
         source_c_count: res.body.count
         source_c_data: res.body.data
@@ -452,14 +484,14 @@ jobs:
       uses: hello
       echo: |
         Multi-Source Data Summary:
-          
+
         Source A: {{outputs['source-a'].source_a_count}} records ({{outputs['source-a'].source_a_time}}ms)
         Source B: {{outputs['source-b'].source_b_count}} records ({{outputs['source-b'].source_b_time}}ms)
         Source C: {{outputs['source-c'].source_c_count}} records ({{outputs['source-c'].source_c_time}}ms)
-          
+
         Total Records: {{outputs['source-a'].source_a_count + outputs['source-b'].source_b_count + outputs['source-c'].source_c_count}}
         Average Response Time: {{(outputs['source-a'].source_a_time + outputs['source-b'].source_b_time + outputs['source-c'].source_c_time) / 3}}ms
-          
+
         Fastest Source: {{
           outputs['source-a'].source_a_time <= outputs['source-b'].source_b_time && outputs['source-a'].source_a_time <= outputs['source-c'].source_c_time ? "Source A" :
           outputs['source-b'].source_b_time <= outputs['source-c'].source_c_time ? "Source B" : "Source C"
@@ -491,11 +523,11 @@ jobs:
     user_count: len(res.body.users)
     valid_users: 'filter(res.body.users, #.id != nil && #.email != nil)'
     admin_users: 'filter(res.body.users, #.role == "admin")'
-    
+
     # データ品質メトリクス
     data_completeness: 'len(filter(res.body.users, #.id != nil && #.email != nil)) / len(res.body.users)'
     has_admin_users: 'any(res.body.users, #.role == "admin")'
-    
+
     # レスポンスメタデータ
     data_freshness: res.headers["Last-Modified"]
     cache_status: res.headers["X-Cache-Status"]
@@ -515,12 +547,12 @@ jobs:
   outputs:
     # 生データ
     raw_input: res.body.input
-    
+
     # サニタイズ済みデータ
     clean_email: trim(lower(res.body.input.email))
     clean_name: trim(res.body.input.name)
     safe_description: res.body.input.description[0:500]  # 長さを制限
-    
+
     # バリデーションフラグ
     email_valid: res.body.input.email matches "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
     name_valid: len(res.body.input.name) >= 2 && len(res.body.input.name) <= 50
@@ -583,15 +615,15 @@ outputs:
     record_count: res.body.metadata.total_records
     last_updated: res.body.metadata.last_updated
     status: res.body.metadata.status
-    
+
     # 基準による特定レコードを抽出
     critical_items: 'filter(res.body.data, #.priority == "critical")'
     error_items: 'filter(res.body.data, #.status == "error")'
-    
+
     # 集計を計算
     avg_score: 'sum(map(res.body.data, #.score)) / len(res.body.data)'
     max_score: 'max(map(res.body.data, #.score))'
-    
+
     # データセット全体は保存しない
     # full_dataset: res.body.data  # 大きなデータセットでは避ける
 ```
@@ -627,11 +659,11 @@ outputs:
 outputs:
   user_count: len(res.body.users)          # 常に数値
   is_admin: res.body.user.role == "admin"    # 常にブール値
-  user_email: res.body.user.email || ""      # 常に文字列（デフォルト値付き）
+  user_email: res.body.user.email ?? ""      # 常に文字列（デフォルト値付き）
 
 # 避ける: 不整合なタイプ
 outputs:
-  user_count: len(res.body.users) || "unknown"  # 数値または文字列
+  user_count: res.body.user_count ?? "unknown"  # 数値または文字列
 ```
 
 ### 3. エラーセーフなデータアクセス
@@ -641,9 +673,9 @@ outputs:
 ```yaml
 # 良い例: 安全なデータアクセス
 outputs:
-  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : nil'
-  email_verified: res.body.user && res.body.user.email_verified == true
-  profile_complete: res.body.user && res.body.user.profile && res.body.user.profile.complete == true
+  user_id: 'res.body.user != nil ? res.body.user.id : nil'
+  email_verified: res.body.user != nil && res.body.user.email_verified == true
+  profile_complete: res.body.user?.profile != nil && res.body.user.profile.complete == true
 
 # 良い例: 安全なナビゲーションを使用
 test: res.body.user?.id != nil && res.body.user?.email != nil
@@ -654,12 +686,23 @@ test: res.body.user?.id != nil && res.body.user?.email != nil
 データがどこからどこに流れるかを文書化します：
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  smtp_addr: "{{SMTP_ADDR}}"
+
 jobs:
 - id: user-setup
   name: User Account Setup
   steps:
     - name: Create User Account
       id: user-setup
+      uses: http
+      with:
+        method: POST
+        url: "{{vars.api_url}}/users"
+        body: |
+          {"username": "probe_{{random_str(8)}}"}
+      test: res.code == 201
       # 生成: user_id, username, email
       outputs:
         user_id: res.body.user.id
@@ -681,6 +724,7 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0
       echo: "Click here to verify user {{outputs['user-setup'].user_id}}"
 ```
 

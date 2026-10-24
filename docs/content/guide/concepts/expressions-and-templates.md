@@ -72,13 +72,13 @@ Template expressions have access to several data sources:
 
 #### Environment Variables (`env`)
 
-Environment values are read through `vars`, and `||` supplies a fallback when one is absent.
+Environment variables are read by their bare names in the templates of the top-level `vars`, and `??` supplies a fallback when one is absent. Steps then read them as `vars.<name>`.
 
 ```yaml
-variables:
-  api_url: "{{vars.API_URL}}"                    # Environment variable
-  port: "{{vars.PORT || '3000'}}"               # With default value
-  debug_mode: "{{vars.DEBUG == 'true'}}"        # Boolean conversion
+vars:
+  api_url: "{{API_URL}}"                    # Environment variable
+  port: "{{PORT ?? '3000'}}"               # With default value
+  debug_mode: "{{DEBUG == 'true'}}"        # Boolean conversion
 ```
 
 #### Step Outputs (`outputs`)
@@ -113,17 +113,22 @@ steps:
 
 #### Job Outputs (Cross-job references)
 
-Across jobs the reference starts with the job, which is why the reading job has to declare `needs` on it.
+Across jobs an output is read the same way, by the `id` of the step that publishes it. The reading job declares `needs` on the job of that step, so that it runs after it.
 
 ```yaml
+name: Session
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: setup
   name: setup
   steps:
     - name: Initialize
-      id: setup
+      id: init
+      uses: hello
       outputs:
-        session_id: "{{random_str(16)}}"
+        session_id: random_str(16)
 
 - id: main-test
   name: main-test
@@ -132,8 +137,11 @@ jobs:
     - name: Use Session
       uses: http
       with:
+        url: "{{vars.api_url}}/session"
+        method: GET
         headers:
-          X-Session-ID: "{{outputs.setup.session_id}}"
+          X-Session-ID: "{{outputs.init.session_id}}"
+      test: res.code == 200
 ```
 
 ### Advanced Template Patterns
@@ -234,15 +242,15 @@ The `res` object provides comprehensive response data:
 # Status code testing
 test: res.code == 200
 test: res.code >= 200 && res.code < 300
-test: res.status in [200, 201, 202]
+test: res.code in [200, 201, 202]
 
 # Response time testing
 test: (rt.sec * 1000) < 1000                           # Less than 1 second
 test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500      # Between 100-500ms
 
 # Response size testing
-test: res.body_size > 0                        # Has content
-test: res.body_size < 1048576                  # Less than 1MB
+test: len(res.rawbody) > 0                     # Has content
+test: len(res.rawbody) < 1048576               # Less than 1MB
 
 # Header testing
 test: res.headers["Content-Type"] == "application/json"
@@ -399,6 +407,10 @@ The functions become useful when combined: generating test data that does not co
 Generating the identifier once and reusing it lets the later steps address the record the first step created.
 
 ```yaml
+name: User lifecycle
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: user-lifecycle-test
   name: user-lifecycle-test
@@ -407,7 +419,7 @@ jobs:
       id: create-user
       uses: http
       with:
-        url: "{{vars.API_URL}}/users"
+        url: "{{vars.api_url}}/users"
         method: POST
         body: |
           {
@@ -425,15 +437,15 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.API_URL}}/users/{{outputs['create-user'].user_id}}"
+        url: "{{vars.api_url}}/users/{{outputs['create-user'].user_id}}"
       test: |
         res.code == 200 &&
-        res.body.user.username == "{{outputs['create-user'].username}}"
+        res.body.user.username == outputs['create-user'].username
 
     - name: Clean Up User
       uses: http
       with:
-        url: "{{vars.API_URL}}/users/{{outputs['create-user'].user_id}}"
+        url: "{{vars.api_url}}/users/{{outputs['create-user'].user_id}}"
         method: DELETE
       test: res.code == 204
 ```
@@ -443,6 +455,12 @@ jobs:
 A value generated at the start and sent with every request ties the requests of one run together in the server's logs.
 
 ```yaml
+name: Distributed trace
+vars:
+  service_a_url: "{{SERVICE_A_URL}}"
+  service_b_url: "{{SERVICE_B_URL}}"
+  tracing_url: "{{TRACING_URL}}"
+
 jobs:
 - id: distributed-trace-test
   name: distributed-trace-test
@@ -452,14 +470,14 @@ jobs:
       id: trace
       echo: "Starting distributed trace"
       outputs:
-        trace_id: "trace_{{unixtime()}}_{{random_str(16)}}"
-        correlation_id: "corr_{{random_str(32)}}"
+        trace_id: "'trace_' + string(unixtime()) + '_' + random_str(16)"
+        correlation_id: "'corr_' + random_str(32)"
 
     - name: Service A Call
       uses: http
       with:
         method: GET
-        url: "{{vars.SERVICE_A_URL}}/process"
+        url: "{{vars.service_a_url}}/process"
         headers:
           X-Trace-ID: "{{outputs.trace.trace_id}}"
           X-Correlation-ID: "{{outputs.trace.correlation_id}}"
@@ -469,7 +487,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.SERVICE_B_URL}}/process"
+        url: "{{vars.service_b_url}}/process"
         headers:
           X-Trace-ID: "{{outputs.trace.trace_id}}"
           X-Correlation-ID: "{{outputs.trace.correlation_id}}"
@@ -479,16 +497,16 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.TRACING_URL}}/traces/{{outputs.trace.trace_id}}"
+        url: "{{vars.tracing_url}}/traces/{{outputs.trace.trace_id}}"
       test: |
         res.code == 200 &&
         len(res.body.spans) >= 2 &&
-        res.body.correlation_id == "{{outputs.trace.correlation_id}}"
+        res.body.correlation_id == outputs.trace.correlation_id
 ```
 
 ## Conditional Logic Patterns
 
-An `if` expression decides whether something runs. It can be attached to a single step or to a whole job, and it commonly reads the environment.
+A `skipif` expression decides whether something is skipped. It can be attached to a single step or to a whole job, and it commonly reads the environment.
 
 ### Step-level Conditions
 
@@ -528,9 +546,13 @@ steps:
 
 ### Job-level Conditions
 
-A job's `skipif` reads `vars` and the outputs of the jobs it depends on.
+A job's `skipif` reads `vars` and the outputs of the jobs it depends on. A job whose needed job failed is skipped, so Detailed Analysis, which is there for a failed Health Check, has `always: true`; it reads the output with `?.` and `??` because a check that never connected publishes none.
 
 ```yaml
+name: Health
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - id: health-check
   name: Health Check
@@ -541,12 +563,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.api_url}}/health"
+      test: res.code == 200
       outputs:
         healthy: res.code == 200
 
 - name: Detailed Analysis
   needs: [health-check]
-  skipif: outputs.health.healthy
+  always: true
+  skipif: outputs.health?.healthy ?? false
   steps:
     - name: Deep Diagnostic
       uses: http
@@ -557,7 +581,7 @@ jobs:
 
 - name: Performance Test
   needs: [health-check]
-  skipif: "!outputs.health.healthy"
+  skipif: "!(outputs.health?.healthy ?? false)"
   steps:
     - name: Load Test
       uses: http
@@ -739,7 +763,7 @@ probe -v workflow.yml
 - name: Debug Values
   echo: |
     Debug Information:
-    Status: {{res.status}}
+    Status: {{res.code}}
     Response Time: {{rt.duration}}
     JSON Success: {{res.body.success}}
     Headers: {{res.headers}}

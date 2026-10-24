@@ -22,6 +22,10 @@ steps:
 
 **workflow.yml:**
 ```yaml
+name: Main
+vars:
+  environment: staging
+  api_url: "{{API_URL}}"
 jobs:
 - name: Main
   steps:

@@ -47,24 +47,25 @@ vars:
   api_url: "{{CUSTOM_API_URL ?? DEFAULT_API_URL ?? 'https://api.example.com'}}"
 
 outputs:
-  item_count: "{{len(res.body.items ?? [])}}"
-  user_name: "{{upper(res.body.user.name ?? 'unknown')}}"
+  item_count: len(res.body.items ?? [])
+  user_name: upper(res.body.user?.name ?? 'unknown')
 ```
 
 ## データの整形
 
 配列・マップ関数を組み合わせると、レスポンスから必要な値だけを取り出せます。
+`outputs`の値は式なので、テンプレートの波カッコで囲みません。
 
 ```yaml
 outputs:
   # 有効なユーザー名をカンマ区切りで並べる
-  active_users: "{{join(map(filter(res.body.users, #.active), #.name), ', ')}}"
+  active_users: "join(map(filter(res.body.users, #.active), #.name), ', ')"
 
   # 成功率をパーセントで計算する
-  success_rate: "{{round(res.body.successful * 100 / res.body.total)}}%"
+  success_rate: 'string(round(res.body.successful * 100 / res.body.total)) + "%"'
 
   # ステータスごとの件数をまとめる
-  by_status: "{{toJSON(groupBy(res.body.items, #.status))}}"
+  by_status: "toJSON(groupBy(res.body.items, #.status))"
 ```
 
 ## 値は一度だけ計算する
@@ -87,6 +88,7 @@ jobs:
       url: "{{vars.api_url}}/health"
       headers:
         X-Run-Id: "{{vars.run_id}}"
+    test: res.code == 200
 
   - name: Metrics
     uses: http
@@ -95,6 +97,7 @@ jobs:
       url: "{{vars.api_url}}/metrics"
       headers:
         X-Run-Id: "{{vars.run_id}}"
+    test: res.code == 200
 ```
 
 ステップごとに`random_str(8)`を書くと、ステップごとに別の値になります。

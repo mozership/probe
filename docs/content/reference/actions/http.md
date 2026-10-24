@@ -78,6 +78,10 @@ The step's own `timeout` is a separate, outer limit on each attempt of the actio
 `get`, `head`, `post`, `put`, `patch`, `delete`, `connect`, `options` and `trace` set the method and the path in one key. The value is either a full URL or a path resolved against `url`, which makes it convenient with a job's `defaults`.
 
 ```yaml
+name: API
+vars:
+  api_url: "{{API_URL}}"
+  user_name: alice
 jobs:
   - name: API checks
     defaults:

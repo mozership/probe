@@ -162,6 +162,12 @@ The password of any URL in what Probe shows or writes is shown as `<redacted>` a
 A connection that every job uses, such as a base URL or a DSN, is written once here rather than in each job:
 
 ```yaml
+vars:
+  user: "{{DB_USER}}"
+  host: "{{DB_HOST}}"
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 defaults:
   db:
     dsn: "postgres://{{vars.user}}@{{vars.host}}/app"
@@ -231,7 +237,7 @@ A job file run by the [embedded](/reference/actions/embedded) action is read by 
 
 ## Jobs
 
-`jobs` is a map from job name to job definition. A job groups the steps that run in sequence, and declares what it depends on.
+`jobs` is a list of job definitions. A job groups the steps that run in sequence, and declares what it depends on.
 
 ### Job Properties
 
@@ -277,6 +283,10 @@ jobs:
 A job is skipped when a job it `needs` failed or was skipped for the same reason. With `always: true`, it runs once every job in `needs` is over, however each ended. That is what a job that removes what the others made needs: left without it, a failed run leaves its test database or its files behind, and the next run finds them.
 
 ```yaml
+vars:
+  admin_dsn: "{{ADMIN_DSN}}"
+  test_dsn: "{{TEST_DSN}}"
+
 jobs:
   - id: setup
     name: Setup
@@ -322,6 +332,10 @@ jobs:
 A boolean expression. The job is skipped when it evaluates to true.
 
 ```yaml
+vars:
+  environment: "{{ENVIRONMENT}}"
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Production only
     skipif: vars.environment != "production"
@@ -331,6 +345,7 @@ jobs:
         with:
           method: GET
           url: "{{vars.api_url}}/health"
+        test: res.code == 200
 ```
 
 #### `fail_fast`
@@ -341,11 +356,14 @@ The steps of a job run one after another, and a step runs whether or not the one
 jobs:
   - name: Orders
     fail_fast: true
+    defaults:
+      db:
+        dsn: "file:./orders.db"
     steps:
       - name: Create the table
         uses: db
         with:
-          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+          query: CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, total INTEGER)
         test: res.code == 0
 
       - name: Insert an order          # skipped when the table was not created
@@ -367,6 +385,10 @@ jobs:
 Default parameters merged into the `with` of every step in the job that uses the matching action. A value set on the step wins, and a value set here wins over the [`defaults` of the workflow](#defaults), which every job shares. The key is what a step writes in `uses`: the name of a built-in action, an external action in full, or a name given under [`actions`](#actions).
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 jobs:
   - name: API checks
     defaults:
@@ -407,6 +429,9 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | `baseline_test` | Expression | No | Checked once every run is over, against the runs of the steps and those of the run given by [`--baseline`](/reference/cli-reference#--baseline). Skipped when there is none. See [Test against an Earlier Run](#test-against-an-earlier-run) |
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Poll until ready
     repeat:
@@ -430,6 +455,9 @@ Each run's steps read the outputs that the earlier steps of the same run publish
 Without `repeat.test`, a run in which a step fails fails the job. `repeat.test` is checked once every run is over, against what the runs of each step came to, and decides alone whether the job passed:
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -472,6 +500,9 @@ With `repeat.test`, the runs are counted and fail nothing by themselves:
 `repeat.baseline_test` compares the runs to those of an earlier run, the report given by [`--baseline`](/reference/cli-reference#--baseline). It is checked once every run is over, after `repeat.test`, and reads what that test reads and, under `baseline.steps`, the steps of the same job in the earlier run, by their `id`:
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:

@@ -115,82 +115,82 @@ jobs:
         url: "{{vars.PRIMARY_API_URL}}/data"
       test: res.code == 200 && (rt.sec * 1000) < 5000
       outputs:
-        success: res.code == 200 && (rt.sec * 1000) < 5000
-        response_time: (rt.sec * 1000)
-        data: res.body
+        primary_success: res.code == 200 && (rt.sec * 1000) < 5000
+        primary_time: (rt.sec * 1000)
+        primary_data: res.body
 
     # プライマリが失敗または遅い場合はセカンダリサービスを試行
     - name: Secondary Service Attempt
       id: secondary
       uses: http
       timeout: 15s
-      skipif: outputs.primary?.success ?? false
+      skipif: outputs.primary_success ?? false
       with:
         method: GET
         url: "{{vars.SECONDARY_API_URL}}/data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
-        data: res.body
+        secondary_success: res.code == 200
+        secondary_time: (rt.sec * 1000)
+        secondary_data: res.body
 
     # プライマリとセカンダリの両方が失敗した場合はキャッシュを試行
     - name: Cache Fallback
       id: cache
       uses: http
       timeout: 5s
-      skipif: (outputs.primary?.success ?? false) || (outputs.secondary?.success ?? false)
+      skipif: (outputs.primary_success ?? false) || (outputs.secondary_success ?? false)
       with:
         method: GET
         url: "{{vars.CACHE_API_URL}}/cached-data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
-        data: res.body
+        cache_success: res.code == 200
+        cache_time: (rt.sec * 1000)
+        cache_data: res.body
         cached_data: true
 
     # 静的データへの最終フォールバック
     - name: Static Fallback
       id: fallback
       uses: http
-      skipif: (outputs.primary?.success ?? false) || (outputs.secondary?.success ?? false) || (outputs.cache?.success ?? false)
+      skipif: (outputs.primary_success ?? false) || (outputs.secondary_success ?? false) || (outputs.cache_success ?? false)
       with:
         method: GET
         url: "{{vars.FALLBACK_API_URL}}/static-data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        response_time: (rt.sec * 1000)
-        data: res.body
+        fallback_success: res.code == 200
+        fallback_time: (rt.sec * 1000)
+        fallback_data: res.body
         static_data: true
 
     # スキップされたステップと、リクエストが届かなかったステップは
-    # outputs を公開しないため、その outputs.<id> は nil になる
+    # outputs を公開しないため、その outputs は nil として読まれる
     - name: Service Resolution Summary
       uses: hello
       echo: |
         🎯 Service Resolution Summary:
 
         Resolution Path:
-        {{(outputs.primary?.success ?? false) ? "✅ Primary Service (optimal)" : "❌ Primary Service failed/slow (" + (outputs.primary != nil ? string(int(outputs.primary.response_time)) + "ms" : "no response") + ")"}}
-        {{outputs.secondary == nil ? "" : outputs.secondary.success ? "✅ Secondary Service (backup)" : "❌ Secondary Service failed"}}
-        {{outputs.cache == nil ? "" : outputs.cache.success ? "✅ Cache Service (degraded)" : "❌ Cache Service failed"}}
-        {{outputs.fallback == nil ? "" : outputs.fallback.success ? "✅ Static Fallback (minimal)" : "❌ All services failed"}}
+        {{(outputs.primary_success ?? false) ? "✅ Primary Service (optimal)" : "❌ Primary Service failed/slow (" + (outputs.primary_time != nil ? string(int(outputs.primary_time)) + "ms" : "no response") + ")"}}
+        {{outputs.secondary_success == nil ? "" : outputs.secondary_success ? "✅ Secondary Service (backup)" : "❌ Secondary Service failed"}}
+        {{outputs.cache_success == nil ? "" : outputs.cache_success ? "✅ Cache Service (degraded)" : "❌ Cache Service failed"}}
+        {{outputs.fallback_success == nil ? "" : outputs.fallback_success ? "✅ Static Fallback (minimal)" : "❌ All services failed"}}
 
         Final Status: {{
-          (outputs.primary?.success ?? false) ? "🟢 Optimal Performance" :
-          (outputs.secondary?.success ?? false) ? "🟡 Backup Service Active" :
-          (outputs.cache?.success ?? false) ? "🟠 Degraded Mode (cached data)" :
-          (outputs.fallback?.success ?? false) ? "🔴 Minimal Functionality (static data)" :
+          (outputs.primary_success ?? false) ? "🟢 Optimal Performance" :
+          (outputs.secondary_success ?? false) ? "🟡 Backup Service Active" :
+          (outputs.cache_success ?? false) ? "🟠 Degraded Mode (cached data)" :
+          (outputs.fallback_success ?? false) ? "🔴 Minimal Functionality (static data)" :
           "🚨 Total Service Failure"
         }}
 
         Data Source: {{
-          (outputs.primary?.success ?? false) ? "Live Primary" :
-          (outputs.secondary?.success ?? false) ? "Live Secondary" :
-          (outputs.cache?.success ?? false) ? "Cached (may be stale)" :
-          (outputs.fallback?.success ?? false) ? "Static Fallback" :
+          (outputs.primary_success ?? false) ? "Live Primary" :
+          (outputs.secondary_success ?? false) ? "Live Secondary" :
+          (outputs.cache_success ?? false) ? "Cached (may be stale)" :
+          (outputs.fallback_success ?? false) ? "Static Fallback" :
           "None Available"
         }}
 ```
@@ -225,88 +225,84 @@ jobs:
         url: "{{vars.UNRELIABLE_SERVICE_URL}}/data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        attempt_number: 1
-        response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : nil'
+        attempt1_success: res.code == 200
+        attempt1_time: (rt.sec * 1000)
+        attempt1_error_code: 'res.code != 200 ? res.code : nil'
 
     # 2回目の試行（2秒遅延）。それまでの試行が成功していればスキップ
     - name: Retry Attempt 1 (2s delay)
       id: attempt2
       uses: http
       wait: 2s
-      skipif: outputs.attempt1?.success ?? false
+      skipif: outputs.attempt1_success ?? false
       timeout: 15s
       with:
         method: GET
         url: "{{vars.UNRELIABLE_SERVICE_URL}}/data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        attempt_number: 2
-        response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : nil'
+        attempt2_success: res.code == 200
+        attempt2_time: (rt.sec * 1000)
+        attempt2_error_code: 'res.code != 200 ? res.code : nil'
 
     # 3回目の試行（4秒遅延）
     - name: Retry Attempt 2 (4s delay)
       id: attempt3
       uses: http
       wait: 4s
-      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false)
+      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false)
       timeout: 20s
       with:
         method: GET
         url: "{{vars.UNRELIABLE_SERVICE_URL}}/data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        attempt_number: 3
-        response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : nil'
+        attempt3_success: res.code == 200
+        attempt3_time: (rt.sec * 1000)
+        attempt3_error_code: 'res.code != 200 ? res.code : nil'
 
     # 最終試行（8秒遅延）
     - name: Final Attempt (8s delay)
       id: attempt4
       uses: http
       wait: 8s
-      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false) || (outputs.attempt3?.success ?? false)
+      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false) || (outputs.attempt3_success ?? false)
       timeout: 30s
       with:
         method: GET
         url: "{{vars.UNRELIABLE_SERVICE_URL}}/data"
       test: res.code == 200
       outputs:
-        success: res.code == 200
-        attempt_number: 4
-        response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : nil'
+        attempt4_success: res.code == 200
+        attempt4_time: (rt.sec * 1000)
+        attempt4_error_code: 'res.code != 200 ? res.code : nil'
 
     # スキップされた試行と、リクエストが届かなかった試行は
-    # outputs を公開しないため、その outputs.<id> は nil になる
+    # outputs を公開しないため、その outputs は nil として読まれる
     - name: Retry Summary
       uses: hello
       echo: |
         🔄 Retry Pattern Results:
 
         Attempt History:
-        1. Initial: {{outputs.attempt1 == nil ? "❌ No response" : outputs.attempt1.success ? "✅ Success (" + string(int(outputs.attempt1.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt1.error_code) + ")"}}
-        {{outputs.attempt2 == nil ? "" : "2. Retry 1: " + (outputs.attempt2.success ? "✅ Success (" + string(int(outputs.attempt2.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt2.error_code) + ")")}}
-        {{outputs.attempt3 == nil ? "" : "3. Retry 2: " + (outputs.attempt3.success ? "✅ Success (" + string(int(outputs.attempt3.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt3.error_code) + ")")}}
-        {{outputs.attempt4 == nil ? "" : "4. Final: " + (outputs.attempt4.success ? "✅ Success (" + string(int(outputs.attempt4.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt4.error_code) + ")")}}
+        1. Initial: {{outputs.attempt1_success == nil ? "❌ No response" : outputs.attempt1_success ? "✅ Success (" + string(int(outputs.attempt1_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt1_error_code) + ")"}}
+        {{outputs.attempt2_success == nil ? "" : "2. Retry 1: " + (outputs.attempt2_success ? "✅ Success (" + string(int(outputs.attempt2_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt2_error_code) + ")")}}
+        {{outputs.attempt3_success == nil ? "" : "3. Retry 2: " + (outputs.attempt3_success ? "✅ Success (" + string(int(outputs.attempt3_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt3_error_code) + ")")}}
+        {{outputs.attempt4_success == nil ? "" : "4. Final: " + (outputs.attempt4_success ? "✅ Success (" + string(int(outputs.attempt4_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt4_error_code) + ")")}}
 
         Final Result: {{
-          (outputs.attempt1?.success ?? false) ? "✅ Success on first attempt" :
-          (outputs.attempt2?.success ?? false) ? "✅ Success on retry 1" :
-          (outputs.attempt3?.success ?? false) ? "✅ Success on retry 2" :
-          (outputs.attempt4?.success ?? false) ? "✅ Success on final attempt" :
+          (outputs.attempt1_success ?? false) ? "✅ Success on first attempt" :
+          (outputs.attempt2_success ?? false) ? "✅ Success on retry 1" :
+          (outputs.attempt3_success ?? false) ? "✅ Success on retry 2" :
+          (outputs.attempt4_success ?? false) ? "✅ Success on final attempt" :
           "❌ All attempts failed"
         }}
 
         {{
-          (outputs.attempt1?.success ?? false) ? "" :
-          (outputs.attempt2?.success ?? false) ? "Service recovered after transient failure" :
-          (outputs.attempt3?.success ?? false) ? "Service required multiple retries" :
-          (outputs.attempt4?.success ?? false) ? "Service barely recoverable" :
+          (outputs.attempt1_success ?? false) ? "" :
+          (outputs.attempt2_success ?? false) ? "Service recovered after transient failure" :
+          (outputs.attempt3_success ?? false) ? "Service required multiple retries" :
+          (outputs.attempt4_success ?? false) ? "Service barely recoverable" :
           "Service appears to be down"
         }}
 ```
@@ -372,7 +368,7 @@ jobs:
       test: res.code == 200
       outputs:
         test_successful: res.code == 200
-        response_time: (rt.sec * 1000)
+        test_response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
     # サーキットが開いているが回復時間が経過した場合のプローブテスト
@@ -387,7 +383,7 @@ jobs:
       test: res.code == 200
       outputs:
         probe_successful: res.code == 200
-        response_time: (rt.sec * 1000)
+        probe_response_time: (rt.sec * 1000)
 
     # サーキットブレーカー状態を更新（サーキットが開いていてプローブの時期でない場合を除く）
     # リクエストが届かなかったテストは outputs を公開せず、失敗として扱う
@@ -406,8 +402,8 @@ jobs:
               outputs['probe-test']?.probe_successful ?? false
             }},
             "response_time": {{
-              outputs['normal-test']?.response_time ??
-              outputs['probe-test']?.response_time ?? "null"
+              outputs['normal-test']?.test_response_time ??
+              outputs['probe-test']?.probe_response_time ?? "null"
             }},
             "timestamp": {{unixtime()}}
           }
@@ -926,7 +922,7 @@ outputs:
 
 各ジョブは次のジョブより軽い手段を試し、最後のジョブで初めて打ち切ります。
 
-```yaml
+```yaml fragment
 # 良い例: 段階的エラーハンドリング
 jobs:
 - id: quick-retry        # 即座にリトライを試行

@@ -31,14 +31,14 @@ probe "configs/*.yml"
 安全な分割方法は、ファイルごとに異なるトップレベルキーを持たせることです。
 
 **vars.yml:**
-```yaml
+```yaml merge=vars-file base
 vars:
   api_url: "{{API_URL ?? 'https://api.example.com'}}"
   timeout: "{{REQUEST_TIMEOUT ?? '30s'}}"
 ```
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=vars-file
 name: API Health Check
 description: Basic API monitoring
 
@@ -66,7 +66,7 @@ probe vars.yml,workflow.yml
 最後の定義が勝つため、環境ごとのファイルでキーをまるごと差し替えられます。そのファイルにはワークフローが必要とする値をすべて書いてください。書かなかった値は引き継がれず、消えます。
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=override base
 name: API Health Check
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=override
 vars:
   api_url: https://api.production.example.com
   environment: production
@@ -101,7 +101,7 @@ probe workflow.yml,production.yml
 ファイルが1つのドキュメントになるため、キーを再定義せずに値を共有したい場合はアンカーを使います。
 
 **shared.yml:**
-```yaml
+```yaml merge=anchors base
 shared:
   json_headers: &json_headers
     content-type: application/json
@@ -111,7 +111,7 @@ shared:
 ```
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=anchors
 name: API Test
 vars:
   api_url: "{{API_URL}}"

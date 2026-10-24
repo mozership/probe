@@ -162,6 +162,12 @@ Probeが表示したり書き出したりするものに含まれるURLのパス
 ベースURLやDSNのようにどのジョブも使う接続先は、ジョブごとではなくここに一度だけ書きます：
 
 ```yaml
+vars:
+  user: "{{DB_USER}}"
+  host: "{{DB_HOST}}"
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 defaults:
   db:
     dsn: "postgres://{{vars.user}}@{{vars.host}}/app"
@@ -231,7 +237,7 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 
 ## ジョブ
 
-`jobs`はジョブ名からジョブ定義へのマップです。ジョブは順に実行するステップをまとめ、依存先を宣言します。
+`jobs`はジョブ定義のリストです。ジョブは順に実行するステップをまとめ、依存先を宣言します。
 
 ### ジョブのプロパティ
 
@@ -277,6 +283,10 @@ jobs:
 ジョブは、`needs`に書いたジョブが失敗したとき、または同じ理由でスキップされたときにスキップされます。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます。他のジョブが作ったものを片付けるジョブに必要な動作です。これがないと、失敗した実行はテスト用のデータベースやファイルを残し、次の実行はそれらが残っているために失敗します。
 
 ```yaml
+vars:
+  admin_dsn: "{{ADMIN_DSN}}"
+  test_dsn: "{{TEST_DSN}}"
+
 jobs:
   - id: setup
     name: Setup
@@ -322,6 +332,10 @@ jobs:
 ブール式です。真と評価されるとジョブをスキップします。
 
 ```yaml
+vars:
+  environment: "{{ENVIRONMENT}}"
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Production only
     skipif: vars.environment != "production"
@@ -329,8 +343,9 @@ jobs:
       - name: Check
         uses: http
         with:
-          url: "{{vars.api_url}}/health"
           method: GET
+          url: "{{vars.api_url}}/health"
+        test: res.code == 200
 ```
 
 #### `fail_fast`
@@ -341,11 +356,14 @@ jobs:
 jobs:
   - name: Orders
     fail_fast: true
+    defaults:
+      db:
+        dsn: "file:./orders.db"
     steps:
       - name: Create the table
         uses: db
         with:
-          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+          query: CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, total INTEGER)
         test: res.code == 0
 
       - name: Insert an order          # テーブルを作れなかったときはスキップ
@@ -367,6 +385,10 @@ jobs:
 ジョブ内の該当アクションを使うステップの`with`にマージされる既定値です。ステップ側の指定が優先され、ここでの指定は、すべてのジョブが共有する[ワークフローの`defaults`](#defaults)より優先されます。キーはステップが`uses`に書くものです。組み込みアクションの名前、完全な形の外部アクション、[`actions`](#actions)で付けた名前のどれかです。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 jobs:
   - name: API checks
     defaults:
@@ -407,6 +429,9 @@ jobs:
 | `baseline_test` | Expression | 任意 | すべての回が終わった後に、各ステップの回の集計と、[`--baseline`](/ja/reference/cli-reference#--baseline)で指定した実行の集計に対して評価する。指定がなければスキップする。[以前の実行と比べるテスト](#以前の実行と比べるテスト)を参照 |
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Poll until ready
     repeat:
@@ -416,8 +441,8 @@ jobs:
       - name: Check
         uses: http
         with:
-          url: "{{vars.api_url}}/status"
           method: GET
+          url: "{{vars.api_url}}/status"
         test: res.code == 200
 ```
 
@@ -430,6 +455,9 @@ jobs:
 `repeat.test`がなければ、ステップが失敗した回が1回でもあるとジョブは失敗します。`repeat.test`は、すべての回が終わった後に各ステップの回の集計に対して評価され、これだけでジョブの成否が決まります。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -472,6 +500,9 @@ jobs:
 `repeat.baseline_test`は、各回を以前の実行（[`--baseline`](/ja/reference/cli-reference#--baseline)で指定したレポート）と比べます。すべての回が終わった後、`repeat.test`の次に評価します。`repeat.test`が読めるものに加えて、`baseline.steps`の下で、以前の実行における同じジョブのステップを`id`で読めます。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -579,8 +610,8 @@ steps:
   - name: Flaky endpoint
     uses: http
     with:
-      url: "{{vars.api_url}}/slow"
       method: GET
+      url: "{{vars.api_url}}/slow"
     test: res.code == 200
     retry:
       max_attempts: 3
@@ -600,8 +631,8 @@ steps:
       - path: /metrics
       - path: /version
     with:
-      url: "{{vars.api_url}}{{vars.path}}"
       method: GET
+      url: "{{vars.api_url}}{{vars.path}}"
     test: res.code == 200
 ```
 
