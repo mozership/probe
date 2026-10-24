@@ -35,18 +35,25 @@ const (
 	// of a group are checked together, in the order of the page.
 	mergeMarker = "merge="
 	// baseMarker marks a block of a group that every other block of it is
-	// read with, as a base file is with each test file. A group is checked
-	// once for each block not marked so, together with those that are; a
-	// group whose blocks are all marked so is checked once.
+	// read with, as a base file is with each test file.
 	baseMarker = "base"
+	// variantMarker marks blocks of a group that stand in for one another,
+	// as the file of each environment does: one of them is read at a time.
+	//
+	// A group is checked once for each variant with each block marked
+	// neither, together with the base blocks, in the order of the page; a
+	// group without variants, once for each block marked neither; and a
+	// group whose blocks are all base, once as a whole.
+	variantMarker = "variant"
 )
 
 // docsBlock is a yaml block of a page, written to a file of its own.
 type docsBlock struct {
-	page string
-	line int // the line of the page the block starts on
-	file string
-	base bool
+	page    string
+	line    int // the line of the page the block starts on
+	file    string
+	base    bool
+	variant bool
 }
 
 // TestDocsWorkflowsCheck runs what probe check runs on every workflow in the
@@ -103,10 +110,11 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 				continue
 			}
 			b := docsBlock{
-				page: path,
-				line: line,
-				file: filepath.Join(dir, fmt.Sprintf("%s-%d.yml", strings.ReplaceAll(path, string(filepath.Separator), "_"), n)),
-				base: slices.Contains(meta, baseMarker),
+				page:    path,
+				line:    line,
+				file:    filepath.Join(dir, fmt.Sprintf("%s-%d.yml", strings.ReplaceAll(path, string(filepath.Separator), "_"), n)),
+				base:    slices.Contains(meta, baseMarker),
+				variant: slices.Contains(meta, variantMarker),
 			}
 			if err := os.WriteFile(b.file, body, 0o600); err != nil {
 				return err
@@ -145,13 +153,15 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 // do not go together, so that a misspelt one does not leave the block
 // unchecked or checked alone.
 func blockMarkers(meta []string) (string, error) {
-	group, base, fragment := "", false, false
+	group, base, variant, fragment := "", false, false, false
 	for _, w := range meta {
 		switch {
 		case w == fragmentMarker:
 			fragment = true
 		case w == baseMarker:
 			base = true
+		case w == variantMarker:
+			variant = true
 		case strings.HasPrefix(w, mergeMarker):
 			if group != "" {
 				return "", fmt.Errorf("more than one %s in %q", mergeMarker, strings.Join(meta, " "))
@@ -161,37 +171,53 @@ func blockMarkers(meta []string) (string, error) {
 				return "", fmt.Errorf("%s names no group in %q", mergeMarker, strings.Join(meta, " "))
 			}
 		default:
-			return "", fmt.Errorf("unknown word %q after the language; the markers are %s, %s<group> and %s", w, fragmentMarker, mergeMarker, baseMarker)
+			return "", fmt.Errorf("unknown word %q after the language; the markers are %s, %s<group>, %s and %s", w, fragmentMarker, mergeMarker, baseMarker, variantMarker)
 		}
 	}
 	switch {
-	case base && group == "":
-		return "", fmt.Errorf("%s without %s<group>", baseMarker, mergeMarker)
+	case (base || variant) && group == "":
+		return "", fmt.Errorf("%s without %s<group>", strings.Join(meta, " "), mergeMarker)
+	case base && variant:
+		return "", fmt.Errorf("%s with %s: a block is read with every set or with some", baseMarker, variantMarker)
 	case fragment && group != "":
 		return "", fmt.Errorf("%s with %s%s: a block is either skipped or merged", fragmentMarker, mergeMarker, group)
 	}
 	return group, nil
 }
 
-// mergeSets returns the sets of blocks a group is checked as: each block not
-// marked base with those that are, in the order of the page, or the whole
-// group when every block is marked base.
+// mergeSets returns the sets of blocks a group is checked as, as
+// variantMarker tells.
 func mergeSets(group []docsBlock) [][]docsBlock {
-	var sets [][]docsBlock
+	var variants, others []int
 	for i, b := range group {
-		if b.base {
-			continue
+		switch {
+		case b.variant:
+			variants = append(variants, i)
+		case !b.base:
+			others = append(others, i)
 		}
-		var set []docsBlock
-		for j, o := range group {
-			if o.base || j == i {
-				set = append(set, o)
-			}
-		}
-		sets = append(sets, set)
 	}
-	if len(sets) == 0 {
-		sets = append(sets, group)
+	if len(variants) == 0 && len(others) == 0 {
+		return [][]docsBlock{group}
+	}
+	// -1 stands for no block of the kind, when the group has none.
+	if len(variants) == 0 {
+		variants = []int{-1}
+	}
+	if len(others) == 0 {
+		others = []int{-1}
+	}
+	var sets [][]docsBlock
+	for _, v := range variants {
+		for _, o := range others {
+			var set []docsBlock
+			for i, b := range group {
+				if b.base || i == v || i == o {
+					set = append(set, b)
+				}
+			}
+			sets = append(sets, set)
+		}
 	}
 	return sets
 }
@@ -249,11 +275,47 @@ func TestBlockMarkers(t *testing.T) {
 		{"base", "", false},
 		{"fragment merge=suite", "", false},
 		{"merge=a merge=b", "", false},
+		{"merge=suite variant", "suite", true},
+		{"variant", "", false},
+		{"merge=suite base variant", "", false},
 	}
 	for _, tt := range tests {
 		group, err := blockMarkers(strings.Fields(tt.meta))
 		if (err == nil) != tt.ok || group != tt.group {
 			t.Errorf("blockMarkers(%q) = %q, %v; want %q, ok %v", tt.meta, group, err, tt.group, tt.ok)
+		}
+	}
+}
+
+func TestMergeSets(t *testing.T) {
+	block := func(name string, base, variant bool) docsBlock {
+		return docsBlock{file: name, base: base, variant: variant}
+	}
+	names := func(sets [][]docsBlock) []string {
+		var out []string
+		for _, set := range sets {
+			var files []string
+			for _, b := range set {
+				files = append(files, b.file)
+			}
+			out = append(out, strings.Join(files, ","))
+		}
+		return out
+	}
+	tests := []struct {
+		name  string
+		group []docsBlock
+		want  []string
+	}{
+		{"bases only", []docsBlock{block("a", true, false), block("b", true, false)}, []string{"a,b"}},
+		{"bases and others", []docsBlock{block("base", true, false), block("x", false, false), block("y", false, false)}, []string{"base,x", "base,y"}},
+		{"variants and others", []docsBlock{block("base", true, false), block("dev", false, true), block("prod", false, true), block("x", false, false), block("y", false, false)},
+			[]string{"base,dev,x", "base,dev,y", "base,prod,x", "base,prod,y"}},
+		{"variants only", []docsBlock{block("base", true, false), block("dev", false, true), block("prod", false, true)}, []string{"base,dev", "base,prod"}},
+	}
+	for _, tt := range tests {
+		if got := names(mergeSets(tt.group)); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: sets = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }
