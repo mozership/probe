@@ -545,3 +545,32 @@ func TestWorkflow_KeyCollisionUnderACredentialIsShown(t *testing.T) {
 		t.Errorf("failure message %q does not contain %q", msg, want)
 	}
 }
+
+// TestStep_ExpressionHints tells a test, or a template, written as another
+// language would write it how expressions write it, after the error it
+// fails with.
+func TestStep_ExpressionHints(t *testing.T) {
+	_, result, failed := runStepForTemplateError(t, &Step{
+		Name: "test",
+		Uses: "http",
+		Test: `res.code.toString() == "200"`,
+	}, nil)
+	if !failed {
+		t.Error("the job is not marked failed")
+	}
+	for _, want := range []string{"test error: ", "| res.code.toString() == \"200\"", "hint: expressions have no toString() method: write string(res.code)"} {
+		if !strings.Contains(result.TestOutput, want) {
+			t.Errorf("test output %q does not contain %q", result.TestOutput, want)
+		}
+	}
+
+	_, result, _ = runStepForTemplateError(t, &Step{
+		Name: "with",
+		Uses: "http",
+		With: map[string]any{"url": "http://localhost/{{ vars.name.toLowerCase() }}"},
+	}, map[string]any{"name": "Alice"})
+	if result.Failure == nil || !strings.Contains(result.Failure.Message, "with.url: {{ vars.name.toLowerCase() }}: ") ||
+		!strings.Contains(result.Failure.Message, "hint: expressions have no toLowerCase() method: write lower(vars.name)") {
+		t.Errorf("failure = %+v, want the template's error and the hint", result.Failure)
+	}
+}

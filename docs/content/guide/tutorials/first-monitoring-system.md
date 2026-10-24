@@ -120,7 +120,7 @@ Now let's expand to monitor all critical endpoints:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.products != null &&
+          res.body.products != nil &&
           len(res.body.products) > 0
         outputs:
           product_count: len(res.body.products)
@@ -138,8 +138,8 @@ Now let's expand to monitor all critical endpoints:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.user != null &&
-          res.body.user.id != null
+          res.body.user != nil &&
+          res.body.user.id != nil
         outputs:
           authenticated: res.code == 200
           user_id: res.body.user.id
@@ -156,7 +156,7 @@ Now let's expand to monitor all critical endpoints:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.orders != null
+          res.body.orders != nil
         outputs:
           order_count: len(res.body.orders)
           response_time: (rt.sec * 1000)
@@ -179,7 +179,7 @@ Now let's expand to monitor all critical endpoints:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.results != null
+          res.body.results != nil
         outputs:
           result_count: len(res.body.results)
           response_time: (rt.sec * 1000)
@@ -272,7 +272,7 @@ Now let's make our monitoring more robust with error handling:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.products != null &&
+          res.body.products != nil &&
           len(res.body.products) > 0
         outputs:
           product_count: len(res.body.products || [])
@@ -303,8 +303,8 @@ Now let's make our monitoring more robust with error handling:
         test: |
           res.code == 200 &&
           (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.user != null &&
-          res.body.user.id != null
+          res.body.user != nil &&
+          res.body.user.id != nil
         outputs:
           authenticated: res.code == 200
           user_id: res.body.user.id || "unknown"

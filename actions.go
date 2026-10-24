@@ -16,6 +16,9 @@ import (
 type RunOptions struct {
 	// Verbose raises the action's log level to debug.
 	Verbose bool
+	// Trace, with Verbose, raises it to trace, to show how the action's
+	// process is started, called and stopped as well.
+	Trace bool
 	// Quiet silences the action's own log records. It is set for a retry
 	// attempt that still has another attempt left: actions have no notion of
 	// being retried, so a failure there would otherwise be reported at error
@@ -46,14 +49,10 @@ func (o RunOptions) context() context.Context {
 
 // logLevel returns the level the action's log records are filtered at.
 func (o RunOptions) logLevel() hclog.Level {
-	switch {
-	case o.Verbose:
-		return hclog.Debug
-	case o.Quiet:
+	if o.Quiet && !o.Verbose {
 		return hclog.Off
-	default:
-		return hclog.Warn
 	}
+	return actionLogLevel(o.Verbose, o.Trace)
 }
 
 // ActionRunner defines the interface for running actions
@@ -85,11 +84,7 @@ func (p *PluginActionRunner) RunActions(name string, with map[string]any, opts R
 func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
-	log := hclog.New(&hclog.LoggerOptions{
-		Name:   "actions",
-		Output: opts.Masker.Writer(os.Stderr),
-		Level:  opts.logLevel(),
-	})
+	log := newActionLog(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
 	// An action that runs steps of its own, as embedded does, says which
 	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
@@ -109,6 +104,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		if err != nil {
 			return nil, nil, err
 		}
+		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
 	return actionrpc.RunExecutableStepContext(opts.context(), exe.Path, exe.SHA256, call, log)

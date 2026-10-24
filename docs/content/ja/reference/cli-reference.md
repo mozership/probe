@@ -7,13 +7,13 @@
 Probeの呼び出し方は2つです。実行するワークフローファイルを渡すか、ファイルに対するサブコマンドを指定します。
 
 ```bash
-probe [options] <workflow-file>
+probe [options] <workflow-file>...
 probe <subcommand> [options] <file>
 ```
 
 ## コマンド構文
 
-実行時には必ず1つ以上のワークフローファイルを指定します。オプションはその前に置き、実行以外の処理を行う場合はファイルの代わりにサブコマンドを指定します。
+実行時には必ず1つ以上のワークフローファイルを指定します。オプションはファイルの前、後、間のどこにでも置けます。`--`より後の引数は、`-`で始まるものも含めてすべてファイルとして扱います。実行以外の処理を行う場合は、最初にサブコマンドを指定します。
 
 ### 基本コマンド
 
@@ -28,19 +28,20 @@ probe workflow.yml
 設定マージでワークフローを実行：
 
 ```bash
+probe base.yml environment.yml overrides.yml
 probe base.yml,environment.yml,overrides.yml
 ```
 
-ファイルは左から右に連結され、1つのYAMLドキュメントとして解析されます。複数のファイルで定義されたトップレベルのキーは最後のファイルの値になり、エントリ単位ではなくキーごと置き換わります。
+ファイルは別々の引数として渡すか、カンマ区切りの1引数として渡します。2つの形は混ぜて使えます。ファイルは左から右に連結され、1つのYAMLドキュメントとして解析されます。複数のファイルで定義されたトップレベルのキーは最後のファイルの値になり、エントリ単位ではなくキーごと置き換わります。
 
 ### 位置引数
 
-位置引数はワークフローのパスだけで、これは必須です。
+位置引数はワークフローのパスだけで、1つ以上が必須です。
 
 #### `workflow-path`
 
-**型:** String（必須）  
-**説明:** ワークフローYAMLファイルのパス、またはマージ用のカンマ区切りファイルリスト
+**型:** String、1つ以上（必須）  
+**説明:** ワークフローYAMLファイル、ディレクトリ、グロブのパス。複数のパスを別々の引数またはカンマ区切りで渡すと、指定した順にマージされます。直接指定するファイルは`.yml`か`.yaml`で終わる必要があります。ディレクトリやグロブからは、これらのファイルだけを読みます
 
 **例:**
 ```bash
@@ -48,6 +49,7 @@ probe base.yml,environment.yml,overrides.yml
 probe workflow.yml
 
 # 複数ファイル（マージ）
+probe base.yml production.yml
 probe base.yml,production.yml
 
 # 相対パス
@@ -65,20 +67,39 @@ probe /home/user/workflows/monitoring.yml
 
 **型:** ブールフラグ  
 **デフォルト:** `false`  
-**説明:** 詳細な実行情報を表示する詳細出力を有効化
+**説明:** 各ステップが何をしたかを表示します。アクションに渡したリクエスト、アクションが返したレスポンス、テストの結果です。`-vv`のように2回指定すると、各アクションをどう実行したかも表示します
 
 **例:**
 ```bash
 probe -v workflow.yml
 probe --verbose workflow.yml
+probe -vv workflow.yml
 ```
 
 **詳細出力に含まれる内容:**
-- ステップバイステップの実行詳細
-- HTTPリクエスト/レスポンス情報
-- テンプレート評価結果
-- タイミング情報
-- デバッグメッセージ
+- 各ステップのリクエストとレスポンス、レスポンス時間。リクエストを返す前にアクションが失敗したステップでは、代わりにステップがアクションに渡したパラメーター（テンプレートを評価したもの）
+- テストの結果と、テストが読んだ値（`Env`）
+- アクションがデバッグ、情報、エラーの各レベルで記録したログ（`-v`なしでは表示しません）
+
+詳細出力は標準エラー出力に書きます。レポートは`-v`なしのときと同じく標準出力に書きます。アクションのログは、ほかの詳細出力と同じ形で表示します。先頭にレベルとアクション名を置き、その下にフィールドを並べます。
+
+```
+[DEBUG] ./my-action: retrying the request
+[DEBUG]   attempt: 2
+```
+
+**`-vv`**（`-v`を2回指定しても同じ）は、ワークフローではなくアクションのデバッグに役立つ情報も表示します。Probeがアクションのプロセスを起動し、呼び出し、停止する過程と、アクションがトレースレベルで記録したログです。受け取ったパラメーターや返した結果などがこれに当たります。リクエストとレスポンスが同じことをすでに示すため、`-v`ではこれらを表示しません。
+
+```
+[TRACE] http: starting plugin
+[TRACE]   args:
+[TRACE]     - probe
+[TRACE]     - builtin-actions
+[TRACE]     - http
+[TRACE]   path: /usr/local/bin/probe
+…
+[TRACE] http: plugin exited
+```
 
 ### `-h, --help`
 
@@ -123,6 +144,16 @@ probe --timing workflow.yml
 **値:** `auto`, `spinner`, `stream`  
 **デフォルト:** `auto`  
 **説明:** レポートの出力方法を選択します。`auto`は対話的な端末なら`spinner`、それ以外なら`stream`を選びます。`spinner`は進捗をその場で描き換え、`stream`は完了したものから順に書き出すため、CIのログやパイプに向いています。
+
+`stream`は、ジョブの実行中にも、ステップの開始と終了ごとに1行を標準エラー出力へ書き出します。ジョブは並行して動くため、各行にはそのジョブの`name`をテンプレートを評価したうえで付けます。`name`に含まれるシークレットはマスクします。`name`のないジョブには`id`を付けます。24桁を超える`name`は切り詰め、同じ`name`のジョブには`id`を添えます。ラベルは同じ幅にそろえるため、ステップの列が縦にそろいます。
+
+```
+15:54:13.658 [Unit tests (job_0)] ▸ go test ./api
+15:54:13.658 [Unit tests (job_1)] ▸ go test ./web
+15:54:13.659 [Deploy staging]     ▸ upload
+15:54:13.690 [Unit tests (job_1)] ✓ go test ./web (31ms)
+15:54:13.702 [Unit tests (job_0)] ✗ go test ./api
+```
 
 値は環境変数`PROBE_OUTPUT`でも指定できます。優先順位はフラグ、環境変数、自動判定の順です。
 
@@ -277,6 +308,32 @@ PRIVATE_KEY='taken as it is, $ and \ included'
 
 表示してはいけない値を持つ変数は、通常どおり[`secrets`](/ja/reference/yaml-configuration#secrets)に書きます。値の出どころは関係ありません。
 
+### `--job`
+
+**型:** String（繰り返し指定可）  
+**値:** ジョブのidまたは名前のカンマ区切りのリスト  
+**説明:** ワークフローのうち、指定したジョブと、それが必要とするジョブだけを実行します。ジョブは`id`で指定します。その`id`を持つジョブがなければ、書かれたとおりの`name`で指定します。`id`のないジョブには、3番目のジョブなら`job_2`のように、位置から決まるidが付きます。`name`はテンプレートを評価する前の、書かれたとおりの文字列と照合します。そのため、`Setup {{vars.env}}`のようにテンプレートを含む`name`のジョブは`id`で指定します。
+
+```bash
+probe --job tests workflow.yml
+probe --job "User API" --job tests,lint workflow.yml
+```
+
+```
+Running 3 of 5 jobs: Tests, Setup (needed), Cleanup (always)
+```
+
+- 指定したジョブの[`needs`](/ja/reference/yaml-configuration#needs)にあるジョブは、その前に実行します。それらが必要とするジョブも、何段先でも同様です。ジョブはそれらが公開する値を読むことがあるためです。
+- [`always`](/ja/reference/yaml-configuration#always)を持つジョブは、`needs`のジョブのどれかが実行されるときに実行します。そのジョブが作ったものを削除するジョブは、実行されなければならないためです。待つのは`needs`のうち実行されるジョブだけで、ほかのジョブは実行しません。そのため、実行されないジョブが公開するはずだった値はありません。`needs`のジョブが失敗したときと同じです。
+- それ以外のジョブは実行しません。端末のレポートにも、レポートファイルにも、その集計にも含めません。実行は、実行するジョブだけからなるワークフローの実行です。終了ステータスもそれらのジョブで決まります。どのジョブをなぜ実行するかは、上の行のように標準エラー出力に表示します。ワークフロー全体の実行と取り違えないためです。`json`は、指定したジョブのidとワークフローのジョブの数を`"selection": {"jobs": ["tests"], "total": 5}`のように`selection`に記録します。`markdown`と`github-summary`は要約の行の下にそのことを書き、[`probe coverage`](#coverage)は、ほかのジョブのステップを数えていないことを警告します。
+- 外部アクションの取得と、[`embedded`](/ja/reference/actions/embedded)ステップのジョブファイルの読み込みは、実行するジョブの分だけ行います。ワークフロー全体の読み込みと検査は、全体を実行するときと同じく行います。どのジョブであっても、存在しないジョブを指す`needs`、循環する`needs`、どのアクションも指さない`uses`があれば、Probeは終了ステータス2で停止します。
+- どのジョブの`id`でも`name`でもない値や、複数のジョブが持つ`name`を指定すると、Probeはジョブを実行する前に終了ステータス2で停止します。近い名前のジョブがあれば候補を示し、複数のジョブが持つ名前では、それらのidを示します。
+- カンマを含む名前はカンマで分割されます。そのジョブは`id`で指定します。
+
+`--report`とは異なり、環境変数はありません。一部のジョブに絞る設定が環境から入ると、全体を実行したように見えるためです。
+
+[`probe dag --job`](#dag)は、同じ`--job`での実行が実行するジョブを描きます。
+
 ## サブコマンド
 
 サブコマンドを指定すると、ワークフローの実行の代わりに別の処理を行います。`gen`は雛形のワークフローを生成し、`dag`はワークフローが表す依存関係のグラフを出力し、`check`はワークフローを実行せずに誤りや弱点を見つけ、`coverage`は実行がOpenAPIドキュメントのどこまでを検証したかを示し、`guide`はこのドキュメントを出力し、`skill`はAIエージェントがProbeを使えるように準備し、`manifest`は外部アクションのリリースの`action.yml`を出力します。
@@ -299,10 +356,13 @@ probe gen petstore.yml
 
 ワークフローを実行せずにジョブ依存関係グラフを表示します。デフォルトではASCIIアートで出力します。`--mermaid`を指定するとMermaidフローチャート形式で出力します。
 
+複数のファイルは、実行時と同じくマージされます。
+
 **使い方:**
 ```bash
-probe dag <workflow-file>
-probe dag --mermaid <workflow-file>
+probe dag <workflow-file>...
+probe dag --mermaid <workflow-file>...
+probe dag --job <job> <workflow-file>...
 ```
 
 **オプション:**
@@ -310,6 +370,9 @@ probe dag --mermaid <workflow-file>
 | オプション | 説明 |
 |--------|-------------|
 | `--mermaid` | ASCIIアートの代わりにMermaidフローチャート形式で出力 |
+| `--job` | 同じ[`--job`](#--job)での実行が実行するジョブだけを描く |
+
+`needs`が循環するジョブは、実行と同じく拒否します。描く順序がないため、終了ステータス2で停止します。
 
 **ASCII出力例:**
 ```
@@ -374,12 +437,12 @@ flowchart LR
 
 ### `check`
 
-ワークフローを実行せずに、誤りや弱点を見つけます。人やAIエージェントが書いたワークフローを、テスト対象のシステムに対して実行する前に確かめられます。実行時と同じく複数のファイルを読み合わせる場合は、カンマ区切りで1つの引数として渡します。
+ワークフローを実行せずに、誤りや弱点を見つけます。人やAIエージェントが書いたワークフローを、テスト対象のシステムに対して実行する前に確かめられます。実行時と同じく複数のファイルを読み合わせる場合は、別々の引数として渡すか、カンマ区切りで1つの引数として渡します。
 
 **使い方:**
 ```bash
 probe check workflow.yml
-probe check base.yml,staging.yml
+probe check base.yml staging.yml
 ```
 
 **出力例:**
@@ -387,9 +450,11 @@ probe check base.yml,staging.yml
 workflow.yml:10: error: job 0 "Users", step 0 "Log in": unknown key "tset"; did you mean "test"?
 workflow.yml:14: error: job 0 "Users", step 1 "Read": unknown action "htp"; did you mean "http"?
 workflow.yml:18: error: job 0 "Users", step 1 "Read": with: outputs.login.tokn is not published: step "login" publishes token
+workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
 workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.login.token may not be published yet: job "Other" does not need job "Users", whose step publishes it
+workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_url is not defined by the workflow, so it is nil unless --var gives it; did you mean "API_URL"?
 
-3 errors, 1 warning
+4 errors, 2 warnings
 ```
 
 **エラー**として報告するもの:
@@ -405,6 +470,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - `baseline`を読む`repeat.test`。`baseline`を読めるのは`repeat.baseline_test`だけ
 - `baseline.steps`の下のステップやフィールドを、`baseline.steps[vars.id]`のように実行時に決まるキーで読む`repeat.baseline_test`
 - どのステップも公開していない出力、そのステップが公開していない出力、そのステップが公開する前に読む出力（同じジョブの前のステップから読む場合など）の参照
+- 式やテンプレートが読む名前のうち、読める場所にないもの。読んだところで失敗します。ステップの`name`、`with`、`vars`、`iteration`、`test`、`echo`ではステップが失敗し、`skipif`、`wait`、出力ではエラーを表示してそれを無視するので、ステップは書いていないかのように実行されます。ステップが読めるのは`vars`、`outputs`、`res`、`req`、`rt`、`status`、`report`、`repeat_index`なので、ステップの`test`の`steps.login.code`、`nil`のつもりの`null`、ステップの`with`の`{{API_TOKEN}}`を報告します。環境変数を読めるのはワークフローの`vars`だけです。繰り返すジョブのテストが読めるのは`vars`、`steps`、`baseline`です。ジョブの`name`とワークフローの`vars`のテンプレートは、この確認の対象外です
 
 **警告**として報告するもの:
 
@@ -412,6 +478,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - 何も検証していないステップ。`test`がなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
 - `1 == 1`のように何も読まない`test`。ステップの実行結果によらず、テストの結果が変わりません
 - `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
+- `vars.<name>`として読むvarのうち、ワークフローの`vars`、ステップの`vars`、ステップに書いた`iteration`の項目のどれも定義していないもの。[`--var`](#--var)で与えない限りnilになります。ステップの`vars`が読めるのはワークフローのvarだけなので、ステップの他のvarや`iteration`のキーを読むものも報告します。`vars[k]`のように実行時に決まるキーで読むvarと、`iteration`がテンプレートのステップで、そのステップの`vars`と`iteration`以外のフィールドが読むvarは確かめません。読み合わせるファイルは1つのワークフローとして確かめるので、実行時に読むファイルを`probe check`にも渡します
 
 エラーが見つかれば終了ステータスは2、警告だけか何も見つからなければ0です。
 
@@ -503,6 +570,8 @@ Responses:  2 of 4 checked (50.0%)
 ```
 
 ドキュメントが宣言する各オペレーションを、宣言するレスポンス（`200`、`2XX`、`default`など）とともに一覧にします。ステップのレスポンスを対応付けたものには`✓`、どのステップも対応付けなかったものには`-`を付けます。オペレーションが宣言していないステータスコードのステップは、オペレーションだけに数えます。ステップは、指定したドキュメントを同じパスで指しているときに数えます。`./openapi.yml`のように書き方が違っても同じパスなら数えます。どのステップも指定したドキュメントを指していないレポートはエラーになり、ステップが指しているドキュメントを一覧で示します。`.proto`で終わるファイルは、grpcアクションの契約として扱います。インポートは解決せずにそのファイルだけを読み、宣言している各サービスの各メソッドを`users.v1.UserService/GetUser`のように一覧にします。`.proto`ファイルはメソッドが返すステータスを宣言しないため、網羅度はメソッドだけで示し、レスポンスの行は出しません。ファイルは`proto.files`と同じパスで指定します。
+
+[`--job`](#--job)で絞った実行のレポートには、実行したジョブのステップしかありません。その場合は`[WARN] 3 of the 5 jobs of the workflow ran, selected with --job: tests; the steps of the others are not counted`のように標準エラー出力に警告します。
 
 網羅の度合いにかかわらず終了ステータスは0で、ドキュメントかレポートを読めない場合は2です。
 
@@ -691,7 +760,7 @@ probe -v health-check.yml
 
 ### 環境固有の実行
 
-カンマに続けて2つ目のファイルを指定すると、1つ目に上書きマージされます。1つのワークフローで環境を切り替えるにはこの方法を使います。
+1つ目のファイルに続けて、別の引数として、またはカンマの後に2つ目のファイルを指定すると、1つ目に上書きマージされます。1つのワークフローで環境を切り替えるにはこの方法を使います。
 
 ```bash
 # 開発環境

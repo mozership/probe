@@ -154,7 +154,7 @@ jobs:
         "query": "query GetUser($id: ID!) { user(id: $id) { name email active } }",
         "variables": { "id": "{{vars.test_user_id}}" }
       }
-  test: res.code == 200 && res.body.data.user != null
+  test: res.code == 200 && res.body.data.user != nil
   outputs:
     user_name: res.body.data.user.name
     user_email: res.body.data.user.email
@@ -293,7 +293,7 @@ The `hello` action is primarily used for testing and demonstrations. It provides
 **Hello Action Response:** the action takes no parameters of its own. Every key given in `with` comes back on `res`, and `status` is always `0`.
 
 ```yaml
-test: status == 0 && res.message != null
+test: status == 0 && res.message != nil
 ```
 
 ### SMTP Action
@@ -673,7 +673,7 @@ Validate action responses thoroughly:
   test: |
     res.code == 200 &&
     res.headers["Content-Type"] contains "application/json" &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
     (rt.sec * 1000) < 1000
   outputs:
@@ -928,6 +928,19 @@ func main() {
     })
 }
 ```
+
+The error `Run` returns is what the step's result and the files `--report` writes show, as it is, so word it for the person who reads why the step failed. An action that panics or exits before it returns fails its step with how its process exited and, for a panic, the panic message.
+
+Probe shows the records the action logs by their levels:
+
+- Warning: in every run. Log at this level what the user must see whatever the step's result says.
+- Error: only with `-v`, since the error the action returns already says what they would.
+- Debug and info: with `-v`, alongside the request and the response of the step, which Probe shows itself. Log at these levels what the action did that its result does not tell, such as a retry.
+- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `actionrpc.LogParams` and `actionrpc.LogOutcome` log the parameters, and the result or the error, at this level.
+
+Each record is shown as `[LEVEL] <action>: <message>`, its fields under it as YAML-like lines, maps and lists laid out.
+
+Build the action against the `actionrpc` of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `actionrpc` puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.
 
 Build it for every platform it supports, publish the executables, and commit an `action.yml` with their URLs and digests. Users then pin the commit that holds that `action.yml`. [mozership/probe-graphql](https://github.com/mozership/probe-graphql) does this with GoReleaser and a workflow that commits the digests after each release.
 

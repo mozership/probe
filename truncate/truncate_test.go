@@ -1,6 +1,7 @@
 package truncate
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/fatih/color"
@@ -218,5 +219,50 @@ func TestMap(t *testing.T) {
 	}
 	if input["long"] != "abcdefghij" {
 		t.Error("Map() changed its input")
+	}
+}
+
+func TestValue(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	type point struct{ X, Y int }
+	input := map[string]any{
+		"short":   "abc",
+		"long":    "abcdefghij",
+		"number":  1234567,
+		"float":   1.5,
+		"flag":    true,
+		"none":    nil,
+		"nested":  map[string]any{"k": "vvvvvvvv", "n": 2},
+		"headers": map[string]string{"Accept": "text/plain"},
+		"list":    []any{"wwwwwwww", 3},
+		"tags":    []string{"a"},
+		"bytes":   []byte("xyz"),
+		"struct":  point{X: 123456, Y: 2},
+	}
+	got := Value(input, 5)
+
+	// Maps and lists are kept, so that what logs them lays them out, and
+	// the strings in them are cut one by one.
+	want := map[string]any{
+		"short":   "abc",
+		"long":    "abcde" + Message(),
+		"number":  1234567,
+		"float":   1.5,
+		"flag":    true,
+		"none":    nil,
+		"nested":  map[string]any{"k": "vvvvv" + Message(), "n": 2},
+		"headers": map[string]any{"Accept": "text/" + Message()},
+		"list":    []any{"wwwww" + Message(), 3},
+		"tags":    []any{"a"},
+		"bytes":   []byte("xyz"),
+		"struct":  "{1234" + Message(),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Value() = %#v, want %#v", got, want)
+	}
+	if input["long"] != "abcdefghij" || input["nested"].(map[string]any)["k"] != "vvvvvvvv" {
+		t.Error("Value() changed its input")
 	}
 }

@@ -4,10 +4,12 @@ Probe can build one workflow out of several files. This is how configuration is 
 
 ## How Merging Works
 
-Pass the files as one comma-separated argument:
+Pass the files as separate arguments, or as one comma-separated argument. The two forms mean the same and can be mixed:
 
 ```bash
+probe base.yml production.yml
 probe base.yml,production.yml
+probe common.yml,base.yml production.yml
 ```
 
 Probe reads the files **in order and concatenates them into a single YAML document**, then parses that document. Nothing more clever happens: there is no per-key deep merge.
@@ -139,6 +141,7 @@ The file holding the anchors has to come first, and keys that Probe does not kno
 
 - Put the anchor definitions first, then the workflow, then any environment override.
 - Keep one owner per top-level key. Two files that both define `vars` is the most common surprise.
+- Only one file can hold `jobs`. When a later file has `jobs` too, its jobs replace those of the earlier file, which do not run, and the run, `probe dag` and `probe check` warn of it with the line of each. This also happens with a glob such as `probe workflows/*.yml` over files that are each a workflow: run them one at a time.
 - `probe dag workflow.yml,production.yml` loads the merged result without running it, which is the quickest way to check that the pieces fit together.
 
 ## What's Next?

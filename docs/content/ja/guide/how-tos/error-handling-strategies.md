@@ -53,7 +53,7 @@ jobs:
       test: res.code == 200
       outputs:
         analytics_available: res.code == 200
-        analytics_error: 'res.code != 200 ? res.code : null'
+        analytics_error: 'res.code != 200 ? res.code : nil'
 
     # このステップは前のステップに関係なく常に実行
     - name: Optional Notification Service
@@ -216,7 +216,7 @@ jobs:
         success: res.code == 200
         attempt_number: 1
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : null'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # 2回目の試行（2秒遅延）
     - name: Retry Attempt 1 (2s delay)
@@ -231,7 +231,7 @@ jobs:
         success: res.code == 200
         attempt_number: 2
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : null'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # 3回目の試行（4秒遅延）
     - name: Retry Attempt 2 (4s delay)
@@ -246,7 +246,7 @@ jobs:
         success: res.code == 200
         attempt_number: 3
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : null'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # 最終試行（8秒遅延）
     - name: Final Attempt (8s delay)
@@ -261,7 +261,7 @@ jobs:
         success: res.code == 200
         attempt_number: 4
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : null'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     - name: Retry Summary
       uses: hello
@@ -348,7 +348,7 @@ jobs:
       outputs:
         test_successful: res.code == 200
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.code : null'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # サーキットが開いているが回復時間が経過した場合のプローブテスト
     - name: Circuit Recovery Probe
@@ -379,7 +379,7 @@ jobs:
             }},
             "response_time": {{
               outputs['normal-test'] ? outputs['normal-test'].response_time :
-              outputs['probe-test'] ? outputs['probe-test'].response_time : null
+              outputs['probe-test'] ? outputs['probe-test'].response_time : nil
             }},
             "timestamp": {{unixtime()}}
           }
@@ -443,7 +443,7 @@ jobs:
         healthy: res.code == 200
         status_code: res.code
         response_time: (rt.sec * 1000)
-        error_details: 'res.code != 200 ? res.body : null'
+        error_details: 'res.code != 200 ? res.body : nil'
 
     # ステップ2: 異常な場合の詳細診断
     - name: Service Diagnostics
@@ -688,19 +688,19 @@ jobs:
         content_type: res.headers["Content-Type"]
         
         # エラーコンテキスト（失敗時のみ入力）
-        error_message: 'res.code != 200 ? res.body.error.message : null'
-        error_code: 'res.code != 200 ? res.body.error.code : null'
-        error_details: 'res.code != 200 ? res.body.error.details : null'
+        error_message: 'res.code != 200 ? res.body.error.message : nil'
+        error_code: 'res.code != 200 ? res.body.error.code : nil'
+        error_details: 'res.code != 200 ? res.body.error.details : nil'
         trace_id: res.headers["X-Trace-Id"]
         request_id: res.headers["X-Request-Id"]
         
         # パフォーマンスコンテキスト
         server_response_time: res.headers["X-Response-Time"]
-        database_time: 'res.body.debug ? res.body.debug.database_time_ms : null'
-        cache_hit: 'res.body.debug ? res.body.debug.cache_hit : null'
+        database_time: 'res.body.debug ? res.body.debug.database_time_ms : nil'
+        cache_hit: 'res.body.debug ? res.body.debug.cache_hit : nil'
         
         # ビジネスコンテキスト
-        affected_user: 'res.body.error ? res.body.error.affected_user : null'
+        affected_user: 'res.body.error ? res.body.error.affected_user : nil'
         operation_id: res.body.operation_id
         retry_after: res.headers["Retry-After"]
 

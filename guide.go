@@ -7,6 +7,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/mozership/probe/internal/suggest"
 )
 
 // The reference and concept pages of the documentation site are built into
@@ -109,7 +111,9 @@ func Guide(topic string) (string, error) {
 	if name, ok := strings.CutPrefix(topic, "actions/"); ok {
 		topic = name
 	}
-	for _, t := range GuideTopics() {
+	topics := GuideTopics()
+	names := make([]string, 0, len(topics))
+	for _, t := range topics {
 		if t.Name == topic {
 			data, err := guideFS.ReadFile(t.file)
 			if err != nil {
@@ -117,6 +121,10 @@ func Guide(topic string) (string, error) {
 			}
 			return string(data), nil
 		}
+		names = append(names, t.Name)
+	}
+	if s := suggest.Closest(topic, names); s != "" {
+		return "", fmt.Errorf("unknown guide topic: %s; did you mean %q?", topic, s)
 	}
 	return "", fmt.Errorf("unknown guide topic: %s (run probe guide to list the topics)", topic)
 }

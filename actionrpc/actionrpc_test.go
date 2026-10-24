@@ -486,7 +486,7 @@ func (c directClient) Cleanup(ctx context.Context, in *pb.CleanupRequest, _ ...g
 
 func TestClientRunStep(t *testing.T) {
 	var logBuf bytes.Buffer
-	log := hclog.New(&hclog.LoggerOptions{Output: &logBuf, Level: hclog.Debug})
+	log := hclog.New(&hclog.LoggerOptions{Output: &logBuf, Level: hclog.Trace})
 	c := &Client{client: directClient{&Server{Impl: &statefulAction{}, log: log}}}
 
 	result, state, err := c.RunStep(Call{With: map[string]any{"a": "b"}})
@@ -543,7 +543,7 @@ func TestClientRunDropsState(t *testing.T) {
 // once it has the result.
 func TestServerLogsResultWithCredentialsHidden(t *testing.T) {
 	var logBuf bytes.Buffer
-	log := hclog.New(&hclog.LoggerOptions{Output: &logBuf, Level: hclog.Debug})
+	log := hclog.New(&hclog.LoggerOptions{Output: &logBuf, Level: hclog.Trace})
 	s := &Server{Impl: &MockActions{RunFunc: func(map[string]any) (map[string]any, error) {
 		return map[string]any{"res": map[string]any{
 			"cookies": map[string]any{"session": "cookie-value"},

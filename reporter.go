@@ -73,6 +73,12 @@ type Reporter interface {
 	Finish(rs *Result)
 }
 
+// jobLabeler is a Reporter that labels what it prints by job, and is told
+// the names of the jobs once the vars they are evaluated with are known.
+type jobLabeler interface {
+	labelJobs(name func(id string) string)
+}
+
 // newReporter builds the reporter for the given mode.
 func newReporter(mode OutputMode, p *Printer, render *reportRenderer) Reporter {
 	if mode.resolve() == OutputModeStream {
@@ -129,6 +135,8 @@ type StreamReporter struct {
 	index   map[string]int
 
 	mu            sync.Mutex
+	labels        map[string]string
+	labelWidth    int
 	cursor        int
 	ready         map[string]*JobResult
 	succeeded     int
@@ -151,6 +159,27 @@ func newStreamReporter(p *Printer, render *reportRenderer) *StreamReporter {
 		index:   index,
 		ready:   make(map[string]*JobResult),
 	}
+}
+
+// labelJobs labels the progress lines of each job by its name, which name
+// gives for its id. The names are known once the vars they are evaluated
+// with are, which is after Start. Until then a line is labelled by its id.
+func (r *StreamReporter) labelJobs(name func(id string) string) {
+	// A name is masked before it is cut short: the line is masked again
+	// as it is written, but a secret cut short is no longer one the masker
+	// finds, and the padding is for the label as it is shown.
+	masker := r.printer.Masker()
+	labels := jobLabels(r.order, func(id string) string {
+		return masker.String(name(id))
+	})
+	w := 0
+	for _, l := range labels {
+		w = max(w, displayWidth(l))
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.labels, r.labelWidth = labels, w
 }
 
 func (r *StreamReporter) Start(name, description string) {
@@ -267,11 +296,20 @@ func (r *StreamReporter) writeJobLocked(jr *JobResult) {
 
 // progress writes one live line to stderr. The report on stdout only grows a
 // whole job at a time, so these lines are what show which step is running now.
+// Jobs run at once, so a line is labelled by its job, and the labels are
+// padded to one width, so that the steps line up in a log.
 func (r *StreamReporter) progress(jobID, icon, text, suffix string) {
 	ts := colorDim().Sprint(time.Now().Format("15:04:05.000"))
-	job := colorDim().Sprintf("[%s]", jobID)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	label, ok := r.labels[jobID]
+	if !ok {
+		label = jobID
+	}
+	job := colorDim().Sprintf("[%s]", label)
+	if pad := r.labelWidth - displayWidth(label); pad > 0 {
+		job += strings.Repeat(" ", pad)
+	}
 	r.printer.Fprintf(r.printer.errWriter, "%s %s %s %s%s\n", ts, job, icon, text, suffix)
 }

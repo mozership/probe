@@ -4,6 +4,7 @@ package truncate
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/fatih/color"
 )
@@ -38,6 +39,8 @@ func MapString(params map[string]string, maxLen int) map[string]string {
 }
 
 // Map truncates long values in map[string]any for logging
+//
+// Deprecated: use Value, which keeps the maps and lists in the values.
 func Map(params map[string]any, maxLen int) map[string]any {
 	truncated := make(map[string]any)
 	for key, value := range params {
@@ -51,4 +54,39 @@ func Map(params map[string]any, maxLen int) map[string]any {
 		}
 	}
 	return truncated
+}
+
+// Value truncates the long strings in v, a value an action logs, at any
+// depth, keeping its maps and lists as they are laid out, so that what logs
+// it shows them as such. A map comes back as a map[string]any and a list as
+// a []any, other than a []byte, which is left as it is, as are numbers and
+// booleans. Any other value, such as a struct, is turned into a string and
+// truncated, as Map does.
+func Value(v any, maxLen int) any {
+	switch val := v.(type) {
+	case nil, bool, []byte,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return v
+	case string:
+		return String(val, maxLen)
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Map:
+		out := make(map[string]any, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			out[fmt.Sprint(iter.Key().Interface())] = Value(iter.Value().Interface(), maxLen)
+		}
+		return out
+	case reflect.Slice, reflect.Array:
+		out := make([]any, rv.Len())
+		for i := range out {
+			out[i] = Value(rv.Index(i).Interface(), maxLen)
+		}
+		return out
+	}
+	return String(fmt.Sprintf("%v", v), maxLen)
 }

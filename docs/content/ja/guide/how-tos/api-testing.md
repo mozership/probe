@@ -35,7 +35,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.headers["Content-Type"] contains "application/json" &&
-        res.body != null &&
+        res.body != nil &&
         len(res.body) > 0
       outputs:
         post_count: len(res.body)
@@ -50,8 +50,8 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.id == outputs.first_post_id &&
-        res.body.title != null &&
-        res.body.body != null
+        res.body.title != nil &&
+        res.body.body != nil
       outputs:
         post_title: res.body.title
         post_body: res.body.body
@@ -101,8 +101,8 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.id != null &&
-        res.body.title != null &&
+        res.body.id != nil &&
+        res.body.title != nil &&
         res.body.userId == {{vars.test_user_id}}
       outputs:
         created_post_id: res.body.id
@@ -246,7 +246,7 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.access_token != null &&
+        res.body.access_token != nil &&
         res.body.token_type == "Bearer" &&
         res.body.expires_in > 0
       outputs:
@@ -267,7 +267,7 @@ jobs:
           Accept: "application/json"
       test: |
         res.code == 200 &&
-        res.body.id != null &&
+        res.body.id != nil &&
         res.body.email == "{{vars.test_username}}"
       outputs:
         user_id: res.body.id
@@ -306,7 +306,7 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.access_token != null &&
+        res.body.access_token != nil &&
         res.body.access_token != "{{outputs.login.access_token}}"
       outputs:
         new_access_token: res.body.access_token
@@ -414,7 +414,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.authenticated == true &&
-        res.body.rate_limit != null
+        res.body.rate_limit != nil
       outputs:
         header_auth_success: true
         rate_limit_remaining: res.body.rate_limit.remaining
@@ -503,21 +503,21 @@ jobs:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
-        res.body != null &&
-        res.body.data != null &&
+        res.body != nil &&
+        res.body.data != nil &&
         len(res.body.data) > 0 &&
         
         # Validate response structure
-        res.body.meta != null &&
-        res.body.meta.total != null &&
-        res.body.meta.page != null &&
-        res.body.meta.per_page != null &&
+        res.body.meta != nil &&
+        res.body.meta.total != nil &&
+        res.body.meta.page != nil &&
+        res.body.meta.per_page != nil &&
         
         # Validate first user object
-        res.body.data[0].id != null &&
-        res.body.data[0].email != null &&
-        res.body.data[0].name != null &&
-        res.body.data[0].created_at != null &&
+        res.body.data[0].id != nil &&
+        res.body.data[0].email != nil &&
+        res.body.data[0].name != nil &&
+        res.body.data[0].created_at != nil &&
         
         # Validate data types
         typeof(res.body.data[0].id) == "number" &&
@@ -538,26 +538,26 @@ jobs:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
-        res.body.user != null &&
+        res.body.user != nil &&
         
         # Validate required fields
         res.body.user.id == outputs.users.first_user_id &&
         res.body.user.email == "{{outputs.users.first_user_email}}" &&
-        res.body.user.profile != null &&
+        res.body.user.profile != nil &&
         
         # Validate nested objects
-        res.body.user.profile.first_name != null &&
-        res.body.user.profile.last_name != null &&
-        res.body.user.preferences != null &&
+        res.body.user.profile.first_name != nil &&
+        res.body.user.profile.last_name != nil &&
+        res.body.user.preferences != nil &&
         
         # Validate arrays
-        res.body.user.roles != null &&
+        res.body.user.roles != nil &&
         len(res.body.user.roles) > 0 &&
-        res.body.user.permissions != null
+        res.body.user.permissions != nil
       outputs:
         user_roles: res.body.user.roles
         user_permissions_count: len(res.body.user.permissions)
-        profile_complete: res.body.user.profile.first_name != null && res.body.user.profile.last_name != null
+        profile_complete: res.body.user.profile.first_name != nil && res.body.user.profile.last_name != nil
 
     - name: Test Data Consistency
       uses: http
@@ -568,20 +568,20 @@ jobs:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
-        res.body.orders != null &&
+        res.body.orders != nil &&
         
         # Validate all orders belong to the user
         all(res.body.orders, #.user_id == outputs.users.first_user_id) &&
         
         # Validate order structure
-        all(res.body.orders, #.id != null &&
-          #.total != null &&
-          #.status != null &&
-          #.created_at != null) &&
+        all(res.body.orders, #.id != nil &&
+          #.total != nil &&
+          #.status != nil &&
+          #.created_at != nil) &&
         
         # Validate business logic
         all(res.body.orders, #.total >= 0) &&
-        all(filter(res.body.orders, #.status == "completed"), #.completed_at != null)
+        all(filter(res.body.orders, #.status == "completed"), #.completed_at != nil)
       outputs:
         order_count: len(res.body.orders)
         completed_orders: 'len(filter(res.body.orders, #.status == "completed"))'
@@ -640,10 +640,10 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != null &&
+        res.body.error != nil &&
         res.body.error.code == "validation_error" &&
-        res.body.error.message != null &&
-        res.body.error.details != null &&
+        res.body.error.message != nil &&
+        res.body.error.details != nil &&
         len(res.body.error.details) > 0
       outputs:
         validation_errors: res.body.error.details
@@ -657,7 +657,7 @@ jobs:
         url: "{{vars.api_base_url}}/admin/users"
       test: |
         res.code == 401 &&
-        res.body.error != null &&
+        res.body.error != nil &&
         res.body.error.code == "unauthorized" &&
         res.body.error.message contains "authentication"
       outputs:
@@ -673,7 +673,7 @@ jobs:
           Authorization: "Bearer {{vars.USER_TOKEN}}"  # Non-admin token
       test: |
         res.code == 403 &&
-        res.body.error != null &&
+        res.body.error != nil &&
         res.body.error.code == "forbidden" &&
         res.body.error.message contains "permission"
       outputs:
@@ -689,7 +689,7 @@ jobs:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 404 &&
-        res.body.error != null &&
+        res.body.error != nil &&
         res.body.error.code == "not_found" &&
         res.body.error.resource == "user"
       outputs:
@@ -711,9 +711,9 @@ jobs:
           }
       test: |
         res.code == 422 &&
-        res.body.error != null &&
+        res.body.error != nil &&
         res.body.error.code == "unprocessable_entity" &&
-        res.body.error.details != null
+        res.body.error.details != nil
       outputs:
         duplicate_email_handled: true
 
@@ -729,7 +729,7 @@ jobs:
         res.code in [200, 429] &&
         (res.code == 429 ? 
           res.body.error.code == "rate_limit_exceeded" &&
-          res.headers["Retry-After"] != null :
+          res.headers["Retry-After"] != nil :
           true
         )
       outputs:
@@ -795,9 +795,9 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.user.id != null &&
-        res.body.user.email != null &&
-        res.body.access_token != null
+        res.body.user.id != nil &&
+        res.body.user.email != nil &&
+        res.body.access_token != nil
       outputs:
         user_id: res.body.user.id
         user_email: res.body.user.email
@@ -829,7 +829,7 @@ jobs:
       test: |
         res.code == 200 &&
         len(res.body.products) > 0 &&
-        res.body.products[0].id != null &&
+        res.body.products[0].id != nil &&
         res.body.products[0].price > 0
       outputs:
         available_products: len(res.body.products)
@@ -852,7 +852,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.cart_item.id != null &&
+        res.body.cart_item.id != nil &&
         res.body.cart_item.quantity == 2 &&
         res.body.cart_total > 0
       outputs:
@@ -920,7 +920,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.payment_method.id != null &&
+        res.body.payment_method.id != nil &&
         res.body.payment_method.last_four == "1111"
       outputs:
         payment_method_id: res.body.payment_method.id
@@ -947,7 +947,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.order.id != null &&
+        res.body.order.id != nil &&
         res.body.order.status == "processing" &&
         res.body.order.total > 0
       outputs:
@@ -1162,7 +1162,7 @@ body: |
 test: |
   res.code == 200 &&                           # HTTPステータス
   res.headers["Content-Type"] contains "json" &&  # コンテンツタイプ
-  res.body.id != null &&                  # 必須フィールド
+  res.body.id != nil &&                  # 必須フィールド
   typeof(res.body.id) == "number" &&      # データタイプ
   res.body.email contains "@" &&         # データフォーマット
   (rt.sec * 1000) < 1000                              # パフォーマンス

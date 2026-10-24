@@ -32,10 +32,10 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	actionrpc.LogParams(a.log, "received embedded request parameters", with)
 
 	before := WithBefore(func(path string, vars map[string]any) {
-		a.log.Debug("embedded job prepared", "path", path, "vars", vars)
+		a.log.Trace("embedded job prepared", "path", path, "vars", vars)
 	})
 	after := WithAfter(func(result *Result) {
-		a.log.Debug("embedded job completed", "result", result)
+		a.log.Trace("embedded job completed", "result", result)
 	})
 	ret, err := Execute(with, before, after, WithRunID(call.Step.RunID), WithGuard(call.Guard), WithActions(call.Actions), WithBuiltinActions(a.builtin), WithCleanups(call.Cleanups))
 

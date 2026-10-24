@@ -311,7 +311,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 操作が失敗したときは、失敗のメッセージに最初のいくつかのエラーが入ります。操作が失敗した原因がそのエラーであることが多いためです。
 
 ```
-action error in step_execute: action execution failed (caused by: ... context deadline exceeded (console errors: "Uncaught TypeError: Cannot read properties of null (reading 'total') (http://localhost:8090/checkout.js:42:17)") (page at failure: ...))
+... context deadline exceeded (console errors: "Uncaught TypeError: Cannot read properties of null (reading 'total') (http://localhost:8090/checkout.js:42:17)") (page at failure: ...)
 ```
 
 ### スクリーンショットを残す
@@ -342,7 +342,7 @@ action error in step_execute: action execution failed (caused by: ... context de
 アクションが失敗すると、Probeはその時点のページを保存します。ページ全体のPNGのスクリーンショットと、文書のHTMLです。2つのファイルには`probe-browser-failure-1947177907.png`と`.html`のように同じ名前が付きます。失敗のメッセージには、ページのURLとあわせて両方のファイルのパスが入ります。
 
 ```
-action error in step_execute: action execution failed (caused by: ... context deadline exceeded (page at failure: url http://localhost:8090/, screenshot /tmp/probe-browser-failure-1947177907.png, html /tmp/probe-browser-failure-1947177907.html))
+... context deadline exceeded (page at failure: url http://localhost:8090/, screenshot /tmp/probe-browser-failure-1947177907.png, html /tmp/probe-browser-failure-1947177907.html)
 ```
 
 `--report`で書き出すファイルでも、このメッセージが失敗の`message`になります。テストがfalseになるのはアクションの失敗ではないため、そのときはページを保存しません。テキストが期待どおりでないときに保存させるには、`test`で確かめる代わりに[`wait_text`](#テキストを待つ)に`equals`、`contains`、`matches`を書きます。どんな場合でもページを残すには`capture_screenshot`アクションを加えます。

@@ -64,35 +64,24 @@ jobs:
       echo: |
         🌍 Environment Test Report
         =========================
-          
+
         Environment: {{vars.environment}}
         API Base URL: {{vars.api_base_url}}
-          
+
         Health Check Results:
-        API Health: {{outputs['api-health-check'].api_healthy ? "✅ Healthy" : "❌ Down"}} ({{outputs['api-health-check'].response_time}}ms)
-        Database: {{outputs['api-health-check'].database_healthy ? "✅ Healthy" : "❌ Down"}} ({{outputs['api-health-check'].db_response_time}}ms)
-        API Version: {{outputs['api-health-check'].api_version}}
-          
+        API Health: {{outputs.api_healthy ? "✅ Healthy" : "❌ Down"}} ({{outputs.response_time}}ms)
+        Database: {{outputs.database_healthy ? "✅ Healthy" : "❌ Down"}} ({{outputs.db_response_time}}ms)
+        API Version: {{outputs.api_version}}
+
         Environment-Specific Notes:
         {{vars.environment == "development" ? "• Development environment - extended timeouts enabled" : ""}}
         {{vars.environment == "staging" ? "• Staging environment - production-like testing" : ""}}
         {{vars.environment == "production" ? "• Production environment - strict validation" : ""}}
-```
 
-**development.yml:**
-```yaml
-vars:
-  environment: "{{ENVIRONMENT ?? 'development'}}"
-  api_base_url: "{{API_BASE_URL ?? 'http://localhost:3000'}}"
-  default_timeout: "{{DEFAULT_TIMEOUT ?? '60s'}}"
-
-# Development-specific additional checks
-jobs:
 - id: dev-specific-checks
   name: Development Environment Checks
   needs: [api-health-check]
-  defaults:
-    http:
+  skipif: vars.environment != "development"
   steps:
     - name: Hot Reload Check
       uses: http
@@ -118,20 +107,11 @@ jobs:
         🛠️ Development Environment Status:
         Hot Reload: {{outputs.hot_reload_enabled ? "✅ Enabled" : "❌ Disabled"}}
         Debug Info: {{outputs.debug_info_available ? "✅ Available" : "❌ Not Available"}}
-```
 
-**staging.yml:**
-```yaml
-vars:
-  environment: "{{ENVIRONMENT ?? 'staging'}}"
-  api_base_url: "{{API_BASE_URL ?? 'https://api.staging.yourcompany.com'}}"
-  default_timeout: "{{DEFAULT_TIMEOUT ?? '30s'}}"
-
-# Staging-specific additional checks
-jobs:
 - id: staging-specific-checks
   name: Staging Environment Checks
   needs: [api-health-check]
+  skipif: vars.environment != "staging"
   defaults:
     http:
       headers:
@@ -173,19 +153,11 @@ jobs:
         Load Balancer: {{outputs.load_balancer_healthy ? "✅ Healthy" : "❌ Issues"}} ({{outputs.backend_count}} backends)
         Cache Layer: {{outputs.cache_healthy ? "✅ Healthy" : "❌ Issues"}} ({{(outputs.cache_hit_rate * 100)}}% hit rate)
         Integration Tests: {{outputs.integration_tests_passed ? "✅ Passed" : "❌ Failed"}}
-```
 
-**production.yml:**
-```yaml
-vars:
-  environment: "{{ENVIRONMENT ?? 'production'}}"
-  api_base_url: "{{API_BASE_URL ?? 'https://api.yourcompany.com'}}"
-  default_timeout: "{{DEFAULT_TIMEOUT ?? '10s'}}"
-
-jobs:
 - id: production-specific-checks
   name: Production Environment Checks
   needs: [api-health-check]
+  skipif: vars.environment != "production"
   defaults:
     http:
       headers:
@@ -241,6 +213,30 @@ jobs:
         Security Compliance: {{outputs.security_compliant ? "✅ Compliant" : "❌ Non-Compliant"}} ({{(outputs.security_score * 100)}}%)
 ```
 
+**development.yml:**
+```yaml
+vars:
+  environment: "{{ENVIRONMENT ?? 'development'}}"
+  api_base_url: "{{API_BASE_URL ?? 'http://localhost:3000'}}"
+  default_timeout: "{{DEFAULT_TIMEOUT ?? '60s'}}"
+```
+
+**staging.yml:**
+```yaml
+vars:
+  environment: "{{ENVIRONMENT ?? 'staging'}}"
+  api_base_url: "{{API_BASE_URL ?? 'https://api.staging.yourcompany.com'}}"
+  default_timeout: "{{DEFAULT_TIMEOUT ?? '30s'}}"
+```
+
+**production.yml:**
+```yaml
+vars:
+  environment: "{{ENVIRONMENT ?? 'production'}}"
+  api_base_url: "{{API_BASE_URL ?? 'https://api.yourcompany.com'}}"
+  default_timeout: "{{DEFAULT_TIMEOUT ?? '10s'}}"
+```
+
 **Usage:**
 ```bash
 # Development environment
@@ -252,6 +248,8 @@ probe base-workflow.yml,staging.yml
 # Production environment
 probe base-workflow.yml,production.yml
 ```
+
+The environment files hold only `vars`. A top-level key in a later file replaces the one in an earlier file, so `jobs` in an environment file would replace every job of the base workflow, and its `needs` would name jobs that are no longer there; Probe warns of a file whose `jobs` replace those of an earlier one. The jobs for one environment are kept in the base workflow instead, and `skipif` skips them in the others.
 
 When the environments differ only in a few values, the workflow can stay one file, and the values be given as it is run. `--env-file` reads the variables the workflow reads into its `vars` from a file, where the environment has none, and `--var` gives a var in place of what the workflow writes for it:
 
@@ -271,10 +269,12 @@ Environments differ in more than their addresses: which features are enabled, wh
 
 ### Environment-Specific Feature Flags
 
-Control which features are tested in different environments:
+Control which features are tested in different environments. The file is a workflow of its own, with its own `jobs`, so it is run apart from the base workflow rather than merged into it:
 
 **feature-flags.yml:**
 ```yaml
+name: Feature Flag Tests
+
 # Feature flags configuration
 vars:
   api_base_url: "{{API_BASE_URL}}"
@@ -379,23 +379,23 @@ jobs:
       echo: |
         🚀 Feature Test Summary for {{vars.environment}}:
         ================================================
-          
+
         CORE FEATURES:
-        {{vars.feature_user_management == true ? "User Management: " + (outputs['core-feature-tests'].user_management_working ? "✅ Working" : "❌ Failed") : "User Management: ⏸️ Disabled"}}
-        {{vars.feature_basic_api == true ? "Basic API: " + (outputs['core-feature-tests'].basic_api_working ? "✅ Working" : "❌ Failed") : "Basic API: ⏸️ Disabled"}}
-          
+        {{vars.feature_user_management == true ? "User Management: " + (outputs.user_management_working ? "✅ Working" : "❌ Failed") : "User Management: ⏸️ Disabled"}}
+        {{vars.feature_basic_api == true ? "Basic API: " + (outputs.basic_api_working ? "✅ Working" : "❌ Failed") : "Basic API: ⏸️ Disabled"}}
+
         BETA FEATURES:
         {{vars.feature_beta_api == true ? "Beta API: " + (outputs['beta-feature-tests'].beta_api_working ? "✅ Working" : "❌ Failed") : "Beta API: ⏸️ Disabled"}}
-          
+
         ADMIN FEATURES:
         {{vars.feature_admin_tools == true ? "Admin Tools: " + (outputs['admin-feature-tests'].admin_tools_working ? "✅ Working" : "❌ Failed") : "Admin Tools: ⏸️ Disabled"}}
-          
+
         PERFORMANCE TESTING:
         {{vars.feature_performance_testing == true ? "Load Testing: " + (outputs['performance-tests'].load_test_passed ? "✅ Passed" : "❌ Failed") : "Performance Testing: ⏸️ Disabled"}}
-          
+
         SECURITY TESTING:
         {{vars.feature_security_scanning == true ? "Security Scan: " + (outputs['security-tests'].security_scan_clean ? "✅ Clean" : "❌ Vulnerabilities Found") : "Security Testing: ⏸️ Disabled"}}
-          
+
         Environment Configuration:
         Features enabled: {{
           (vars.feature_user_management == true ? 1 : 0) +
@@ -409,69 +409,30 @@ jobs:
 
 ### Credential and Secret Management
 
-Manage environment-specific credentials securely:
+Credentials are not written in the YAML, and are not kept in a YAML file of their own either: given as one more file on the command line, its `vars` would replace those of the environment file. A workflow reads them from environment variables in its `vars`, and lists them under `secrets`, so that their values are hidden in the output and the reports:
 
-**credentials-development.yml:**
 ```yaml
+secrets:
+  - API_TOKEN
 vars:
-  # Development credentials (less sensitive)
-  API_TOKEN: dev_token_12345
-  DB_PASSWORD: dev_password
-  ADMIN_TOKEN: dev_admin_token
-  
-  # Development service URLs
-  API_BASE_URL: http://localhost:3000
-  DB_URL: localhost:5432
-  CACHE_URL: localhost:6379
-  
-  # Development-specific settings
-  LOG_LEVEL: debug
-  RATE_LIMIT_DISABLED: true
-  SECURITY_CHECKS_RELAXED: true
+  api_token: "{{API_TOKEN}}"
 ```
 
-**credentials-staging.yml:**
-```yaml
-vars:
-  # Staging credentials (from environment variables)
-  api_token: "{{STAGING_API_TOKEN}}"
-  db_password: "{{STAGING_DB_PASSWORD}}"
-  admin_token: "{{STAGING_ADMIN_TOKEN}}"
-  
-  # Staging service URLs
-  API_BASE_URL: https://api.staging.yourcompany.com
-  DB_URL: staging-db.yourcompany.com:5432
-  CACHE_URL: staging-cache.yourcompany.com:6379
-  
-  # Staging-specific settings
-  LOG_LEVEL: info
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
+On a development machine, the values can be kept in a file of `NAME=value` lines that is not committed, and given with [`--env-file`](/reference/cli-reference#--env-file):
+
+**development.env:**
+```text
+ENVIRONMENT=development
+API_BASE_URL=http://localhost:3000
+API_TOKEN=dev_token_12345
+ADMIN_TOKEN=dev_admin_token
 ```
 
-**credentials-production.yml:**
-```yaml
-vars:
-  # Production credentials (from secure environment variables)
-  api_token: "{{PROD_API_TOKEN}}"
-  db_password: "{{PROD_DB_PASSWORD}}"
-  admin_token: "{{PROD_ADMIN_TOKEN}}"
-  
-  # Production service URLs
-  API_BASE_URL: https://api.yourcompany.com
-  DB_URL: prod-db.yourcompany.com:5432
-  CACHE_URL: prod-cache.yourcompany.com:6379
-  
-  # Production-specific settings
-  LOG_LEVEL: warn
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
-  
-  # Production-only settings
-  MONITORING_ENABLED: true
-  ALERTS_ENABLED: true
-  AUDIT_LOGGING: true
+```bash
+probe --env-file development.env environment-validation.yml
 ```
+
+In CI, the environment of the job gives them from the secrets of the CI, as in the [GitHub Actions example](#github-actions-integration) below.
 
 ### Environment Validation Workflows
 
@@ -497,16 +458,16 @@ jobs:
       uses: hello
       echo: |
         🔍 Environment Variables Validation:
-          
+
         Required Variables:
         ENVIRONMENT: {{vars.environment ? "✅ Set (" + vars.environment + ")" : "❌ Missing"}}
         API_BASE_URL: {{vars.api_base_url ? "✅ Set (" + vars.api_base_url + ")" : "❌ Missing"}}
         API_TOKEN: {{vars.api_token ? "✅ Set (***)" : "❌ Missing"}}
-          
+
         Optional Variables:
         LOG_LEVEL: {{vars.log_level ? "✅ Set (" + vars.log_level + ")" : "⚠️ Using default"}}
         DEFAULT_TIMEOUT: {{vars.default_timeout ? "✅ Set (" + vars.default_timeout + ")" : "⚠️ Using default"}}
-          
+
         Validation Status: {{
           vars.environment && vars.api_base_url && vars.api_token ? "✅ Valid" : "❌ Invalid"
         }}
@@ -515,17 +476,17 @@ jobs:
       uses: hello
       echo: |
         📋 Environment-Specific Validation:
-          
+
         {{vars.environment == "development" ? "Development Environment:" : ""}}
         {{vars.environment == "development" ? "• Extended timeouts enabled" : ""}}
         {{vars.environment == "development" ? "• Debug features available" : ""}}
         {{vars.environment == "development" ? "• Security checks relaxed" : ""}}
-          
+
         {{vars.environment == "staging" ? "Staging Environment:" : ""}}
         {{vars.environment == "staging" ? "• Production-like configuration" : ""}}
         {{vars.environment == "staging" ? "• Integration testing enabled" : ""}}
         {{vars.environment == "staging" ? "• Performance testing included" : ""}}
-          
+
         {{vars.environment == "production" ? "Production Environment:" : ""}}
         {{vars.environment == "production" ? "• Strict timeouts enforced" : ""}}
         {{vars.environment == "production" ? "• Security scanning enabled" : ""}}
@@ -559,13 +520,13 @@ jobs:
       uses: hello
       echo: |
         ✅ Environment Validation Results:
-          
+
         Connectivity: {{outputs.connectivity_ok ? "✅ Connected" : "❌ Failed"}}
         API Version: {{outputs.api_version}}
         Environment Match: {{outputs.environment_confirmed == vars.environment ? "✅ Confirmed" : "⚠️ Mismatch"}}
         Authentication: {{outputs.auth_valid ? "✅ Valid" : "❌ Invalid"}}
         {{outputs.auth_valid ? "Token Expires In: " + outputs.token_expires_in + " seconds" : ""}}
-          
+
         Environment Ready: {{
           outputs.connectivity_ok && 
           outputs.auth_valid && 
@@ -598,18 +559,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install Probe
         run: |
           curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
-      
+
       - name: Run Development Tests
-        env:
-          DEV_API_TOKEN: ${{ secrets.DEV_API_TOKEN }}
         run: |
-          probe workflows/base-workflow.yml,environments/development.yml,credentials/development.yml
+          probe workflows/base-workflow.yml,environments/development.yml
 
   staging-tests:
     name: Staging Environment Tests
@@ -617,26 +576,31 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install Probe
         run: |
           curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
-      
+
       - name: Validate Staging Environment
         env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          ENVIRONMENT: staging
+          API_BASE_URL: https://api.staging.yourcompany.com
+          API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
         run: |
-          probe workflows/environment-validation.yml,environments/staging.yml,credentials/staging.yml
-      
+          probe workflows/environment-validation.yml
+
       - name: Run Staging Tests
-        env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
         run: |
-          probe workflows/base-workflow.yml,environments/staging.yml,credentials/staging.yml,features/feature-flags.yml
+          probe workflows/base-workflow.yml,environments/staging.yml
+
+      - name: Run Feature Tests
+        env:
+          API_BASE_URL: https://api.staging.yourcompany.com
+          ADMIN_TOKEN: ${{ secrets.STAGING_ADMIN_TOKEN }}
+        run: |
+          probe --var environment=staging features/feature-flags.yml
 
   production-smoke-tests:
     name: Production Smoke Tests
@@ -644,19 +608,18 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install Probe
         run: |
           curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
           chmod +x probe
           sudo mv probe /usr/local/bin/
-      
+
       - name: Production Smoke Tests
         env:
-          PROD_API_TOKEN: ${{ secrets.PROD_API_TOKEN }}
-          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          API_BASE_URL: https://api.yourcompany.com
         run: |
-          probe workflows/smoke-test.yml,environments/production.yml,credentials/production.yml
+          probe workflows/smoke-test.yml
 ```
 
 ### Environment-Specific Test Suites
@@ -710,12 +673,12 @@ jobs:
       uses: hello
       echo: |
         🏭 Production Smoke Test Results:
-          
+
         Critical Systems:
         API: {{outputs['critical-endpoints'].api_healthy ? "✅ Healthy" : "🚨 DOWN"}}
         Authentication: {{outputs['critical-endpoints'].auth_healthy ? "✅ Healthy" : "🚨 DOWN"}}
         Database: {{outputs['critical-endpoints'].db_healthy ? "✅ Healthy" : "🚨 DOWN"}}
-          
+
         Overall Status: {{
           outputs['critical-endpoints'].api_healthy &&
           outputs['critical-endpoints'].auth_healthy &&
@@ -880,20 +843,20 @@ jobs:
       echo: |
         ENVIRONMENT HEALTH ALERT
         ========================
-          
+
         Environment: {{vars.environment}}
         Time: {{unixtime()}}
-          
+
         RESOURCE STATUS:
         {{outputs['environment-health-check'].resources_healthy ? "✅ Resources Healthy" : "❌ Resource Issues"}}
         {{!outputs['environment-health-check'].resources_healthy ? "CPU Usage: " + outputs['environment-health-check'].cpu_usage + "%" : ""}}
         {{!outputs['environment-health-check'].resources_healthy ? "Memory Usage: " + outputs['environment-health-check'].memory_usage + "%" : ""}}
         {{!outputs['environment-health-check'].resources_healthy ? "Disk Usage: " + outputs['environment-health-check'].disk_usage + "%" : ""}}
-          
+
         DEPENDENCIES STATUS:
         {{outputs['environment-health-check'].dependencies_healthy ? "✅ All Dependencies Healthy" : "❌ Dependency Issues"}}
         {{!outputs['environment-health-check'].dependencies_healthy ? "Unhealthy Services: " + outputs['environment-health-check'].unhealthy_services : ""}}
-          
+
         ACTION REQUIRED: Investigate {{vars.environment}} environment immediately
 
 - id: health-summary
@@ -904,12 +867,12 @@ jobs:
       uses: hello
       echo: |
         ✅ {{vars.environment}} Environment Health Check
-          
+
         All systems operational:
         • Resources: CPU {{outputs['environment-health-check'].cpu_usage}}%, Memory {{outputs['environment-health-check'].memory_usage}}%, Disk {{outputs['environment-health-check'].disk_usage}}%
         • Dependencies: All healthy
         • Environment: {{vars.environment}}
-          
+
         Next check in {{vars.monitoring_interval}} seconds
 ```
 
@@ -928,11 +891,9 @@ environments/
 ├── staging.yml
 └── production.yml
 
-# Good: Environment-specific credentials
-credentials/
-├── development.yml
-├── staging.yml
-└── production.yml (uses env vars only)
+# Good: Credentials in the environment, not in YAML
+development.env (not committed)
+CI secrets → the environment of the job
 ```
 
 ### 2. Progressive Testing

@@ -222,7 +222,7 @@ jobs:
   test: |
     res.code == 200 &&
     res.body.success == true &&
-    res.body.data != null &&
+    res.body.data != nil &&
     (rt.sec * 1000) < 1000
 ```
 
@@ -251,7 +251,7 @@ test: res.headers["X-Rate-Limit-Remaining"] > "10"
 # JSON レスポンステスト
 test: res.body.status == "success"
 test: len(res.body.data.users) > 0
-test: res.body.error == null
+test: res.body.error == nil
 
 # テキストレスポンステスト
 test: res.body contains "Success"
@@ -288,7 +288,7 @@ test: 'any(res.body.items, #.price > 100)'
 
 # オブジェクトプロパティテスト
 test: '"id" in res.body.user && "email" in res.body.user'
-test: res.body.config.database.host != null
+test: res.body.config.database.host != nil
 ```
 
 #### 複雑な論理条件
@@ -304,7 +304,7 @@ test: |
 # ネストした条件検証
 test: |
   res.code == 200 &&
-  res.body.data != null &&
+  res.body.data != nil &&
   (
     (res.body.data.type == "user" && res.body.data.user.active == true) ||
     (res.body.data.type == "system" && res.body.data.system.healthy == true)
@@ -745,13 +745,30 @@ probe -v workflow.yml
     Headers: {{res.headers}}
 ```
 
+#### JavaScript や Python から来た場合
+
+式は [expr-lang](https://expr-lang.org) で書きます。expr-lang の値はメソッドを持たないため、JavaScript や Python で値に対して呼ぶ処理は、演算子か関数で書きます。メソッド呼び出しはステップの実行時に `invalid operation: int(string)` などのエラーで失敗し、エラーの後に以下の書き方を示すヒントが続きます。`probe check` はワークフローを実行する前にこれを報告します。
+
+| 誤り | 正しい書き方 |
+|------|--------------|
+| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`、リストなら `"x" in list` |
+| `res.body.startsWith("x")`, `startsWith(res.body, "x")` | `res.body startsWith "x"`、または `hasPrefix(res.body, "x")` |
+| `res.body.endsWith("x")` | `res.body endsWith "x"`、または `hasSuffix(res.body, "x")` |
+| `res.body.matches("^a")` | `res.body matches "^a"` |
+| `res.body.length`, `items.size()` | `len(res.body)`, `len(items)` |
+| `s.toLowerCase()`, `s.toUpperCase()`, `s.trim()` | `lower(s)`, `upper(s)`, `trim(s)` |
+| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")`（JavaScript と異なり、最初の一致だけでなくすべての一致を置換します） |
+| `n.toString()`, `obj.keys()` | `string(n)`, `keys(obj)` |
+| `===`, `!==` | `==`, `!=` |
+| `null`, `undefined`, `None` | `nil` |
+
 #### Null値の処理
 
 存在しないフィールドはnullになり、それをそのまま比較しても意味のある結果は得られません。先に存在を確認します。
 
 ```yaml
-# 良い例: 潜在的な null 値を処理
-test: res.body.user != null && res.body.user.active == true
+# 良い例: 潜在的な nil 値を処理
+test: res.body.user != nil && res.body.user.active == true
 
 # 良い例: デフォルト値を使用
 echo: "User count: {{outputs.api.user_count || 0}}"
@@ -801,8 +818,8 @@ outputs:
 # 良い例: 防御的プログラミング
 test: |
   res.code == 200 &&
-  res.body != null &&
-  res.body.users != null &&
+  res.body != nil &&
+  res.body.users != nil &&
   len(res.body.users) > 0
 
 # 良い例: デフォルト値を提供
@@ -827,8 +844,8 @@ echo: "Processing {{outputs.api.item_count || 0}} items"
   test: |
     res.code == 200 &&
     (rt.sec * 1000) < 2000 &&
-    res.body.users != null &&
-    res.body.revenue != null &&
+    res.body.users != nil &&
+    res.body.revenue != nil &&
     len(filter(res.body.users, #.active == true)) > 0 &&
     res.body.revenue > 1000
 ```

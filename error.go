@@ -13,8 +13,11 @@ const (
 	ErrorTypeConfiguration ErrorType = "configuration"
 	ErrorTypeNetwork       ErrorType = "network"
 	ErrorTypeFile          ErrorType = "file"
-	ErrorTypeAction        ErrorType = "action"
-	ErrorTypeDependency    ErrorType = "dependency"
+	// Deprecated: a step whose action failed keeps the action's error as
+	// it is, not wrapped in a ProbeError, so that what the action said is
+	// what is shown.
+	ErrorTypeAction     ErrorType = "action"
+	ErrorTypeDependency ErrorType = "dependency"
 )
 
 // ProbeError is the base error type with context information
@@ -75,6 +78,11 @@ func NewFileError(operation, message string, cause error) *ProbeError {
 	return NewProbeError(ErrorTypeFile, operation, message, cause)
 }
 
+// NewActionError creates a ProbeError of an action.
+//
+// Deprecated: a step whose action failed keeps the action's error as it
+// is, not wrapped in a ProbeError, so that what the action said is what is
+// shown.
 func NewActionError(operation, message string, cause error) *ProbeError {
 	return NewProbeError(ErrorTypeAction, operation, message, cause)
 }

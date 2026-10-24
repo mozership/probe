@@ -21,10 +21,10 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	actionrpc.LogParams(a.log, "received imap request parameters", with)
 
 	before := WithBefore(func(req *Req) {
-		a.log.Debug("imap request prepared", "request", req)
+		a.log.Trace("imap request prepared", "request", req)
 	})
 	after := WithAfter(func(res *Res) {
-		a.log.Debug("imap response received", "response", res)
+		a.log.Trace("imap response received", "response", res)
 	})
 	ret, err := Request(with, before, after)
 

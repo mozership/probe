@@ -747,3 +747,42 @@ func TestWorkflow_RepeatOnlyWarmup(t *testing.T) {
 		t.Errorf("report = %+v, want a passed job with no step counted", r)
 	}
 }
+
+// TestWorkflow_RepeatTellsWhyItsActionFailed repeats a step whose action
+// fails: the error is told once, under the step's count, rather than once
+// for each run as it happens.
+func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
+	runner := NewMockActionRunner()
+	runner.SetError("http", errors.New(`Get "http://127.0.0.1:1/x": connection refused`))
+	workflow := &Workflow{
+		Name: "Repeat",
+		Jobs: []Job{{
+			ID:     "search",
+			Name:   "Search",
+			Repeat: &Repeat{Count: 3},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+		}},
+		printer: newBufferPrinter(),
+	}
+	if err := workflow.Start(Config{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	lines := strings.Split(out, "\n")
+	told := false
+	for i, line := range lines[:len(lines)-1] {
+		if strings.HasSuffix(line, "0/3 success (0.0%)") {
+			told = strings.TrimSpace(lines[i+1]) == `Get "http://127.0.0.1:1/x": connection refused`
+		}
+	}
+	if !told {
+		t.Errorf("terminal should tell the error under the count, got:\n%s", out)
+	}
+	if n := strings.Count(out, "connection refused"); n != 1 {
+		t.Errorf("terminal tells the error %d times, want once:\n%s", n, out)
+	}
+	if errOut := workflow.printer.errWriter.(*bytes.Buffer).String(); strings.Contains(errOut, "connection refused") {
+		t.Errorf("the error should not be told as it happens outside a verbose run, got:\n%s", errOut)
+	}
+}

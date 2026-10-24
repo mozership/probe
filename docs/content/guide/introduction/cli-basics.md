@@ -63,20 +63,43 @@ Verbose mode shows:
 - Detailed HTTP request/response information
 - Step execution timing
 - Variable resolution details
-- Log records from actions
+- Log records from actions at debug level and above
 
-**Example verbose output:**
+**Example verbose output** (`…` marks what is left out here):
 ```
-[DEBUG] Starting workflow: My Health Check
-[DEBUG] --- Step 1: Check Homepage
+[DEBUG] --- Step 0: Check Homepage
 [DEBUG] Request:
-[DEBUG]   method: "GET"
-[DEBUG]   url: "https://example.com"
+[DEBUG]   body: ""
+[DEBUG]   headers:
+[DEBUG]     Accept: */*
+[DEBUG]     User-Agent: probe-http/1.0.0
+[DEBUG]   method: GET
+[DEBUG]   timeout: 30s
+[DEBUG]   url: https://example.com/
 [DEBUG] Response:
-[DEBUG]   status: 200
-[DEBUG]   body: "<!DOCTYPE html>..."
+[DEBUG]   body: |
+[DEBUG]     <!doctype html><html lang=en><head><meta charset=utf-8>…
+[DEBUG]   code: 200
+[DEBUG]   cookies: {}
+[DEBUG]   filepath: ""
+[DEBUG]   headers:
+[DEBUG]     Content-Type: text/html; charset=utf-8
+[DEBUG]     …
+[DEBUG]   status: 200 OK
 [DEBUG] RT: 245ms
+[DEBUG] Test: Success (input: res.code == 200)
+[DEBUG] Env:
+[DEBUG]   outputs: {}
+[DEBUG]   repeat_index: 0
+[DEBUG]   report: ""
+[DEBUG]   rt:
+[DEBUG]     duration: 245ms
+[DEBUG]     sec: 0.245
+[DEBUG]   status: 0
+[DEBUG]   vars: {}
 ```
+
+To debug an action rather than a workflow, give `-vv`. It also shows how Probe starts, calls and stops each action's process, and what actions log at trace level, such as the parameters they received, as `[TRACE]` lines.
 
 ### Timing Display
 
@@ -356,8 +379,12 @@ Monitoring application health
   ⎿ 0. ✘  Check Homepage (1.23s)
               failed: res.code == 200
                 res.code = 500
-              request: map[string]interface {}{"method":"GET", "url":"https://example.com"}
-              response: map[string]interface {}{"code":500, "body":"Internal Server Error"}
+              request:
+                method: GET
+                url: https://example.com
+              response:
+                body: Internal Server Error
+                code: 500
      1. ⏭  Check API Health (skipped)
 
 Total workflow time: 1.23s ✘ 1 job(s) failed

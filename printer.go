@@ -11,6 +11,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/dump"
 	"github.com/mozership/probe/mask"
 )
 
@@ -266,13 +267,33 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 	} else {
 		resultStr = colorError().Sprintf("Failure")
 	}
-	// The context holds the request and response; show them masked.
-	if sc, ok := context.(StepContext); ok {
-		sc.Req = p.masker.Map(sc.Req)
-		sc.Res = p.masker.Map(sc.Res)
-		context = sc
+	p.LogDebug("Test: %s (input: %s)", resultStr, testExpr)
+	if env := testEnv(context); env != nil {
+		p.LogDebug("Env:")
+		p.PrintMapData(p.masker.Map(env))
 	}
-	p.LogDebug("Test: %s (input: %s, env: %s)", resultStr, testExpr, colorDim().Sprintf("%#v", context))
+}
+
+// testEnv is what PrintTestResult shows of the context a test was evaluated
+// in, by the names the test reads it by. Of a step's, the request and the
+// response are left out, as the step has just shown them, under Request and
+// Response.
+func testEnv(context any) map[string]any {
+	switch c := context.(type) {
+	case StepContext:
+		return map[string]any{
+			"vars":         c.Vars,
+			"outputs":      c.Outputs,
+			"status":       c.Status,
+			"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
+			"report":       c.Report,
+			"repeat_index": c.RepeatIndex,
+		}
+	case map[string]any:
+		return c
+	default:
+		return nil
+	}
 }
 
 // PrintEchoContent prints echo content with proper indentation in verbose mode
@@ -298,95 +319,19 @@ func (p *Printer) PrintRequestResponse(stepIdx int, stepName string, req, res ma
 	p.LogDebug("RT: %s", colorInfo().Sprintf("%s", rt))
 }
 
-// PrintMapData prints map data with proper formatting for nested structures
+// PrintGivenRequest prints, for a step whose action failed without
+// returning the request it made, the parameters the step gave the action,
+// its templates evaluated, in place of the request and the response.
+func (p *Printer) PrintGivenRequest(stepIdx int, stepName string, with map[string]any) {
+	p.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	p.LogDebug("Request (as the step gave it; the action returned none):")
+	p.PrintMapData(p.masker.Map(with))
+}
+
+// PrintMapData prints map data in verbose mode as YAML-like lines, its keys
+// sorted, and all of it, as it is: nothing is cut or left out.
 func (p *Printer) PrintMapData(data map[string]any) {
-	p.printMapDataRecursive(data, 1)
-}
-
-// printMapDataRecursive recursively prints map data with YAML-like indentation
-func (p *Printer) printMapDataRecursive(data map[string]any, indentLevel int) {
-	indent := strings.Repeat("  ", indentLevel)
-
-	for k, v := range data {
-		switch val := v.(type) {
-		case map[string]any:
-			if len(val) == 0 {
-				p.LogDebug("%s%s: {}", indent, k)
-			} else {
-				p.LogDebug("%s%s:", indent, k)
-				p.printMapDataRecursive(val, indentLevel+1)
-			}
-		case []any:
-			if len(val) == 0 {
-				p.LogDebug("%s%s: []", indent, k)
-			} else {
-				p.LogDebug("%s%s:", indent, k)
-				p.printSliceRecursive(val, indentLevel+1)
-			}
-		case map[string]string:
-			if len(val) == 0 {
-				p.LogDebug("%s%s: {}", indent, k)
-			} else {
-				p.LogDebug("%s%s:", indent, k)
-				for kk, vv := range val {
-					p.LogDebug("%s  %s: %v", indent, kk, vv)
-				}
-			}
-		case []string:
-			if len(val) == 0 {
-				p.LogDebug("%s%s: []", indent, k)
-			} else {
-				p.LogDebug("%s%s:", indent, k)
-				for _, item := range val {
-					p.LogDebug("%s- %v", indent+"  ", item)
-				}
-			}
-		default:
-			p.LogDebug("%s%s: %v", indent, k, v)
-		}
-	}
-}
-
-// printSliceRecursive recursively prints slice data with YAML-like indentation
-func (p *Printer) printSliceRecursive(data []any, indentLevel int) {
-	indent := strings.Repeat("  ", indentLevel)
-
-	for _, v := range data {
-		switch val := v.(type) {
-		case map[string]any:
-			if len(val) == 0 {
-				p.LogDebug("%s- {}", indent)
-			} else {
-				p.LogDebug("%s-", indent)
-				p.printMapDataRecursive(val, indentLevel+1)
-			}
-		case []any:
-			if len(val) == 0 {
-				p.LogDebug("%s- []", indent)
-			} else {
-				p.LogDebug("%s-", indent)
-				p.printSliceRecursive(val, indentLevel+1)
-			}
-		case map[string]string:
-			if len(val) == 0 {
-				p.LogDebug("%s- {}", indent)
-			} else {
-				p.LogDebug("%s-", indent)
-				for kk, vv := range val {
-					p.LogDebug("%s  %s: %v", indent, kk, vv)
-				}
-			}
-		case []string:
-			if len(val) == 0 {
-				p.LogDebug("%s- []", indent)
-			} else {
-				p.LogDebug("%s-", indent)
-				for _, item := range val {
-					p.LogDebug("%s  - %v", indent, item)
-				}
-			}
-		default:
-			p.LogDebug("%s- %v", indent, v)
-		}
+	for _, l := range dump.Lines(data, dump.Options{}) {
+		p.LogDebug("  %s", l)
 	}
 }

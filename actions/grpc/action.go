@@ -31,10 +31,10 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	actionrpc.LogParams(a.log, "received grpc request parameters", with)
 
 	before := WithBefore(func(ctx context.Context, service, method string) {
-		a.log.Debug("grpc request prepared", "service", service, "method", method)
+		a.log.Trace("grpc request prepared", "service", service, "method", method)
 	})
 	after := WithAfter(func(res *Res) {
-		a.log.Debug("grpc response received", "status", res.StatusCode)
+		a.log.Trace("grpc response received", "status", res.StatusCode)
 	})
 	ret, err := RequestStep(call, before, after)
 
