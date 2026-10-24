@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // redactedValue replaces the value of a header that carries credentials.
@@ -34,6 +35,17 @@ var sensitiveKeys = map[string]bool{
 	"secret_access_key":   true,
 	"session_token":       true,
 }
+
+// MinLength is the fewest characters a value must have to be masked inside
+// other text. A shorter value, such as 1, ok or dev, is as likely to stand
+// inside an unrelated word as for itself: replacing it wherever it appears
+// mangles the whole output, and the letters missing from the words give it
+// away anyway. Such a value is masked only where it is a whole value of a
+// request or a response, which neither mangles nor gives away anything. A
+// credential header or parameter shown by Map, and the password in a URL
+// under dsn or url, are still replaced outright, whatever their length, since
+// that depends on their names, not their values.
+const MinLength = 4
 
 // dsnKey names the parameter that holds a database URL. Only the password in
 // it is a credential: the rest says which database was used, so it stays
@@ -78,26 +90,62 @@ type Masker struct {
 	mu       sync.RWMutex
 	labels   map[string]string // secret value -> what it is replaced with
 	replacer *strings.Replacer
+	exact    map[string]string // short value -> its label, masked only whole
+	tooShort []string          // declared secrets too short to mask in text
 }
 
 // New builds a Masker for the environment variables named in secrets.
 // Each value is replaced by <secret:NAME>. A name that is not set, or set to
-// an empty string, has nothing to hide and is skipped.
+// an empty string, has nothing to hide and is skipped. A value shorter than
+// MinLength is masked only where it is a whole value; TooShort names those
+// secrets so that the caller can warn about them.
 func New(secrets []string, env map[string]string) *Masker {
-	m := &Masker{labels: make(map[string]string)}
+	m := &Masker{labels: make(map[string]string), exact: make(map[string]string)}
+	seen := make(map[string]bool, len(secrets))
 	for _, name := range secrets {
-		m.addLocked(env[name], "<secret:"+name+">")
+		value := env[name]
+		if value != "" && tooShort(value) && !seen[name] {
+			m.tooShort = append(m.tooShort, name)
+		}
+		seen[name] = true
+		m.addLocked(value, "<secret:"+name+">")
 	}
 	m.rebuildLocked()
 	return m
 }
 
+// TooShort returns the names of the declared secrets whose values are set but
+// shorter than MinLength, and so are masked only where they are a whole value,
+// once each in the order they were declared. It never returns the values.
+func (m *Masker) TooShort() []string {
+	if m == nil {
+		return nil
+	}
+	return m.tooShort
+}
+
+// tooShort reports whether value has fewer than MinLength characters.
+func tooShort(value string) bool {
+	return utf8.RuneCountInString(value) < MinLength
+}
+
 // addLocked registers a value under the label it is replaced with, along with
 // the escaped forms it takes when Go, JSON or a log line quotes it, since a
 // secret containing a quote or a backslash would otherwise slip through in
-// an error message or a dump. Callers must hold mu or own m exclusively.
+// an error message or a dump. A value shorter than MinLength is kept apart,
+// to be masked only where it is a whole value, and reported as not added,
+// since the replacer need not change. Callers must hold mu or own m
+// exclusively.
 func (m *Masker) addLocked(value, label string) bool {
 	if value == "" {
+		return false
+	}
+	if tooShort(value) {
+		for _, v := range escapedForms(value) {
+			if _, exists := m.exact[v]; !exists {
+				m.exact[v] = label
+			}
+		}
 		return false
 	}
 	added := false
@@ -366,6 +414,22 @@ func Userinfo(rawURL string) string {
 	return authority[:at]
 }
 
+// redactURLPassword returns rawURL with the password in its user info
+// replaced by <redacted>, whatever its length, or rawURL itself when it has
+// none.
+func redactURLPassword(rawURL string) string {
+	scheme, rest, ok := strings.Cut(rawURL, "://")
+	if !ok {
+		return rawURL
+	}
+	userinfo := Userinfo(rawURL)
+	user, password, ok := strings.Cut(userinfo, ":")
+	if !ok || password == "" {
+		return rawURL
+	}
+	return scheme + "://" + user + ":" + redactedValue + rest[len(userinfo):]
+}
+
 // dsnPassword returns the password in a URL-style DSN, both as written and
 // percent-decoded, or nothing when it has none.
 func dsnPassword(dsn string) []string {
@@ -438,6 +502,10 @@ func (m *Masker) Map(data map[string]any) map[string]any {
 			out[k] = redacted(v)
 			continue
 		}
+		if s, ok := v.(string); ok && holdsURL(k) {
+			out[k] = m.leaf(redactURLPassword(s))
+			continue
+		}
 		out[k] = m.value(v)
 	}
 	return out
@@ -475,7 +543,7 @@ func (m *Masker) Value(v any) any {
 func (m *Masker) value(v any) any {
 	switch val := v.(type) {
 	case string:
-		return m.String(val)
+		return m.leaf(val)
 	case map[string]any:
 		return m.Map(val)
 	case map[string]string:
@@ -485,7 +553,10 @@ func (m *Masker) value(v any) any {
 				out[k] = redactedValue
 				continue
 			}
-			out[k] = m.String(s)
+			if holdsURL(k) {
+				s = redactURLPassword(s)
+			}
+			out[k] = m.leaf(s)
 		}
 		return out
 	case []any:
@@ -497,12 +568,49 @@ func (m *Masker) value(v any) any {
 	case []string:
 		out := make([]any, len(val))
 		for i, e := range val {
-			out[i] = m.String(e)
+			out[i] = m.leaf(e)
 		}
 		return out
 	default:
+		return m.number(v)
+	}
+}
+
+// number returns the label of a value too short to mask inside other text
+// when v is a number written as that value, such as 123 parsed from a JSON
+// body, and v itself otherwise.
+func (m *Masker) number(v any) any {
+	if m == nil {
 		return v
 	}
+	forms, ok := numberForms(v)
+	if !ok {
+		return v
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, f := range forms {
+		if label, ok := m.exact[f]; ok {
+			return label
+		}
+	}
+	return v
+}
+
+// leaf hides the secret values in s, a whole value of a request or a
+// response. A value too short to mask inside other text is masked here when
+// s is that value and nothing else.
+func (m *Masker) leaf(s string) string {
+	if m == nil {
+		return s
+	}
+	m.mu.RLock()
+	label, ok := m.exact[s]
+	m.mu.RUnlock()
+	if ok {
+		return label
+	}
+	return m.String(s)
 }
 
 // Writer wraps w so that secret values are hidden in what is written to it.

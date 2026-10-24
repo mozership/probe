@@ -533,3 +533,162 @@ func TestUserinfo(t *testing.T) {
 		t.Error("HoldsURL should name url and dsn, in any case, and nothing else")
 	}
 }
+
+// TestNew_ShortSecret covers a declared secret too short to mask inside other
+// text: replacing it wherever it appears would cut it out of unrelated words,
+// which mangles the output and gives the value away by the letters missing
+// from them. Where it is a whole value, it is masked.
+func TestNew_ShortSecret(t *testing.T) {
+	env := map[string]string{
+		"ONE":   "x",
+		"THREE": "dev",
+		"KANJI": "秘密鍵",
+		"FOUR":  "abcd",
+		"EMPTY": "",
+	}
+	m := New([]string{"ONE", "THREE", "ONE", "KANJI", "FOUR", "EMPTY", "MISSING"}, env)
+
+	tests := []struct {
+		in, want string
+	}{
+		{"probe.StepContext", "probe.StepContext"},
+		{"x", "x"},
+		{"deploy to dev", "deploy to dev"},
+		{"秘密鍵", "秘密鍵"},
+		{"key abcd", "key <secret:FOUR>"},
+	}
+	for _, tt := range tests {
+		if got := m.String(tt.in); got != tt.want {
+			t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+
+	got := m.Map(map[string]any{
+		"body":    "x",
+		"headers": map[string]string{"X-Env": "dev"},
+		"list":    []any{"秘密鍵", "xx"},
+		"names":   []string{"dev", "devops"},
+	})
+	wantMap := map[string]any{
+		"body":    "<secret:ONE>",
+		"headers": map[string]any{"X-Env": "<secret:THREE>"},
+		"list":    []any{"<secret:KANJI>", "xx"},
+		"names":   []any{"<secret:THREE>", "devops"},
+	}
+	if !reflect.DeepEqual(got, wantMap) {
+		t.Errorf("Map() = %#v, want %#v", got, wantMap)
+	}
+	if got := m.Value("x"); got != "<secret:ONE>" {
+		t.Errorf("Value(%q) = %v", "x", got)
+	}
+
+	want := []string{"ONE", "THREE", "KANJI"}
+	if got := m.TooShort(); !reflect.DeepEqual(got, want) {
+		t.Errorf("TooShort() = %q, want %q", got, want)
+	}
+	if got := New([]string{"FOUR"}, env).TooShort(); len(got) != 0 {
+		t.Errorf("a secret long enough to mask should not be reported, got %q", got)
+	}
+	var nilMasker *Masker
+	if got := nilMasker.TooShort(); got != nil {
+		t.Errorf("nil TooShort() = %q", got)
+	}
+}
+
+// TestMasker_ShortCredential covers a credential learned at run time that is
+// too short to mask in free text: it is left there, but Map still hides it
+// under its key, or as the whole value it is, neither of which depends on
+// its length.
+func TestMasker_ShortCredential(t *testing.T) {
+	m := New(nil, nil)
+	m.Learn(map[string]any{
+		"password": "ab",
+		"dsn":      "postgres://app:pw@db/main",
+		"headers":  map[string]any{"cookie": "s=1"},
+	})
+
+	for _, in := range []string{"about a table", "pwd", "s=1x"} {
+		if got := m.String(in); got != in {
+			t.Errorf("String(%q) = %q, want it unchanged", in, got)
+		}
+	}
+
+	got := m.Map(map[string]any{
+		"password": "ab",
+		"headers":  map[string]any{"Cookie": "s=1", "Accept": "about"},
+	})
+	if got := m.Map(map[string]any{"echo": "ab"}); got["echo"] != redactedValue {
+		t.Errorf("a whole value equal to the credential = %v, want %s", got["echo"], redactedValue)
+	}
+	if got["password"] != redactedValue {
+		t.Errorf("password = %v, want %s", got["password"], redactedValue)
+	}
+	headers := got["headers"].(map[string]any)
+	if headers["Cookie"] != redactedValue || headers["Accept"] != "about" {
+		t.Errorf("headers = %v", headers)
+	}
+}
+
+// TestMasker_MapRedactsURLPassword covers the password in a URL under dsn or
+// url, which Map hides by where it stands, whatever its length, and so also
+// when it is too short to be learned as a value.
+func TestMasker_MapRedactsURLPassword(t *testing.T) {
+	with := map[string]any{
+		"dsn":     "postgres://app:pw@db/main",
+		"url":     "redis://u:p%40w@h:6379/0",
+		"conn":    map[string]string{"DSN": "mysql://root:a@tcp(db:3306)/app"},
+		"query":   "select 1",
+		"plain":   "https://example.com/a@b",
+		"noPass":  map[string]any{"url": "redis://app@cache"},
+		"longPwd": map[string]any{"dsn": "postgres://app:long-password@db/main"},
+	}
+	m := New(nil, nil)
+	m.Learn(with)
+
+	got := m.Map(with)
+	want := map[string]any{
+		"dsn":     "postgres://app:<redacted>@db/main",
+		"url":     "redis://u:<redacted>@h:6379/0",
+		"conn":    map[string]any{"DSN": "mysql://root:<redacted>@tcp(db:3306)/app"},
+		"query":   "select 1",
+		"plain":   "https://example.com/a@b",
+		"noPass":  map[string]any{"url": "redis://app@cache"},
+		"longPwd": map[string]any{"dsn": "postgres://app:<redacted>@db/main"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Map() = %#v, want %#v", got, want)
+	}
+	if with["dsn"] != "postgres://app:pw@db/main" {
+		t.Errorf("Map changed the original: %v", with["dsn"])
+	}
+	if got := New(nil, nil).Map(map[string]any{"url": "redis://:p@ss@cache"}); got["url"] != "redis://:<redacted>@cache" {
+		t.Errorf("a password with an @ = %v", got["url"])
+	}
+}
+
+// TestMasker_ShortSecretAsNumber covers a short secret that reaches Map as a
+// number, as 123 does when a JSON body is parsed: it is masked as the whole
+// value it is, while other numbers are left as they are.
+func TestMasker_ShortSecretAsNumber(t *testing.T) {
+	m := New([]string{"PIN"}, map[string]string{"PIN": "123"})
+	got := m.Map(map[string]any{
+		"pin":   float64(123),
+		"int":   123,
+		"other": float64(1234),
+		"list":  []any{float64(123), float64(12)},
+		"flag":  true,
+	})
+	want := map[string]any{
+		"pin":   "<secret:PIN>",
+		"int":   "<secret:PIN>",
+		"other": float64(1234),
+		"list":  []any{"<secret:PIN>", float64(12)},
+		"flag":  true,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Map() = %#v, want %#v", got, want)
+	}
+	if got := New(nil, nil).Value(float64(123)); got != float64(123) {
+		t.Errorf("a masker with no secrets changed a number: %v", got)
+	}
+}
