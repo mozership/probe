@@ -6,7 +6,9 @@
  * mark of SAKURA internet.
  */
 
-type Mark = { viewBox: string; paths: string[] }
+// size is the width and the height of a mark that is not square, in rem,
+// so that it is as large to the eye as the others.
+type Mark = { viewBox: string; paths: string[]; size?: [number, number] }
 
 const MARKS: Record<string, Mark> = {
   claude: {
@@ -28,13 +30,14 @@ const MARKS: Record<string, Mark> = {
     ],
   },
   xai: {
-    viewBox: '0 0 24 24',
+    viewBox: '0 7.4 24 9.2',
+    size: [1.75, 0.67],
     paths: [
       'M24 7.417C8.882 8.287 1.89 14.75.321 16.28L0 16.583h2.797C10.356 9.005 21.222 7.663 24 7.417zm-17.046 6.35c-.472.321-.945.68-1.398 1.02l2.457 1.796h2.778zM2.948 10.8H.189l3.25 2.381c.473-.321 1.02-.661 1.512-.945Z',
     ],
   },
   sakura: {
-    viewBox: '0 0 358 334',
+    viewBox: '70 55 218 224',
     paths: [
       'M272.5,74.75c-29.66-23.85-73.17-18.66-97.12,10.91l-32.45,40.07a16.39,16.39,0,0,0,12.74,26.71h94.94a27.87,27.87,0,0,1,27.26,22.08l.57,2.69,4.42-5.46A68.85,68.85,0,0,0,272.5,74.75Z',
       'M85.43,259.64c29.66,23.85,73.17,18.66,97.12-10.91L215,208.66a16.39,16.39,0,0,0-12.74-26.71H107.32a27.87,27.87,0,0,1-27.26-22.08l-.57-2.69-4.42,5.46A68.85,68.85,0,0,0,85.43,259.64Z',
@@ -46,7 +49,13 @@ export function ProviderMark({ id }: { id: string }) {
   const mark = MARKS[id]
   if (!mark) return null
   return (
-    <svg className="lp-providers__mark" viewBox={mark.viewBox} aria-hidden="true" focusable="false">
+    <svg
+      className="lp-providers__mark"
+      viewBox={mark.viewBox}
+      style={mark.size && { width: `${mark.size[0]}rem`, height: `${mark.size[1]}rem` }}
+      aria-hidden="true"
+      focusable="false"
+    >
       {mark.paths.map(d => (
         <path key={d} d={d} fill="currentColor" />
       ))}
