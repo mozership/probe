@@ -409,69 +409,30 @@ jobs:
 
 ### 認証情報とシークレット管理
 
-環境固有の認証情報を安全に管理します：
+認証情報はYAMLに書きません。認証情報だけのYAMLファイルにも分けません。コマンドラインでファイルを1つ増やして渡すと、その`vars`が環境ごとのファイルの`vars`を置き換えるためです。ワークフローは認証情報を`vars`で環境変数から読み、`secrets`に名前を並べます。こうすると、その値は出力とレポートで隠されます：
 
-**credentials-development.yml:**
 ```yaml
+secrets:
+  - API_TOKEN
 vars:
-  # 開発認証情報（機密性が低い）
-  API_TOKEN: dev_token_12345
-  DB_PASSWORD: dev_password
-  ADMIN_TOKEN: dev_admin_token
-
-  # 開発サービスURL
-  API_BASE_URL: http://localhost:3000
-  DB_URL: localhost:5432
-  CACHE_URL: localhost:6379
-
-  # 開発固有設定
-  LOG_LEVEL: debug
-  RATE_LIMIT_DISABLED: true
-  SECURITY_CHECKS_RELAXED: true
+  api_token: "{{API_TOKEN}}"
 ```
 
-**credentials-staging.yml:**
-```yaml
-vars:
-  # ステージング認証情報（環境変数から）
-  api_token: "{{STAGING_API_TOKEN}}"
-  db_password: "{{STAGING_DB_PASSWORD}}"
-  admin_token: "{{STAGING_ADMIN_TOKEN}}"
+開発用のマシンでは、値を`NAME=value`の行で書いたファイルに置き、コミットせずに[`--env-file`](/ja/reference/cli-reference#--env-file)で渡せます：
 
-  # ステージングサービスURL
-  API_BASE_URL: https://api.staging.yourcompany.com
-  DB_URL: staging-db.yourcompany.com:5432
-  CACHE_URL: staging-cache.yourcompany.com:6379
-
-  # ステージング固有設定
-  LOG_LEVEL: info
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
+**development.env:**
+```text
+ENVIRONMENT=development
+API_BASE_URL=http://localhost:3000
+API_TOKEN=dev_token_12345
+ADMIN_TOKEN=dev_admin_token
 ```
 
-**credentials-production.yml:**
-```yaml
-vars:
-  # プロダクション認証情報（セキュアな環境変数から）
-  api_token: "{{PROD_API_TOKEN}}"
-  db_password: "{{PROD_DB_PASSWORD}}"
-  admin_token: "{{PROD_ADMIN_TOKEN}}"
-
-  # プロダクションサービスURL
-  API_BASE_URL: https://api.yourcompany.com
-  DB_URL: prod-db.yourcompany.com:5432
-  CACHE_URL: prod-cache.yourcompany.com:6379
-
-  # プロダクション固有設定
-  LOG_LEVEL: warn
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
-
-  # プロダクション専用設定
-  MONITORING_ENABLED: true
-  ALERTS_ENABLED: true
-  AUDIT_LOGGING: true
+```bash
+probe --env-file development.env environment-validation.yml
 ```
+
+CIでは、ジョブの環境変数にCIのシークレットから値を渡します。下の[GitHub Actionsの例](#github-actions統合)を参照してください。
 
 ### 環境検証ワークフロー
 
@@ -605,10 +566,8 @@ jobs:
           sudo mv probe /usr/local/bin/
 
       - name: Run Development Tests
-        env:
-          DEV_API_TOKEN: ${{ secrets.DEV_API_TOKEN }}
         run: |
-          probe workflows/base-workflow.yml,environments/development.yml,credentials/development.yml
+          probe workflows/base-workflow.yml,environments/development.yml
 
   staging-tests:
     name: Staging Environment Tests
@@ -625,17 +584,15 @@ jobs:
 
       - name: Validate Staging Environment
         env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          ENVIRONMENT: staging
+          API_BASE_URL: https://api.staging.yourcompany.com
+          API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
         run: |
-          probe workflows/environment-validation.yml,environments/staging.yml,credentials/staging.yml
+          probe workflows/environment-validation.yml
 
       - name: Run Staging Tests
-        env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
         run: |
-          probe workflows/base-workflow.yml,environments/staging.yml,credentials/staging.yml
+          probe workflows/base-workflow.yml,environments/staging.yml
 
       - name: Run Feature Tests
         env:
@@ -659,10 +616,9 @@ jobs:
 
       - name: Production Smoke Tests
         env:
-          PROD_API_TOKEN: ${{ secrets.PROD_API_TOKEN }}
-          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          API_BASE_URL: https://api.yourcompany.com
         run: |
-          probe workflows/smoke-test.yml,environments/production.yml,credentials/production.yml
+          probe workflows/smoke-test.yml
 ```
 
 ### 環境固有のテストスイート
@@ -925,11 +881,9 @@ environments/
 ├── staging.yml
 └── production.yml
 
-# 良い例: 環境固有の認証情報
-credentials/
-├── development.yml
-├── staging.yml
-└── production.yml（環境変数のみ使用）
+# 良い例: 認証情報はYAMLに書かず環境変数で渡す
+development.env（コミットしない）
+CIのシークレット → ジョブの環境変数
 ```
 
 ### 2. 段階的テスト

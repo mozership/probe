@@ -409,69 +409,30 @@ jobs:
 
 ### Credential and Secret Management
 
-Manage environment-specific credentials securely:
+Credentials are not written in the YAML, and are not kept in a YAML file of their own either: given as one more file on the command line, its `vars` would replace those of the environment file. A workflow reads them from environment variables in its `vars`, and lists them under `secrets`, so that their values are hidden in the output and the reports:
 
-**credentials-development.yml:**
 ```yaml
+secrets:
+  - API_TOKEN
 vars:
-  # Development credentials (less sensitive)
-  API_TOKEN: dev_token_12345
-  DB_PASSWORD: dev_password
-  ADMIN_TOKEN: dev_admin_token
-
-  # Development service URLs
-  API_BASE_URL: http://localhost:3000
-  DB_URL: localhost:5432
-  CACHE_URL: localhost:6379
-
-  # Development-specific settings
-  LOG_LEVEL: debug
-  RATE_LIMIT_DISABLED: true
-  SECURITY_CHECKS_RELAXED: true
+  api_token: "{{API_TOKEN}}"
 ```
 
-**credentials-staging.yml:**
-```yaml
-vars:
-  # Staging credentials (from environment variables)
-  api_token: "{{STAGING_API_TOKEN}}"
-  db_password: "{{STAGING_DB_PASSWORD}}"
-  admin_token: "{{STAGING_ADMIN_TOKEN}}"
+On a development machine, the values can be kept in a file of `NAME=value` lines that is not committed, and given with [`--env-file`](/reference/cli-reference#--env-file):
 
-  # Staging service URLs
-  API_BASE_URL: https://api.staging.yourcompany.com
-  DB_URL: staging-db.yourcompany.com:5432
-  CACHE_URL: staging-cache.yourcompany.com:6379
-
-  # Staging-specific settings
-  LOG_LEVEL: info
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
+**development.env:**
+```text
+ENVIRONMENT=development
+API_BASE_URL=http://localhost:3000
+API_TOKEN=dev_token_12345
+ADMIN_TOKEN=dev_admin_token
 ```
 
-**credentials-production.yml:**
-```yaml
-vars:
-  # Production credentials (from secure environment variables)
-  api_token: "{{PROD_API_TOKEN}}"
-  db_password: "{{PROD_DB_PASSWORD}}"
-  admin_token: "{{PROD_ADMIN_TOKEN}}"
-
-  # Production service URLs
-  API_BASE_URL: https://api.yourcompany.com
-  DB_URL: prod-db.yourcompany.com:5432
-  CACHE_URL: prod-cache.yourcompany.com:6379
-
-  # Production-specific settings
-  LOG_LEVEL: warn
-  RATE_LIMIT_DISABLED: false
-  SECURITY_CHECKS_RELAXED: false
-
-  # Production-only settings
-  MONITORING_ENABLED: true
-  ALERTS_ENABLED: true
-  AUDIT_LOGGING: true
+```bash
+probe --env-file development.env environment-validation.yml
 ```
+
+In CI, the environment of the job gives them from the secrets of the CI, as in the [GitHub Actions example](#github-actions-integration) below.
 
 ### Environment Validation Workflows
 
@@ -606,10 +567,8 @@ jobs:
           sudo mv probe /usr/local/bin/
 
       - name: Run Development Tests
-        env:
-          DEV_API_TOKEN: ${{ secrets.DEV_API_TOKEN }}
         run: |
-          probe workflows/base-workflow.yml,environments/development.yml,credentials/development.yml
+          probe workflows/base-workflow.yml,environments/development.yml
 
   staging-tests:
     name: Staging Environment Tests
@@ -626,17 +585,15 @@ jobs:
 
       - name: Validate Staging Environment
         env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          ENVIRONMENT: staging
+          API_BASE_URL: https://api.staging.yourcompany.com
+          API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
         run: |
-          probe workflows/environment-validation.yml,environments/staging.yml,credentials/staging.yml
+          probe workflows/environment-validation.yml
 
       - name: Run Staging Tests
-        env:
-          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
         run: |
-          probe workflows/base-workflow.yml,environments/staging.yml,credentials/staging.yml
+          probe workflows/base-workflow.yml,environments/staging.yml
 
       - name: Run Feature Tests
         env:
@@ -660,10 +617,9 @@ jobs:
 
       - name: Production Smoke Tests
         env:
-          PROD_API_TOKEN: ${{ secrets.PROD_API_TOKEN }}
-          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          API_BASE_URL: https://api.yourcompany.com
         run: |
-          probe workflows/smoke-test.yml,environments/production.yml,credentials/production.yml
+          probe workflows/smoke-test.yml
 ```
 
 ### Environment-Specific Test Suites
@@ -935,11 +891,9 @@ environments/
 ├── staging.yml
 └── production.yml
 
-# Good: Environment-specific credentials
-credentials/
-├── development.yml
-├── staging.yml
-└── production.yml (uses env vars only)
+# Good: Credentials in the environment, not in YAML
+development.env (not committed)
+CI secrets → the environment of the job
 ```
 
 ### 2. Progressive Testing

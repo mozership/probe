@@ -115,18 +115,13 @@ func (p *Probe) Load() error {
 		return NewFileError("load_yaml_files", "failed to locate YAML files", err).
 			WithContext("workflow_path", p.FilePath)
 	}
-	y, err := p.readYamlFiles(files)
+	y, data, err := p.readYamlFiles(files)
 	if err != nil {
 		return NewFileError("read_yaml_files", "failed to read YAML files", err).
 			WithContext("files", files)
 	}
 	if p.Config.Warn != nil {
-		redefs, err := redefinedJobs(files)
-		if err != nil {
-			return NewFileError("read_yaml_files", "failed to read YAML files", err).
-				WithContext("files", files)
-		}
-		for _, r := range redefs {
+		for _, r := range redefinedJobs(files, data) {
 			_, _ = fmt.Fprintln(p.Config.Warn, colorWarning().Sprintf("[WARN] %s", r))
 		}
 	}
@@ -185,14 +180,18 @@ func (p *Probe) Load() error {
 	return nil
 }
 
-func (p *Probe) readYamlFiles(paths []string) (string, error) {
+// readYamlFiles returns the files at paths as one text, and the content of
+// each, in their order.
+func (p *Probe) readYamlFiles(paths []string) (string, [][]byte, error) {
 	var y strings.Builder
+	contents := make([][]byte, 0, len(paths))
 
 	for i, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
+		contents = append(contents, data)
 		y.Write(data)
 
 		// Add newline between files to prevent concatenation issues
@@ -201,7 +200,7 @@ func (p *Probe) readYamlFiles(paths []string) (string, error) {
 		}
 	}
 
-	return y.String(), nil
+	return y.String(), contents, nil
 }
 
 // jobsRedefinition is a file that writes jobs at the top after an earlier
@@ -224,19 +223,16 @@ func (r jobsRedefinition) message() string {
 // starts with: what a key at the top holds is indented.
 var topJobsKey = regexp.MustCompile(`^(?:jobs|"jobs"|'jobs')[ \t]*:(?:[ \t]|$)`)
 
-// redefinedJobs returns each file that writes jobs at the top after an
-// earlier file did, with the one it replaces. Only jobs is told of: a file
-// that replaces vars, say, is how a workflow is run in other environments.
-func redefinedJobs(files []string) ([]jobsRedefinition, error) {
+// redefinedJobs returns each of files, whose contents are data, that writes
+// jobs at the top after an earlier file did, with the one it replaces. Only
+// jobs is told of: a file that replaces vars, say, is how a workflow is run
+// in other environments.
+func redefinedJobs(files []string, data [][]byte) []jobsRedefinition {
 	var out []jobsRedefinition
 	prev, prevLine := "", 0
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			return nil, err
-		}
+	for k, f := range files {
 		line := 0
-		for i, l := range strings.Split(string(data), "\n") {
+		for i, l := range strings.Split(string(data[k]), "\n") {
 			if topJobsKey.MatchString(strings.TrimSuffix(l, "\r")) {
 				line = i + 1
 			}
@@ -249,7 +245,7 @@ func redefinedJobs(files []string) ([]jobsRedefinition, error) {
 		}
 		prev, prevLine = f, line
 	}
-	return out, nil
+	return out
 }
 
 // yamlFiles resolves paths and returns a list of YAML (.yml and .yaml) files

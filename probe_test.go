@@ -191,10 +191,15 @@ func TestRedefinedJobs(t *testing.T) {
 	vars := write("vars.yml", "vars:\n  who: x\n")
 	c := write("c.yml", "jobs: []\n")
 
-	got, err := redefinedJobs([]string{a, vars, b, vars, c})
-	if err != nil {
-		t.Fatal(err)
+	read := func(paths ...string) ([]string, [][]byte) {
+		_, data, err := (&Probe{}).readYamlFiles(paths)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return paths, data
 	}
+
+	got := redefinedJobs(read(a, vars, b, vars, c))
 	want := []jobsRedefinition{
 		{File: b, Line: 4, Prev: a, PrevLine: 2},
 		{File: c, Line: 1, Prev: b, PrevLine: 4},
@@ -203,9 +208,8 @@ func TestRedefinedJobs(t *testing.T) {
 		t.Errorf("redefinedJobs() = %v, want %v", got, want)
 	}
 
-	got, err = redefinedJobs([]string{a, vars})
-	if err != nil || len(got) != 0 {
-		t.Errorf("redefinedJobs() of one file with jobs = %v, %v, want none", got, err)
+	if got := redefinedJobs(read(a, vars)); len(got) != 0 {
+		t.Errorf("redefinedJobs() of one file with jobs = %v, want none", got)
 	}
 }
 
@@ -231,7 +235,7 @@ func TestReadYamlFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := p.readYamlFiles(tt.paths)
+			_, _, err := p.readYamlFiles(tt.paths)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("readYamlFiles() error = %v, wantErr %v", err, tt.wantErr)
 			}
