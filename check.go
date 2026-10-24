@@ -2,6 +2,7 @@ package probe
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -707,8 +708,15 @@ func (c *checker) checkProblems(problems []problem) {
 	}
 }
 
+// addProblem tells p by the first line of its error, which says where in
+// the expression it is, and how the expression is likely meant to be
+// written where it is written as another language would write it.
 func (c *checker) addProblem(p problem) {
-	c.add(SeverityError, c.line(p.path), p.where, "%s", firstLine(p.err.Error()))
+	msg := firstLine(p.err.Error())
+	if h, ok := errors.AsType[*expr.HintError](p.err); ok {
+		msg += "; " + strings.Join(h.Hints, "; ")
+	}
+	c.add(SeverityError, c.line(p.path), p.where, "%s", msg)
 }
 
 // publisher is a step that publishes outputs.
@@ -845,11 +853,15 @@ func exprKeys(t reflect.Type) []string {
 // expression fails: the step fails, or its skipif, wait or output is left
 // out. A var not defined where it is read, by the workflow or by the step,
 // whose own vars read only those of the workflow, is a warning, as it reads
-// nil unless --var gives it, which check cannot know.
+// nil unless --var gives it, which check cannot know. A call of a method
+// expressions do not have, such as res.body.contains("x"), is an error too,
+// with how it is written in expressions, as it fails whatever it is called
+// on.
 //
 // Of the templates of a job's name, which are evaluated against the job and
 // so can read more than they are meant to, and of the workflow's vars, which
-// read the environment, only the vars they read are checked.
+// read the environment, only the vars they read and the methods they call
+// are checked.
 func (c *checker) checkNames() {
 	workflowVars := varNames(c.wf.Vars)
 	seen := map[string]bool{}
@@ -868,6 +880,9 @@ func (c *checker) checkNames() {
 				continue
 			}
 			add(SeverityError, "%s is not defined; it can read %s%s", name, listNames(names), nameHint(name, names))
+		}
+		for _, h := range expr.MethodCallHints(input) {
+			add(SeverityError, "%s", h)
 		}
 		if vars == nil {
 			return
@@ -921,8 +936,8 @@ func (c *checker) checkNames() {
 func nameHint(name string, names []string) string {
 	step := slices.Equal(names, stepNames)
 	switch {
-	case name == "null" || name == "undefined":
-		return "; did you mean nil?"
+	case expr.NameFor(name) != "":
+		return fmt.Sprintf("; did you mean %s?", expr.NameFor(name))
 	case suggest.Closest(name, names) != "":
 		return fmt.Sprintf("; did you mean %q?", suggest.Closest(name, names))
 	case step && name == "steps":

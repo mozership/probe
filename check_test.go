@@ -715,6 +715,45 @@ jobs:
 			},
 		},
 		{
+			name: "methods and operators written as another language writes them",
+			workflow: `name: methods
+vars:
+  host: "{{ HOST.toLowerCase() }}"
+jobs:
+- name: M
+  skipif: vars.host.startsWith("prod")
+  repeat:
+    count: 2
+    test: string(steps.a.runs).trim() != ""
+  steps:
+  - name: A
+    id: a
+    uses: hello
+    with:
+      name: "{{ vars.host.split('.') }}"
+    test: res.body.contains("ok") && res.code == None
+  - name: Written as expressions write it
+    uses: hello
+    test: res.body contains "ok" && res.body.contains == "x" && res.body.length > 0 && lower(res.body) != "" && len(res.items) > 0
+  - name: Operators
+    uses: hello
+    test: res.code === 200
+  - name: An operator called as a function
+    uses: hello
+    test: startsWith(res.body, "ok")
+`,
+			want: []want{
+				{SeverityError, 3, "vars: expressions have no toLowerCase() method: write lower(HOST)"},
+				{SeverityError, 6, `skipif: expressions have no startsWith() method: write vars.host startsWith "prod"`},
+				{SeverityError, 9, `repeat.test: expressions have no trim() method: write trim(string(steps.a.runs))`},
+				{SeverityError, 15, `with: expressions have no split() method: write split(vars.host, ".")`},
+				{SeverityError, 16, `test: None is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?`},
+				{SeverityError, 16, `test: expressions have no contains() method: write res.body contains "ok" for a string, or "ok" in res.body for a list`},
+				{SeverityError, 22, `test: unexpected token Operator("=") (1:12); expressions have no ===: write ==`},
+				{SeverityError, 25, `test: unexpected token Operator("startsWith") (1:1); startsWith is an operator: write res.body startsWith "ok", or hasPrefix(res.body, "ok")`},
+			},
+		},
+		{
 			name: "the fields of a step and what each reads",
 			workflow: `name: fields
 vars:

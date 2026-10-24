@@ -9,10 +9,12 @@ import (
 )
 
 // Parse reports whether input is an expression that parses, without
-// evaluating it, so that a workflow can be checked before it runs.
+// evaluating it, so that a workflow can be checked before it runs. Its
+// error tells how input is likely meant to be written where it is written
+// as another language would write it, as a *HintError.
 func Parse(input string) error {
 	_, err := parser.Parse(input)
-	return err
+	return withHints(input, err)
 }
 
 // TemplateExprs returns the expressions of the {{ }} templates in s, in the

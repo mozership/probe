@@ -745,6 +745,23 @@ probe -v workflow.yml
     Headers: {{res.headers}}
 ```
 
+#### Coming from JavaScript or Python
+
+Expressions are [expr-lang](https://expr-lang.org), in which values have no methods: what JavaScript or Python calls on a value is an operator or a function here. A method call fails when the step runs with an error such as `invalid operation: int(string)`, which a hint follows with the form below; `probe check` reports it before the workflow runs.
+
+| Instead of | Write |
+|------------|-------|
+| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`, or `"x" in res.body.items` for a list |
+| `res.body.startsWith("x")`, `startsWith(res.body, "x")` | `res.body startsWith "x"`, or `hasPrefix(res.body, "x")` |
+| `res.body.endsWith("x")` | `res.body endsWith "x"`, or `hasSuffix(res.body, "x")` |
+| `res.body.matches("^a")` | `res.body matches "^a"` |
+| `res.body.length`, `items.size()` | `len(res.body)`, `len(items)` |
+| `s.toLowerCase()`, `s.toUpperCase()`, `s.trim()` | `lower(s)`, `upper(s)`, `trim(s)` |
+| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")` |
+| `n.toString()`, `obj.keys()` | `string(n)`, `keys(obj)` |
+| `===`, `!==` | `==`, `!=` |
+| `null`, `undefined`, `None` | `nil` |
+
 #### Null Value Handling
 
 A missing field is null, and comparing it directly gives a result that says nothing. Check for its presence first.
