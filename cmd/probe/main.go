@@ -91,6 +91,9 @@ func newBufferCmd() *Cmd {
 // parseArgs parses command line arguments manually to allow options after arguments
 func (c *Cmd) parseArgs(args []string) error {
 	var nonFlagArgs []string
+	// operands are how many of nonFlagArgs came before a --, after which
+	// every argument is a file, a subcommand's name included.
+	operands := -1
 	skipNext := false
 
 	for i := range args {
@@ -100,6 +103,12 @@ func (c *Cmd) parseArgs(args []string) error {
 		}
 
 		arg := args[i]
+
+		if arg == "--" {
+			operands = len(nonFlagArgs)
+			nonFlagArgs = append(nonFlagArgs, args[i+1:]...)
+			break
+		}
 
 		// A - alone is the standard input, for fmt.
 		if strings.HasPrefix(arg, "-") && arg != "-" {
@@ -223,11 +232,12 @@ func (c *Cmd) parseArgs(args []string) error {
 	}
 
 	// Check if first non-flag argument is a subcommand
-	if len(nonFlagArgs) > 0 && isSubCommand(nonFlagArgs[0]) {
+	if len(nonFlagArgs) > 0 && operands != 0 && isSubCommand(nonFlagArgs[0]) {
 		c.SubCommand = nonFlagArgs[0]
 		c.SubCommandArgs = nonFlagArgs[1:]
 	} else if len(nonFlagArgs) > 0 {
-		c.WorkflowPath = nonFlagArgs[0]
+		// Files given apart are merged as those given with commas are.
+		c.WorkflowPath = strings.Join(nonFlagArgs, ",")
 	}
 
 	return nil
@@ -266,10 +276,10 @@ https://github.com/mozership/probe (ver: %s, rev: %s)
 `
 
 	head := `
-Usage: probe [options] <workflow-file>
+Usage: probe [options] <workflow-file>...
        probe gen <openapi-file>
-       probe dag [--mermaid] <workflow-file>
-       probe check <workflow-file>
+       probe dag [--mermaid] <workflow-file>...
+       probe check <workflow-file>...
        probe fmt [--check] <workflow-file>...
        probe coverage <openapi-file|proto-file> <report-file>
        probe guide [topic]
@@ -278,15 +288,16 @@ Usage: probe [options] <workflow-file>
        probe manifest <tag> <checksums-file> [action-file]
 
 Arguments:
-  workflow-file    Path to YAML workflow file(s). Multiple files can be
-                   specified with comma-separated paths (e.g., "base.yml,override.yml")
-                   to merge configurations.
+  workflow-file    Path to a YAML workflow file, a directory or a glob.
+                   Several are merged in their order into one workflow,
+                   given apart or with commas: "base.yml override.yml" or
+                   "base.yml,override.yml".
 
 Subcommands:
   gen <file>       Generate probe workflow YAML from OpenAPI specification
-  dag <file>       Show job dependency graph as ASCII art (default)
+  dag <file>...    Show job dependency graph as ASCII art (default)
                    Use --mermaid to output in Mermaid format
-  check <file>     Find what is wrong or weak in a workflow without running it
+  check <file>...  Find what is wrong or weak in a workflow without running it
   fmt <file>...    Format workflow files in place, and print those it changed
                    A directory is every YAML file under it, and - is the
                    standard input, formatted to the standard output
@@ -377,7 +388,7 @@ func (c *Cmd) start(args []string) int {
 
 	case c.DagMermaid:
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --mermaid can only be used with the dag subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>...\n")
 		return probe.ExitConfigError
 
 	case c.WorkflowPath == "":
@@ -422,6 +433,11 @@ func (c *Cmd) runGen() int {
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
 		return probe.ExitConfigError
 	}
+	if len(c.SubCommandArgs) > 1 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] gen takes one OpenAPI spec file, not %d\n", len(c.SubCommandArgs))
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
+		return probe.ExitConfigError
+	}
 
 	output, err := oas.Generate(c.SubCommandArgs[0])
 	if err != nil {
@@ -436,6 +452,7 @@ func (c *Cmd) runGen() int {
 func (c *Cmd) runProbe() int {
 	p := probe.New(c.WorkflowPath, c.Verbose)
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
 	if c.Timing {
 		p.Config.Timing = true
 	}
@@ -511,7 +528,7 @@ func (c *Cmd) runProbe() int {
 func (c *Cmd) runDag() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>...\n")
 		return probe.ExitConfigError
 	}
 
@@ -519,8 +536,9 @@ func (c *Cmd) runDag() int {
 		return 0
 	}
 
-	p := probe.New(c.SubCommandArgs[0], c.Verbose)
+	p := probe.New(strings.Join(c.SubCommandArgs, ","), c.Verbose)
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
 	var graph string
 	var err error
 	if c.DagMermaid {
@@ -650,13 +668,13 @@ func splitList(s string) []string {
 // It exits with 2 when it finds an error, and with 0 when it finds only
 // warnings or nothing.
 func (c *Cmd) runCheck() int {
-	if len(c.SubCommandArgs) != 1 {
+	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe check <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe check <workflow-file>...\n")
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(c.SubCommandArgs[0], probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Manifest: actionref.ReadManifest})
+	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Manifest: actionref.ReadManifest})
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
@@ -727,6 +745,11 @@ func (c *Cmd) runGuide() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprint(c.outWriter, probe.GuideIndex())
 		return 0
+	}
+	if len(c.SubCommandArgs) > 1 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] guide takes one topic, not %d\n", len(c.SubCommandArgs))
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe guide [topic]\n")
+		return probe.ExitConfigError
 	}
 
 	page, err := probe.Guide(c.SubCommandArgs[0])

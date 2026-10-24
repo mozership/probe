@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -29,7 +30,10 @@ type Probe struct {
 }
 
 type Config struct {
-	Log     io.Writer
+	Log io.Writer
+	// Warn is where what is found as the workflow is loaded, and does not
+	// keep it from running, is written; nil for nowhere.
+	Warn    io.Writer
 	Verbose bool
 	Timing  bool
 	// Output selects how the report is delivered while jobs run.
@@ -69,6 +73,7 @@ func New(path string, v bool) *Probe {
 		FilePath: path,
 		Config: Config{
 			Log:     os.Stdout,
+			Warn:    os.Stderr,
 			Verbose: v,
 			Timing:  false,
 			Output:  OutputModeAuto,
@@ -110,10 +115,15 @@ func (p *Probe) Load() error {
 		return NewFileError("load_yaml_files", "failed to locate YAML files", err).
 			WithContext("workflow_path", p.FilePath)
 	}
-	y, err := p.readYamlFiles(files)
+	y, data, err := p.readYamlFiles(files)
 	if err != nil {
 		return NewFileError("read_yaml_files", "failed to read YAML files", err).
 			WithContext("files", files)
+	}
+	if p.Config.Warn != nil {
+		for _, r := range redefinedJobs(files, data) {
+			_, _ = fmt.Fprintln(p.Config.Warn, colorWarning().Sprintf("[WARN] %s", r))
+		}
 	}
 
 	v := validator.New()
@@ -170,14 +180,18 @@ func (p *Probe) Load() error {
 	return nil
 }
 
-func (p *Probe) readYamlFiles(paths []string) (string, error) {
+// readYamlFiles returns the files at paths as one text, and the content of
+// each, in their order.
+func (p *Probe) readYamlFiles(paths []string) (string, [][]byte, error) {
 	var y strings.Builder
+	contents := make([][]byte, 0, len(paths))
 
 	for i, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
+		contents = append(contents, data)
 		y.Write(data)
 
 		// Add newline between files to prevent concatenation issues
@@ -186,7 +200,52 @@ func (p *Probe) readYamlFiles(paths []string) (string, error) {
 		}
 	}
 
-	return y.String(), nil
+	return y.String(), contents, nil
+}
+
+// jobsRedefinition is a file that writes jobs at the top after an earlier
+// file did. The files are read as one text, so its jobs replace the earlier
+// ones, which do not run.
+type jobsRedefinition struct {
+	File, Prev     string
+	Line, PrevLine int
+}
+
+func (r jobsRedefinition) String() string {
+	return fmt.Sprintf("%s:%d: %s", r.File, r.Line, r.message())
+}
+
+func (r jobsRedefinition) message() string {
+	return fmt.Sprintf("jobs replaces the jobs of %s:%d, which do not run", r.Prev, r.PrevLine)
+}
+
+// topJobsKey is jobs as a key of the top mapping, which no other line
+// starts with: what a key at the top holds is indented.
+var topJobsKey = regexp.MustCompile(`^(?:jobs|"jobs"|'jobs')[ \t]*:(?:[ \t]|$)`)
+
+// redefinedJobs returns each of files, whose contents are data, that writes
+// jobs at the top after an earlier file did, with the one it replaces. Only
+// jobs is told of: a file that replaces vars, say, is how a workflow is run
+// in other environments.
+func redefinedJobs(files []string, data [][]byte) []jobsRedefinition {
+	var out []jobsRedefinition
+	prev, prevLine := "", 0
+	for k, f := range files {
+		line := 0
+		for i, l := range strings.Split(string(data[k]), "\n") {
+			if topJobsKey.MatchString(strings.TrimSuffix(l, "\r")) {
+				line = i + 1
+			}
+		}
+		if line == 0 {
+			continue
+		}
+		if prev != "" {
+			out = append(out, jobsRedefinition{File: f, Line: line, Prev: prev, PrevLine: prevLine})
+		}
+		prev, prevLine = f, line
+	}
+	return out
 }
 
 // yamlFiles resolves paths and returns a list of YAML (.yml and .yaml) files
@@ -213,6 +272,10 @@ func (p *Probe) yamlFiles() ([]string, error) {
 			} else if p.isYamlFile(path) {
 				// Single file path
 				files = append(files, path)
+			} else {
+				// A file named on its own is not left out without a word,
+				// as one a directory or a glob finds is.
+				return nil, fmt.Errorf("%s: not a YAML file (.yml or .yaml)", path)
 			}
 		} else {
 			// Handle wildcard pattern

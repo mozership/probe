@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
-	"os"
 	"reflect"
 	"slices"
 	"sort"
@@ -88,6 +87,8 @@ type CheckOptions struct {
 // as a file that does not exist.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
 	p := New(path, false)
+	// What a run warns of is told as a finding here.
+	p.Config.Warn = nil
 	files, err := p.yamlFiles()
 	if err != nil {
 		return nil, err
@@ -95,7 +96,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no YAML file", path)
 	}
-	data, err := p.readYamlFiles(files)
+	data, contents, err := p.readYamlFiles(files)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +108,14 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	if c.opts.Params == nil {
 		c.opts.Params = map[string][]string{}
 	}
-	if err := c.mapFiles(files); err != nil {
-		return nil, err
+	c.mapFiles(files, contents)
+	for _, r := range redefinedJobs(files, contents) {
+		c.findings = append(c.findings, Finding{
+			Severity: SeverityWarning,
+			File:     r.File,
+			Line:     r.Line,
+			Message:  r.message(),
+		})
 	}
 
 	// A key may be written more than once, as a run reads the workflow,
@@ -168,22 +175,17 @@ type fileStart struct {
 
 // mapFiles notes the line each file starts on in the text read, the files
 // one after another, so that a line of the text can be told as a line of a
-// file. readYamlFiles adds a newline after a file that does not end in one,
-// unless it is the last.
-func (c *checker) mapFiles(files []string) error {
+// file, whose contents are data. readYamlFiles adds a newline after a file
+// that does not end in one, unless it is the last.
+func (c *checker) mapFiles(files []string, data [][]byte) {
 	line := 1
 	for k, f := range files {
 		c.files = append(c.files, fileStart{name: f, line: line})
-		data, err := os.ReadFile(f)
-		if err != nil {
-			return err
-		}
-		line += bytes.Count(data, []byte("\n"))
-		if k < len(files)-1 && len(data) > 0 && data[len(data)-1] != '\n' {
+		line += bytes.Count(data[k], []byte("\n"))
+		if k < len(files)-1 && len(data[k]) > 0 && data[k][len(data[k])-1] != '\n' {
 			line++
 		}
 	}
-	return nil
 }
 
 // position tells line, a line of the text read, as a file and a line of it.

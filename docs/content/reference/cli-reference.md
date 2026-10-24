@@ -7,13 +7,13 @@ This page provides complete documentation for the Probe command-line interface, 
 Probe is invoked in one of two forms: a workflow file to run, or a subcommand acting on one.
 
 ```bash
-probe [options] <workflow-file>
+probe [options] <workflow-file>...
 probe <subcommand> [options] <file>
 ```
 
 ## Command Syntax
 
-Every invocation names one or more workflow files. Options come before them, and a subcommand takes their place when you want something other than a run.
+Every invocation names one or more workflow files. Options may come before, after or between them, and every argument after `--` is a file, even one that starts with `-`. A subcommand comes first when you want something other than a run.
 
 ### Basic Command
 
@@ -28,19 +28,20 @@ probe workflow.yml
 Execute workflows with configuration merging:
 
 ```bash
+probe base.yml environment.yml overrides.yml
 probe base.yml,environment.yml,overrides.yml
 ```
 
-The files are concatenated from left to right into a single YAML document. A top-level key defined in more than one file takes the value from the last file, and the whole key is replaced rather than merged entry by entry.
+The files are given as separate arguments or as one comma-separated argument, and the two forms can be mixed. The files are concatenated from left to right into a single YAML document. A top-level key defined in more than one file takes the value from the last file, and the whole key is replaced rather than merged entry by entry.
 
 ### Positional Arguments
 
-The workflow path is the only positional argument, and it is required.
+The workflow paths are the only positional arguments, and at least one is required.
 
 #### `workflow-path`
 
-**Type:** String (required)  
-**Description:** Path to the workflow YAML file, or comma-separated list of files for merging
+**Type:** String, one or more (required)  
+**Description:** Path to the workflow YAML file, a directory or a glob. Several paths, as separate arguments or as a comma-separated list, are merged in their order. A file named directly must end in `.yml` or `.yaml`; from a directory or a glob, only those files are read
 
 **Examples:**
 ```bash
@@ -48,6 +49,7 @@ The workflow path is the only positional argument, and it is required.
 probe workflow.yml
 
 # Multiple files (merging)
+probe base.yml production.yml
 probe base.yml,production.yml
 
 # Relative paths
@@ -299,10 +301,12 @@ probe gen petstore.yml
 
 Display job dependency graph without executing the workflow. By default, outputs ASCII art. Use `--mermaid` to output in Mermaid flowchart format.
 
+Several files are merged as a run merges them.
+
 **Usage:**
 ```bash
-probe dag <workflow-file>
-probe dag --mermaid <workflow-file>
+probe dag <workflow-file>...
+probe dag --mermaid <workflow-file>...
 ```
 
 **Options:**
@@ -374,12 +378,12 @@ This is useful for:
 
 ### `check`
 
-Find what is wrong or weak in a workflow without running it, so that a workflow written by hand or by a coding agent can be checked before it reaches the systems it tests. Several files read together, as a run reads them, are given as one comma-separated argument.
+Find what is wrong or weak in a workflow without running it, so that a workflow written by hand or by a coding agent can be checked before it reaches the systems it tests. Several files read together, as a run reads them, are given as separate arguments or as one comma-separated argument.
 
 **Usage:**
 ```bash
 probe check workflow.yml
-probe check base.yml,staging.yml
+probe check base.yml staging.yml
 ```
 
 **Output Example:**
@@ -691,7 +695,7 @@ probe -v health-check.yml
 
 ### Environment-Specific Execution
 
-Listing a second file after a comma merges it over the first, which is how one workflow targets different environments.
+Listing a second file after the first, as another argument or after a comma, merges it over the first, which is how one workflow targets different environments.
 
 ```bash
 # Development environment
