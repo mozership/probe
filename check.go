@@ -743,11 +743,18 @@ func (c *checker) checkOutputs() {
 			}
 		}
 	}
-	c.checkOutputNames(byKey)
 	needs := c.ancestors()
+	// The names read by themselves, as outputs.token, rather than through
+	// the id of the step that publishes them.
+	flat := map[string]bool{}
 
 	c.eachExpr(func(e exprAt) {
 		chains := expr.Reads(e.input, "outputs")
+		for _, chain := range chains {
+			if len(byID[chain[0]]) == 0 {
+				flat[chain[0]] = true
+			}
+		}
 		// outputs.auth.token also reads outputs.auth, which is not reported
 		// on its own.
 		deeper := map[string]bool{}
@@ -769,35 +776,38 @@ func (c *checker) checkOutputs() {
 			}
 		}
 	})
+	c.checkOutputNames(byID, byKey, flat)
 }
 
-// checkOutputNames warns of an output whose name another step publishes
-// too, or that is the id of a step, as a run does: outputs.<name> holds the
-// value of the step that publishes it first, or the outputs of the step of
-// that id, and not this one.
-func (c *checker) checkOutputNames(byKey map[string][]publisher) {
-	ids := map[string]bool{}
-	for _, job := range c.wf.Jobs {
-		for _, st := range job.Steps {
-			if st.ID != "" {
-				ids[st.ID] = true
-			}
-		}
-	}
+// checkOutputNames warns of an output name that more than one step
+// publishes where a value is lost by it. outputs.<name> holds the value of
+// the step that publishes it first, and each value is read through the id
+// of its step, which draws no warning. What does is a step without an id
+// publishing a name another step publishes too, as its value then cannot be
+// read, and outputs.<name> read by itself while more than one step publishes
+// it. An output named as the id of a step that publishes is warned of
+// whoever reads it: outputs.<name> is that step's outputs or the value,
+// whichever is published first.
+func (c *checker) checkOutputNames(byID, byKey map[string][]publisher, flat map[string]bool) {
 	for _, key := range slices.Sorted(maps.Keys(byKey)) {
 		pubs := byKey[key]
 		for n, p := range pubs {
-			instead := fmt.Sprintf("read outputs.%s.%s for this one", p.id, key)
-			if p.id == "" {
-				instead = "give the step an id to read this one through it"
-			}
 			path := fmt.Sprintf("jobs[%d].steps[%d].outputs.%s", p.job, p.step, key)
+			where := c.stepWhere(p.job, p.step)
+			if owners := byID[key]; len(owners) > 0 && p.id != key {
+				owner := owners[0]
+				c.add(SeverityWarning, c.line(path), where, "outputs: %s is the id of %s too, so outputs.%s is that step's outputs or this value, whichever is published first; give this output another name", key, c.stepWhere(owner.job, owner.step), key)
+				continue
+			}
+			if n == 0 {
+				continue
+			}
+			first := c.stepWhere(pubs[0].job, pubs[0].step)
 			switch {
-			case ids[key]:
-				c.add(SeverityWarning, c.line(path), c.stepWhere(p.job, p.step), "outputs: %s has the name of the step %q, so outputs.%s is that step's outputs; %s", key, key, key, instead)
-			case n > 0:
-				first := pubs[0]
-				c.add(SeverityWarning, c.line(path), c.stepWhere(p.job, p.step), "outputs: %s is also published by %s, so outputs.%s holds the value of whichever publishes it first; %s", key, c.stepWhere(first.job, first.step), key, instead)
+			case p.id == "":
+				c.add(SeverityWarning, c.line(path), where, "outputs: %s is also published by %s, so outputs.%s holds the value of whichever publishes it first, and this step has no id to read its own through; give it one", key, first, key)
+			case flat[key]:
+				c.add(SeverityWarning, c.line(path), where, "outputs: %s is also published by %s, and outputs.%s, which holds the value of whichever publishes it first, is read; read outputs.%s.%s for this one", key, first, key, p.id, key)
 			}
 		}
 	}

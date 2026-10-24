@@ -119,7 +119,7 @@ func (o *Outputs) set(stepID, publisher string, outputs map[string]any) error {
 		if _, isMap := existingValue.(map[string]any); !isMap {
 			// stepID conflicts with existing flat data - this will prevent step-based access
 			stepIDConflictsWithFlat = true
-			conflictError = fmt.Errorf("cannot create step-based outputs for '%s' because flat output with same name exists", stepID)
+			conflictError = fmt.Errorf("the outputs of '%s' cannot be read as outputs.%s.<name>, since outputs.%s is an output published before", stepID, stepID, stepID)
 		}
 	}
 
@@ -129,8 +129,10 @@ func (o *Outputs) set(stepID, publisher string, outputs map[string]any) error {
 	}
 
 	// Store flat outputs. The first step to publish a name keeps it; a later
-	// step's value under the same name is read through its step id, and is
-	// reported so that it is not lost without a word.
+	// step's value under the same name is read through its step id, which is
+	// how each value of a name is read. A value that cannot be read so, as
+	// the step has no id or its id is taken, is reported, so that it is not
+	// lost without a word.
 	var errs []error
 	if conflictError != nil {
 		errs = append(errs, conflictError)
@@ -145,13 +147,11 @@ func (o *Outputs) set(stepID, publisher string, outputs map[string]any) error {
 		existing, _ := o.lookupLocked(outputName)
 		_, isStep := existing.(map[string]any)
 
-		// Where this value can still be read when the name alone is taken:
-		// through the step's id, unless that was taken as well above.
-		instead := fmt.Sprintf("read outputs.%s.%s for this one", stepID, outputName)
-		switch {
-		case stepID == "":
-			instead = "give the step an id to read this one through it"
-		case stepIDConflictsWithFlat:
+		// When the name alone is taken, the value is read through the
+		// step's id, unless the step has none or that was taken above.
+		lost := stepID == "" || stepIDConflictsWithFlat
+		instead := "give the step an id to read this one through it"
+		if stepIDConflictsWithFlat {
 			instead = fmt.Sprintf("this one cannot be read, since outputs.%s is an output name too", stepID)
 		}
 		switch {
@@ -160,10 +160,16 @@ func (o *Outputs) set(stepID, publisher string, outputs map[string]any) error {
 			// latest value, as outputs.<step_id>.<name> has.
 			o.data[outputName] = outputs[outputName]
 		case owned:
+			if !lost {
+				break
+			}
 			errs = append(errs, &NameTakenError{fmt.Sprintf("output '%s' of '%s' is also published by '%s', which came first, so outputs.%s keeps the value of '%s'; %s",
 				outputName, publisher, owner, outputName, owner, instead)})
 		case isStep:
 			// A step ID of the same name keeps the name for its outputs.
+			if !lost {
+				break
+			}
 			errs = append(errs, &NameTakenError{fmt.Sprintf("output '%s' of '%s' has the name of the step '%s', so outputs.%s is that step's outputs; %s",
 				outputName, publisher, outputName, outputName, instead)})
 		default:

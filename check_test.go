@@ -423,10 +423,20 @@ jobs:
     test: res.code == 200
     outputs:
       token: res.body.token
+      user: res.body.user
   - name: Refresh
+    id: refresh
     uses: http
     with:
       get: /refresh
+    test: res.code == 200 && outputs.login.token != "" && outputs.user != nil
+    outputs:
+      token: res.body.token
+      user: res.body.user
+  - name: Without an id
+    uses: http
+    with:
+      get: /again
     test: res.code == 200
     outputs:
       token: res.body.token
@@ -439,13 +449,22 @@ jobs:
       get: /admin
     test: res.code == 200
     outputs:
-      token: res.body.token
       login: res.body.user
+  - name: Id only
+    id: session
+    uses: http
+    with:
+      get: /session
+    test: res.code == 200
+  - name: Named as an id that publishes nothing
+    uses: hello
+    outputs:
+      session: res.status
 `,
 			want: []want{
-				{SeverityWarning, 19, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first; give the step an id to read this one through it`},
-				{SeverityWarning, 29, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first; read outputs.admin.token for this one`},
-				{SeverityWarning, 30, `outputs: login has the name of the step "login", so outputs.login is that step's outputs; read outputs.admin.login for this one`},
+				{SeverityWarning, 22, `outputs: user is also published by job 0 "Users", step 0 "Login", and outputs.user, which holds the value of whichever publishes it first, is read; read outputs.refresh.user for this one`},
+				{SeverityWarning, 29, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 39, `outputs: login is the id of job 0 "Users", step 0 "Login" too, so outputs.login is that step's outputs or this value, whichever is published first; give this output another name`},
 			},
 		},
 		{
