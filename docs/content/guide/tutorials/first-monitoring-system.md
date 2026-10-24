@@ -17,7 +17,7 @@ A comprehensive monitoring system that:
 
 - Probe installed ([Installation Guide](/guide/introduction/installation))
 - Basic understanding of HTTP APIs
-- Email account for notifications (Gmail, Office 365, or SMTP server)
+- An SMTP server for notifications that accepts mail from the machine running Probe without logging in, such as your company's mail relay
 - A web application or API to monitor (we'll provide examples if you don't have one)
 
 ## Step 1: Planning Your Monitoring Strategy
@@ -64,7 +64,7 @@ vars:
   CRITICAL_RESPONSE_TIME: 5000  # 5 seconds
   
   # Authentication
-  API_TOKEN: "{{vars.API_AUTH_TOKEN}}"
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
 
 jobs:
 - id: health-check
@@ -105,85 +105,85 @@ probe monitoring.yml
 Now let's expand to monitor all critical endpoints:
 
 ```yaml
-# Add this to your monitoring.yml file after the health-check job
+# Add this job to the jobs list of monitoring.yml, after the health-check job
 
-  endpoint-monitoring:
-    name: "API Endpoint Monitoring"
-    needs: [health-check]
-    steps:
-      - name: "Test Product Catalog"
-        id: products
-        uses: http
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.products != nil &&
-          len(res.body.products) > 0
-        outputs:
-          product_count: len(res.body.products)
-          response_time: (rt.sec * 1000)
-          available: res.code == 200
+- id: endpoint-monitoring
+  name: "API Endpoint Monitoring"
+  needs: [health-check]
+  steps:
+    - name: "Test Product Catalog"
+      id: products
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.products != nil &&
+        len(res.body.products) > 0
+      outputs:
+        product_count: len(res.body.products)
+        response_time: (rt.sec * 1000)
+        available: res.code == 200
 
-      - name: "Test User Authentication"
-        id: auth
-        uses: http
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/users/me"
-          headers:
-            Authorization: "Bearer {{vars.API_TOKEN}}"
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.user != nil &&
-          res.body.user.id != nil
-        outputs:
-          authenticated: res.code == 200
-          user_id: res.body.user.id
-          response_time: (rt.sec * 1000)
+    - name: "Test User Authentication"
+      id: auth
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/users/me"
+        headers:
+          Authorization: "Bearer {{vars.API_TOKEN}}"
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.user != nil &&
+        res.body.user.id != nil
+      outputs:
+        authenticated: res.code == 200
+        user_id: res.body.user.id
+        response_time: (rt.sec * 1000)
 
-      - name: "Test Order System"
-        id: orders
-        uses: http
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/orders/recent"
-          headers:
-            Authorization: "Bearer {{vars.API_TOKEN}}"
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.orders != nil
-        outputs:
-          order_count: len(res.body.orders)
-          response_time: (rt.sec * 1000)
-          available: res.code == 200
+    - name: "Test Order System"
+      id: orders
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/orders/recent"
+        headers:
+          Authorization: "Bearer {{vars.API_TOKEN}}"
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.orders != nil
+      outputs:
+        order_count: len(res.body.orders)
+        response_time: (rt.sec * 1000)
+        available: res.code == 200
 
-      - name: "Test Search Functionality"
-        id: search
-        uses: http
-        with:
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/search"
-          method: "POST"
-          headers:
-            Authorization: "Bearer {{vars.API_TOKEN}}"
-            Content-Type: "application/json"
-          body: |
-            {
-              "query": "test product",
-              "limit": 10
-            }
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.results != nil
-        outputs:
-          result_count: len(res.body.results)
-          response_time: (rt.sec * 1000)
-          available: res.code == 200
+    - name: "Test Search Functionality"
+      id: search
+      uses: http
+      with:
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/search"
+        method: "POST"
+        headers:
+          Authorization: "Bearer {{vars.API_TOKEN}}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "query": "test product",
+            "limit": 10
+          }
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.results != nil
+      outputs:
+        result_count: len(res.body.results)
+        response_time: (rt.sec * 1000)
+        available: res.code == 200
 ```
 
 ## Step 4: Adding Performance Analysis
@@ -191,66 +191,70 @@ Now let's expand to monitor all critical endpoints:
 Let's add a job that analyzes overall performance:
 
 ```yaml
-# Add this job to your monitoring.yml file
+# Add this job to the jobs list of monitoring.yml
 
-  performance-analysis:
-    name: "Performance Analysis"
-    needs: [endpoint-monitoring]
-    steps:
-      - name: "Calculate Performance Metrics"
-        id: metrics
-        uses: hello
-        with:
-          message: "Analyzing performance metrics"
-        outputs:
-          # Calculate average response time across all endpoints
-          avg_response_time: |
-            {{(outputs.health.response_time +
-               outputs.products.response_time +
-               outputs.auth.response_time +
-               outputs.orders.response_time +
-               outputs.search.response_time) / 5}}
-          
-          # Count successful endpoints
-          successful_endpoints: |
-            {{(outputs.health.healthy ? 1 : 0) +
-               (outputs.products.available ? 1 : 0) +
-               (outputs.auth.authenticated ? 1 : 0) +
-               (outputs.orders.available ? 1 : 0) +
-               (outputs.search.available ? 1 : 0)}}
-          
-          # Calculate success rate percentage
-          success_rate: |
-            {{((outputs.metrics.successful_endpoints / 5) * 100)}}
-          
-          # Determine overall health status
-          overall_status: |
-            {{outputs.metrics.success_rate == 100 ? "healthy" :
-              outputs.metrics.success_rate >= 80 ? "degraded" : "critical"}}
+- id: performance-analysis
+  name: "Performance Analysis"
+  needs: [health-check, endpoint-monitoring]
+  always: true  # Report even when a check failed
+  steps:
+    - name: "Calculate Performance Metrics"
+      id: metrics
+      uses: hello
+      with:
+        # Average response time of the endpoints that answered
+        avg_response_time: >-
+          {{ mean(filter([
+            outputs.health?.response_time,
+            outputs.products?.response_time,
+            outputs.auth?.response_time,
+            outputs.orders?.response_time,
+            outputs.search?.response_time
+          ], # != nil)) }}
+        # Count successful endpoints
+        successful_endpoints: >-
+          {{ count([
+            outputs.health?.healthy,
+            outputs.products?.available,
+            outputs.auth?.authenticated,
+            outputs.orders?.available,
+            outputs.search?.available
+          ], # == true) }}
+      outputs:
+        avg_response_time: res.avg_response_time
+        successful_endpoints: res.successful_endpoints
+        # Calculate success rate percentage
+        success_rate: res.successful_endpoints * 100 / 5
+        # Determine overall health status
+        overall_status: |
+          res.successful_endpoints == 5 ? "healthy" :
+          res.successful_endpoints >= 4 ? "degraded" : "critical"
 
-      - name: "Performance Report"
-        uses: hello
-        echo: |
-          === MONITORING REPORT ===
-          
-          Overall Status: {{outputs.metrics.overall_status | upper}}
-          Success Rate: {{outputs.metrics.success_rate}}%
-          Average Response Time: {{outputs.metrics.avg_response_time}}ms
-          
-          Endpoint Details:
-          ✓ Health Check: {{outputs.health.healthy ? "✅ UP" : "❌ DOWN"}} ({{outputs.health.response_time}}ms)
-          ✓ Products API: {{outputs.products.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.products.response_time}}ms)
-          ✓ Authentication: {{outputs.auth.authenticated ? "✅ UP" : "❌ DOWN"}} ({{outputs.auth.response_time}}ms)
-          ✓ Orders API: {{outputs.orders.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders.response_time}}ms)
-          ✓ Search API: {{outputs.search.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.search.response_time}}ms)
-          
-          Data Summary:
-          - Products Available: {{outputs.products.product_count}}
-          - Recent Orders: {{outputs.orders.order_count}}
-          - Search Results: {{outputs.search.result_count}}
-          
-          Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
+    - name: "Performance Report"
+      uses: hello
+      echo: |
+        === MONITORING REPORT ===
+
+        Overall Status: {{upper(outputs.metrics.overall_status)}}
+        Success Rate: {{outputs.metrics.success_rate}}%
+        Average Response Time: {{outputs.metrics.avg_response_time}}ms
+
+        Endpoint Details:
+        ✓ Health Check: {{outputs.health?.healthy == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.health?.response_time ?? "-"}}ms)
+        ✓ Products API: {{outputs.products?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.products?.response_time ?? "-"}}ms)
+        ✓ Authentication: {{outputs.auth?.authenticated == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.auth?.response_time ?? "-"}}ms)
+        ✓ Orders API: {{outputs.orders?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders?.response_time ?? "-"}}ms)
+        ✓ Search API: {{outputs.search?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.search?.response_time ?? "-"}}ms)
+
+        Data Summary:
+        - Products Available: {{outputs.products?.product_count ?? 0}}
+        - Recent Orders: {{outputs.orders?.order_count ?? 0}}
+        - Search Results: {{outputs.search?.result_count ?? 0}}
+
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 ```
+
+`always: true` runs this job even when a job it needs failed, which is when the report matters most. An output that a failed or skipped job did not publish reads as nil, so the job reads each one with `?.`. The outputs of one step cannot read each other, so the counts are computed in `with`: `hello` returns what `with` gave it in `res`, and the outputs build on that.
 
 ## Step 5: Adding Error Handling and Retries
 
@@ -259,180 +263,132 @@ Now let's make our monitoring more robust with error handling:
 ```yaml
 # Replace the endpoint-monitoring job with this enhanced version
 
-  endpoint-monitoring:
-    name: "API Endpoint Monitoring"
-    needs: [health-check]
-    steps:
-      - name: "Test Product Catalog"
-        id: products
-        uses: http
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.products != nil &&
-          len(res.body.products) > 0
-        outputs:
-          product_count: len(res.body.products || [])
-          response_time: (rt.sec * 1000)
-          available: res.code == 200
-          status_code: res.status
+- id: endpoint-monitoring
+  name: "API Endpoint Monitoring"
+  needs: [health-check]
+  steps:
+    - name: "Test Product Catalog"
+      id: products
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.products != nil &&
+        len(res.body.products) > 0
+      retry:
+        max_attempts: 3  # Try up to 3 times before the step fails
+        interval: 2s
+      outputs:
+        product_count: len(res.body.products ?? [])
+        response_time: (rt.sec * 1000)
+        available: res.code == 200
+        status_code: res.code
 
-      - name: "Retry Product Catalog (if failed)"
-        id: products-retry
-        uses: http
-        timeout: "30s"  # Longer timeout for retry
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
-        test: res.code == 200
-        outputs:
-          retry_successful: res.code == 200
-          retry_time: (rt.sec * 1000)
+    - name: "Test User Authentication"
+      id: auth
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/users/me"
+        headers:
+          Authorization: "Bearer {{vars.API_TOKEN}}"
+      test: |
+        res.code == 200 &&
+        (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
+        res.body.user != nil &&
+        res.body.user.id != nil
+      retry:
+        max_attempts: 3
+        interval: 2s
+      outputs:
+        authenticated: res.code == 200
+        user_id: res.body.user?.id ?? "unknown"
+        response_time: (rt.sec * 1000)
+        status_code: res.code
 
-      - name: "Test User Authentication"
-        id: auth
-        uses: http
-        with:
-          method: GET
-          url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/users/me"
-          headers:
-            Authorization: "Bearer {{vars.API_TOKEN}}"
-        test: |
-          res.code == 200 &&
-          (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-          res.body.user != nil &&
-          res.body.user.id != nil
-        outputs:
-          authenticated: res.code == 200
-          user_id: res.body.user.id || "unknown"
-          response_time: (rt.sec * 1000)
-          status_code: res.status
-
-      # Continue with other endpoints using similar patterns...
+    # Continue with the orders and search steps using the same pattern...
 ```
+
+`retry` runs a step again until its test passes, so a single slow or dropped response does not fail the check. `??` supplies a value when the response lacks the field, so the outputs are published even when the API answers with an error.
 
 ## Step 6: Adding Email Notifications
 
-Let's add email alerts when issues are detected:
+Let's add email alerts when issues are detected. The alert job reads the mail settings from the environment, so add them to the `vars` of `monitoring.yml`:
+
+```yaml
+vars:
+  # Email Configuration
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
+```
+
+Then add the job:
 
 ```yaml
 # Add this job to send alerts when monitoring detects issues
 
-  alerting:
-    name: "Alert Notifications"
-    needs: [performance-analysis]
-    steps:
-      - name: "Send Critical Alert Email"
-        uses: smtp
-        with:
-          addr: "{{vars.SMTP_HOST || 'smtp.gmail.com'}}:{{vars.SMTP_PORT || 587}}"
-          from: "{{vars.ALERT_FROM_EMAIL}}"
-          to: "{{vars.ALERT_TO_EMAIL}}"
-          subject: "🚨 CRITICAL: API Monitoring Alert - {{outputs.metrics.overall_status | upper}}"
-          session: 1
-          message: 1
-          length: 500
-        echo: |
-          <html>
-          <head><title>API Monitoring Alert</title></head>
-          <body style="font-family: Arial, sans-serif; margin: 20px;">
-            
-          <h1 style="color: #d32f2f;">🚨 Critical API Monitoring Alert</h1>
-            
-          <div style="background: #ffebee; border-left: 4px solid #d32f2f; padding: 15px; margin: 20px 0;">
-            <h2>Alert Summary</h2>
-            <p><strong>Overall Status:</strong> {{outputs.metrics.overall_status | upper}}</p>
-            <p><strong>Success Rate:</strong> {{outputs.metrics.success_rate}}%</p>
-            <p><strong>Average Response Time:</strong> {{outputs.metrics.avg_response_time}}ms</p>
-            <p><strong>Time:</strong> {{now().Format('2006-01-02T15:04:05Z07:00')}}</p>
-          </div>
-            
-          <h2>Endpoint Status</h2>
-          <table border="1" style="border-collapse: collapse; width: 100%;">
-            <tr style="background: #f5f5f5;">
-              <th style="padding: 10px; text-align: left;">Endpoint</th>
-              <th style="padding: 10px; text-align: left;">Status</th>
-              <th style="padding: 10px; text-align: left;">Response Time</th>
-              <th style="padding: 10px; text-align: left;">Details</th>
-            </tr>
-            <tr>
-              <td style="padding: 10px;">Health Check</td>
-              <td style="padding: 10px; color: {{outputs.health.healthy ? 'green' : 'red'}};">
-                {{outputs.health.healthy ? "✅ UP" : "❌ DOWN"}}
-              </td>
-              <td style="padding: 10px;">{{outputs.health.response_time}}ms</td>
-              <td style="padding: 10px;">{{outputs.health.status}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px;">Products API</td>
-              <td style="padding: 10px; color: {{outputs.products.available ? 'green' : 'red'}};">
-                {{outputs.products.available ? "✅ UP" : "❌ DOWN"}}
-              </td>
-              <td style="padding: 10px;">{{outputs.products.response_time}}ms</td>
-              <td style="padding: 10px;">{{outputs.products.product_count}} products</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px;">Authentication</td>
-              <td style="padding: 10px; color: {{outputs.auth.authenticated ? 'green' : 'red'}};">
-                {{outputs.auth.authenticated ? "✅ UP" : "❌ DOWN"}}
-              </td>
-              <td style="padding: 10px;">{{outputs.auth.response_time}}ms</td>
-              <td style="padding: 10px;">User ID: {{outputs.auth.user_id}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px;">Orders API</td>
-              <td style="padding: 10px; color: {{outputs.orders.available ? 'green' : 'red'}};">
-                {{outputs.orders.available ? "✅ UP" : "❌ DOWN"}}
-              </td>
-              <td style="padding: 10px;">{{outputs.orders.response_time}}ms</td>
-              <td style="padding: 10px;">{{outputs.orders.order_count}} recent orders</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px;">Search API</td>
-              <td style="padding: 10px; color: {{outputs.search.available ? 'green' : 'red'}};">
-                {{outputs.search.available ? "✅ UP" : "❌ DOWN"}}
-              </td>
-              <td style="padding: 10px;">{{outputs.search.response_time}}ms</td>
-              <td style="padding: 10px;">{{outputs.search.result_count}} search results</td>
-            </tr>
-          </table>
-            
-          <div style="background: #f5f5f5; padding: 15px; margin: 20px 0;">
-            <h3>Recommended Actions</h3>
-            <ul>
-              {{if not outputs.health.healthy}}<li>Check API server health and connectivity</li>{{end}}
-              {{if not outputs.products.available}}<li>Investigate product catalog service</li>{{end}}
-              {{if not outputs.auth.authenticated}}<li>Verify authentication service and token validity</li>{{end}}
-              {{if not outputs.orders.available}}<li>Check order processing system</li>{{end}}
-              {{if not outputs.search.available}}<li>Investigate search service functionality</li>{{end}}
-              {{if gt outputs.metrics.avg_response_time 3000}}<li>Performance issue detected - investigate slow responses</li>{{end}}
-            </ul>
-          </div>
-            
-          <p style="font-size: 12px; color: #666;">
-            This alert was generated by Probe Monitoring System.<br>
-            Workflow: {{workflow.name}}<br>
-            Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
-          </p>
-            
-          </body>
-          </html>
+- id: alerting
+  name: "Alert Notifications"
+  needs: [performance-analysis]
+  skipif: outputs.metrics.overall_status == "healthy"
+  steps:
+    - name: "Send Alert Email"
+      uses: smtp
+      with:
+        addr: "{{vars.SMTP_HOST}}:{{vars.SMTP_PORT}}"
+        from: "{{vars.ALERT_FROM_EMAIL}}"
+        to: "{{vars.ALERT_TO_EMAIL}}"
+        subject: "🚨 API Monitoring Alert - {{upper(outputs.metrics.overall_status)}}"
+        session: 1
+        message: 1
+        length: 500
+      test: res.code == 0 && res.sent > 0
+      echo: |
+        API MONITORING ALERT
+        ====================
 
-      - name: "Log Alert Sent"
-        uses: hello
-        echo: |
-          🚨 CRITICAL ALERT SENT
-          Status: {{outputs.metrics.overall_status}}
-          Success Rate: {{outputs.metrics.success_rate}}%
-          Alert sent to: {{vars.ALERT_TO_EMAIL}}
+        Alert Summary:
+        Overall Status: {{upper(outputs.metrics.overall_status)}}
+        Success Rate: {{outputs.metrics.success_rate}}%
+        Average Response Time: {{outputs.metrics.avg_response_time}}ms
+        Time: {{now().Format('2006-01-02T15:04:05Z07:00')}}
+
+        Endpoint Status:
+        Health Check: {{outputs.health?.healthy == true ? "✅ UP" : "❌ DOWN"}} (status: {{outputs.health?.status ?? "-"}})
+        Products API: {{outputs.products?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.products?.product_count ?? 0}} products)
+        Authentication: {{outputs.auth?.authenticated == true ? "✅ UP" : "❌ DOWN"}} (user ID: {{outputs.auth?.user_id ?? "-"}})
+        Orders API: {{outputs.orders?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders?.order_count ?? 0}} recent orders)
+        Search API: {{outputs.search?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.search?.result_count ?? 0}} search results)
+
+        Recommended Actions:
+        {{outputs.health?.healthy != true ? "- Check API server health and connectivity" : ""}}
+        {{outputs.products?.available != true ? "- Investigate product catalog service" : ""}}
+        {{outputs.auth?.authenticated != true ? "- Verify authentication service and token validity" : ""}}
+        {{outputs.orders?.available != true ? "- Check order processing system" : ""}}
+        {{outputs.search?.available != true ? "- Investigate search service functionality" : ""}}
+        {{outputs.metrics.avg_response_time > 3000 ? "- Performance issue detected - investigate slow responses" : ""}}
+
+        This alert was generated by Probe Monitoring System.
+
+    - name: "Log Alert Sent"
+      uses: hello
+      echo: |
+        🚨 ALERT SENT
+        Status: {{outputs.metrics.overall_status}}
+        Success Rate: {{outputs.metrics.success_rate}}%
+        Alert sent to: {{vars.ALERT_TO_EMAIL}}
 ```
+
+`skipif` skips the job while every endpoint is up. The `smtp` action sends a generated message with the subject above. It has no parameters for a body of your own or for logging in to the server, so use a server that accepts mail from this host without authentication, such as your company's mail relay. The report goes in the step's `echo`, which appears in Probe's output.
 
 ## Step 7: Environment Configuration
 
-Create environment-specific configuration files:
+Create environment-specific configuration files. Probe joins the files given to it into one document, so the `vars` of a later file replace those of `monitoring.yml` as a whole rather than entry by entry. Each file therefore repeats every var, including the ones that read the environment:
 
 **development.yml:**
 ```yaml
@@ -441,7 +397,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 5000  # More lenient for dev
   CRITICAL_RESPONSE_TIME: 10000
-
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 **staging.yml:**
@@ -451,7 +411,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 3000
   CRITICAL_RESPONSE_TIME: 7000
-
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 **production.yml:**
@@ -461,7 +425,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 2000
   CRITICAL_RESPONSE_TIME: 5000
-
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 ## Step 8: Setting Up Environment Variables
@@ -476,10 +444,8 @@ Create a script to set up your environment variables:
 export API_AUTH_TOKEN="your-api-token-here"
 
 # Email Configuration
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="your-email@gmail.com"
-export SMTP_PASSWORD="your-app-password"
+export SMTP_HOST="mail.yourcompany.com"
+export SMTP_PORT=25
 export ALERT_FROM_EMAIL="alerts@yourcompany.com"
 export ALERT_TO_EMAIL="admin@yourcompany.com"
 
@@ -520,14 +486,17 @@ Set up automated monitoring with cron:
 crontab -e
 
 # Add entries for regular monitoring
+# setup-monitoring.sh exports the variables, so it is sourced in bash
+SHELL=/bin/bash
+
 # Run every 5 minutes during business hours
-*/5 9-17 * * 1-5 /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+*/5 9-17 * * 1-5 source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 
 # Run every 15 minutes outside business hours
-*/15 0-8,18-23 * * * /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+*/15 0-8,18-23 * * * source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 
 # Run every hour on weekends
-0 * * * 0,6 /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+0 * * * 0,6 source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 ```
 
 ## Testing and Validation
@@ -539,11 +508,11 @@ Before leaving the system to run on its own, check that each part works: the ind
 Running one job at a time confirms each part before the whole workflow is left to run unattended.
 
 ```bash
-# Test health check only
-probe -v monitoring.yml --jobs=health-check
+# Test the health check (the performance report, an always job, runs after it)
+probe -v --job health-check monitoring.yml
 
-# Test without email alerts
-probe monitoring.yml,production.yml --skip-jobs=alerting
+# Test without email alerts (runs the jobs the analysis needs, not the alerting)
+probe --job performance-analysis monitoring.yml,production.yml
 
 # Test with fake failures (modify URLs to non-existent endpoints)
 probe monitoring.yml,development.yml
@@ -551,10 +520,10 @@ probe monitoring.yml,development.yml
 
 ### Validate Email Alerts
 
-1. Temporarily set success thresholds very high to trigger alerts
-2. Run monitoring and verify email delivery
-3. Check email formatting and content
-4. Restore normal thresholds
+1. Point the checks at an address where nothing answers, so that every check fails: `probe --var API_BASE_URL=http://localhost:1 monitoring.yml`
+2. Verify that the mail was delivered
+3. Check the subject of the mail, and the report in Probe's output
+4. Run without `--var` again, and verify that the alerting job is skipped
 
 ## Troubleshooting
 
@@ -574,10 +543,10 @@ echo $API_AUTH_TOKEN | base64 -d  # For JWT tokens
 **Email delivery issues:**
 ```bash
 # Test SMTP connection
-telnet smtp.gmail.com 587
+telnet "$SMTP_HOST" "$SMTP_PORT"
 
-# Check app password (for Gmail)
-# Generate new app password in Google Account settings
+# Probe does not log in to the server, so it has to accept
+# mail from this host without authentication
 ```
 
 **Performance issues:**

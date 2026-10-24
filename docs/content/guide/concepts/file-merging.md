@@ -38,7 +38,7 @@ vars:
 ```
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 description: Basic API monitoring
 
@@ -66,7 +66,7 @@ probe vars.yml,workflow.yml
 Because the last definition wins, an environment file can replace one key outright. Keep every value the workflow needs in that file - what it leaves out is gone, not inherited.
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 
 jobs:
@@ -111,9 +111,10 @@ shared:
 ```
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Test
 vars:
+  api_url: "{{API_URL}}"
   token: "{{API_TOKEN}}"
 
 jobs:

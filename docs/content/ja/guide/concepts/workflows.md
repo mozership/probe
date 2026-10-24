@@ -11,13 +11,16 @@ name: Workflow Name                    # 必須: 人間が読みやすい名前
 description: What this workflow does   # オプション: 詳細な説明
 vars:                                  # オプション: 変数
   API_BASE_URL: https://api.example.com
-jobs:                                 # 必須: 一つ以上のジョブ
-- name: job-name                      # ジョブは配列形式
-  defaults:                           # オプション: ジョブレベルのデフォルト設定
-    http:
-      headers:
-        User-Agent: "Probe Monitor"
-  # ジョブ定義...
+jobs:                                  # 必須: 一つ以上のジョブ
+- id: api-check                        # オプション: 他のジョブから参照するためのID
+  name: API Check                      # 必須: ジョブ名
+  steps:                               # 必須: 一つ以上のステップ
+    - name: Check API Health
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/health"
+      test: res.code == 200
 ```
 
 ### 必須コンポーネント
@@ -64,14 +67,19 @@ vars:
 
 ```yaml
 jobs:
-- name: Example Job
+- name: Health Check
   defaults:
     http:
+      url: "{{vars.api_url}}"
       headers:
         Accept: "application/json"
         User-Agent: "Probe Health Monitor v1.0"
   steps:
-    # このジョブ内のすべてのステップに上記のdefaultsが適用されます
+    - name: Ping
+      uses: http
+      with:
+        get: /health
+      test: res.code == 200
 ```
 
 ## ワークフロー設計パターン
@@ -85,32 +93,37 @@ jobs:
 ```yaml
 name: Database Migration
 description: Execute database schema changes in order
+vars:
+  DB_API: "{{DB_API}}"
 
 jobs:
-- name: Run Migration Steps
+- id: migration
+  name: Run Migration Steps
   steps:
-  - name: Backup Current Schema
-    uses: http
-    with:
-      url: "{{vars.DB_API}}/backup"
-      method: POST
-    test: res.code == 200
+    - name: Backup Current Schema
+      uses: http
+      with:
+        url: "{{vars.DB_API}}/backup"
+        method: POST
+      test: res.code == 200
 
-  - name: Apply Schema Changes
-    uses: http
-    with:
-      url: "{{vars.DB_API}}/migrate"
-      method: POST
-    test: res.code == 200
+    - name: Apply Schema Changes
+      uses: http
+      with:
+        url: "{{vars.DB_API}}/migrate"
+        method: POST
+      test: res.code == 200
 
-  - name: Verify Migration
-    uses: http
-    with:
-      get: "/schema/version"
-    test: res.body.version == "2.1.0"
+    - name: Verify Migration
+      uses: http
+      with:
+        url: "{{vars.DB_API}}/schema/version"
+        method: GET
+      test: res.body.version == "2.1.0"
 
-  - name: Update Documentation
-    echo: "Migration to v2.1.0 completed successfully"
+    - name: Update Documentation
+      uses: hello
+      echo: "Migration to v2.1.0 completed successfully"
 ```
 
 **使用例:**
@@ -125,34 +138,41 @@ jobs:
 ```yaml
 name: Multi-Service Health Check
 description: Check health of all microservices in parallel
+vars:
+  USER_SERVICE_URL: "{{USER_SERVICE_URL}}"
+  PAYMENT_SERVICE_URL: "{{PAYMENT_SERVICE_URL}}"
+  NOTIFICATION_SERVICE_URL: "{{NOTIFICATION_SERVICE_URL}}"
 
 jobs:
-- name: User Service Health
-  id: user-service
+- id: user-service
+  name: User Service Health
   steps:
-  - name: Check User API
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Check User API
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.USER_SERVICE_URL}}/health"
+      test: res.code == 200
 
-- name: Payment Service Health
-  id: payment-service
+- id: payment-service
+  name: Payment Service Health
   steps:
-  - name: Check Payment API
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Check Payment API
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.PAYMENT_SERVICE_URL}}/health"
+      test: res.code == 200
 
-- name: Notification Service Health
-  id: notification-service
+- id: notification-service
+  name: Notification Service Health
   steps:
-  - name: Check Notification API
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Check Notification API
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.NOTIFICATION_SERVICE_URL}}/health"
+      test: res.code == 200
 ```
 
 **使用例:**
@@ -167,51 +187,61 @@ jobs:
 ```yaml
 name: Application Deployment Validation
 description: Validate deployment across multiple stages
+vars:
+  DB_HEALTH_URL: "{{DB_HEALTH_URL}}"
+  REDIS_HEALTH_URL: "{{REDIS_HEALTH_URL}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
-# ステージ 1: インフラチェック（並列）
-- name: Database Connectivity
-  id: database-check
+  # ステージ 1: インフラチェック（並列）
+- id: database-check
+  name: Database Connectivity
   steps:
-  - name: Test Database Connection
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Test Database Connection
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.DB_HEALTH_URL}}"
+      test: res.code == 200
 
-- name: Cache Service Check
-  id: cache-check
+- id: cache-check
+  name: Cache Service Check
   steps:
-  - name: Test Redis Connection
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Test Redis Connection
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.REDIS_HEALTH_URL}}"
+      test: res.code == 200
 
 # ステージ 2: アプリケーションチェック（インフラに依存）
-- name: API Service Validation
-  id: api-validation
+- id: api-validation
+  name: API Service Validation
   needs: [database-check, cache-check]
   steps:
-  - name: Test Core API Endpoints
-    uses: http
-    with:
-      get: "/health"
-    test: res.code == 200
+    - name: Test Core API Endpoints
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health"
+      test: res.code == 200
 
 # ステージ 3: エンドツーエンドテスト（API に依存）
-- name: End-to-End Tests
-  id: e2e-tests
+- id: e2e-tests
+  name: End-to-End Tests
   needs: [api-validation]
   steps:
-  - name: Test User Registration Flow
-    uses: http
-    with:
-      post: "/auth/register"
-      body:
-        email: "test@example.com"
-        password: "testpass123"
-    test: res.code == 201
+    - name: Test User Registration Flow
+      uses: http
+      with:
+        url: "{{vars.API_URL}}/auth/register"
+        method: POST
+        body: |
+          {
+            "email": "test@example.com",
+            "password": "testpass123"
+          }
+      test: res.code == 201
 ```
 
 **使用例:**
@@ -228,67 +258,71 @@ name: Regional Service Check
 description: Check services across multiple regions and aggregate results
 
 jobs:
-# ファンアウト: 各リージョンを並列チェック
-- name: US East Region Check
-  id: us-east-check
+  # ファンアウト: 各リージョンを並列チェック
+- id: us-east-check
+  name: US East Region Check
   steps:
-  - name: Check US East API
-    uses: http
-    with:
-      method: GET
-      url: https://us-east.api.example.com/health
-    test: res.code == 200
-    outputs:
-      region: "'us-east'"
-      status: res.body.status
-      response_time: (rt.sec * 1000)
+    - name: Check US East API
+      id: us-east-check
+      uses: http
+      with:
+        method: GET
+        url: https://us-east.api.example.com/health
+      test: res.code == 200
+      outputs:
+        region: "'us-east'"
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
-- name: US West Region Check
-  id: us-west-check
+- id: us-west-check
+  name: US West Region Check
   steps:
-  - name: Check US West API
-    uses: http
-    with:
-      method: GET
-      url: https://us-west.api.example.com/health
-    test: res.code == 200
-    outputs:
-      region: "'us-west'"
-      status: res.body.status
-      response_time: (rt.sec * 1000)
+    - name: Check US West API
+      id: us-west-check
+      uses: http
+      with:
+        method: GET
+        url: https://us-west.api.example.com/health
+      test: res.code == 200
+      outputs:
+        region: "'us-west'"
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
-- name: Europe Region Check
-  id: eu-check
+- id: eu-check
+  name: Europe Region Check
   steps:
-  - name: Check EU API
-    uses: http
-    with:
-      method: GET
-      url: https://eu.api.example.com/health
-    test: res.code == 200
-    outputs:
-      region: "'eu'"
-      status: res.body.status
-      response_time: (rt.sec * 1000)
+    - name: Check EU API
+      id: eu-check
+      uses: http
+      with:
+        method: GET
+        url: https://eu.api.example.com/health
+      test: res.code == 200
+      outputs:
+        region: "'eu'"
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 # ファンイン: 結果を集約
-- name: Regional Summary
-  id: summary
+- id: summary
+  name: Regional Summary
   needs: [us-east-check, us-west-check, eu-check]
   steps:
-  - name: Generate Report
-    echo: |
-      Regional Health Check Results:
-      
-      US East: {{outputs['us-east-check'].status}} ({{outputs['us-east-check'].response_time}}ms)
-      US West: {{outputs['us-west-check'].status}} ({{outputs['us-west-check'].response_time}}ms)
-      Europe: {{outputs['eu-check'].status}} ({{outputs['eu-check'].response_time}}ms)
-      
-      Total regions healthy: {{
-        (outputs['us-east-check'].status == "healthy" ? 1 : 0) +
-        (outputs['us-west-check'].status == "healthy" ? 1 : 0) +
-        (outputs['eu-check'].status == "healthy" ? 1 : 0)
-      }}/3
+    - name: Generate Report
+      uses: hello
+      echo: |
+        Regional Health Check Results:
+
+        US East: {{outputs['us-east-check'].status}} ({{outputs['us-east-check'].response_time}}ms)
+        US West: {{outputs['us-west-check'].status}} ({{outputs['us-west-check'].response_time}}ms)
+        Europe: {{outputs['eu-check'].status}} ({{outputs['eu-check'].response_time}}ms)
+
+        Total regions healthy: {{
+          (outputs['us-east-check'].status == "healthy" ? 1 : 0) +
+          (outputs['us-west-check'].status == "healthy" ? 1 : 0) +
+          (outputs['eu-check'].status == "healthy" ? 1 : 0)
+        }}/3
 ```
 
 **使用例:**
@@ -344,33 +378,32 @@ description: Test core business functionality
 ```yaml
 name: Service Monitoring
 description: Monitor critical services
+vars:
+  # production.yml または staging.yml の vars で置き換わる
+  API_BASE_URL: "{{API_BASE_URL}}"
 
 jobs:
-- name: API Check
-  id: api-check
-  defaults:
-    http:
+- id: api-check
+  name: API Check
   steps:
-  - name: Check API Health
-    uses: http
-    with:
-      method: GET
-      url: "{{vars.API_BASE_URL}}/health"
-    test: res.code == 200
+    - name: Check API Health
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/health"
+      test: res.code == 200
 ```
 
 **production.yml:**
 ```yaml
 vars:
   API_BASE_URL: https://api.production.example.com
-  DEFAULT_TIMEOUT: 10s
 ```
 
 **staging.yml:**
 ```yaml
 vars:
   API_BASE_URL: https://api.staging.example.com
-  DEFAULT_TIMEOUT: 30s
 ```
 
 使用方法:
@@ -435,65 +468,72 @@ jobs:
 
 ```yaml
 jobs:
-- name: Load Testing
-  id: load-test
+- id: load-test
+  name: Load Testing
   steps:
-  - name: Determine Load Parameters
-    id: params
-    echo: "Load test configuration determined"
-    outputs:
-      concurrent_users: "{{vars.LOAD_TEST_USERS || 10}}"
-      test_duration: "{{vars.LOAD_TEST_DURATION || 60}}"
+    - name: Determine Load Parameters
+      uses: hello
+      id: params
+      echo: "Load test configuration determined"
+      outputs:
+        concurrent_users: vars.LOAD_TEST_USERS ?? 10
+        test_duration: vars.LOAD_TEST_DURATION ?? 60
 
-  - name: Execute Load Test
-    uses: http
-    with:
-      url: "{{vars.LOAD_TEST_URL}}"
-      method: POST
-      body: |
-        {
-          "concurrent_users": {{outputs.params.concurrent_users}},
-          "duration_seconds": {{outputs.params.test_duration}}
-        }
-    test: res.code == 200
+    - name: Execute Load Test
+      uses: http
+      with:
+        url: "{{vars.LOAD_TEST_URL}}"
+        method: POST
+        body: |
+          {
+            "concurrent_users": {{outputs.params.concurrent_users}},
+            "duration_seconds": {{outputs.params.test_duration}}
+          }
+      test: res.code == 200
 ```
 
 ### 3. ワークフロー構成
 
-複雑なワークフローを再利用可能なコンポーネントに分解します。
+複雑なワークフローを再利用可能なコンポーネントに分解します。`jobs`を持てるのは1ファイルだけなので、共有するファイルではジョブをYAMLアンカーの下に置き、ワークフロー側で自分のジョブと並べて列挙します。
 
 **common-setup.yml:**
 ```yaml
-jobs:
-- name: Common Setup
-  id: setup
-  steps:
-  - name: Initialize Environment
-    echo: "Environment initialized"
-    outputs:
-      timestamp: "{{unixtime()}}"
-      session_id: "{{random_str(8)}}"
+shared:
+  setup_job: &setup_job
+    id: setup
+    name: Common Setup
+    steps:
+      - name: Initialize Environment
+        uses: hello
+        id: setup
+        echo: "Environment initialized"
+        outputs:
+          timestamp: unixtime()
+          session_id: random_str(8)
 ```
 
 **main-workflow.yml:**
-```yaml
+```yaml fragment
 name: Complete System Test
 description: Full system validation with common setup
 
-# これは common-setup.yml とマージされる
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
-- name: API Tests
-  id: api-tests
+- *setup_job    # common-setup.yml で定義
+- id: api-tests
+  name: API Tests
   needs: [setup]
   steps:
-  - name: Test API with Session
-    uses: http
-    with:
-      method: GET
-      url: "{{vars.API_URL}}/test"
-      headers:
-        X-Session-ID: "{{outputs.setup.session_id}}"
-    test: res.code == 200
+    - name: Test API with Session
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/test"
+        headers:
+          X-Session-ID: "{{outputs.setup.session_id}}"
+      test: res.code == 200
 ```
 
 使用方法:
@@ -512,20 +552,38 @@ probe common-setup.yml,main-workflow.yml
 ```yaml
 # ワークフロー名: タイトルケースを使用
 name: Production API Health Check
+vars:
+  API_URL: "{{API_URL}}"
 
 # ジョブ名: 説明的で具体的
 jobs:
-- name: User Authentication Test
-  id: user-authentication-test
-  
-- name: Database Connectivity Check
-  id: database-connectivity-check
+- id: user-authentication-test
+  name: User Authentication Test
+  steps:
+    # ステップ名: アクション指向
+    - name: Verify User Login Endpoint
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/auth/login"
+      test: res.code == 200
 
-# ステップ名: アクション指向
-steps:
-  - name: Verify User Login Endpoint
-  - name: Test Database Connection Pool
-  - name: Validate Cache Expiration
+- id: database-connectivity-check
+  name: Database Connectivity Check
+  steps:
+    - name: Test Database Connection Pool
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health/db-pool"
+      test: res.code == 200
+
+    - name: Validate Cache Expiration
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health/cache"
+      test: res.code == 200
 ```
 
 ### 2. ドキュメント
@@ -567,40 +625,54 @@ description: |
 
 ```yaml
 jobs:
-- name: Primary Service Check
-  id: primary-check
+- id: primary-check
+  name: Primary Service Check
   steps:
-  - name: Check Primary Service
-    id: primary
-    uses: http
-    with:
-      method: GET
-      url: "{{vars.PRIMARY_SERVICE_URL}}"
-    test: res.code == 200
+    - name: Check Primary Service
+      id: primary
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.PRIMARY_SERVICE_URL}}"
+      test: res.code == 200
+      outputs:
+        primary_healthy: res.code == 200
 
-- name: Fallback Service Check
-  id: fallback-check
+- id: fallback-check
+  name: Fallback Service Check
   steps:
-  - name: Check Fallback Service
-    uses: http
-    with:
-      method: GET
-      url: "{{vars.FALLBACK_SERVICE_URL}}"
-    test: res.code == 200
+    - name: Check Fallback Service
+      id: fallback
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.FALLBACK_SERVICE_URL}}"
+      test: res.code == 200
+      outputs:
+        fallback_healthy: res.code == 200
 
-- name: Send Notifications
-  id: notification
+- id: notification
+  name: Send Notifications
   needs: [primary-check, fallback-check]
+  always: true    # チェックが失敗しても実行する
   steps:
-  - name: Success Notification
-    echo: "Primary service is healthy"
-    
-  - name: Fallback Notification
-    echo: "Primary service down, fallback operational"
-    
-  - name: Critical Alert
-    echo: "CRITICAL: Both primary and fallback services are down"
+    - name: Success Notification
+      uses: hello
+      skipif: outputs.primary_healthy != true
+      echo: "✅ Primary service is healthy"
+
+    - name: Fallback Notification
+      uses: hello
+      skipif: outputs.primary_healthy == true || outputs.fallback_healthy != true
+      echo: "⚠️ Primary service down, fallback operational"
+
+    - name: Critical Alert
+      uses: hello
+      skipif: outputs.primary_healthy == true || outputs.fallback_healthy == true
+      echo: "🚨 CRITICAL: Both primary and fallback services are down"
 ```
+
+`always: true`により、チェックが失敗しても通知ジョブは実行されます。接続できなかったチェックは出力を公開せず、その出力はnilとして読まれます。そのため条件は`true`と比較し、各通知は該当する場合以外はスキップされます。
 
 ### 4. パフォーマンス考慮事項
 
@@ -609,30 +681,27 @@ jobs:
 ```yaml
 # 良い例: 独立操作の並列実行
 jobs:
-- name: Frontend Check    # これらは並列実行される
-  id: frontend-check
-- name: Backend Check     # パフォーマンス向上のため
-  id: backend-check
-- name: Database Check
-  id: database-check
+- id: frontend-check   # これらは並列実行される
+- id: backend-check    # パフォーマンス向上のため
+- id: database-check
 
 # 良い例: 効率的なジョブ依存関係
 jobs:
-- name: Infrastructure Check    # 基盤チェックを最初に
-  id: infrastructure
-- name: Application Check       # 次にアプリケーションチェック
-  id: application
+- id: infrastructure
+  name: infrastructure
+- id: application
+  name: application
   needs: [infrastructure]
-- name: Integration Test       # 最後に統合テスト
-  id: integration
+- id: integration
+  name: integration
   needs: [application]
 
 # 避ける: 不要な順次依存関係
 jobs:
-- name: Check A
-  id: check-a
-- name: Check B
-  id: check-b
+- id: check-a
+  name: check-a
+- id: check-b
+  name: check-b
   needs: [check-a]  # B が実際に A に依存する場合のみ
 ```
 
@@ -643,18 +712,18 @@ jobs:
 ### 1. モノリシックワークフロー
 
 **避ける:**
-```yaml
+```yaml fragment
 name: Everything Check
 jobs:
-- name: Massive Job
-  id: massive-job
+- id: massive-job
+  name: massive-job
   steps:
-  - name: Check API
-  - name: Check Database  
-  - name: Check Cache
-  - name: Check Email
-  - name: Check Files
-  - name: Check Logs
+    - name: Check API
+    - name: Check Database
+    - name: Check Cache
+    - name: Check Email
+    - name: Check Files
+    - name: Check Logs
     # ... 50個以上のステップ
 ```
 

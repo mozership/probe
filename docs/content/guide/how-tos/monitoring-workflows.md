@@ -43,7 +43,7 @@ jobs:
       uses: hello
       echo: |
         🏥 Health Check Results:
-          
+
         API Status: {{outputs.api_healthy ? "✅ Healthy" : "❌ Down"}}
         Response Time: {{outputs.response_time}}ms
         API Version: {{outputs.api_version}}
@@ -139,27 +139,27 @@ jobs:
       echo: |
         🎯 Multi-Service Health Report
         ===============================
-          
+
         User Service: {{outputs['user-service'].healthy ? "✅" : "❌"}} ({{outputs['user-service'].response_time}}ms)
           Active Users: {{outputs['user-service'].user_count}}
-          
+
         Order Service: {{outputs['order-service'].healthy ? "✅" : "❌"}} ({{outputs['order-service'].response_time}}ms)
           Pending Orders: {{outputs['order-service'].pending_orders}}
-          
+
         Payment Service: {{outputs['payment-service'].healthy ? "✅" : "❌"}} ({{outputs['payment-service'].response_time}}ms)
           Transaction Queue: {{outputs['payment-service'].transaction_queue}}
-          
+
         Notification Service: {{outputs['notification-service'].healthy ? "✅" : "❌"}} ({{outputs['notification-service'].response_time}}ms)
           Notification Queue: {{outputs['notification-service'].queue_size}}
-          
+
         Overall System Status: {{
-          outputs['user-service'].healthy && 
-          outputs['order-service'].healthy && 
-          outputs['payment-service'].healthy && 
-          outputs['notification-service'].healthy ? 
+          outputs['user-service'].healthy &&
+          outputs['order-service'].healthy &&
+          outputs['payment-service'].healthy &&
+          outputs['notification-service'].healthy ?
           "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 ISSUES DETECTED"
         }}
-          
+
         Timestamp: {{unixtime()}}
 ```
 
@@ -181,12 +181,15 @@ vars:
   DB_NAME: production
   REDIS_HOST: redis.yourcompany.com
   REDIS_PORT: 6379
+  DB_API_URL: "{{DB_API_URL}}"
+  CACHE_API_URL: "{{CACHE_API_URL}}"
 
 jobs:
 - id: database-connectivity
   name: Database Connectivity
   steps:
     - name: PostgreSQL Connection Test
+      id: database-connectivity
       uses: http
       with:
         method: GET
@@ -199,6 +202,7 @@ jobs:
         max_connections: res.body.max_connections
 
     - name: Database Performance Check
+      id: database-performance
       uses: http
       with:
         method: GET
@@ -213,6 +217,7 @@ jobs:
   name: Cache System Health
   steps:
     - name: Redis Connection Test
+      id: cache-connectivity
       uses: http
       with:
         method: GET
@@ -225,6 +230,7 @@ jobs:
         keys_count: res.body.keys.total
 
     - name: Cache Performance Check
+      id: cache-performance
       uses: http
       with:
         method: GET
@@ -244,28 +250,28 @@ jobs:
       echo: |
         🏗️ Infrastructure Health Report
         =================================
-          
+
         Database Status:
         Connection: {{outputs['database-connectivity'].db_connected ? "✅ Connected" : "❌ Failed"}}
         Response Time: {{outputs['database-connectivity'].connection_time}}ms
         Active Connections: {{outputs['database-connectivity'].active_connections}}/{{outputs['database-connectivity'].max_connections}}
-        Average Query Time: {{outputs['database-connectivity'].avg_query_time}}ms
-        Slow Queries: {{outputs['database-connectivity'].slow_queries}}
-        Database Size: {{outputs['database-connectivity'].db_size_mb}}MB
-          
+        Average Query Time: {{outputs['database-performance'].avg_query_time}}ms
+        Slow Queries: {{outputs['database-performance'].slow_queries}}
+        Database Size: {{outputs['database-performance'].db_size_mb}}MB
+
         Cache Status:
-        Connection: {{outputs['cache-monitoring'].cache_connected ? "✅ Connected" : "❌ Failed"}}
-        Response Time: {{outputs['cache-monitoring'].cache_response_time}}ms
-        Memory Usage: {{outputs['cache-monitoring'].memory_usage_percent}}%
-        Total Keys: {{outputs['cache-monitoring'].keys_count}}
-        Hit Rate: {{(outputs['cache-monitoring'].hit_rate * 100)}}%
-        Miss Rate: {{(outputs['cache-monitoring'].miss_rate * 100)}}%
-          
+        Connection: {{outputs['cache-connectivity'].cache_connected ? "✅ Connected" : "❌ Failed"}}
+        Response Time: {{outputs['cache-connectivity'].cache_response_time}}ms
+        Memory Usage: {{outputs['cache-connectivity'].memory_usage_percent}}%
+        Total Keys: {{outputs['cache-connectivity'].keys_count}}
+        Hit Rate: {{(outputs['cache-performance'].hit_rate * 100)}}%
+        Miss Rate: {{(outputs['cache-performance'].miss_rate * 100)}}%
+
         Performance Alerts:
-        {{outputs['database-connectivity'].avg_query_time > 100 ? "⚠️ Database queries are slow (>" + outputs['database-connectivity'].avg_query_time + "ms)" : ""}}
-        {{outputs['database-connectivity'].slow_queries > 10 ? "⚠️ High number of slow queries (" + outputs['database-connectivity'].slow_queries + ")" : ""}}
-        {{outputs['cache-monitoring'].memory_usage_percent > 80 ? "⚠️ Cache memory usage high (" + outputs['cache-monitoring'].memory_usage_percent + "%)" : ""}}
-        {{outputs['cache-monitoring'].hit_rate < 0.8 ? "⚠️ Cache hit rate low (" + (outputs['cache-monitoring'].hit_rate * 100) + "%)" : ""}}
+        {{outputs['database-performance'].avg_query_time > 100 ? "⚠️ Database queries are slow (" + string(outputs['database-performance'].avg_query_time) + "ms)" : ""}}
+        {{outputs['database-performance'].slow_queries > 10 ? "⚠️ High number of slow queries (" + string(outputs['database-performance'].slow_queries) + ")" : ""}}
+        {{outputs['cache-connectivity'].memory_usage_percent > 80 ? "⚠️ Cache memory usage high (" + string(outputs['cache-connectivity'].memory_usage_percent) + "%)" : ""}}
+        {{outputs['cache-performance'].hit_rate < 0.8 ? "⚠️ Cache hit rate low (" + string(outputs['cache-performance'].hit_rate * 100) + "%)" : ""}}
 ```
 
 ## Comprehensive System Monitoring
@@ -284,7 +290,10 @@ vars:
   # Service URLs
   FRONTEND_URL: https://app.yourcompany.com
   API_GATEWAY_URL: https://api.yourcompany.com
-  
+  LOAD_BALANCER_URL: "{{LOAD_BALANCER_URL}}"
+  CDN_URL: "{{CDN_URL}}"
+  SECURITY_API_URL: "{{SECURITY_API_URL}}"
+
   # Monitoring thresholds
   MAX_RESPONSE_TIME: 2000
   MIN_SUCCESS_RATE: 0.95
@@ -296,6 +305,7 @@ jobs:
   name: Infrastructure Health Check
   steps:
     - name: Load Balancer Health
+      id: load-balancer
       uses: http
       with:
         method: GET
@@ -307,6 +317,7 @@ jobs:
         total_backends: res.body.total_backends
 
     - name: CDN Performance
+      id: cdn
       uses: http
       with:
         method: GET
@@ -323,6 +334,7 @@ jobs:
   needs: [infrastructure-health]
   steps:
     - name: Frontend Health
+      id: frontend
       uses: http
       with:
         method: GET
@@ -334,6 +346,7 @@ jobs:
         frontend_build: res.body.build
 
     - name: API Gateway Health
+      id: api-gateway
       uses: http
       with:
         method: GET
@@ -350,6 +363,7 @@ jobs:
   needs: [application-health]
   steps:
     - name: User Service Functional Test
+      id: user-service
       uses: http
       with:
         method: GET
@@ -360,6 +374,7 @@ jobs:
         active_sessions: res.body.active_sessions
 
     - name: Order Service Functional Test
+      id: order-service
       uses: http
       with:
         method: GET
@@ -386,9 +401,9 @@ jobs:
             "max_duration_seconds": 30
           }
       test: |
-        res.code == 200 && 
-        res.body.success_rate >= {{vars.MIN_SUCCESS_RATE}} &&
-        res.body.avg_response_time <= {{vars.MAX_RESPONSE_TIME}}
+        res.code == 200 &&
+        res.body.success_rate >= vars.MIN_SUCCESS_RATE &&
+        res.body.avg_response_time <= vars.MAX_RESPONSE_TIME
       outputs:
         success_rate: res.body.success_rate
         avg_response_time: res.body.avg_response_time
@@ -401,6 +416,7 @@ jobs:
   needs: [performance-validation]
   steps:
     - name: SSL Certificate Check
+      id: ssl-certificates
       uses: http
       with:
         url: "{{vars.SECURITY_API_URL}}/ssl-check"
@@ -418,6 +434,7 @@ jobs:
         cert_expiry_days: res.body.min_days_to_expiry
 
     - name: Security Headers Check
+      id: security-headers
       uses: http
       with:
         url: "{{vars.SECURITY_API_URL}}/headers-check"
@@ -442,61 +459,61 @@ jobs:
         🌐 Full-Stack System Health Report
         ===================================
         Generated: {{unixtime()}}
-          
+
         📊 INFRASTRUCTURE LAYER
-        Load Balancer: {{outputs['infrastructure-health'].lb_healthy ? "✅ Healthy" : "❌ Issues"}}
-          Backends: {{outputs['infrastructure-health'].active_backends}}/{{outputs['infrastructure-health'].total_backends}} active
-        CDN: {{outputs['infrastructure-health'].cdn_healthy ? "✅ Healthy" : "❌ Issues"}} ({{outputs['infrastructure-health'].cdn_response_time}}ms)
-          Cache Hit Ratio: {{(outputs['infrastructure-health'].cache_hit_ratio * 100)}}%
-          
+        Load Balancer: {{outputs['load-balancer'].lb_healthy ? "✅ Healthy" : "❌ Issues"}}
+          Backends: {{outputs['load-balancer'].active_backends}}/{{outputs['load-balancer'].total_backends}} active
+        CDN: {{outputs['cdn'].cdn_healthy ? "✅ Healthy" : "❌ Issues"}} ({{outputs['cdn'].cdn_response_time}}ms)
+          Cache Hit Ratio: {{(outputs['cdn'].cache_hit_ratio * 100)}}%
+
         🖥️ APPLICATION LAYER
-        Frontend: {{outputs['application-health'].frontend_healthy ? "✅ Healthy" : "❌ Issues"}}
-          Version: {{outputs['application-health'].frontend_version}} (Build: {{outputs['application-health'].frontend_build}})
-        API Gateway: {{outputs['application-health'].gateway_healthy ? "✅ Healthy" : "❌ Issues"}}
-          Version: {{outputs['application-health'].gateway_version}}
-          Services: {{outputs['application-health'].registered_services}} registered
-          
+        Frontend: {{outputs['frontend'].frontend_healthy ? "✅ Healthy" : "❌ Issues"}}
+          Version: {{outputs['frontend'].frontend_version}} (Build: {{outputs['frontend'].frontend_build}})
+        API Gateway: {{outputs['api-gateway'].gateway_healthy ? "✅ Healthy" : "❌ Issues"}}
+          Version: {{outputs['api-gateway'].gateway_version}}
+          Services: {{outputs['api-gateway'].registered_services}} registered
+
         🏢 BUSINESS LOGIC LAYER
-        User Service: {{outputs['business-logic-health'].user_service_functional ? "✅ Functional" : "❌ Issues"}}
-          Active Sessions: {{outputs['business-logic-health'].active_sessions}}
-        Order Service: {{outputs['business-logic-health'].order_service_functional ? "✅ Functional" : "❌ Issues"}}
-          Processing Queue: {{outputs['business-logic-health'].processing_queue_length}} items
-          
+        User Service: {{outputs['user-service'].user_service_functional ? "✅ Functional" : "❌ Issues"}}
+          Active Sessions: {{outputs['user-service'].active_sessions}}
+        Order Service: {{outputs['order-service'].order_service_functional ? "✅ Functional" : "❌ Issues"}}
+          Processing Queue: {{outputs['order-service'].processing_queue_length}} items
+
         ⚡ PERFORMANCE METRICS
         Success Rate: {{(outputs['performance-validation'].success_rate * 100)}}%
         Average Response Time: {{outputs['performance-validation'].avg_response_time}}ms
         95th Percentile: {{outputs['performance-validation'].p95_response_time}}ms
         Error Rate: {{(outputs['performance-validation'].error_rate * 100)}}%
-          
+
         🔒 SECURITY STATUS
-        SSL Certificates: {{outputs['security-checks'].ssl_valid ? "✅ Valid" : "❌ Issues"}}
-          Expiry: {{outputs['security-checks'].cert_expiry_days}} days minimum
-        Security Headers: Score {{(outputs['security-checks'].security_score * 100)}}%
-        {{outputs['security-checks'].missing_headers ? "Missing Headers: " + outputs['security-checks'].missing_headers : ""}}
-          
+        SSL Certificates: {{outputs['ssl-certificates'].ssl_valid ? "✅ Valid" : "❌ Issues"}}
+          Expiry: {{outputs['ssl-certificates'].cert_expiry_days}} days minimum
+        Security Headers: Score {{(outputs['security-headers'].security_score * 100)}}%
+        {{len(outputs['security-headers'].missing_headers) > 0 ? "Missing Headers: " + join(outputs['security-headers'].missing_headers, ", ") : ""}}
+
         🎯 OVERALL SYSTEM STATUS
         {{
-          outputs['infrastructure-health'].lb_healthy &&
-          outputs['infrastructure-health'].cdn_healthy &&
-          outputs['application-health'].frontend_healthy &&
-          outputs['application-health'].gateway_healthy &&
-          outputs['business-logic-health'].user_service_functional &&
-          outputs['business-logic-health'].order_service_functional &&
+          outputs['load-balancer'].lb_healthy &&
+          outputs['cdn'].cdn_healthy &&
+          outputs['frontend'].frontend_healthy &&
+          outputs['api-gateway'].gateway_healthy &&
+          outputs['user-service'].user_service_functional &&
+          outputs['order-service'].order_service_functional &&
           outputs['performance-validation'].success_rate >= vars.MIN_SUCCESS_RATE &&
           outputs['performance-validation'].avg_response_time <= vars.MAX_RESPONSE_TIME &&
-          outputs['security-checks'].ssl_valid &&
-          outputs['security-checks'].security_score >= 0.8
-          ? "🟢 ALL SYSTEMS OPERATIONAL" 
+          outputs['ssl-certificates'].ssl_valid &&
+          outputs['security-headers'].security_score >= 0.8
+          ? "🟢 ALL SYSTEMS OPERATIONAL"
           : "🔴 ISSUES REQUIRE ATTENTION"
         }}
-          
+
         ⚠️ ALERTS
-        {{outputs['infrastructure-health'].active_backends != outputs['infrastructure-health'].total_backends ? "• Load balancer has inactive backends" : ""}}
-        {{outputs['infrastructure-health'].cdn_response_time > 1000 ? "• CDN response time is high" : ""}}
+        {{outputs['load-balancer'].active_backends != outputs['load-balancer'].total_backends ? "• Load balancer has inactive backends" : ""}}
+        {{outputs['cdn'].cdn_response_time > 1000 ? "• CDN response time is high" : ""}}
         {{outputs['performance-validation'].success_rate < vars.MIN_SUCCESS_RATE ? "• Success rate below threshold" : ""}}
         {{outputs['performance-validation'].avg_response_time > vars.MAX_RESPONSE_TIME ? "• Average response time exceeds threshold" : ""}}
-        {{outputs['security-checks'].cert_expiry_days < 30 ? "• SSL certificates expiring soon" : ""}}
-        {{outputs['security-checks'].security_score < 0.8 ? "• Security headers need improvement" : ""}}
+        {{outputs['ssl-certificates'].cert_expiry_days < 30 ? "• SSL certificates expiring soon" : ""}}
+        {{outputs['security-headers'].security_score < 0.8 ? "• Security headers need improvement" : ""}}
 ```
 
 ## Alerting and Notification Integration
@@ -618,7 +635,7 @@ Thresholds and endpoints differ between environments, so one monitoring file has
 ### Multi-Environment Configuration
 
 **base-monitoring.yml:**
-```yaml
+```yaml fragment
 name: Service Health Monitor
 description: Base monitoring workflow for all environments
 
@@ -632,6 +649,7 @@ jobs:
         Accept: "application/json"
   steps:
     - name: API Health
+      id: api-health
       uses: http
       with:
         method: GET
@@ -642,6 +660,7 @@ jobs:
         response_time: (rt.sec * 1000)
 
     - name: Database Health
+      id: database-health
       uses: http
       with:
         method: GET
@@ -664,33 +683,14 @@ jobs:
       uses: hello
       echo: |
         Environment: {{vars.ENVIRONMENT}}
-        API: {{outputs['service-health'].api_healthy ? "✅" : "❌"}} ({{outputs['service-health'].response_time}}ms)
-        Database: {{outputs['service-health'].db_healthy ? "✅" : "❌"}} ({{outputs['service-health'].db_response_time}}ms)
-```
+        API: {{outputs['api-health'].api_healthy ? "✅" : "❌"}} ({{outputs['api-health'].response_time}}ms)
+        Database: {{outputs['database-health'].db_healthy ? "✅" : "❌"}} ({{outputs['database-health'].db_response_time}}ms)
 
-**development.yml:**
-```yaml
-vars:
-  ENVIRONMENT: development
-  API_URL: http://localhost:3000
-  DB_API_URL: http://localhost:5432
-
-```
-
-**production.yml:**
-```yaml
-vars:
-  ENVIRONMENT: production
-  API_URL: https://api.yourcompany.com
-  DB_API_URL: https://db-api.yourcompany.com
-
-jobs:
-  # Add production-specific security monitoring
+  # Production-specific security monitoring
 - id: security-monitoring
   name: Security Monitoring
   needs: [service-health]
-  defaults:
-    http:
+  skipif: vars.ENVIRONMENT != "production"
   steps:
     - name: SSL Certificate Check
       id: security-monitoring
@@ -704,6 +704,23 @@ jobs:
         days_to_expiry: res.body.min_days_to_expiry
 ```
 
+**development.yml:**
+```yaml
+vars:
+  ENVIRONMENT: development
+  API_URL: http://localhost:3000
+  DB_API_URL: http://localhost:5432
+```
+
+**production.yml:**
+```yaml
+vars:
+  ENVIRONMENT: production
+  API_URL: https://api.yourcompany.com
+  DB_API_URL: https://db-api.yourcompany.com
+  SECURITY_API_URL: https://security-api.yourcompany.com
+```
+
 **Usage:**
 ```bash
 # Development monitoring
@@ -712,6 +729,8 @@ probe base-monitoring.yml,development.yml
 # Production monitoring (includes security checks)
 probe base-monitoring.yml,production.yml
 ```
+
+A later file that has `jobs` replaces every job of the earlier file, so the production-only check is in `base-monitoring.yml`, and its `skipif` runs it only when `ENVIRONMENT` is `production`.
 
 ## Best Practices
 
@@ -766,20 +785,20 @@ The description is where the workflow records what it watches and what a failure
 name: Well-Documented Monitor
 description: |
   Monitoring workflow for the e-commerce platform.
-  
+
   Checks:
   - User service health and performance
   - Order processing service
   - Payment gateway connectivity
   - Database performance
-  
+
   Alerting:
   - Critical: Service completely down
   - Warning: Performance degradation
   - Info: All systems normal
-  
+
   Expected execution time: 30-60 seconds
-  
+
   Maintenance:
   - Review thresholds monthly
   - Update service URLs when services move

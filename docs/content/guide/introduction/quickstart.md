@@ -35,14 +35,14 @@ jobs:
         url: https://httpbin.org/status/200
         method: GET
       test: res.code == 200
-        
+
     - name: Check API Endpoint
       uses: http
       with:
         url: https://httpbin.org/json
         method: GET
       test: res.code == 200 && res.body.slideshow != nil
-        
+
     - name: Success Message
       uses: hello
       echo: "✅ All checks passed! Website is healthy."
@@ -144,7 +144,7 @@ Include steps that handle failures gracefully:
     url: https://api.example.com/status
     method: GET
   test: res.code == 200
-  
+
 - name: Fallback Check
   uses: http
   with:

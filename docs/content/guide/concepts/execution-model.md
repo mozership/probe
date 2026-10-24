@@ -42,6 +42,10 @@ Jobs without dependencies execute in parallel:
 ```yaml
 name: Parallel Service Check
 description: Check multiple services simultaneously
+vars:
+  DB_URL: "{{DB_URL}}"
+  API_URL: "{{API_URL}}"
+  CACHE_URL: "{{CACHE_URL}}"
 
 jobs:
 - id: database-check
@@ -88,6 +92,9 @@ Jobs with dependencies wait for prerequisite jobs to complete:
 ```yaml
 name: Staged Deployment Validation
 description: Validate deployment in dependency order
+vars:
+  DB_URL: "{{DB_URL}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
 - id: infrastructure
@@ -361,7 +368,7 @@ steps:
     test: res.code == 200 && (rt.sec * 1000) < 1000
     outputs:
       response_time: (rt.sec * 1000)
-      status_code: res.status
+      status_code: res.code
       api_healthy: res.code == 200
 
   - name: Reference Previous Step
@@ -505,6 +512,14 @@ Optimize workflow execution through effective parallelization:
 ```yaml
 name: Optimized Parallel Execution
 description: Efficiently organize jobs for maximum parallelism
+vars:
+  DB_URL: "{{DB_URL}}"
+  CACHE_URL: "{{CACHE_URL}}"
+  EXTERNAL_API: "{{EXTERNAL_API}}"
+  USER_API: "{{USER_API}}"
+  ORDER_API: "{{ORDER_API}}"
+  NOTIFICATION_API: "{{NOTIFICATION_API}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
   # Tier 1: Independent foundation checks (all parallel)

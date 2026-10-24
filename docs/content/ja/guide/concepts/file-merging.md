@@ -38,7 +38,7 @@ vars:
 ```
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 description: Basic API monitoring
 
@@ -66,7 +66,7 @@ probe vars.yml,workflow.yml
 最後の定義が勝つため、環境ごとのファイルでキーをまるごと差し替えられます。そのファイルにはワークフローが必要とする値をすべて書いてください。書かなかった値は引き継がれず、消えます。
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 
 jobs:
@@ -111,9 +111,10 @@ shared:
 ```
 
 **workflow.yml:**
-```yaml
+```yaml fragment
 name: API Test
 vars:
+  api_url: "{{API_URL}}"
   token: "{{API_TOKEN}}"
 
 jobs:

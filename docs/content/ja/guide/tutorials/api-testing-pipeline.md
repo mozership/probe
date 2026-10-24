@@ -52,53 +52,64 @@ api-tests/
 └── main-test-suite.yml
 ```
 
+Probeは渡されたファイルを連結して1つのYAMLドキュメントにするため、`vars`のようなトップレベルのキーを2つのファイルで定義すると、最後のファイルの値が使われます。そこで、すべての環境で共通の値は`base.yml`の`shared`（Probeが無視するキー）の下にYAMLアンカーとして定義し、各環境ファイルが自分の`vars`に取り込みます。
+
 **config/base.yml:**
 ```yaml
-name: "API Testing Pipeline"
-description: "Comprehensive API testing suite for e-commerce platform"
+shared:
+  base_vars: &base_vars
+    # テストデータ
+    TEST_USER_EMAIL: "test@example.com"
+    TEST_USER_PASSWORD: "TestPassword123!"
+    TEST_PRODUCT_NAME: "Test Product"
+    TEST_ORDER_AMOUNT: 99.99
 
-vars:
-  # テストデータ
-  TEST_USER_EMAIL: "test@example.com"
-  TEST_USER_PASSWORD: "TestPassword123!"
-  TEST_PRODUCT_NAME: "Test Product"
-  TEST_ORDER_AMOUNT: 99.99
-  
-  # パフォーマンスしきい値
-  FAST_RESPONSE_TIME: 200      # 200ms
-  ACCEPTABLE_RESPONSE_TIME: 1000  # 1秒
-  SLOW_RESPONSE_TIME: 3000     # 3秒
-  
-  # テスト設定
-  RETRY_COUNT: 3
-  PARALLEL_REQUESTS: 5
+    # パフォーマンスしきい値
+    FAST_RESPONSE_TIME: 200      # 200ms
+    ACCEPTABLE_RESPONSE_TIME: 1000  # 1秒
+    SLOW_RESPONSE_TIME: 3000     # 3秒
 
+    # テスト設定
+    RETRY_COUNT: 3
+    PARALLEL_REQUESTS: 5
+
+    # トークンが必要なエンドポイント用。環境変数から読む
+    API_TOKEN: "{{API_TOKEN}}"
+
+  common_headers: &common_headers
+    Content-Type: "application/json"
+    User-Agent: "Probe API Test Suite v1.0"
+```
+
+共有ヘッダーも同じ方法でジョブの`defaults`に取り込みます：
+
+```yaml
 jobs:
-- name: default
+- name: API checks
   defaults:
     http:
       headers:
-        Content-Type: "application/json"
-        User-Agent: "Probe API Test Suite v1.0"
+        <<: *common_headers
+  steps:
+    # ...
 ```
 
 **config/development.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "development"
   API_BASE_URL: "http://localhost:3000"
   API_VERSION: "v1"
   SKIP_PERFORMANCE_TESTS: true
   SKIP_LOAD_TESTS: true
-
-jobs:
-- name: default
-  defaults:
-    http:
 ```
 
 **config/staging.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "staging"
   API_BASE_URL: "https://api-staging.example.com"
   API_VERSION: "v1"
   SKIP_PERFORMANCE_TESTS: false
@@ -108,6 +119,8 @@ vars:
 **config/production.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "production"
   API_BASE_URL: "https://api.example.com"
   API_VERSION: "v1" 
   SKIP_PERFORMANCE_TESTS: false
@@ -118,15 +131,16 @@ vars:
 
 ## ステップ2: 認証テスト
 
-包括的な認証テストを作成します：
+包括的な認証テストを作成します。このチュートリアルのテストファイルはどれも設定を`vars`から読みます。`vars`は一緒に実行する設定ファイルから来ます（[ステップ8](#ステップ8-テストスイートの実行)を参照）：
 
 **tests/auth-tests.yml:**
-```yaml
+```yaml fragment
 name: "Authentication Tests"
 description: "Test user authentication, authorization, and session management"
 
 jobs:
-- name: "Authentication Functional Tests"
+- id: auth-functional-tests
+  name: "Authentication Functional Tests"
   steps:
     - name: "Test User Registration"
       id: register
@@ -165,7 +179,7 @@ jobs:
         res.code == 200 &&
         res.body.token != nil &&
         res.body.user != nil &&
-        res.body.token | len > 20
+        len(res.body.token) > 20
       outputs:
         auth_token: res.body.token
         user_id: res.body.user.id
@@ -183,7 +197,8 @@ jobs:
           }
       test: |
         res.code == 401 &&
-        res.body.error != nil
+        res.body.error != nil &&
+        res.body.message contains "Invalid credentials"
 
     - name: "Test Token Validation"
       id: token-validation
@@ -232,7 +247,8 @@ jobs:
         headers:
           Authorization: "Bearer {{outputs.refresh.new_token}}"
       test: |
-        res.code == 200
+        res.code == 200 &&
+        res.body.message contains "logged out"
 
     - name: "Test Using Token After Logout"
       uses: http
@@ -251,12 +267,13 @@ jobs:
 商品の包括的CRUDテストを作成します：
 
 **tests/product-tests.yml:**
-```yaml
+```yaml fragment
 name: "Product API Tests"
 description: "Test product CRUD operations, search, and data validation"
 
 jobs:
-- name: "Product CRUD Operations"
+- id: product-crud-tests
+  name: "Product CRUD Operations"
   steps:
     - name: "Setup - Get Auth Token"
       id: auth
@@ -294,7 +311,9 @@ jobs:
       test: |
         res.code == 201 &&
         res.body.id != nil &&
+        res.body.name contains vars.TEST_PRODUCT_NAME &&
         res.body.price == 29.99 &&
+        res.body.sku startsWith "TEST-" &&
         res.body.stock == 100
       outputs:
         product_id: res.body.id
@@ -314,7 +333,7 @@ jobs:
         res.body.name == outputs['create-product'].product_name &&
         res.body.price == 29.99 &&
         res.body.category == "Electronics" &&
-        res.body.tags | len == 3
+        len(res.body.tags) == 3
       outputs:
         read_time: (rt.sec * 1000)
 
@@ -339,9 +358,10 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.id == outputs['create-product'].product_id &&
+        res.body.name endsWith "UPDATED" &&
         res.body.price == 39.99 &&
         res.body.stock == 75 &&
-        res.body.tags | len == 4
+        len(res.body.tags) == 4
       outputs:
         updated_name: res.body.name
         update_time: (rt.sec * 1000)
@@ -373,7 +393,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.stock == 50 &&
-        res.body.tags | len == 3 &&
+        len(res.body.tags) == 3 &&
         res.body.name == outputs['update-product'].updated_name
       outputs:
         patch_time: (rt.sec * 1000)
@@ -397,8 +417,9 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products/{{outputs['create-product'].product_id}}"
       test: res.code == 404
 
-- name: "Product Search and Filtering"
-  needs: [product-crud-operations]
+- id: product-search-tests
+  name: "Product Search and Filtering"
+  needs: [product-crud-tests]
   steps:
     - name: "Setup - Create Multiple Test Products"
       id: setup-products
@@ -433,7 +454,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.products | len == 3
+        len(res.body.products) == 3
       outputs:
         created_products: res.body.products
 
@@ -444,18 +465,20 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products/search?q=Search%20Test"
       test: |
         res.code == 200 &&
-        res.body.products | len >= 3
+        len(res.body.products) >= 3 &&
+        res.body.products[0].name contains "Search Test"
 
     - name: "Test Product Filter by Category"
+      id: product-search-tests
       uses: http
       with:
         method: GET
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products?category=Books"
       test: |
         res.code == 200 &&
-        res.body.products | len >= 2
+        len(res.body.products) >= 2
       outputs:
-        books_found: res.body.products | len
+        books_found: len(res.body.products)
 
     - name: "Test Product Filter by Price Range"
       uses: http
@@ -474,7 +497,7 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products?sort=price&order=desc"
       test: |
         res.code == 200 &&
-        res.body.products | len > 1 &&
+        len(res.body.products) > 1 &&
         res.body.products[0].price >= res.body.products[1].price
 
     - name: "Test Pagination"
@@ -484,7 +507,7 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products?page=1&limit=2"
       test: |
         res.code == 200 &&
-        res.body.products | len <= 2 &&
+        len(res.body.products) <= 2 &&
         res.body.pagination.page == 1 &&
         res.body.pagination.total > 0
 ```
@@ -494,12 +517,13 @@ jobs:
 テストにパフォーマンス検証を追加します：
 
 **tests/performance-tests.yml:**
-```yaml
+```yaml fragment
 name: "API Performance Tests"
 description: "Validate API response times and performance characteristics"
 
 jobs:
-- name: "Response Time Validation"
+- id: response-time-tests
+  name: "Response Time Validation"
   steps:
     - name: "Test Fast Endpoint Performance"
       id: health-perf
@@ -538,20 +562,20 @@ jobs:
         search_time: (rt.sec * 1000)
 
     - name: "Performance Summary"
-      uses: echo
-      with:
-        message: |
-          === PERFORMANCE TEST RESULTS ===
-          Health Check: {{outputs['health-perf'].health_time}}ms (threshold: {{vars.FAST_RESPONSE_TIME}}ms)
-          Product List: {{outputs['list-perf'].list_time}}ms (threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms)
-          Search: {{outputs['search-perf'].search_time}}ms (threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms)
+      uses: hello
+      echo: |
+        === PERFORMANCE TEST RESULTS ===
+        Health Check: {{outputs['health-perf'].health_time}}ms (threshold: {{vars.FAST_RESPONSE_TIME}}ms)
+        Product List: {{outputs['list-perf'].list_time}}ms (threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms)
+        Search: {{outputs['search-perf'].search_time}}ms (threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms)
           
-          {{outputs['health-perf'].health_time < vars.FAST_RESPONSE_TIME ? "✅" : "❌"}} Health: Fast
-          {{outputs['list-perf'].list_time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅" : "❌"}} List: Acceptable
-          {{outputs['search-perf'].search_time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅" : "❌"}} Search: Acceptable
+        {{outputs['health-perf'].health_time < vars.FAST_RESPONSE_TIME ? "✅" : "❌"}} Health: Fast
+        {{outputs['list-perf'].list_time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅" : "❌"}} List: Acceptable
+        {{outputs['search-perf'].search_time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅" : "❌"}} Search: Acceptable
 
-- name: "Concurrent Request Testing"
-  needs: [response-time-validation]
+- id: concurrent-request-tests
+  name: "Concurrent Request Testing"
+  needs: [response-time-tests]
   steps:
     - name: "Concurrent Health Checks"
       id: concurrent-health
@@ -562,17 +586,20 @@ jobs:
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < (vars.ACCEPTABLE_RESPONSE_TIME * 2)
+      outputs:
+        time: (rt.sec * 1000)
+      # 注: 実際には並列実行でこのリクエストを繰り返す
+      # 実際の環境では負荷テストツールやスクリプトを使う
 
     - name: "Stress Test Report"
-      uses: echo
-      with:
-        message: |
-          === CONCURRENT LOAD TEST ===
-          Concurrent requests: {{vars.PARALLEL_REQUESTS}}
-          Average response time: {{outputs['concurrent-health'].time}}ms
-          Success rate: 100%
+      uses: hello
+      echo: |
+        === CONCURRENT LOAD TEST ===
+        Concurrent requests: {{vars.PARALLEL_REQUESTS}}
+        Average response time: {{outputs['concurrent-health'].time}}ms
+        Success rate: 100%
           
-          Status: {{outputs['concurrent-health'].time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅ PASSED" : "❌ FAILED"}}
+        Status: {{outputs['concurrent-health'].time < vars.ACCEPTABLE_RESPONSE_TIME ? "✅ PASSED" : "❌ FAILED"}}
 ```
 
 ## ステップ5: データ検証とスキーマテスト
@@ -580,12 +607,13 @@ jobs:
 堅牢なデータ検証テストを作成します：
 
 **tests/data-validation-tests.yml:**
-```yaml
+```yaml fragment
 name: "Data Validation Tests"
 description: "Validate API response schemas and data integrity"
 
 jobs:
-- name: "Response Schema Validation"
+- id: schema-validation-tests
+  name: "Response Schema Validation"
   steps:
     - name: "Validate Product Schema"
       id: product-schema
@@ -596,7 +624,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.products != nil &&
-        res.body.products | len > 0 &&
+        len(res.body.products) > 0 &&
         res.body.products[0].id != nil &&
         res.body.products[0].name != nil &&
         res.body.products[0].price != nil &&
@@ -625,7 +653,7 @@ jobs:
         res.body.user.lastName != nil &&
         res.body.user.createdAt != nil &&
         res.body.token != nil &&
-        res.body.token | len > 20
+        len(res.body.token) > 20
 
     - name: "Validate Error Response Schema"
       uses: http
@@ -639,7 +667,8 @@ jobs:
         res.body.statusCode == 404 &&
         res.body.timestamp != nil
 
-- name: "Data Integrity Validation"
+- id: data-integrity-tests
+  name: "Data Integrity Validation"
   steps:
     - name: "Test Data Type Validation"
       uses: http
@@ -656,7 +685,8 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != nil
+        res.body.error != nil &&
+        res.body.message contains "price"
 
     - name: "Test Required Field Validation"
       uses: http
@@ -671,7 +701,8 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != nil
+        res.body.error != nil &&
+        res.body.message contains "name"
 
     - name: "Test Email Format Validation"
       uses: http
@@ -685,7 +716,8 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != nil
+        res.body.error != nil &&
+        res.body.message contains "email"
 
     - name: "Test Numeric Range Validation"
       uses: http
@@ -702,7 +734,8 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != nil
+        res.body.error != nil &&
+        res.body.message contains "price"
 ```
 
 ## ステップ6: 統合テスト
@@ -710,12 +743,13 @@ jobs:
 エンドツーエンドユーザージャーニーテストを作成します：
 
 **tests/integration-tests.yml:**
-```yaml
+```yaml fragment
 name: "Integration Tests"
 description: "End-to-end user journey validation"
 
 jobs:
-- name: "Complete User Purchase Journey"
+- id: user-journey-test
+  name: "Complete User Purchase Journey"
   steps:
     - name: "User Registration"
       id: register
@@ -735,6 +769,7 @@ jobs:
         user_id: res.body.user.id
         auth_token: res.body.token
         user_email: res.body.user.email
+        timestamp: unixtime()
 
     - name: "Browse Products"
       id: browse
@@ -744,7 +779,7 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products?category=Electronics&limit=5"
       test: |
         res.code == 200 &&
-        res.body.products | len > 0
+        len(res.body.products) > 0
       outputs:
         available_products: res.body.products
         first_product_id: res.body.products[0].id
@@ -781,7 +816,7 @@ jobs:
           Authorization: "Bearer {{outputs.register.auth_token}}"
       test: |
         res.code == 200 &&
-        res.body.items | len == 1 &&
+        len(res.body.items) == 1 &&
         res.body.items[0].productId == outputs.browse.first_product_id &&
         res.body.total == (outputs.browse.first_product_price * 2)
 
@@ -847,7 +882,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.id == outputs['create-order'].order_id &&
-        res.body.items | len == 1 &&
+        len(res.body.items) == 1 &&
         res.body.items[0].productId == outputs.browse.first_product_id &&
         res.body.items[0].quantity == 3
       outputs:
@@ -862,25 +897,24 @@ jobs:
           Authorization: "Bearer {{outputs.register.auth_token}}"
       test: |
         res.code == 200 &&
-        res.body.orders | len >= 1 &&
+        len(res.body.orders) >= 1 &&
         res.body.orders[0].id == outputs['create-order'].order_id
 
     - name: "User Journey Report"
-      uses: echo
-      with:
-        message: |
-          === USER JOURNEY TEST COMPLETE ===
+      uses: hello
+      echo: |
+        === USER JOURNEY TEST COMPLETE ===
           
-          ✅ User Registration: {{outputs.register.user_email}}
-          ✅ Product Browse: Found {{outputs.browse.available_products | len}} products
-          ✅ Add to Cart: Product {{outputs.browse.first_product_id}}
-          ✅ Update Cart: Quantity changed to 3
-          ✅ Order Creation: Order {{outputs['create-order'].order_id}}
-          ✅ Order Verification: Status {{outputs['create-order'].order_status}}
-          ✅ Order History: Retrieved successfully
+        ✅ User Registration: {{outputs.register.user_email}}
+        ✅ Product Browse: Found {{len(outputs.browse.available_products)}} products
+        ✅ Add to Cart: Product {{outputs.browse.first_product_id}}
+        ✅ Update Cart: Quantity changed to 3
+        ✅ Order Creation: Order {{outputs['create-order'].order_id}}
+        ✅ Order Verification: Status {{outputs['create-order'].order_status}}
+        ✅ Order History: Retrieved successfully
           
-          Total Order Value: ${{outputs['update-cart'].new_cart_total}}
-          Journey Completion Time: {{unixtime() - outputs.register.timestamp}} seconds
+        Total Order Value: ${{outputs['update-cart'].new_cart_total}}
+        Journey Completion Time: {{(unixtime() - outputs.register.timestamp)}} seconds
 ```
 
 ## ステップ7: メインテストスイート
@@ -888,12 +922,16 @@ jobs:
 すべてのテストをまとめるメインテストスイートを作成します：
 
 **main-test-suite.yml:**
-```yaml
+```yaml fragment
 name: "Complete API Test Suite"
 description: "Comprehensive API testing pipeline"
 
+# 基本設定を読み込む
+# このファイルは環境ごとの設定とマージされる
+
 jobs:
-- name: "Test Environment Setup"
+- id: setup
+  name: "Test Environment Setup"
   steps:
     - name: "Verify API Availability"
       id: api-check
@@ -906,77 +944,81 @@ jobs:
         api_available: res.code == 200
 
     - name: "Setup Test Data"
-      uses: echo
-      with:
-        message: |
-          === API TEST SUITE STARTING ===
-          Environment: {{vars.ENVIRONMENT ?? 'default'}}
-          API Base URL: {{vars.API_BASE_URL}}
-          API Version: {{vars.API_VERSION}}
-          Skip Performance Tests: {{vars.SKIP_PERFORMANCE_TESTS}}
-          Skip Load Tests: {{vars.SKIP_LOAD_TESTS}}
+      uses: hello
+      echo: |
+        === API TEST SUITE STARTING ===
+        Environment: {{vars.ENVIRONMENT ?? 'default'}}
+        API Base URL: {{vars.API_BASE_URL}}
+        API Version: {{vars.API_VERSION}}
+        Skip Performance Tests: {{vars.SKIP_PERFORMANCE_TESTS}}
+        Skip Load Tests: {{vars.SKIP_LOAD_TESTS}}
           
-          Test Configuration:
-          - Fast Response Threshold: {{vars.FAST_RESPONSE_TIME}}ms
-          - Acceptable Response Threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms
-          - Slow Response Threshold: {{vars.SLOW_RESPONSE_TIME}}ms
+        Test Configuration:
+        - Fast Response Threshold: {{vars.FAST_RESPONSE_TIME}}ms
+        - Acceptable Response Threshold: {{vars.ACCEPTABLE_RESPONSE_TIME}}ms
+        - Slow Response Threshold: {{vars.SLOW_RESPONSE_TIME}}ms
 
-- name: "Authentication Test Suite"
-  needs: [test-environment-setup]
+- id: authentication-tests
+  name: "Authentication Test Suite"
+  needs: [setup]
   # 実際には、ここでauth-tests.ymlファイルをインポートします
+  # この例では主要な認証テストを参照するだけにする
   steps:
     - name: "Run Authentication Tests"
-      uses: echo
-      with:
-        message: "Running authentication test suite..."
+      uses: hello
+      echo: "Running authentication test suite..."
+      # 通常はここでtests/auth-tests.ymlをインポートする
 
-- name: "Functional Test Suite"
-  needs: [authentication-test-suite]
+- id: functional-tests
+  name: "Functional Test Suite"
+  needs: [authentication-tests]
   steps:
     - name: "Run Product CRUD Tests"
-      uses: echo
-      with:
-        message: "Running product CRUD test suite..."
+      uses: hello
+      echo: "Running product CRUD test suite..."
+      # 通常はここでtests/product-tests.ymlをインポートする
         
     - name: "Run Data Validation Tests"
-      uses: echo
-      with:
-        message: "Running data validation test suite..."
+      uses: hello
+      echo: "Running data validation test suite..."
+      # 通常はここでtests/data-validation-tests.ymlをインポートする
 
-- name: "Performance Test Suite"
-  needs: [functional-test-suite]
+- id: performance-tests
+  name: "Performance Test Suite"
+  needs: [functional-tests]
   steps:
     - name: "Run Performance Tests"
-      uses: echo
-      with:
-        message: "Running performance test suite..."
+      uses: hello
+      echo: "Running performance test suite..."
+      # 通常はここでtests/performance-tests.ymlをインポートする
 
-- name: "Integration Test Suite"
-  needs: [functional-test-suite]
+- id: integration-tests
+  name: "Integration Test Suite"
+  needs: [functional-tests]
   steps:
     - name: "Run Integration Tests"
-      uses: echo
-      with:
-        message: "Running integration test suite..."
+      uses: hello
+      echo: "Running integration test suite..."
+      # 通常はここでtests/integration-tests.ymlをインポートする
 
-- name: "Generate Test Report"
-  needs: [authentication-test-suite, functional-test-suite, performance-test-suite, integration-test-suite]
+- id: test-report
+  name: "Generate Test Report"
+  needs: [authentication-tests, functional-tests, performance-tests, integration-tests]
   steps:
     - name: "Final Test Report"
-      uses: echo
-      with:
-        message: |
-          === API TEST SUITE COMPLETE ===
+      uses: hello
+      echo: |
+        === API TEST SUITE COMPLETE ===
           
-          Test Results Summary:
-          ✅ Authentication Tests: Completed
-          ✅ Functional Tests: Completed
-          {{vars.SKIP_PERFORMANCE_TESTS != "true" ? "✅ Performance Tests: Completed" : "⏭️  Performance Tests: Skipped"}}
-          ✅ Integration Tests: Completed
+        Test Results Summary:
+        ✅ Authentication Tests: Completed
+        ✅ Functional Tests: Completed
+        {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️  Performance Tests: Skipped" : "✅ Performance Tests: Completed"}}
+        ✅ Integration Tests: Completed
+
+        Overall Status: ✅ ALL TESTS PASSED
           
-          Overall Status: ✅ ALL TESTS PASSED
-          
-          Generated: {{unixtime()}}
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 ```
 
 ## ステップ8: テストスイートの実行
@@ -1028,7 +1070,7 @@ jobs:
       
       - name: Run API Tests
         env:
-          API_AUTH_TOKEN: ${{ secrets.API_TOKEN }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ENVIRONMENT: ${{ matrix.environment }}
@@ -1052,13 +1094,14 @@ jobs:
 
 API契約検証を追加します：
 
-```yaml
+```yaml fragment
 # tests/contract-tests.yml
 name: "API Contract Tests"
 description: "Validate API specification compliance"
 
 jobs:
-- name: "OpenAPI Specification Compliance"
+- id: openapi-compliance
+  name: "OpenAPI Specification Compliance"
   steps:
     - name: "Validate Product Endpoints Against Schema"
       # OpenAPI仕様に対してレスポンスを検証
@@ -1066,6 +1109,8 @@ jobs:
       with:
         method: GET
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+      # OpenAPI準拠のための独自の検証ロジック。
+      # スキーマの確認を増やすときは式に追加する
       test: |
         res.code == 200 &&
         res.body.products != nil
@@ -1075,13 +1120,14 @@ jobs:
 
 基本的なセキュリティ検証を追加します：
 
-```yaml
+```yaml fragment
 # tests/security-tests.yml
 name: "API Security Tests"
 description: "Basic security validation tests"
 
 jobs:
-- name: "Security Headers Validation"
+- id: security-headers
+  name: "Security Headers Validation"
   steps:
     - name: "Check Security Headers"
       uses: http
@@ -1094,7 +1140,8 @@ jobs:
         res.headers["X-Frame-Options"] != nil &&
         res.headers["X-Xss-Protection"] != nil
 
-- name: "Authentication Security Tests"
+- id: authentication-security
+  name: "Authentication Security Tests"
   steps:
     - name: "Test SQL Injection Prevention"
       uses: http
@@ -1122,15 +1169,17 @@ jobs:
 - name: "Refresh Token If Needed"
   uses: http
   with:
-    method: GET
+    method: POST
     url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/auth/refresh"
+    headers:
+      Authorization: "Bearer {{outputs.login.auth_token}}"
   # ... トークンリフレッシュロジック
 ```
 
 **テストデータのクリーンアップ:**
 ```yaml
 # クリーンアップジョブを追加
-cleanup:
+- id: cleanup
   name: "Test Data Cleanup"
   steps:
     - name: "Delete Test Products"
@@ -1139,12 +1188,14 @@ cleanup:
 
 **レート制限:**
 ```yaml
-# リクエスト間の遅延を追加
-- name: "Rate Limit Delay"
-  uses: echo
+# ステップのwaitでリクエストの前に待つ
+- name: "List Products After a Pause"
+  wait: 1s
+  uses: http
   with:
-    message: "Waiting for rate limit..."
-    delay: "1s"
+    method: GET
+    url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+  test: res.code == 200
 ```
 
 ## 次のステップ

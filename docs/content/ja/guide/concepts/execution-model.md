@@ -42,6 +42,10 @@ Workflow
 ```yaml
 name: Parallel Service Check
 description: Check multiple services simultaneously
+vars:
+  DB_URL: "{{DB_URL}}"
+  API_URL: "{{API_URL}}"
+  CACHE_URL: "{{CACHE_URL}}"
 
 jobs:
 - id: database-check
@@ -88,6 +92,9 @@ jobs:
 ```yaml
 name: Staged Deployment Validation
 description: Validate deployment in dependency order
+vars:
+  DB_URL: "{{DB_URL}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
 - id: infrastructure
@@ -505,6 +512,14 @@ jobs:
 ```yaml
 name: Optimized Parallel Execution
 description: Efficiently organize jobs for maximum parallelism
+vars:
+  DB_URL: "{{DB_URL}}"
+  CACHE_URL: "{{CACHE_URL}}"
+  EXTERNAL_API: "{{EXTERNAL_API}}"
+  USER_API: "{{USER_API}}"
+  ORDER_API: "{{ORDER_API}}"
+  NOTIFICATION_API: "{{NOTIFICATION_API}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
   # ティア1: 独立基盤チェック (すべて並列)

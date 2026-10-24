@@ -59,7 +59,7 @@ deployment-tests/
 name: "Multi-Environment Deployment Testing"
 description: "開発、ステージング、プロダクション環境での包括的テスト"
 
-vars:
+vars: &base_vars
   # 共通設定
   API_VERSION: "v2"
   USER_AGENT: "Probe Multi-Env Tester v1.0"
@@ -80,18 +80,32 @@ vars:
   FEATURE_VALIDATION_ENABLED: true
   A_B_TEST_VALIDATION_ENABLED: false
 
+shared:
+  common_headers: &common_headers
+    User-Agent: "{{vars.USER_AGENT}}"
+    Accept: "application/json"
+```
+
+共通ヘッダーはここでYAMLアンカーとして定義し、各ジョブが `defaults` に取り込みます：
+
+```yaml
 jobs:
-- name: default
+- name: Environment checks
   defaults:
     http:
       headers:
-        User-Agent: "{{vars.USER_AGENT}}"
-        Accept: "application/json"
+        <<: *common_headers
+  steps:
+    # ...
 ```
+
+ファイルをマージすると、後のファイルのトップレベルのキーは前のファイルの同じキーを丸ごと置き換えます。そのため、環境ファイルに自分の `vars` だけを書くと、`base.yml` の `vars` は失われます。ファイルは読み込まれる前に1つのYAML文書につなげられるので、各環境ファイルはYAMLのマージキー `<<: *base_vars` でベースの変数を取り込みます。環境ファイルの `vars` も `env_vars` としてアンカーを付け、独自の変数を足すワークフローファイルから取り込めるようにします。
 
 **config/environments/development.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # 環境識別
   ENVIRONMENT: "development"
   ENVIRONMENT_COLOR: "🟡"
@@ -119,15 +133,13 @@ vars:
   USE_TEST_DATA: true
   RESET_DATA_BEFORE_TESTS: true
 
-jobs:
-- name: default
-  defaults:
-    http:
 ```
 
 **config/environments/staging.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # 環境識別
   ENVIRONMENT: "staging"
   ENVIRONMENT_COLOR: "🟠"
@@ -156,15 +168,13 @@ vars:
   USE_PRODUCTION_LIKE_DATA: true
   RESET_DATA_BEFORE_TESTS: false
 
-jobs:
-- name: default
-  defaults:
-    http:
 ```
 
 **config/environments/production.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # 環境識別
   ENVIRONMENT: "production"
   ENVIRONMENT_COLOR: "🔴"
@@ -197,10 +207,6 @@ vars:
   ENABLE_REAL_USER_MONITORING: true
   ENABLE_ERROR_TRACKING: true
 
-jobs:
-- name: default
-  defaults:
-    http:
 ```
 
 ## ステップ2: 基本環境ヘルスチェック
@@ -208,12 +214,13 @@ jobs:
 包括的なヘルス検証を作成します：
 
 **workflows/health-check.yml:**
-```yaml
-name: "{{vars.ENVIRONMENT | upper}} Environment Health Check"
-description: "{{vars.ENVIRONMENT}}環境の包括的ヘルス検証"
+```yaml fragment
+name: "Environment Health Check"
+description: "マージした設定が指す環境の包括的ヘルス検証"
 
 jobs:
-- name: Infrastructure Health Check
+- id: infrastructure-health
+  name: "Infrastructure Health Check"
   steps:
     - name: "API Server Health"
       id: api-health
@@ -272,8 +279,9 @@ jobs:
         cache_status: 'res.body.cache.connected ? "connected" : "disconnected"'
         cache_hit_rate: res.body.cache.hitRate
 
-- name: External Service Dependencies
-  needs: [infrastructure-health-check]
+- id: service-dependencies
+  name: "External Service Dependencies"
+  needs: [infrastructure-health]
   steps:
     - name: "Payment Service Health"
       id: payment-health
@@ -311,42 +319,44 @@ jobs:
       outputs:
         search_status: 'res.body.searchService.available ? "available" : "unavailable"'
 
-- name: Environment Health Report
-  needs: [infrastructure-health-check, external-service-dependencies]
+- id: environment-report
+  name: "Environment Health Report"
+  needs: [infrastructure-health, service-dependencies]
   steps:
     - name: "Generate Health Report"
       uses: hello
       echo: |
-        {{vars.ENVIRONMENT_COLOR}} === {{vars.ENVIRONMENT | upper}} ENVIRONMENT HEALTH REPORT ===
-        
+        {{vars.ENVIRONMENT_COLOR}} === {{upper(vars.ENVIRONMENT)}} ENVIRONMENT HEALTH REPORT ===
+
         Infrastructure Status:
-        • API Server: {{outputs['api-health'].api_status | upper}} ({{outputs['api-health'].api_response_time}}ms)
+        • API Server: {{upper(outputs['api-health'].api_status)}} ({{outputs['api-health'].api_response_time}}ms)
           Version: {{outputs['api-health'].api_version}}
           Uptime: {{outputs['api-health'].api_uptime}}
-        
-        • Web Application: {{outputs['web-health'].web_status | upper}} ({{outputs['web-health'].web_response_time}}ms)
-        
-        • Database: {{outputs['db-health'].db_status | upper}} ({{outputs['db-health'].db_response_time}}ms)
+
+        • Web Application: {{upper(outputs['web-health'].web_status)}} ({{outputs['web-health'].web_response_time}}ms)
+
+        • Database: {{upper(outputs['db-health'].db_status)}} ({{outputs['db-health'].db_response_time}}ms)
           Pool Size: {{outputs['db-health'].db_pool_size}}
-        
-        • Cache: {{outputs['cache-health'].cache_status | upper}}
+
+        • Cache: {{upper(outputs['cache-health'].cache_status)}}
           Hit Rate: {{outputs['cache-health'].cache_hit_rate}}%
-        
+
         External Services:
-        • Payment Service: {{outputs['payment-health'].payment_status | upper}}
-        • Email Service: {{outputs['email-health'].email_status | upper}}
-        • Search Service: {{outputs['search-health'].search_status | upper}}
-        
+        • Payment Service: {{upper(outputs['payment-health'].payment_status)}}
+        • Email Service: {{upper(outputs['email-health'].email_status)}}
+        • Search Service: {{upper(outputs['search-health'].search_status)}}
+
         Overall Status: {{
           outputs['api-health'].api_status == "healthy" &&
           outputs['web-health'].web_status == "healthy" &&
           outputs['db-health'].db_status == "connected" ? "✅ HEALTHY" : "⚠️ DEGRADED"
         }}
-        
-        Generated: {{unixtime()}}
+
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
         Environment: {{vars.ENVIRONMENT}}
 
     - name: "Health Check Validation"
+      uses: hello
       test: |
         outputs['api-health'].api_status == "healthy" &&
         outputs['db-health'].db_status == "connected"
@@ -357,18 +367,21 @@ jobs:
 包括的なデプロイ確認を作成します：
 
 **workflows/deployment-validation.yml:**
-```yaml
-name: "{{vars.ENVIRONMENT | upper}} Deployment Validation"
-description: "{{vars.ENVIRONMENT}}環境でのデプロイ成功を検証"
+```yaml fragment
+name: "Deployment Validation"
+description: "マージした設定が指す環境でのデプロイ成功を検証"
 
 vars:
+  <<: *env_vars
+
   # デプロイメタデータ（CI/CDから渡される）
   DEPLOYMENT_ID: "{{DEPLOYMENT_ID ?? unixtime()}}"
   BUILD_VERSION: "{{BUILD_VERSION ?? 'unknown'}}"
-  DEPLOYMENT_TIMESTAMP: "{{DEPLOYMENT_TIMESTAMP ?? unixtime()}}"
+  DEPLOYMENT_TIMESTAMP: "{{DEPLOYMENT_TIMESTAMP ?? now().Format('2006-01-02T15:04:05Z07:00')}}"
 
 jobs:
-- name: Pre-Deployment Validation
+- id: pre-deployment-validation
+  name: "Pre-Deployment Validation"
   steps:
     - name: "Verify Deployment Prerequisites"
       id: prerequisites
@@ -399,7 +412,8 @@ jobs:
         pending_migrations: res.body.pendingMigrations
         last_migration: res.body.lastMigration
 
-- name: Deployment Verification
+- id: deployment-verification
+  name: "Deployment Verification"
   needs: [pre-deployment-validation]
   steps:
     - name: "Verify New Version Deployment"
@@ -444,7 +458,8 @@ jobs:
         config_version: res.body.configVersion
         config_valid: res.body.valid
 
-- name: Post-Deployment Functional Tests
+- id: functional-validation
+  name: "Post-Deployment Functional Tests"
   needs: [deployment-verification]
   steps:
     - name: "Critical Path Test - User Authentication"
@@ -514,8 +529,10 @@ jobs:
           Authorization: "Bearer {{outputs['auth-test'].auth_token}}"
       test: res.code == 204 || res.code == 200
 
-- name: Performance Validation
-  needs: [post-deployment-functional-tests]
+- id: performance-validation
+  name: "Performance Validation"
+  needs: [functional-validation]
+  skipif: vars.SKIP_PERFORMANCE_TESTS
   steps:
     - name: "Response Time Validation"
       id: perf-test
@@ -529,9 +546,9 @@ jobs:
       outputs:
         response_time: (rt.sec * 1000)
         performance_grade: |
-          {{(rt.sec * 1000) < 500 ? "A" :
-            (rt.sec * 1000) < 1000 ? "B" :
-            (rt.sec * 1000) < 2000 ? "C" : "D"}}
+          (rt.sec * 1000) < 500 ? "A" :
+          (rt.sec * 1000) < 1000 ? "B" :
+          (rt.sec * 1000) < 2000 ? "C" : "D"
 
     - name: "Load Test Simulation"
       uses: http
@@ -541,41 +558,42 @@ jobs:
       test: res.code == 200 && (rt.sec * 1000) < (vars.RESPONSE_TIME_THRESHOLD * 2)
       # 実際のシナリオでは、これが同時リクエストをトリガーする
 
-- name: Deployment Validation Report
-  needs: [pre-deployment-validation, deployment-verification, post-deployment-functional-tests, performance-validation]
+- id: deployment-report
+  name: "Deployment Validation Report"
+  needs: [pre-deployment-validation, deployment-verification, functional-validation, performance-validation]
   steps:
     - name: "Generate Deployment Report"
       uses: hello
       echo: |
-        {{vars.ENVIRONMENT_COLOR}} === {{vars.ENVIRONMENT | upper}} DEPLOYMENT VALIDATION REPORT ===
-        
+        {{vars.ENVIRONMENT_COLOR}} === {{upper(vars.ENVIRONMENT)}} DEPLOYMENT VALIDATION REPORT ===
+
         Deployment Information:
         • Deployment ID: {{vars.DEPLOYMENT_ID}}
         • Target Version: {{vars.BUILD_VERSION}}
         • Deployed Version: {{outputs['version-check'].deployed_version}}
         • Deployment Time: {{outputs['version-check'].deployment_time}}
         • Environment: {{vars.ENVIRONMENT}}
-        
+
         Pre-Deployment Status:
         • Prerequisites: {{outputs.prerequisites.deployment_ready ? "✅ Ready" : "❌ Not Ready"}}
         • Current Version: {{outputs.prerequisites.current_version}}
         • Target Version: {{outputs.prerequisites.target_version}}
         • Pending Migrations: {{outputs['migration-status'].pending_migrations}}
-        
+
         Deployment Verification:
         • Version Match: {{outputs['version-check'].deployed_version == vars.BUILD_VERSION ? "✅ Correct" : "❌ Mismatch"}}
         • Configuration: {{outputs['config-validation'].config_valid ? "✅ Valid" : "❌ Invalid"}}
-        • Feature Flags: {{vars.ENABLE_NEW_FEATURES == "true" ? outputs['feature-flags'].feature_count + " features active" : "Default features"}}
-        
+        • Feature Flags: {{vars.ENABLE_NEW_FEATURES ? string(outputs['feature-flags'].feature_count) + " features active" : "Default features"}}
+
         Functional Tests:
         • Authentication: {{outputs['auth-test'].auth_response_time}}ms {{outputs['auth-test'].auth_response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅" : "⚠️"}}
         • Data Retrieval: {{outputs['data-test'].data_response_time}}ms {{outputs['data-test'].data_response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅" : "⚠️"}}
         • Data Mutation: {{outputs['mutation-test'].mutation_response_time}}ms {{outputs['mutation-test'].mutation_response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅" : "⚠️"}}
-        
+
         Performance Validation:
-        {{vars.SKIP_PERFORMANCE_TESTS != "true" ? "• Response Time: " + outputs['perf-test'].response_time + "ms (Grade: " + outputs['perf-test'].performance_grade + ")" : "• Performance Tests: ⏭️ Skipped"}}
-        {{vars.SKIP_PERFORMANCE_TESTS != "true" ? "• Performance Status: " + (outputs['perf-test'].response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅ Acceptable" : "⚠️ Slow") : ""}}
-        
+        • Response Time: {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️ Skipped" : string(outputs['perf-test'].response_time) + "ms (Grade: " + outputs['perf-test'].performance_grade + ")"}}
+        • Performance Status: {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️ Skipped" : outputs['perf-test'].response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅ Acceptable" : "⚠️ Slow"}}
+
         Overall Deployment Status: {{
           outputs['version-check'].deployed_version == vars.BUILD_VERSION &&
           outputs['config-validation'].config_valid &&
@@ -584,10 +602,11 @@ jobs:
           outputs['mutation-test'].mutation_response_time < vars.RESPONSE_TIME_THRESHOLD ? 
           "✅ DEPLOYMENT SUCCESSFUL" : "❌ DEPLOYMENT ISSUES DETECTED"
         }}
-        
-        Generated: {{unixtime()}}
+
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 
     - name: "Validate Deployment Success"
+      uses: hello
       test: |
         outputs['version-check'].deployed_version == vars.BUILD_VERSION &&
         outputs['config-validation'].config_valid &&
@@ -610,15 +629,16 @@ vars:
   COMPARISON_ENVIRONMENTS: "{{COMPARISON_ENVS ?? 'staging,development'}}"
 
 jobs:
-- name: Version Consistency Check
+- id: version-consistency
+  name: "Version Consistency Check"
   steps:
     - name: "Get Primary Environment Version"
       id: primary-version
       uses: http
       with:
         method: GET
-        url: "{{PRIMARY_ENV == 'production' ? 'https://api.example.com' : 
-                PRIMARY_ENV == 'staging' ? 'https://api-staging.example.com' :
+        url: "{{vars.PRIMARY_ENVIRONMENT == 'production' ? 'https://api.example.com' :
+                vars.PRIMARY_ENVIRONMENT == 'staging' ? 'https://api-staging.example.com' :
                 'https://api-dev.example.com'}}/version"
       test: res.code == 200
       outputs:
@@ -648,8 +668,9 @@ jobs:
         dev_version: res.body.version
         dev_config_version: res.body.configVersion
 
-- name: Feature Flag Consistency
-  needs: [version-consistency-check]
+- id: feature-consistency
+  name: "Feature Flag Consistency"
+  needs: [version-consistency]
   steps:
     - name: "Compare Production vs Staging Features"
       id: prod-staging-features
@@ -659,8 +680,8 @@ jobs:
         url: "https://api.example.com/features"
       test: res.code == 200
       outputs:
-        prod_features: 'res.body.features ? keys(Object) : []'
-        prod_feature_count: 'res.body.features ? len(keys(Object)) : 0'
+        prod_features: keys(res.body.features)
+        prod_feature_count: len(res.body.features)
 
     - name: "Get Staging Features"
       id: staging-features
@@ -670,23 +691,24 @@ jobs:
         url: "https://api-staging.example.com/features"
       test: res.code == 200
       outputs:
-        staging_features: 'res.body.features ? keys(Object) : []'
-        staging_feature_count: 'res.body.features ? len(keys(Object)) : 0'
+        staging_features: keys(res.body.features)
+        staging_feature_count: len(res.body.features)
 
     - name: "Feature Drift Analysis"
       uses: hello
       echo: |
         === FEATURE FLAG CONSISTENCY ANALYSIS ===
-        
+
         Production Features: {{outputs['prod-staging-features'].prod_feature_count}}
         Staging Features: {{outputs['staging-features'].staging_feature_count}}
-        
-        Feature Drift: {{abs(Math)}} features different
-        
+
+        Feature Drift: {{abs(outputs['prod-staging-features'].prod_feature_count - outputs['staging-features'].staging_feature_count)}} features different
+
         Status: {{outputs['prod-staging-features'].prod_feature_count == outputs['staging-features'].staging_feature_count ? "✅ Consistent" : "⚠️ Drift Detected"}}
 
-- name: Configuration Consistency
-  needs: [version-consistency-check]
+- id: configuration-consistency
+  name: "Configuration Consistency"
+  needs: [version-consistency]
   steps:
     - name: "Database Schema Consistency"
       id: schema-consistency
@@ -714,43 +736,83 @@ jobs:
       uses: hello
       echo: |
         === DATABASE SCHEMA CONSISTENCY ===
-        
+
         Production Schema: v{{outputs['schema-consistency'].prod_schema_version}} ({{outputs['schema-consistency'].prod_migration_count}} migrations)
         Staging Schema: v{{outputs['staging-schema'].staging_schema_version}} ({{outputs['staging-schema'].staging_migration_count}} migrations)
-        
+
         Schema Status: {{outputs['schema-consistency'].prod_schema_version == outputs['staging-schema'].staging_schema_version ? "✅ Synchronized" : "⚠️ Version Mismatch"}}
         Migration Status: {{outputs['schema-consistency'].prod_migration_count == outputs['staging-schema'].staging_migration_count ? "✅ Synchronized" : "⚠️ Migration Count Mismatch"}}
 
-- name: Overall Consistency Report
-  needs: [version-consistency-check, feature-flag-consistency, configuration-consistency]
+- id: api-consistency
+  name: "API Endpoint Consistency"
+  needs: [version-consistency]
+  steps:
+    - name: "Get Production API Endpoints"
+      id: prod-endpoints
+      uses: http
+      with:
+        method: GET
+        url: "https://api.example.com/api/endpoints"
+      test: res.code == 200
+      outputs:
+        prod_endpoints: keys(res.body.endpoints)
+        prod_endpoint_count: len(res.body.endpoints)
+
+    - name: "Get Staging API Endpoints"
+      id: staging-endpoints
+      uses: http
+      with:
+        method: GET
+        url: "https://api-staging.example.com/api/endpoints"
+      test: res.code == 200
+      outputs:
+        staging_endpoints: keys(res.body.endpoints)
+        staging_endpoint_count: len(res.body.endpoints)
+
+    - name: "API Consistency Analysis"
+      uses: hello
+      echo: |
+        === API ENDPOINT CONSISTENCY ===
+
+        Production Endpoints: {{outputs['prod-endpoints'].prod_endpoint_count}}
+        Staging Endpoints: {{outputs['staging-endpoints'].staging_endpoint_count}}
+
+        Endpoint Drift: {{abs(outputs['prod-endpoints'].prod_endpoint_count - outputs['staging-endpoints'].staging_endpoint_count)}} endpoints different
+
+        API Status: {{outputs['prod-endpoints'].prod_endpoint_count == outputs['staging-endpoints'].staging_endpoint_count ? "✅ Consistent" : "⚠️ Endpoint Drift"}}
+
+- id: consistency-report
+  name: "Overall Consistency Report"
+  needs: [version-consistency, feature-consistency, configuration-consistency, api-consistency]
   steps:
     - name: "Generate Consistency Report"
       uses: hello
       echo: |
         🔍 === CROSS-ENVIRONMENT CONSISTENCY REPORT ===
-        
+
         Environment Versions:
         • Production: {{outputs['primary-version'].primary_version}} (config: {{outputs['primary-version'].primary_config_version}})
         • Staging: {{outputs['staging-version'].staging_version ?? "N/A"}} (config: {{outputs['staging-version'].staging_config_version ?? "N/A"}})
         • Development: {{outputs['dev-version'].dev_version ?? "N/A"}} (config: {{outputs['dev-version'].dev_config_version ?? "N/A"}})
-        
+
         Consistency Checks:
         • Version Alignment: {{outputs['primary-version'].primary_version == outputs['staging-version'].staging_version ? "✅ Aligned" : "⚠️ Misaligned"}}
         • Feature Flags: {{outputs['prod-staging-features'].prod_feature_count == outputs['staging-features'].staging_feature_count ? "✅ Consistent" : "⚠️ Drift Detected"}}
         • Database Schema: {{outputs['schema-consistency'].prod_schema_version == outputs['staging-schema'].staging_schema_version ? "✅ Synchronized" : "⚠️ Mismatch"}}
-        
+        • API Endpoints: {{outputs['prod-endpoints'].prod_endpoint_count == outputs['staging-endpoints'].staging_endpoint_count ? "✅ Consistent" : "⚠️ Drift"}}
+
         Recommendations:
         {{outputs['primary-version'].primary_version != outputs['staging-version'].staging_version ? "⚠️ Version mismatch detected - consider updating staging environment" : ""}}
         {{outputs['schema-consistency'].prod_schema_version != outputs['staging-schema'].staging_schema_version ? "⚠️ Schema version mismatch - verify migration deployment" : ""}}
         {{outputs['prod-staging-features'].prod_feature_count != outputs['staging-features'].staging_feature_count ? "⚠️ Feature flag drift - review feature flag synchronization" : ""}}
-        
+
         Overall Status: {{
           outputs['primary-version'].primary_version == outputs['staging-version'].staging_version &&
           outputs['schema-consistency'].prod_schema_version == outputs['staging-schema'].staging_schema_version ?
           "✅ ENVIRONMENTS CONSISTENT" : "⚠️ CONSISTENCY ISSUES DETECTED"
         }}
-        
-        Generated: {{unixtime()}}
+
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 ```
 
 ## ステップ5: 自動デプロイパイプライン統合
@@ -836,7 +898,190 @@ echo "📊 Deployment ID: $DEPLOYMENT_ID"
 echo "⏰ Completed at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 ```
 
-## ステップ6: マルチ環境テストの実行
+**scripts/setup-environment.sh:**
+```bash
+#!/bin/bash
+
+ENVIRONMENT=${1:-development}
+
+echo "🔧 Setting up environment variables for: $ENVIRONMENT"
+
+# 環境固有のシークレットを読み込む
+case $ENVIRONMENT in
+    "development")
+        export DEV_API_TOKEN=$(cat ~/.probe/dev-api-token 2>/dev/null || echo "dev-token-placeholder")
+        export DEV_SMTP_USERNAME=$(cat ~/.probe/dev-smtp-user 2>/dev/null || echo "dev@example.com")
+        export DEV_SMTP_PASSWORD=$(cat ~/.probe/dev-smtp-pass 2>/dev/null || echo "dev-password")
+        ;;
+    "staging")
+        export STAGING_API_TOKEN=$(cat ~/.probe/staging-api-token 2>/dev/null || echo "staging-token-placeholder")
+        export STAGING_SMTP_USERNAME=$(cat ~/.probe/staging-smtp-user 2>/dev/null || echo "staging@example.com")
+        export STAGING_SMTP_PASSWORD=$(cat ~/.probe/staging-smtp-pass 2>/dev/null || echo "staging-password")
+        ;;
+    "production")
+        export PROD_API_TOKEN=$(cat ~/.probe/prod-api-token 2>/dev/null || echo "prod-token-placeholder")
+        export PROD_SMTP_USERNAME=$(cat ~/.probe/prod-smtp-user 2>/dev/null || echo "alerts@example.com")
+        export PROD_SMTP_PASSWORD=$(cat ~/.probe/prod-smtp-pass 2>/dev/null || echo "prod-password")
+        ;;
+esac
+
+# 共通の環境変数
+export PROBE_OUTPUT=${PROBE_OUTPUT:-auto}
+
+echo "✅ Environment setup complete for: $ENVIRONMENT"
+```
+
+## ステップ6: GitHub Actions統合
+
+包括的なCI/CDワークフローを作成します：
+
+**.github/workflows/multi-environment-deployment.yml:**
+```yaml
+name: Multi-Environment Deployment Testing
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+
+jobs:
+  determine-environments:
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-environments.outputs.environments }}
+      build-version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - name: Determine deployment environments
+        id: set-environments
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environments=[\"${{ github.event.inputs.environment }}\"]" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environments=[\"staging\", \"production\"]" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "environments=[\"development\", \"staging\"]" >> $GITHUB_OUTPUT
+          else
+            echo "environments=[\"development\"]" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set build version
+        id: set-version
+        run: |
+          echo "version=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy-and-test:
+    needs: determine-environments
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environments.outputs.environments) }}
+      fail-fast: false
+
+    environment: ${{ matrix.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Probe
+        run: |
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          chmod +x probe
+          sudo mv probe /usr/local/bin/
+
+      - name: Setup environment
+        run: |
+          chmod +x scripts/setup-environment.sh
+          ./scripts/setup-environment.sh ${{ matrix.environment }}
+        env:
+          DEV_API_TOKEN: ${{ secrets.DEV_API_TOKEN }}
+          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
+          PROD_API_TOKEN: ${{ secrets.PROD_API_TOKEN }}
+          DEV_SMTP_USERNAME: ${{ secrets.DEV_SMTP_USERNAME }}
+          DEV_SMTP_PASSWORD: ${{ secrets.DEV_SMTP_PASSWORD }}
+          STAGING_SMTP_USERNAME: ${{ secrets.STAGING_SMTP_USERNAME }}
+          STAGING_SMTP_PASSWORD: ${{ secrets.STAGING_SMTP_PASSWORD }}
+          PROD_SMTP_USERNAME: ${{ secrets.PROD_SMTP_USERNAME }}
+          PROD_SMTP_PASSWORD: ${{ secrets.PROD_SMTP_PASSWORD }}
+
+      - name: Run deployment validation
+        run: |
+          chmod +x scripts/deploy-validation.sh
+          ./scripts/deploy-validation.sh ${{ matrix.environment }} ${{ needs.determine-environments.outputs['build-version'] }}
+        env:
+          BUILD_VERSION: ${{ needs.determine-environments.outputs['build-version'] }}
+          DEPLOYMENT_ID: ${{ github.run_id }}-${{ matrix.environment }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.environment }}
+          path: test-results/
+          retention-days: 30
+
+  consistency-check:
+    needs: [determine-environments, deploy-and-test]
+    runs-on: ubuntu-latest
+    if: contains(fromJson(needs.determine-environments.outputs.environments), 'production') && contains(fromJson(needs.determine-environments.outputs.environments), 'staging')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Probe
+        run: |
+          curl -L https://github.com/mozership/probe/releases/latest/download/probe_linux_x86_64.tar.gz | tar -xz probe
+          chmod +x probe
+          sudo mv probe /usr/local/bin/
+
+      - name: Run cross-environment consistency check
+        run: |
+          probe config/base.yml,workflows/consistency-check.yml
+        env:
+          PRIMARY_ENV: production
+          COMPARISON_ENVS: staging,development
+
+  deployment-report:
+    needs: [determine-environments, deploy-and-test, consistency-check]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate deployment report
+        run: |
+          echo "## 🚀 Multi-Environment Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Version:** ${{ needs.determine-environments.outputs['build-version'] }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environments:** ${{ needs.determine-environments.outputs.environments }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 環境ごとのデプロイ状況を追加
+          echo "### Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 実際のテスト結果で埋める
+          echo "| Environment | Status | Tests | Performance |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|--------|-------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Development | ✅ Success | ✅ Passed | ✅ Good |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging | ✅ Success | ✅ Passed | ✅ Good |" >> $GITHUB_STEP_SUMMARY
+          echo "| Production | ${{ needs.deploy-and-test.result == 'success' && '✅ Success' || '❌ Failed' }} | Results | Performance |" >> $GITHUB_STEP_SUMMARY
+```
+
+## ステップ7: マルチ環境テストの実行
 
 包括的なマルチ環境テストを実行します：
 
@@ -860,7 +1105,7 @@ for env in development staging production; do
 done
 ```
 
-## ステップ7: 高度なマルチ環境パターン
+## ステップ8: 高度なマルチ環境パターン
 
 2つのバージョンを並行して動かすデプロイ方式では、テスト側でどちらに接続しているかを区別できる必要があります。
 
@@ -872,31 +1117,40 @@ Blue-Greenデプロイのテストを作成します：
 # workflows/blue-green-validation.yml
 name: "Blue-Green Deployment Validation"
 
+vars:
+  BLUE_URL: "{{BLUE_URL}}"
+  GREEN_URL: "{{GREEN_URL}}"
+
 jobs:
-- name: blue-green-test
+- id: blue-green-test
+  name: blue-green-test
   steps:
     - name: "Test Blue Environment"
       id: blue-test
       uses: http
       with:
         method: GET
-        url: "{{BLUE_URL}}/health"
+        url: "{{vars.BLUE_URL}}/health"
       test: res.code == 200
-      
+      outputs:
+        time: rt.sec * 1000
+
     - name: "Test Green Environment"
       id: green-test
       uses: http
       with:
         method: GET
-        url: "{{GREEN_URL}}/health"
+        url: "{{vars.GREEN_URL}}/health"
       test: res.code == 200
-      
+      outputs:
+        time: rt.sec * 1000
+
     - name: "Compare Environment Performance"
       uses: hello
       echo: |
         Blue Environment: {{outputs['blue-test'].time}}ms
         Green Environment: {{outputs['green-test'].time}}ms
-        Performance Difference: {{abs(Math)}}ms
+        Performance Difference: {{abs(outputs['blue-test'].time - outputs['green-test'].time)}}ms
 ```
 
 ### カナリアデプロイテスト
@@ -907,8 +1161,14 @@ jobs:
 # workflows/canary-validation.yml
 name: "Canary Deployment Validation"
 
+vars:
+  API_BASE_URL: "{{API_BASE_URL}}"
+  MAX_CANARY_TRAFFIC: 10
+  MAX_CANARY_ERROR_RATE: 0.01
+
 jobs:
-- name: canary-monitoring
+- id: canary-monitoring
+  name: canary-monitoring
   steps:
     - name: "Monitor Canary Traffic"
       uses: http

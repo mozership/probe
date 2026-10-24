@@ -27,6 +27,7 @@ jobs:
           ports: [5432]
           wait:
             port: 5432
+        test: res.addr != ""
         outputs:
           addr: res.addr
 
