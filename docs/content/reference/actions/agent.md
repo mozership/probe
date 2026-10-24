@@ -1,6 +1,6 @@
 # Agent Action
 
-The agent action tests a web application from a task written in words. A model, the tester, uses the application through a real Chrome to carry out the task; another call of the model, the judge, then decides from what the pages showed whether the expectation holds. Chrome or Chromium has to be installed where Probe runs, and the model is reached with the API key of its provider.
+The agent action tests a web application from a task written in natural language. A model, the tester, uses the application through a real Chrome to carry out the task; another call of the model, the judge, then decides from what the pages showed whether the expectation holds. Chrome or Chromium has to be installed where Probe runs, and the model is reached with the API key of its provider.
 
 It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-agent](https://github.com/mozership/probe-agent). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later.
 
@@ -59,7 +59,7 @@ A persona test takes `persona` and `goal` in place of `task` and `expect`:
     test: len(filter(res.findings, .severity == "high" && .verified)) == 0
 ```
 
-A test in words is not deterministic: the same step can take another path, or come to another verdict, from one run to the next. Check what matters with a deterministic step after it where you can, such as an `http` or `db` step that the account exists, and count the passes over runs with [`repeat`](/reference/yaml-configuration#repeat) rather than trusting one run.
+A test in natural language is not deterministic: the same step can take another path, or come to another verdict, from one run to the next. Check what matters with a deterministic step after it where you can, such as an `http` or `db` step that the account exists, and count the passes over runs with [`repeat`](/reference/yaml-configuration#repeat) rather than trusting one run.
 
 ## How It Works
 
@@ -79,10 +79,10 @@ These go directly under `with`.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `url` | String | required | The page the browser opens first, `http` or `https` |
-| `task` | String | required in a scenario test | What the tester does, in words |
-| `expect` | String | required in a scenario test | What has to hold afterwards, in words |
-| `persona` | String | required in a persona test | Who the tester plays, in words: what they know, and how they go about things |
-| `goal` | String | required in a persona test | What the persona sets out to do, in words |
+| `task` | String | required in a scenario test | What the tester does, in natural language |
+| `expect` | String | required in a scenario test | What has to hold afterwards, in natural language |
+| `persona` | String | required in a persona test | Who the tester plays, in natural language: what they know, and how they go about things |
+| `goal` | String | required in a persona test | What the persona sets out to do, in natural language |
 | `secrets` | Object | none | Values the model never sees, by name. Write them as `{secret:NAME}` in `task` or `persona`. See [Secrets](#secrets) |
 | `allow_hosts` | List or string | the host of `url` | The hosts the tester may open pages of: `host`, `host:port`, or `*.domain`. A list, or a string apart by commas |
 | `provider` | String | `anthropic` | `anthropic`, `openai`, `xai`, `gemini` or `sakura`. See [Models](#models) |
