@@ -61,9 +61,10 @@ func newCleanups(runID string, printer *Printer) *cleanups {
 			level = hclog.Debug
 		}
 		log := hclog.New(&hclog.LoggerOptions{
-			Name:   "actions",
-			Output: printer.Masker().Writer(os.Stderr),
-			Level:  level,
+			Name:    "actions",
+			Output:  printer.Masker().Writer(os.Stderr),
+			Level:   level,
+			Exclude: excludeErrors(printer.verbose),
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()

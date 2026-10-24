@@ -837,42 +837,51 @@ func TestStep_processActionResult(t *testing.T) {
 }
 
 func TestStep_handleActionError(t *testing.T) {
-	step := &stepRun{
-		Step: &Step{
-			Uses: "mock-action-for-error-test",
-		},
-		expr: &expr.Expr{},
+	tests := []struct {
+		name    string
+		verbose bool
+		err     error
+		wantOut string
+	}{
+		{name: "an action error", err: fmt.Errorf("test error")},
+		{name: "an action error in a verbose run", verbose: true, err: fmt.Errorf("test error"), wantOut: "Error: Action execution failed: test error\n"},
+		{name: "a refusal", err: actionrpc.Refuse("POST may write")},
+		{name: "a refusal in a verbose run", verbose: true, err: actionrpc.Refuse("POST may write"), wantOut: "Error: refused: POST may write\n"},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &stepRun{
+				Step: &Step{
+					Uses: "mock-action-for-error-test",
+				},
+				expr: &expr.Expr{},
+			}
+			printer := newBufferPrinter()
+			printer.verbose = tt.verbose
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Config:  Config{Verbose: tt.verbose},
+					Printer: printer,
+				},
+			}
 
-	jCtx := &JobContext{
-		runEnv: &runEnv{
-			Printer: newBufferPrinter(),
-		},
-	}
+			step.handleActionError(tt.err, "test-step", jCtx)
 
-	originalErr := fmt.Errorf("test error")
-	step.handleActionError(originalErr, "test-step", jCtx)
-
-	// Check that error was set
-	if step.err == nil {
-		t.Errorf("handleActionError() should set step.err")
-	}
-
-	// Check that job was marked as failed
-	if !jCtx.Failed {
-		t.Errorf("handleActionError() should mark job as failed")
-	}
-
-	// Check error details
-	if probeErr, ok := step.err.(*ProbeError); ok {
-		if probeErr.Context["step_name"] != "test-step" {
-			t.Errorf("handleActionError() should set step_name context")
-		}
-		if probeErr.Context["action_type"] != "mock-action-for-error-test" {
-			t.Errorf("handleActionError() should set action_type context")
-		}
-	} else {
-		t.Errorf("handleActionError() should create ProbeError")
+			// The error is kept as it is, for the step's result to tell
+			// what the action said and nothing about where it was caught.
+			if step.err != tt.err {
+				t.Errorf("step.err = %v, want %v", step.err, tt.err)
+			}
+			if !jCtx.Failed {
+				t.Errorf("handleActionError() should mark job as failed")
+			}
+			// The step's result tells the error, so it is told as it
+			// happens only in a verbose run, before the exchange.
+			got := printer.errWriter.(*bytes.Buffer).String()
+			if tt.wantOut == "" && got != "" || !strings.HasPrefix(got, tt.wantOut) {
+				t.Errorf("printed %q, want it to start with %q", got, tt.wantOut)
+			}
+		})
 	}
 }
 
