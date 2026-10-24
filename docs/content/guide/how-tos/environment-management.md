@@ -779,10 +779,7 @@ vars:
   api_base_url: "{{API_BASE_URL}}"
   environment: "{{ENVIRONMENT}}"
   smtp_host: "{{SMTP_HOST}}"
-  smtp_username: "{{SMTP_USERNAME}}"
-  smtp_password: "{{SMTP_PASSWORD}}"
   monitoring_interval: "{{MONITORING_INTERVAL ?? '300'}}"  # 5 minutes
-  alert_threshold: "{{ALERT_THRESHOLD ?? '2'}}"        # Alert after 2 consecutive failures
 
 jobs:
 - id: environment-health-check
@@ -837,7 +834,7 @@ jobs:
   name: Environment Alerting
   needs: [environment-health-check]
   always: true
-  skipif: outputs.resources.resources_healthy == true && outputs.dependencies.dependencies_healthy == true
+  skipif: outputs.resources?.resources_healthy == true && outputs.dependencies?.dependencies_healthy == true
   steps:
     - name: Environment Alert
       uses: smtp
@@ -858,14 +855,14 @@ jobs:
         Time: {{unixtime()}}
 
         RESOURCE STATUS:
-        {{outputs.resources.resources_healthy == true ? "✅ Resources Healthy" : "❌ Resource Issues"}}
-        CPU Usage: {{outputs.resources.cpu_usage ?? "unknown"}}%
-        Memory Usage: {{outputs.resources.memory_usage ?? "unknown"}}%
-        Disk Usage: {{outputs.resources.disk_usage ?? "unknown"}}%
+        {{outputs.resources?.resources_healthy == true ? "✅ Resources Healthy" : "❌ Resource Issues"}}
+        CPU Usage: {{outputs.resources?.cpu_usage ?? "unknown"}}%
+        Memory Usage: {{outputs.resources?.memory_usage ?? "unknown"}}%
+        Disk Usage: {{outputs.resources?.disk_usage ?? "unknown"}}%
 
         DEPENDENCIES STATUS:
-        {{outputs.dependencies.dependencies_healthy == true ? "✅ All Dependencies Healthy" : "❌ Dependency Issues"}}
-        Unhealthy Services: {{join(outputs.dependencies.unhealthy_services ?? [], ", ")}}
+        {{outputs.dependencies?.dependencies_healthy == true ? "✅ All Dependencies Healthy" : "❌ Dependency Issues"}}
+        Unhealthy Services: {{join(outputs.dependencies?.unhealthy_services ?? [], ", ")}}
 
         ACTION REQUIRED: Investigate {{vars.environment}} environment immediately
 
