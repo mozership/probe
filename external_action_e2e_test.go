@@ -212,7 +212,7 @@ func TestEndToEndFailingActionTellsWhyOnce(t *testing.T) {
 	_ = l.Close()
 
 	workflow := filepath.Join(dir, "workflow.yml")
-	if err := os.WriteFile(workflow, []byte(fmt.Sprintf(`name: failing
+	if err := os.WriteFile(workflow, fmt.Appendf(nil, `name: failing
 jobs:
 - name: http
   steps:
@@ -234,7 +234,7 @@ jobs:
     uses: ./failing
     with:
       mode: panic
-`, addr)), 0o644); err != nil {
+`, addr), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	refused := fmt.Sprintf(`Get "http://%s/x": dial tcp %s: connect: connection refused`, addr, addr)
