@@ -148,12 +148,11 @@ func TestParamsCoverTheDocs(t *testing.T) {
 // of with it needs are keys it takes. That the fields are those it returns
 // is tested in each action's package, by running it.
 func TestFieldsAndRequired(t *testing.T) {
-	all := AllFields()
+	req, res := AllReqFields(), AllResFields()
 	required := AllRequired()
 	for _, name := range Names() {
-		f, ok := all[name]
-		if !ok || len(f.Res) == 0 {
-			t.Errorf("%s declares no fields of res: %+v", name, f)
+		if _, ok := req[name]; !ok || len(res[name]) == 0 {
+			t.Errorf("%s declares no fields of req or of res: %v, %v", name, req[name], res[name])
 		}
 		params, takesAny := Params(name)
 		if name == "hello" {
@@ -173,7 +172,7 @@ func TestFieldsAndRequired(t *testing.T) {
 			}
 		}
 	}
-	for name := range all {
+	for name := range res {
 		if !slices.Contains(Names(), name) {
 			t.Errorf("%s declares fields but is not a built-in action", name)
 		}

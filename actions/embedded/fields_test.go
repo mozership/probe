@@ -17,7 +17,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		// A job that cannot run is an error, with a result that tells why
 		// in res.error.
 		ret, _ := a.Run(with)
-		actiontest.CheckFields(t, Fields(), with, ret)
+		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
 	}
 }
 

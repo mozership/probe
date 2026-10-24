@@ -33,7 +33,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}
-		actiontest.CheckFields(t, Fields(), with, ret)
+		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
 	}
 }
 

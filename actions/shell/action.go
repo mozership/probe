@@ -80,10 +80,17 @@ func Params() []string {
 	return mapping.FieldTags(Req{})
 }
 
-// Fields returns the fields of the req and the res the shell action returns:
-// those of Req and of Res.
-func Fields() actionrpc.Fields {
-	return actionrpc.Fields{Req: mapping.FieldTags(Req{}), Res: mapping.FieldTags(Res{})}
+// ReqFields returns the fields of the req the shell action returns, those of
+// Req, and ResFields those of its res, those of Res, for probe check to
+// report a step that reads another.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the shell action returns; see
+// ReqFields.
+func ResFields() []string {
+	return mapping.FieldTags(Res{})
 }
 
 // Required returns the keys of with the shell action cannot run without:

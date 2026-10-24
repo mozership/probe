@@ -13,7 +13,6 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -72,11 +71,16 @@ type CheckOptions struct {
 	// openapi asks the http action. A step with such a key and no test is
 	// not warned of as unchecked.
 	Contracts map[string][]string
-	// Fields are the fields of the req and the res each action returns, by
-	// its name, so that a test, an echo or an output that reads another is
-	// reported. What a step of an action it does not name reads is not
-	// checked.
-	Fields map[string]actionrpc.Fields
+	// ReqFields and ResFields are the top-level fields of the req and the
+	// res each action returns, by its name, so that a test, an echo or an
+	// output that reads another is reported. What a step reads of the req
+	// or the res of an action they do not name is not checked.
+	ReqFields map[string][]string
+	ResFields map[string][]string
+	// WithFields are the actions whose req and res hold the keys of the
+	// step's with too, besides the fields they are named with, as an action
+	// that returns what it is given does.
+	WithFields []string
 	// Required are the keys of with each action cannot run without, by its
 	// name, each as the keys that stand for one another, of which one is
 	// enough: as get stands for method in the http action.
@@ -123,9 +127,9 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	if c.opts.Params == nil {
 		c.opts.Params = map[string][]string{}
 	}
-	c.opts.Fields = maps.Clone(opts.Fields)
-	if c.opts.Fields == nil {
-		c.opts.Fields = map[string]actionrpc.Fields{}
+	c.opts.ResFields = maps.Clone(opts.ResFields)
+	if c.opts.ResFields == nil {
+		c.opts.ResFields = map[string][]string{}
 	}
 	c.mapFiles(files, contents)
 	for _, r := range redefinedJobs(files, contents) {
@@ -588,7 +592,7 @@ func (c *checker) readParams(uses string, line int, where string) {
 		c.opts.Params[uses] = m.Params
 	}
 	if m.Res != nil {
-		c.opts.Fields[uses] = actionrpc.Fields{Res: m.Res}
+		c.opts.ResFields[uses] = m.Res
 	}
 }
 
@@ -692,27 +696,54 @@ func (c *checker) checkRequired() {
 			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate) {
 				continue
 			}
+			var missing [][]string
 			for _, group := range groups {
-				if slices.ContainsFunc(group, func(key string) bool { _, ok := st.With[key]; return ok }) {
-					continue
+				if !slices.ContainsFunc(group, func(key string) bool { _, ok := st.With[key]; return ok }) {
+					missing = append(missing, group)
 				}
+			}
+			if len(missing) > 0 {
 				path := fmt.Sprintf("jobs[%d].steps[%d].with", i, j)
-				c.add(SeverityError, c.line(path), c.stepWhere(i, j), "with: the %s action cannot run without %s, which neither the step nor its defaults give", st.Uses, orNames(group))
+				c.add(SeverityError, c.line(path), c.stepWhere(i, j), "with: the %s action cannot run without %s, which neither the step nor its defaults give", st.Uses, requiredNames(missing))
 			}
 		}
 	}
 }
 
-func isTemplate(s string) bool {
-	return len(expr.TemplateExprs(s)) > 0
+// requiredNames tells the keys of groups, each of which a step lacks, as the
+// first key of each and the keys that stand for them: a group of two as url
+// or get, and one of more as method, or a key that stands for it, such as
+// get.
+func requiredNames(groups [][]string) string {
+	var names, others []string
+	for _, group := range groups {
+		switch len(group) {
+		case 1:
+			names = append(names, group[0])
+		case 2:
+			names = append(names, group[0]+" or "+group[1])
+		default:
+			names = append(names, group[0])
+			for _, k := range group[1:] {
+				if !slices.Contains(others, k) {
+					others = append(others, k)
+				}
+			}
+		}
+	}
+	out := listNames(names)
+	switch {
+	case len(others) == 0:
+	case len(names) == 1:
+		out += fmt.Sprintf(", or a key that stands for it, such as %s", others[0])
+	default:
+		out += fmt.Sprintf(", or a key that stands for them, such as %s", others[0])
+	}
+	return out
 }
 
-// orNames lists names as a, b or c.
-func orNames(names []string) string {
-	if len(names) < 2 {
-		return strings.Join(names, "")
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+func isTemplate(s string) bool {
+	return len(expr.TemplateExprs(s)) > 0
 }
 
 func (c *checker) checkNeeds() {
@@ -1103,10 +1134,14 @@ func (c *checker) checkResults() {
 					continue
 				}
 				msg := fmt.Sprintf("%s.%s is not a field the %s action returns", name, chain[0], st.Uses)
-				if s := suggest.Closest(chain[0], declared); s != "" {
+				// Among the few fields of a res, one two edits away, as
+				// code is from body, is as likely another as the one meant.
+				if s := suggest.Within(chain[0], declared, 1); s != "" {
 					msg += fmt.Sprintf("; did you mean %q?", s)
-				} else {
-					msg += fmt.Sprintf("; its %s has %s", name, listNames(declared))
+				}
+				msg += fmt.Sprintf("; its %s has %s", name, listNames(declared))
+				if name == "res" && chain[0] == "status" {
+					msg += "; the step's own status is read as status"
 				}
 				add(severity, e, "%s", msg)
 			}
@@ -1121,17 +1156,28 @@ func (c *checker) checkResults() {
 // for a step whose with has a key that holds a template, which names its
 // key only when it runs.
 func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
-	f, ok := c.opts.Fields[st.Uses]
-	if !ok || (f.With && slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate)) {
-		return nil, false
+	keys := slices.Collect(maps.Keys(st.With))
+	if slices.Contains(c.opts.WithFields, st.Uses) {
+		if slices.ContainsFunc(keys, isTemplate) {
+			return nil, false
+		}
+	} else {
+		keys = nil
 	}
-	req, res := f.Of(st.With)
-	out := map[string][]string{"res": addedResFields(res)}
-	// An external action declares only the fields of its res.
-	if !actionref.IsExternal(st.Uses) {
-		out["req"] = req
+	out := map[string][]string{}
+	for name, declared := range map[string]map[string][]string{"req": c.opts.ReqFields, "res": c.opts.ResFields} {
+		fields, ok := declared[st.Uses]
+		if !ok {
+			continue
+		}
+		fields = append(slices.Clone(fields), keys...)
+		if name == "res" {
+			fields = addedResFields(fields)
+		}
+		slices.Sort(fields)
+		out[name] = slices.Compact(fields)
 	}
-	return out, true
+	return out, len(out) > 0
 }
 
 // nameHint returns what name, which is not among names, was likely meant

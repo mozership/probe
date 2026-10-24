@@ -45,8 +45,14 @@ func Keeps() []string {
 	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
 }
 
-// Fields returns the fields of the req and the res the hello action returns:
-// it returns its with as req, and with status and dump as res.
-func Fields() actionrpc.Fields {
-	return actionrpc.Fields{Res: []string{"dump", "status"}, With: true}
+// ReqFields returns the fields of the req the hello action returns besides
+// the keys of with, which it returns as req: none.
+func ReqFields() []string {
+	return []string{}
+}
+
+// ResFields returns the fields of the res the hello action returns besides
+// the keys of with, which it returns in res too: status and dump.
+func ResFields() []string {
+	return []string{"dump", "status"}
 }

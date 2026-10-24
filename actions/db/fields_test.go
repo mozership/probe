@@ -22,7 +22,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", query, err)
 		}
-		actiontest.CheckFields(t, Fields(), with, ret)
+		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
 	}
 }
 

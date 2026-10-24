@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 )
 
 // writeWorkflow writes content to a file named name in dir and returns its
@@ -1258,11 +1257,10 @@ jobs:
 
 // The fields of the built-in actions the checks of res and req are tested
 // against, as the actions declare them.
-var resultFields = map[string]actionrpc.Fields{
-	"http":  {Req: []string{"url", "method", "headers", "body"}, Res: []string{"status", "code", "headers", "body"}},
-	"shell": {Req: []string{"cmd"}, Res: []string{"code", "stdout", "stderr"}},
-	"hello": {Res: []string{"dump", "status"}, With: true},
-}
+var (
+	reqFields = map[string][]string{"http": {"url", "method", "headers", "body"}, "shell": {"cmd"}, "hello": {}}
+	resFields = map[string][]string{"http": {"status", "code", "headers", "body"}, "shell": {"code", "stdout", "stderr"}, "hello": {"dump", "status"}}
+)
 
 // TestCheck_ResultFields checks what the test, echo and outputs of a step
 // read under res and req against the fields its action returns, with those
@@ -1293,7 +1291,7 @@ jobs:
     uses: shell
     with:
       cmd: echo
-    test: res.code == 0 && res.json.ok && res.body == ""
+    test: res.code == 0 && res.json.ok && res.body == "" && res.stdot != "" && res.status == 0
   - name: Greet
     uses: hello
     with:
@@ -1318,7 +1316,7 @@ jobs:
     test: let r = res; r.anything == 0 && res.code == 0
 `)
 	opts := checkActions
-	opts.Fields = resultFields
+	opts.ReqFields, opts.ResFields, opts.WithFields = reqFields, resFields, []string{"hello"}
 	findings, err := Check(path, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -1331,7 +1329,9 @@ jobs:
 		{SeverityError, 16, `echo: res.json is not a field the http action returns`},
 		{SeverityError, 18, `outputs.size: res.body_size is not a field the http action returns`},
 		{SeverityError, 20, `outputs.first: res.header is not a field the http action returns; did you mean "headers"?`},
-		{SeverityError, 25, `test: res.body is not a field the shell action returns`},
+		{SeverityError, 25, `test: res.body is not a field the shell action returns; its res has code, json, stderr and stdout`},
+		{SeverityError, 25, `test: res.stdot is not a field the shell action returns; did you mean "stdout"?; its res has`},
+		{SeverityError, 25, `test: res.status is not a field the shell action returns; its res has code, json, stderr and stdout; the step's own status is read as status`},
 		{SeverityError, 30, `test: req.status is not a field the hello action returns; its req has name and shared`},
 		{SeverityError, 30, `test: res.nam is not a field the hello action returns; did you mean "name"?`},
 		{SeverityError, 39, `with: res is empty here, as the step has not run yet when its with is evaluated`},
@@ -1389,20 +1389,31 @@ jobs:
     with:
       "{{ vars.key }}": SELECT 1
     test: res.code == 0
+- name: Without defaults
+  steps:
+  - name: Nothing
+    uses: http
+    test: res.code == 200
+  - name: No login
+    uses: db
+    test: res.code == 0
 `)
 	opts := checkActions
 	opts.Actions = append(opts.Actions, "db")
 	opts.Required = map[string][][]string{
-		"http": {{"url", "get"}, {"method", "get"}},
-		"db":   {{"dsn"}, {"query"}},
+		"http": {{"url", "get", "post"}, {"method", "get", "post"}},
+		"db":   {{"query"}, {"password", "key_file"}},
 	}
 	findings, err := Check(path, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkFindings(t, findings, []want{
-		{SeverityError, 15, "with: the http action cannot run without method or get, which neither the step nor its defaults give"},
-		{SeverityError, 28, "with: the db action cannot run without query"},
+		{SeverityError, 15, "with: the http action cannot run without method, or a key that stands for it, such as get, which neither the step nor its defaults give"},
+		{SeverityError, 25, "with: the db action cannot run without password or key_file, which"},
+		{SeverityError, 28, "with: the db action cannot run without query and password or key_file, which"},
+		{SeverityError, 38, "with: the http action cannot run without url and method, or a key that stands for them, such as get, which"},
+		{SeverityError, 41, "with: the db action cannot run without query and password or key_file, which"},
 	})
 }
 
@@ -1429,8 +1440,8 @@ jobs:
   - uses: ./silent
     test: res.anything == 0
 `)
-	fields := map[string]actionrpc.Fields{"http": resultFields["http"]}
-	findings, err := Check(path, CheckOptions{Actions: []string{"http"}, Fields: fields, Manifest: actionref.ReadManifest})
+	fields := map[string][]string{"http": resFields["http"]}
+	findings, err := Check(path, CheckOptions{Actions: []string{"http"}, ResFields: fields, Manifest: actionref.ReadManifest})
 	if err != nil {
 		t.Fatal(err)
 	}

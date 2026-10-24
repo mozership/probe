@@ -735,7 +735,7 @@ func (c *Cmd) runCheck() int {
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Fields: actions.AllFields(), Required: actions.AllRequired(), Manifest: actionref.ReadManifest})
+	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), WithFields: actions.WithFields(), Required: actions.AllRequired(), Manifest: actionref.ReadManifest})
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError

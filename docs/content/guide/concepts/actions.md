@@ -882,7 +882,7 @@ runs:
 | `runs.checksums` | SHA-256 digest of the executable for each `<os>_<arch>`, in lowercase hex |
 | `guard` | The kinds of guard the action keeps to itself: `read-only`, `allow-host` or both. Probe takes the action at its word and runs it under a guard of those kinds. Without it, the action is refused under any guard unless `--allow-action` names it. See [Guard](/guide/concepts/guard) |
 | `params` | The keys the action takes in `with`, for `probe check` to report a key it does not take. Without it, `with` is not checked; `[]` takes no key |
-| `res` | The top-level fields of the `res` the action returns, such as `[code, body]`, for `probe check` to warn of a step that reads another. Without it, what a step reads of `res` is not checked |
+| `res` | The top-level fields of the `res` the action returns, such as `[code, body]`, for `probe check` to warn of a step that reads another. Without it, what a step reads of `res` is not checked; `[]` declares no field, so every read is warned of |
 | `cleanup` | `true` for an action that Probe is to call once the workflow is over, for it to remove what its steps left behind. Without it, the action is not called. See [Cleaning Up After a Run](#cleaning-up-after-a-run) |
 
 `runs` takes exactly one of `url` and `path`. With `url`, a checksum for the running platform is required, and a download with another digest is refused. The digest is checked again each time the executable is started. The commit in `uses` fixes `action.yml`, and `action.yml` fixes the digest, so the commit decides exactly which executable runs.

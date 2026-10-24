@@ -128,26 +128,57 @@ func AllParams() map[string][]string {
 	return out
 }
 
-// fields are the fields of the req and the res each built-in action
-// returns, as its package declares them.
-var fields = map[string]func() actionrpc.Fields{
-	"db":       db.Fields,
-	"dns":      dns.Fields,
-	"embedded": embedded.Fields,
-	"grpc":     grpc.Fields,
-	"hello":    hello.Fields,
-	"http":     http.Fields,
-	"imap":     imap.Fields,
-	"shell":    shell.Fields,
-	"smtp":     smtp.Fields,
-	"ssh":      ssh.Fields,
+// reqFields and resFields are the fields of the req and the res each
+// built-in action returns, as its package declares them.
+var (
+	reqFields = map[string]func() []string{
+		"db":       db.ReqFields,
+		"dns":      dns.ReqFields,
+		"embedded": embedded.ReqFields,
+		"grpc":     grpc.ReqFields,
+		"hello":    hello.ReqFields,
+		"http":     http.ReqFields,
+		"imap":     imap.ReqFields,
+		"shell":    shell.ReqFields,
+		"smtp":     smtp.ReqFields,
+		"ssh":      ssh.ReqFields,
+	}
+	resFields = map[string]func() []string{
+		"db":       db.ResFields,
+		"dns":      dns.ResFields,
+		"embedded": embedded.ResFields,
+		"grpc":     grpc.ResFields,
+		"hello":    hello.ResFields,
+		"http":     http.ResFields,
+		"imap":     imap.ResFields,
+		"shell":    shell.ResFields,
+		"smtp":     smtp.ResFields,
+		"ssh":      ssh.ResFields,
+	}
+)
+
+// AllReqFields returns the fields of the req each built-in action returns,
+// by its name.
+func AllReqFields() map[string][]string {
+	return collect(reqFields)
 }
 
-// AllFields returns the fields of the req and the res each built-in action
-// returns, by its name.
-func AllFields() map[string]actionrpc.Fields {
-	out := make(map[string]actionrpc.Fields, len(fields))
-	for name, f := range fields {
+// AllResFields returns the fields of the res each built-in action returns,
+// by its name.
+func AllResFields() map[string][]string {
+	return collect(resFields)
+}
+
+// WithFields returns the names of the built-in actions whose req and res
+// hold the keys of the step's with, besides the fields they declare: hello,
+// which returns what it is given.
+func WithFields() []string {
+	return []string{"hello"}
+}
+
+func collect(m map[string]func() []string) map[string][]string {
+	out := make(map[string][]string, len(m))
+	for name, f := range m {
 		out[name] = f()
 	}
 	return out

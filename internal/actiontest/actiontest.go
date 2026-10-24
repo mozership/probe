@@ -7,19 +7,29 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/mozership/probe/actionrpc"
 )
 
-// CheckFields fails t when ret, what an action returned for a step given
-// with, has a field of req or of res that fields does not declare.
-func CheckFields(t testing.TB, fields actionrpc.Fields, with, ret map[string]any) {
+// CheckFields fails t when ret, what an action returned for a step, has a
+// field of req or of res that req and res, the fields the action declares,
+// leave out. with is the step's with, whose keys are fields too of an action
+// that returns what it is given, or nil for one that does not.
+func CheckFields(t testing.TB, req, res []string, with, ret map[string]any) {
 	t.Helper()
 	if _, ok := ret["res"].(map[string]any); !ok {
 		t.Fatalf("the action returned no res: %v", ret)
 	}
-	if got := fields.Undeclared(with, ret); len(got) > 0 {
-		t.Errorf("the action returns %s, which its Fields does not declare", strings.Join(got, ", "))
+	var undeclared []string
+	for name, declared := range map[string][]string{"req": req, "res": res} {
+		m, _ := ret[name].(map[string]any)
+		for key := range m {
+			if _, given := with[key]; !given && !slices.Contains(declared, key) {
+				undeclared = append(undeclared, name+"."+key)
+			}
+		}
+	}
+	slices.Sort(undeclared)
+	if len(undeclared) > 0 {
+		t.Errorf("the action returns %s, which it does not declare", strings.Join(undeclared, ", "))
 	}
 }
 

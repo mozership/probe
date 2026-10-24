@@ -43,12 +43,17 @@ func Params() []string {
 	return mapping.FieldTags(Req{})
 }
 
-// Fields returns the fields of the req and the res the dns action returns.
-func Fields() actionrpc.Fields {
-	return actionrpc.Fields{
-		Req: mapping.FieldTags(Req{}),
-		Res: []string{"answers", "authoritative", "protocol", "rcode", "server", "values"},
-	}
+// ReqFields returns the fields of the req the dns action returns, those of
+// Req, and ResFields those of its res, for probe check to report a step that
+// reads another.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the dns action returns; see
+// ReqFields.
+func ResFields() []string {
+	return []string{"answers", "authoritative", "protocol", "rcode", "server", "values"}
 }
 
 // Required returns the keys of with the dns action cannot run without: name.
