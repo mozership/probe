@@ -544,9 +544,10 @@ func nextParam(t string) (stop, sep int) {
 // query or the fragment of a URL in it that holds a credential, such as
 // password or access_token, replaced by <redacted>. Parameters are separated
 // by &, also as JSON writes it, \u0026, or as HTML does, &amp;. A value ends
-// at the next of them, at the fragment, or at what stands around the URL,
-// and before a < or a >, which a URL cannot hold: a value that is a label
-// already, such as <secret:NAME>, is left as it is.
+// at the next of them, at the fragment, or at what stands around the URL. A
+// value that is a label already, such as <secret:NAME>, is left as it is,
+// and any other is replaced whole, also one a label stands in, so that no
+// part of it around the label is shown.
 func redactQueryCredentials(s string) string {
 	if strings.IndexByte(s, '?') < 0 && strings.IndexByte(s, '#') < 0 {
 		return s
@@ -579,10 +580,13 @@ func redactQueryCredentials(s string) string {
 			param := s[p:stop]
 			if eq := strings.IndexByte(param, '='); eq > 0 && isQueryCredential(strings.TrimPrefix(param[:eq], "amp;")) {
 				value := param[eq+1:]
-				if k := strings.IndexAny(value, "<>"); k >= 0 {
-					value = value[:k]
+				// A URL written in angle brackets, as <https://...>, ends
+				// before the bracket that closes it, also once its value
+				// has been redacted.
+				if v := strings.TrimSuffix(value, ">"); v != value && (strings.IndexByte(v, '<') < 0 || isLabel(v)) {
+					value = v
 				}
-				if value != "" {
+				if value != "" && !isLabel(value) {
 					if done == 0 {
 						b.Grow(len(s))
 					}

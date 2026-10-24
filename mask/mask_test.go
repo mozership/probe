@@ -916,6 +916,9 @@ func TestMasker_SecretInURLKeepsItsName(t *testing.T) {
 		{"password", `postgres://app:long-password@db/main`, `postgres://app:<secret:PASS>@db/main`},
 		{"password and more", `postgres://app:long-password2@db/main`, `postgres://app:<redacted>@db/main`},
 		{"angle brackets around a url", `see <https://h/?token=abc>`, `see <https://h/?token=<redacted>>`},
+		{"secret then more in a value", `http://h/?token=long-passwordTAIL&x=1`, `http://h/?token=<redacted>&x=1`},
+		{"secret inside a value", `http://h/?token=HEADlong-passwordTAIL`, `http://h/?token=<redacted>`},
+		{"angle brackets in a value", `http://h/?token=a<b>c&x=1`, `http://h/?token=<redacted>&x=1`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -928,6 +931,12 @@ func TestMasker_SecretInURLKeepsItsName(t *testing.T) {
 		})
 	}
 
+	if got := m.Map(map[string]any{"url": "https://h/x?token=Xlong-passwordY"}); got["url"] != "https://h/x?token=<redacted>" {
+		t.Errorf("Map url = %v", got["url"])
+	}
+	if got := m.Map(m.Map(map[string]any{"url": "https://h/x?token=Xlong-passwordY"})); got["url"] != "https://h/x?token=<redacted>" {
+		t.Errorf("Map url twice = %v", got["url"])
+	}
 	got := m.Map(map[string]any{"dsn": "postgres://app-user:pw@db.internal/main?password=x"})
 	if want := "postgres://<secret:USER>:<redacted>@<secret:HOST>/main?password=<redacted>"; got["dsn"] != want {
 		t.Errorf("Map dsn = %v, want %v", got["dsn"], want)
