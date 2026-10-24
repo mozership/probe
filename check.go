@@ -13,6 +13,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/suggest"
 )
 
 // Severities of a Finding.
@@ -346,7 +347,7 @@ func (c *checker) keys(n ast.Node, path, where string, allowed []string, each fu
 				continue
 			}
 			msg := fmt.Sprintf("unknown key %q", key)
-			if s := suggest(key, allowed); s != "" {
+			if s := suggest.Closest(key, allowed); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			c.add(SeverityError, line, where, "%s", msg)
@@ -433,47 +434,6 @@ func (c *checker) noteLines(path string, n ast.Node) {
 	}
 }
 
-// suggest returns the key of allowed closest to key, when one is close
-// enough to be what was meant: two edits from it at most, and no more
-// than half its length. One that differs from key only in case, as api_url
-// does from API_URL, is closest.
-func suggest(key string, allowed []string) string {
-	for _, a := range allowed {
-		if strings.EqualFold(key, a) {
-			return a
-		}
-	}
-	// A short key is close to too many others: x is two edits from rt.
-	best, bestDist := "", min(3, len(key)/2+1)
-	for _, a := range allowed {
-		if d := distance(key, a); d < bestDist {
-			best, bestDist = a, d
-		}
-	}
-	return best
-}
-
-// distance is the Levenshtein distance between a and b.
-func distance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		cur := make([]int, len(b)+1)
-		cur[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
-		}
-		prev = cur
-	}
-	return prev[len(b)]
-}
-
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
 	return line
@@ -542,7 +502,7 @@ func (c *checker) checkActions() {
 				continue
 			}
 			msg := fmt.Sprintf("unknown action %q", st.Uses)
-			if s := suggest(st.Uses, c.opts.Actions); s != "" {
+			if s := suggest.Closest(st.Uses, c.opts.Actions); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			c.add(SeverityError, c.line(path), c.stepWhere(i, j), "%s", msg)
@@ -576,7 +536,7 @@ func (c *checker) checkEmbedded() {
 					return
 				}
 				msg := fmt.Sprintf("%s: step %d uses %q, which is not an action of Probe or a name under actions", file, k, uses)
-				if s := suggest(uses, append(slices.Sorted(maps.Keys(c.wf.Actions)), c.opts.Actions...)); s != "" {
+				if s := suggest.Closest(uses, append(slices.Sorted(maps.Keys(c.wf.Actions)), c.opts.Actions...)); s != "" {
 					msg += fmt.Sprintf("; did you mean %q?", s)
 				}
 				c.add(SeverityError, line, c.stepWhere(i, j), "%s", msg)
@@ -659,7 +619,7 @@ func (c *checker) checkDefaults(v any, jp, where string) {
 		}
 		if len(c.opts.Actions) > 0 && !slices.Contains(c.opts.Actions, action) && !actionref.IsExternal(action) {
 			msg := fmt.Sprintf("defaults: no action is named %q, so its defaults apply to no step", action)
-			if s := suggest(action, c.opts.Actions); s != "" {
+			if s := suggest.Closest(action, c.opts.Actions); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			c.add(SeverityError, c.line(path), where, "%s", msg)
@@ -693,7 +653,7 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 			continue
 		}
 		msg := fmt.Sprintf("%s: unknown key %q for the %s action", field, key, action)
-		if s := suggest(key, params); s != "" {
+		if s := suggest.Closest(key, params); s != "" {
 			msg += fmt.Sprintf("; did you mean %q?", s)
 		}
 		c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
@@ -713,7 +673,7 @@ func (c *checker) checkNeeds() {
 			}
 			unknown = true
 			msg := fmt.Sprintf("needs: no job has the id %q", need)
-			if s := suggest(need, slices.Sorted(maps.Keys(ids))); s != "" {
+			if s := suggest.Closest(need, slices.Sorted(maps.Keys(ids))); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d].needs", i)), c.jobWhere(i), "%s", msg)
@@ -919,7 +879,7 @@ func (c *checker) checkNames() {
 			msg := fmt.Sprintf("vars.%s is not defined by the workflow, so it is nil unless --var gives it", chain[0])
 			if slices.Contains(later, chain[0]) {
 				msg = fmt.Sprintf("vars.%s is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it", chain[0])
-			} else if s := suggest(chain[0], vars); s != "" {
+			} else if s := suggest.Closest(chain[0], vars); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			add(SeverityWarning, "%s", msg)
@@ -963,8 +923,8 @@ func nameHint(name string, names []string) string {
 	switch {
 	case name == "null" || name == "undefined":
 		return "; did you mean nil?"
-	case suggest(name, names) != "":
-		return fmt.Sprintf("; did you mean %q?", suggest(name, names))
+	case suggest.Closest(name, names) != "":
+		return fmt.Sprintf("; did you mean %q?", suggest.Closest(name, names))
 	case step && name == "steps":
 		return "; what an earlier step publishes is read under outputs"
 	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":
@@ -1067,7 +1027,7 @@ func (c *checker) outputRead(chain []string, byID, byKey map[string][]publisher,
 	pubs := byKey[chain[0]]
 	if len(pubs) == 0 {
 		msg := "is not published by any step"
-		if s := suggest(chain[0], publishedNames(byID, byKey)); s != "" {
+		if s := suggest.Closest(chain[0], publishedNames(byID, byKey)); s != "" {
 			msg += fmt.Sprintf("; did you mean %q?", s)
 		}
 		return msg, SeverityError
