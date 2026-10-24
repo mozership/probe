@@ -2253,8 +2253,8 @@ func TestWorkflow_Start_JobIDsOfAWorkflowMadeInCode(t *testing.T) {
 }
 
 // TestWorkflow_WarnsOfShortSecret covers a declared secret too short to
-// mask: the output is left readable, and a warning names the secret once
-// without showing its value.
+// mask inside other text: the output is left readable, and a warning names
+// the secret once without showing its value.
 func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 	w := &Workflow{
 		Name:    "short secret",
@@ -2281,7 +2281,7 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 	if !strings.Contains(stdout, "probe.StepContext") {
 		t.Errorf("a short secret should not be cut out of words:\n%s", stdout)
 	}
-	warn := "[WARN] the secret PIN is shorter than 4 characters and is not masked"
+	warn := "[WARN] the secret PIN is shorter than 4 characters, so it is masked only where it is a whole value; use one of at least 4\n"
 	if n := strings.Count(stderr, warn); n != 1 {
 		t.Errorf("want the warning once, got %d times:\n%s", n, stderr)
 	}
