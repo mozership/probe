@@ -92,6 +92,7 @@ probe workflow.yml                    # run; the report goes to stdout
 probe base.yml staging.yml            # merge files, later ones override; base.yml,staging.yml too
 probe --env-file .env workflow.yml    # variables for vars to read, where the environment has none
 probe --var url=http://localhost:8080 workflow.yml  # give a var in place of the one written
+probe --job tests workflow.yml        # run one job, with the jobs it needs
 probe check workflow.yml              # find what is wrong or weak without running
 probe fmt workflow.yml                # lay the file out the one way, in place
 probe dag workflow.yml                # check the job graph without running

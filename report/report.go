@@ -147,6 +147,30 @@ type Report struct {
 	// Baseline is the run the response times were compared to; nil when
 	// they were compared to none. See Compare.
 	Baseline *BaselineRun `json:"baseline,omitempty"`
+	// Selection is the jobs the run was narrowed to with --job; nil when
+	// every job of the workflow ran.
+	Selection *Selection `json:"selection,omitempty"`
+}
+
+// Selection is the jobs a run was narrowed to. The jobs that ran are those
+// of the report: the selected ones, the jobs they need, and the jobs that
+// always run after those.
+type Selection struct {
+	// Jobs are the ids of the jobs selected.
+	Jobs []string `json:"jobs"`
+	// Total is how many jobs the workflow has.
+	Total int `json:"total"`
+}
+
+// Partial says, when the report is of a run narrowed to some of the jobs
+// of its workflow, how many of them ran and which were selected; it is
+// empty for a run of every job.
+func (r *Report) Partial() string {
+	if r.Selection == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d of the %d jobs of the workflow ran, selected with --job: %s",
+		len(r.Jobs), r.Selection.Total, strings.Join(r.Selection.Jobs, ", "))
 }
 
 // Summary counts jobs and steps by status.
