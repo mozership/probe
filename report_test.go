@@ -786,3 +786,34 @@ func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
 		t.Errorf("the error should not be told as it happens outside a verbose run, got:\n%s", errOut)
 	}
 }
+
+// TestWorkflow_HelloPassesWithoutTest passes a hello step without a test,
+// once and repeated, as it does nothing that could fail, while a step of
+// another action without a test is untested.
+func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
+	answer := map[string]any{"res": map[string]any{"status": 0}, "rt": "1ms"}
+	for _, count := range []int{0, 2} {
+		runner := &timedRunner{answers: []map[string]any{answer, answer, answer, answer}}
+		job := Job{
+			ID:   "report",
+			Name: "Report",
+			Steps: []*Step{
+				{Name: "Echo", Uses: "hello", Echo: "done", actionRunner: runner},
+				{Name: "Unchecked", Uses: "http", actionRunner: runner},
+			},
+		}
+		if count > 0 {
+			job.Repeat = &Repeat{Count: count}
+		}
+		workflow := &Workflow{Name: "Hello", Jobs: []Job{job}, printer: newBufferPrinter()}
+
+		r := startWithReport(t, workflow)
+		steps := r.Jobs[0].Steps
+		if steps[0].Status != report.Passed {
+			t.Errorf("count %d: hello step = %q, want %q", count, steps[0].Status, report.Passed)
+		}
+		if steps[1].Status != report.Untested {
+			t.Errorf("count %d: http step = %q, want %q", count, steps[1].Status, report.Untested)
+		}
+	}
+}

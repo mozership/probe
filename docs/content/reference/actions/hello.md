@@ -32,7 +32,7 @@ steps:
 
 ## Response Object
 
-The step always succeeds, and whatever was passed in comes back unchanged.
+The step always succeeds, and whatever was passed in comes back unchanged. A step without a `test` passes, rather than being shown as untested, and `probe check` does not warn of it.
 
 | Property | Type | Description |
 |----------|------|-------------|

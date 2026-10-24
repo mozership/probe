@@ -52,7 +52,8 @@ type StepRepeatCounter struct {
 	// only the count.
 	Failure *StepFailure
 	// Checked is whether an action checked a response against a contract,
-	// which checks the step as a test does.
+	// which checks the step as a test does, or the step is one that passes
+	// without being checked, as one of the hello action does.
 	Checked bool
 	// Contract is what the first iteration's response was matched to in
 	// its contract.
