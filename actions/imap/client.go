@@ -21,7 +21,7 @@ import (
 
 type Req struct {
 	Host            string        `map:"host" validate:"required"`
-	Port            int           `map:"port" validate:"required"`
+	Port            int           `map:"port"`
 	Username        string        `map:"username" validate:"required"`
 	Password        string        `map:"password" validate:"required"`
 	TLS             bool          `map:"tls"`
