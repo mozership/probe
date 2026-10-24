@@ -1535,6 +1535,32 @@ func TestWorkflow_Start_ReportsJobsWithGeneratedIDs(t *testing.T) {
 	}
 }
 
+// TestWorkflow_Start_StreamLabelsJobsByName covers the progress lines of a
+// stream run, which are labelled by the names of the jobs, with the vars in
+// them, rather than by the ids the jobs were given.
+func TestWorkflow_Start_StreamLabelsJobsByName(t *testing.T) {
+	w := newOrderTestWorkflow(false)
+	w.Vars = map[string]any{"env": "staging"}
+	w.Jobs[1].Name = "Bravo {{ vars.env }}"
+	p := NewPrinter(false)
+	p.spinner = nil
+	errOut := new(bytes.Buffer)
+	p.errWriter = errOut
+	w.printer = p
+
+	startCapturing(t, w, OutputModeStream)
+
+	progress := errOut.String()
+	for _, want := range []string{"[Alpha]", "[Bravo staging]", "[Charlie]"} {
+		if !strings.Contains(progress, want) {
+			t.Errorf("progress log should contain %q, got:\n%s", want, progress)
+		}
+	}
+	if strings.Contains(progress, "job_") {
+		t.Errorf("progress log should not name a job by the id it was given, got:\n%s", progress)
+	}
+}
+
 // TestWorkflow_Start_StreamAndSpinnerAgree pins the guarantee that streaming
 // changes when the report is written, not what it says.
 func TestWorkflow_Start_StreamAndSpinnerAgree(t *testing.T) {
