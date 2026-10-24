@@ -665,3 +665,30 @@ func TestMasker_MapRedactsURLPassword(t *testing.T) {
 		t.Errorf("a password with an @ = %v", got["url"])
 	}
 }
+
+// TestMasker_ShortSecretAsNumber covers a short secret that reaches Map as a
+// number, as 123 does when a JSON body is parsed: it is masked as the whole
+// value it is, while other numbers are left as they are.
+func TestMasker_ShortSecretAsNumber(t *testing.T) {
+	m := New([]string{"PIN"}, map[string]string{"PIN": "123"})
+	got := m.Map(map[string]any{
+		"pin":   float64(123),
+		"int":   123,
+		"other": float64(1234),
+		"list":  []any{float64(123), float64(12)},
+		"flag":  true,
+	})
+	want := map[string]any{
+		"pin":   "<secret:PIN>",
+		"int":   "<secret:PIN>",
+		"other": float64(1234),
+		"list":  []any{"<secret:PIN>", float64(12)},
+		"flag":  true,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Map() = %#v, want %#v", got, want)
+	}
+	if got := New(nil, nil).Value(float64(123)); got != float64(123) {
+		t.Errorf("a masker with no secrets changed a number: %v", got)
+	}
+}

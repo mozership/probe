@@ -572,8 +572,29 @@ func (m *Masker) value(v any) any {
 		}
 		return out
 	default:
+		return m.number(v)
+	}
+}
+
+// number returns the label of a value too short to mask inside other text
+// when v is a number written as that value, such as 123 parsed from a JSON
+// body, and v itself otherwise.
+func (m *Masker) number(v any) any {
+	if m == nil {
 		return v
 	}
+	forms, ok := numberForms(v)
+	if !ok {
+		return v
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, f := range forms {
+		if label, ok := m.exact[f]; ok {
+			return label
+		}
+	}
+	return v
 }
 
 // leaf hides the secret values in s, a whole value of a request or a

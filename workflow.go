@@ -148,7 +148,7 @@ func (w *Workflow) Start(c Config) error {
 	// Say so once, by name, so that the user can lengthen it rather than
 	// trust it to be hidden.
 	for _, name := range w.printer.Masker().TooShort() {
-		w.printer.LogWarn("the secret %s is shorter than %d characters, so it is masked only where it is a whole value; use one of at least %d", name, mask.MinLength, mask.MinLength)
+		w.printer.LogWarn("the secret %s is shorter than %d characters, so it is masked only where it is a whole value; use a value of at least %d characters", name, mask.MinLength, mask.MinLength)
 	}
 
 	// A reporter tracks how far the report has been emitted, which is state

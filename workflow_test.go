@@ -2281,7 +2281,7 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 	if !strings.Contains(stdout, "probe.StepContext") {
 		t.Errorf("a short secret should not be cut out of words:\n%s", stdout)
 	}
-	warn := "[WARN] the secret PIN is shorter than 4 characters, so it is masked only where it is a whole value; use one of at least 4\n"
+	warn := "[WARN] the secret PIN is shorter than 4 characters, so it is masked only where it is a whole value; use a value of at least 4 characters\n"
 	if n := strings.Count(stderr, warn); n != 1 {
 		t.Errorf("want the warning once, got %d times:\n%s", n, stderr)
 	}
