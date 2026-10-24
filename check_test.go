@@ -468,6 +468,64 @@ jobs:
 			},
 		},
 		{
+			name: "a step without an id whose name another step may take first",
+			workflow: `name: first
+jobs:
+- name: A
+  needs: [b]
+  steps:
+  - name: Later
+    uses: http
+    with:
+      get: /a
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: B
+  id: b
+  steps:
+  - name: Without an id first
+    uses: http
+    with:
+      get: /b0
+    test: res.code == 200
+    outputs:
+      session: res.body.session
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /b
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      session: res.body.session
+- name: C
+  steps:
+  - name: Parallel without an id
+    uses: http
+    with:
+      get: /c
+    test: res.code == 200
+    outputs:
+      code: res.code
+- name: D
+  steps:
+  - name: Parallel too
+    id: d
+    uses: http
+    with:
+      get: /d
+    test: res.code == 200
+    outputs:
+      code: res.code
+`,
+			want: []want{
+				{SeverityWarning, 12, `outputs: token is also published by job 1 "B", step 1 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 40, `outputs: code is also published by job 3 "D", step 0 "Parallel too", so outputs.code holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+			},
+		},
+		{
 			name: "steps nothing checks and tests that read nothing",
 			workflow: `name: tests
 jobs:

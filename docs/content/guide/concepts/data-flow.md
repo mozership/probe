@@ -165,7 +165,7 @@ steps:
       Test Duration: {{outputs['app-test'].test_duration}}ms
 ```
 
-An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and each later value is read through its step's id, as `outputs.<id>.<name>`. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also a step's id stays that step's outputs. A step without an id whose name is taken so has no way to read its value, and Probe warns of it; `probe check` also warns of `outputs.<name>` read by itself while more than one step publishes the name.
+An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and each later value is read through its step's id, as `outputs.<id>.<name>`. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also the id of a step that publishes is that step's outputs or the value, whichever is published first, so give such an output another name; `probe check` warns of it. A step without an id whose name another step took first has no way to read its value, and Probe warns of it; `probe check` also warns of `outputs.<name>` read by itself while more than one step publishes the name.
 
 ## Cross-Job Data Flow
 

@@ -437,9 +437,9 @@ jobs:
         url: "{{vars.MONITORING_API}}/service/{{vars.SERVICE_NAME}}/health-history"
       test: res.code == 200
       outputs:
-        recent_failures: res.body.failures_last_5_minutes
-        error_rate: res.body.error_rate_percentage
-        last_success: res.body.last_success_timestamp
+        recent_failures: res.body?.failures_last_5_minutes ?? 0
+        error_rate: res.body?.error_rate_percentage ?? 0
+        last_success: res.body?.last_success_timestamp ?? 0
 
     - name: Circuit Breaker Decision
       uses: hello
