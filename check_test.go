@@ -410,6 +410,45 @@ jobs:
 `,
 		},
 		{
+			name: "output names published twice or taken by a step id",
+			workflow: `name: names
+jobs:
+- name: Users
+  steps:
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /login
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+  - name: Refresh
+    uses: http
+    with:
+      get: /refresh
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: Admin
+  steps:
+  - name: Admin login
+    id: admin
+    uses: http
+    with:
+      get: /admin
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      login: res.body.user
+`,
+			want: []want{
+				{SeverityWarning, 19, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first; give the step an id to read this one through it`},
+				{SeverityWarning, 29, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first; read outputs.admin.token for this one`},
+				{SeverityWarning, 30, `outputs: login has the name of the step "login", so outputs.login is that step's outputs; read outputs.admin.login for this one`},
+			},
+		},
+		{
 			name: "steps nothing checks and tests that read nothing",
 			workflow: `name: tests
 jobs:

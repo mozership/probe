@@ -743,6 +743,7 @@ func (c *checker) checkOutputs() {
 			}
 		}
 	}
+	c.checkOutputNames(byKey)
 	needs := c.ancestors()
 
 	c.eachExpr(func(e exprAt) {
@@ -768,6 +769,38 @@ func (c *checker) checkOutputs() {
 			}
 		}
 	})
+}
+
+// checkOutputNames warns of an output whose name another step publishes
+// too, or that is the id of a step, as a run does: outputs.<name> holds the
+// value of the step that publishes it first, or the outputs of the step of
+// that id, and not this one.
+func (c *checker) checkOutputNames(byKey map[string][]publisher) {
+	ids := map[string]bool{}
+	for _, job := range c.wf.Jobs {
+		for _, st := range job.Steps {
+			if st.ID != "" {
+				ids[st.ID] = true
+			}
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(byKey)) {
+		pubs := byKey[key]
+		for n, p := range pubs {
+			instead := fmt.Sprintf("read outputs.%s.%s for this one", p.id, key)
+			if p.id == "" {
+				instead = "give the step an id to read this one through it"
+			}
+			path := fmt.Sprintf("jobs[%d].steps[%d].outputs.%s", p.job, p.step, key)
+			switch {
+			case ids[key]:
+				c.add(SeverityWarning, c.line(path), c.stepWhere(p.job, p.step), "outputs: %s has the name of the step %q, so outputs.%s is that step's outputs; %s", key, key, key, instead)
+			case n > 0:
+				first := pubs[0]
+				c.add(SeverityWarning, c.line(path), c.stepWhere(p.job, p.step), "outputs: %s is also published by %s, so outputs.%s holds the value of whichever publishes it first; %s", key, c.stepWhere(first.job, first.step), key, instead)
+			}
+		}
+	}
 }
 
 // exprAt is an expression of a job or a step, or one of the templates of

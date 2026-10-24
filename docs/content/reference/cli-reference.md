@@ -475,6 +475,7 @@ It reports as an **error**:
 It reports as a **warning**:
 
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
+- an output whose name another step publishes too, or that is the id of a step, so that `outputs.<name>` holds the value of the step that publishes it first, or the outputs of the step of that id; read it through the step's id, as `outputs.<id>.<name>`
 - a step that nothing checks: it has no `test`, it is not a step of the hello action, which does nothing that could fail, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`

@@ -475,6 +475,7 @@ workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_ur
 **警告**として報告するもの:
 
 - 読む側のジョブが直接にも間接にも`needs`で指定していないジョブの出力の参照。まだ公開されていないかもしれません
+- ほかのステップも公開している名前の出力や、ステップのidと同じ名前の出力。`outputs.<name>`は、先に公開したステップの値か、そのidのステップの出力になります。`outputs.<id>.<name>`のように、ステップのidを通して読みます
 - 何も検証していないステップ。`test`がなく、何も失敗しないhelloアクションのステップでもなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
 - `1 == 1`のように何も読まない`test`。ステップの実行結果によらず、テストの結果が変わりません
 - `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
