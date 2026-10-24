@@ -155,23 +155,32 @@ Time T4: notification completes → workflow done
 Jobs can have multiple dependencies and form complex execution graphs:
 
 ```yaml
+name: Layered Service Test
+description: Run setup, services, integration and a report in layers
+
 jobs:
-  # Foundation layer (parallel)
+# Foundation layer (parallel)
 - id: database-setup
   name: Database Setup
   steps:
     - name: Initialize Database
       id: database-setup
+      uses: hello
+      with:
+        session_id: "{{random_str(16)}}"
       outputs:
-        db_session_id: "{{random_str(16)}}"
+        db_session_id: res.session_id
 
 - id: cache-setup
   name: Cache Setup
   steps:
     - name: Initialize Cache
       id: cache-setup
+      uses: hello
+      with:
+        session_id: "{{random_str(16)}}"
       outputs:
-        cache_session_id: "{{random_str(16)}}"
+        cache_session_id: res.session_id
 
 # Service layer (depends on foundation)
 - id: user-service
@@ -180,8 +189,12 @@ jobs:
   steps:
     - name: Test User Service
       id: user-service
+      uses: hello
+      with:
+        db_session_id: "{{outputs['database-setup'].db_session_id}}"
+        cache_session_id: "{{outputs['cache-setup'].cache_session_id}}"
       outputs:
-        user_service_ready: true
+        user_service_ready: res.db_session_id != "" && res.cache_session_id != ""
 
 - id: order-service
   name: Order Service Test
@@ -189,8 +202,11 @@ jobs:
   steps:
     - name: Test Order Service
       id: order-service
+      uses: hello
+      with:
+        db_session_id: "{{outputs['database-setup'].db_session_id}}"
       outputs:
-        order_service_ready: true
+        order_service_ready: res.db_session_id != ""
 
 # Integration layer (depends on services)
 - id: integration-test
@@ -201,7 +217,7 @@ jobs:
       uses: hello
       echo: "Testing integration between user and order services"
 
-# Reporting layer (depends on everything)
+# Reporting layer (depends on everything, through integration-test)
 - id: final-report
   name: Final Report
   needs: [integration-test]
@@ -210,10 +226,10 @@ jobs:
       uses: hello
       echo: |
         Execution Report:
-        Database Setup: {{outputs['database-setup'] ? "✅" : "❌"}}
-        Cache Setup: {{outputs['cache-setup'] ? "✅" : "❌"}}
-        User Service: {{outputs['user-service'] ? "✅" : "❌"}}
-        Order Service: {{outputs['order-service'] ? "✅" : "❌"}}
+        Database Setup: {{outputs['database-setup'].db_session_id != nil ? "✅" : "❌"}}
+        Cache Setup: {{outputs['cache-setup'].cache_session_id != nil ? "✅" : "❌"}}
+        User Service: {{outputs['user-service'].user_service_ready ? "✅" : "❌"}}
+        Order Service: {{outputs['order-service'].order_service_ready ? "✅" : "❌"}}
 ```
 
 **Execution Timeline:**
