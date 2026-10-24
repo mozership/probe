@@ -28,6 +28,8 @@ description: Check if my website is responding correctly
 jobs:
 - id: health-check
   name: Website Health Check
+  # 失敗したステップより後のステップをスキップする
+  fail_fast: true
   steps:
     - name: Check Homepage
       uses: http
@@ -62,13 +64,13 @@ $ probe my-first-workflow.yml
 My First Website Check
 Check if my website is responding correctly
 
-⏺ Website Health Check (Completed in 1.23s)
-  ⎿ 0. ✔︎  Check Homepage (245ms)
-     1. ✔︎  Check API Endpoint (189ms)
-     2. ✔︎  Success Message
-       ✅ All checks passed! Website is healthy.
+⏺ Website Health Check (Completed in 1.73s)
+  ⎿ 0. ✓  Check Homepage
+     1. ✓  Check API Endpoint
+     2. ✓  Success Message
+           ✅ All checks passed! Website is healthy.
 
-Total workflow time: 1.23s ✔︎ All jobs succeeded
+Total workflow time: 1.73s ✓ All jobs succeeded
 ```
 
 ### 3. 実行内容の理解
@@ -79,7 +81,8 @@ Total workflow time: 1.23s ✔︎ All jobs succeeded
 2. **ジョブ定義**: `health-check`ジョブに実行するステップをまとめる
 3. **HTTPアクション**: 2つのステップでHTTPリクエストを行い、エンドポイントをテスト
 4. **テストアサーション**: 各HTTPステップにレスポンスを検証する`test`を含む
-5. **エコー出力**: すべてのチェックが通ったときに、`echo`で成功メッセージを表示
+5. **フェイルファスト**: `fail_fast: true`は失敗したステップより後のステップをスキップするので、成功メッセージは両方のチェックが通ったときだけ表示される
+6. **エコー出力**: `hello`アクションは何もせずに成功し、その`echo`でメッセージを表示
 
 ## 詳細出力の追加
 
@@ -90,6 +93,65 @@ $ probe my-first-workflow.yml --verbose
 ```
 
 これにより、各HTTPリクエストとレスポンスの詳細情報が表示されます。
+
+## よくある次の一歩
+
+最初のワークフローを育てるときの変更は、ほとんどが2つです。複数の環境に対して実行することと、チェックが失敗したときの動きを決めることです。
+
+### 複数の環境をチェックする
+
+ワークフローを変更して、異なる環境をチェックします：
+
+```yaml
+name: Multi-Environment Health Check
+description: Check health across multiple environments
+
+jobs:
+- id: production-check
+  name: Production Health Check
+  steps:
+    - name: Check Production API
+      uses: http
+      with:
+        url: https://api.myapp.com/health
+        method: GET
+      test: res.code == 200
+
+- id: staging-check
+  name: Staging Health Check
+  steps:
+    - name: Check Staging API
+      uses: http
+      with:
+        url: https://staging-api.myapp.com/health
+        method: GET
+      test: res.code == 200
+```
+
+### エラー処理を追加する
+
+プライマリサービスが失敗したときだけフォールバックをチェックします。実行は失敗したままなので失敗は隠れませんが、フォールバックが動いているかもわかります：
+
+```yaml
+- name: Check Service
+  id: primary
+  uses: http
+  with:
+    url: https://api.example.com/status
+    method: GET
+  test: res.code == 200
+  outputs:
+    code: res.code
+
+- name: Fallback Check
+  # プライマリサービスが200を返さなかったときだけ実行する
+  skipif: outputs.primary?.code == 200
+  uses: http
+  with:
+    url: https://backup-api.example.com/status
+    method: GET
+  test: res.code == 200
+```
 
 ## 次のステップ
 
