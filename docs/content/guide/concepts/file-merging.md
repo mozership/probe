@@ -4,10 +4,12 @@ Probe can build one workflow out of several files. This is how configuration is 
 
 ## How Merging Works
 
-Pass the files as one comma-separated argument:
+Pass the files as separate arguments, or as one comma-separated argument. The two forms mean the same and can be mixed:
 
 ```bash
+probe base.yml production.yml
 probe base.yml,production.yml
+probe common.yml,base.yml production.yml
 ```
 
 Probe reads the files **in order and concatenates them into a single YAML document**, then parses that document. Nothing more clever happens: there is no per-key deep merge.

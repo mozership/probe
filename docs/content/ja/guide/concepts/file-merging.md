@@ -4,10 +4,12 @@ Probeは複数のファイルから1つのワークフローを組み立てら�
 
 ## マージの仕組み
 
-ファイルはカンマ区切りの1引数として渡します。
+ファイルは別々の引数として渡すか、カンマ区切りの1引数として渡します。どちらも意味は同じで、混ぜて使えます。
 
 ```bash
+probe base.yml production.yml
 probe base.yml,production.yml
+probe common.yml,base.yml production.yml
 ```
 
 Probeはファイルを**順番に読んで1つのYAMLドキュメントに連結し**、それを解析します。それ以上のことはしません。キーごとの深いマージは行われません。
