@@ -297,3 +297,23 @@ func TestMaskClauseBeforeCutting(t *testing.T) {
 		}
 	}
 }
+
+// A URL whose credentials stand where a long value is cut is hidden before
+// the cut, which would otherwise leave a part of them that no scan finds.
+func TestMaskClauseHidesURLCredentialsBeforeCutting(t *testing.T) {
+	printer := NewPrinter(false)
+	printer.SetMasker(mask.New(nil, nil))
+	pad := strings.Repeat("x", maxOperandLength-30)
+	body := map[string]any{"pad": pad, "next": "https://x/?user=a&password=hunter2-secret&page=2"}
+	text := pad + " postgres://app:hunter2-secret@db/main"
+
+	clause := maskClause(printer.Masker(), expr.Clause{Expr: "res.body == {}", Operands: []expr.Operand{
+		{Expr: "res.body", Value: body},
+		{Expr: "res.text", Value: text},
+	}})
+	for _, out := range []string{falseClauseDetail(clause), clauseSummary(clause)} {
+		if strings.Contains(out, "hun") {
+			t.Errorf("a part of a URL's password is shown: %q", out)
+		}
+	}
+}

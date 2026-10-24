@@ -449,16 +449,6 @@ var urlAuthorityEnd = func() (set [256]bool) {
 	return set
 }()
 
-// urlQueryEnd holds the bytes that end the query of a URL found in text:
-// the start of its fragment, and what stands around a URL in a message or a
-// log line, as for urlAuthorityEnd.
-var urlQueryEnd = func() (set [256]bool) {
-	for _, c := range []byte("#\"'`<> \t\r\n") {
-		set[c] = true
-	}
-	return set
-}()
-
 // urlTextEnd holds the bytes that stand around a URL in a message or a log
 // line, and so end it.
 var urlTextEnd = func() (set [256]bool) {
@@ -469,10 +459,17 @@ var urlTextEnd = func() (set [256]bool) {
 }()
 
 // queryCredentialKeys are names of query parameters whose values are
-// credentials: those of sensitiveKeys and a few more that are usual in a
-// query.
+// credentials, matched whatever their case: those of sensitiveKeys, and
+// those that carry a password, a token or a signature in a URL, as OAuth,
+// presigned S3 and GCS URLs, and Azure shared access signatures do. A
+// generic key is left out: it more often names something else.
 var queryCredentialKeys = func() []string {
-	keys := []string{"passwd", "pass", "pwd", "token", "access_token", "secret", "api_key", "apikey"}
+	keys := []string{
+		"passwd", "pass", "pwd", "secret", "client_secret",
+		"token", "access_token", "refresh_token", "id_token",
+		"api_key", "apikey",
+		"x-amz-security-token", "x-amz-signature", "x-goog-signature", "sig",
+	}
 	for k := range sensitiveKeys {
 		keys = append(keys, k)
 	}
@@ -495,43 +492,66 @@ func isQueryCredential(key string) bool {
 // replaced by <redacted>, whatever their length and whether or not they were
 // ever learned: the password of its user info, as in postgres://app:pw@db in
 // a driver's error or a remote quoted in a response body, and the values of
-// its query parameters that hold credentials, as in ?user=a&password=b.
-// Plain output, which holds no @ or ? or no "://", is returned after quick
-// scans.
+// its query and fragment parameters that hold credentials, as in
+// ?user=a&password=b or #access_token=t. Plain output, which holds none of
+// @, ? and #, or no "://", is returned after quick scans.
 func redactURLPasswords(s string) string {
-	if strings.IndexByte(s, '@') < 0 && strings.IndexByte(s, '?') < 0 || !strings.Contains(s, "://") {
+	if strings.IndexByte(s, '@') < 0 && strings.IndexByte(s, '?') < 0 && strings.IndexByte(s, '#') < 0 ||
+		!strings.Contains(s, "://") {
 		return s
 	}
-	// The query goes first: the user info is scanned back from an @ to the
-	// "://" before it, and a <redacted> put in the user info would stop the
-	// scan of the query back to it.
+	// The parameters go first: the user info is scanned back from an @ to
+	// the "://" before it, and a <redacted> put in the user info would stop
+	// the scan of the parameters back to it.
 	return redactUserinfoPasswords(redactQueryCredentials(s))
 }
 
-// redactQueryCredentials returns s with the value of every query parameter
-// of a URL in it that holds a credential, such as password or token,
-// replaced by <redacted>. A value ends at the next &, at the fragment, or
-// at what stands around the URL.
+// jsonAmpersand is how Go's encoding/json writes an &, so that a URL in a
+// JSON body or in a value Probe writes as JSON separates its parameters so.
+const jsonAmpersand = `\u0026`
+
+// nextParam returns where the parameter at the start of t ends, and how
+// many bytes the separator after it takes: an &, as written or as JSON
+// writes it, or the # that starts the fragment.
+func nextParam(t string) (stop, sep int) {
+	for i := 0; i < len(t); i++ {
+		switch t[i] {
+		case '&', '#':
+			return i, 1
+		case '\\':
+			if strings.HasPrefix(t[i:], jsonAmpersand) {
+				return i, len(jsonAmpersand)
+			}
+		}
+	}
+	return len(t), 0
+}
+
+// redactQueryCredentials returns s with the value of every parameter of the
+// query or the fragment of a URL in it that holds a credential, such as
+// password or access_token, replaced by <redacted>. Parameters are separated
+// by &, also as JSON writes it, \u0026, or as HTML does, &amp;. A value ends
+// at the next of them, at the fragment, or at what stands around the URL.
 func redactQueryCredentials(s string) string {
-	if strings.IndexByte(s, '?') < 0 {
+	if strings.IndexByte(s, '?') < 0 && strings.IndexByte(s, '#') < 0 {
 		return s
 	}
 	var b strings.Builder
 	done := 0
 	for i := 0; i < len(s); {
-		k := strings.IndexByte(s[i:], '?')
+		k := strings.IndexAny(s[i:], "?#")
 		if k < 0 {
 			break
 		}
 		q := i + k
-		// The URL the ? stands in runs back to the text around it, and
-		// its query on to the fragment or the end of the URL.
+		// The URL the ? or # stands in runs back to the text around it,
+		// and its parameters on to the end of the URL.
 		start := q
 		for start > i && !urlTextEnd[s[start-1]] {
 			start--
 		}
 		end := q + 1
-		for end < len(s) && !urlQueryEnd[s[end]] {
+		for end < len(s) && !urlTextEnd[s[end]] {
 			end++
 		}
 		i = end
@@ -539,12 +559,11 @@ func redactQueryCredentials(s string) string {
 			continue
 		}
 		for p := q + 1; p < end; {
-			stop := end
-			if amp := strings.IndexByte(s[p:end], '&'); amp >= 0 {
-				stop = p + amp
-			}
+			stop, sep := nextParam(s[p:end])
+			stop += p
 			param := s[p:stop]
-			if eq := strings.IndexByte(param, '='); eq > 0 && eq+1 < len(param) && isQueryCredential(param[:eq]) {
+			if eq := strings.IndexByte(param, '='); eq > 0 && eq+1 < len(param) &&
+				isQueryCredential(strings.TrimPrefix(param[:eq], "amp;")) {
 				if done == 0 {
 					b.Grow(len(s))
 				}
@@ -552,7 +571,10 @@ func redactQueryCredentials(s string) string {
 				b.WriteString(redactedValue)
 				done = stop
 			}
-			p = stop + 1
+			if sep == 0 {
+				break
+			}
+			p = stop + sep
 		}
 	}
 	if done == 0 {

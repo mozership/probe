@@ -833,7 +833,14 @@ func TestMasker_StringRedactsQueryCredentials(t *testing.T) {
 			`https://h/?pass=<redacted>&passwd=<redacted>&pwd=<redacted>&token=<redacted>&access_token=<redacted>&secret=<redacted>&api_key=<redacted>&apikey=<redacted>&session_token=<redacted>`},
 		{"case-insensitive", `https://h/x?Token=abc&API_KEY=def`, `https://h/x?Token=<redacted>&API_KEY=<redacted>`},
 		{"other params", `GET https://api.example.com/users?page=2&q=token&sort=pass`, `GET https://api.example.com/users?page=2&q=token&sort=pass`},
-		{"fragment", `https://h/?token=abc#token=frag`, `https://h/?token=<redacted>#token=frag`},
+		{"fragment", `https://h/?token=abc#token=frag`, `https://h/?token=<redacted>#token=<redacted>`},
+		{"oauth implicit flow", `redirect to https://app/cb#access_token=at&token_type=bearer&id_token=it&state=s`, `redirect to https://app/cb#access_token=<redacted>&token_type=bearer&id_token=<redacted>&state=s`},
+		{"fragment without parameters", `https://github.com/o/r/issues/1#issuecomment-2 and #3`, `https://github.com/o/r/issues/1#issuecomment-2 and #3`},
+		{"json ampersand", `{"next":"https://x/?user=a\u0026password=b\u0026page=2"}`, `{"next":"https://x/?user=a\u0026password=<redacted>\u0026page=2"}`},
+		{"html ampersand", `<a href="https://x/?user=a&amp;password=b&amp;page=2">`, `<a href="https://x/?user=a&amp;password=<redacted>&amp;page=2">`},
+		{"added keys", `https://h/?client_secret=1&refresh_token=2&X-Amz-Security-Token=3&X-Amz-Signature=4&X-Goog-Signature=5&sig=6&key=7&sv=2022`,
+			`https://h/?client_secret=<redacted>&refresh_token=<redacted>&X-Amz-Security-Token=<redacted>&X-Amz-Signature=<redacted>&X-Goog-Signature=<redacted>&sig=<redacted>&key=7&sv=2022`},
+		{"semicolon parameters", `jdbc:sqlserver://h;password=x`, `jdbc:sqlserver://h;password=x`},
 		{"in quotes", `open "mongodb://h/db?authSource=admin&password=p%40ss%26w": refused`, `open "mongodb://h/db?authSource=admin&password=<redacted>": refused`},
 		{"key=value", `level=error url=https://h/?token=t0k&x=1 err=refused`, `level=error url=https://h/?token=<redacted>&x=1 err=refused`},
 		{"empty value", `https://h/?token=&page=1`, `https://h/?token=&page=1`},
@@ -870,5 +877,19 @@ func TestMasker_MapRedactsQueryCredentials(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Map() = %#v, want %#v", got, want)
+	}
+}
+
+// TestMasker_StringRedactsQueryCredentialsInJSON covers a URL in a value
+// encoding/json wrote, which writes each & as \u0026, as a Go server's body
+// and the value of a false condition are.
+func TestMasker_StringRedactsQueryCredentialsInJSON(t *testing.T) {
+	js, err := json.Marshal(map[string]string{"next": "https://x/?user=a&password=b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := New(nil, nil).String(string(js))
+	if strings.Contains(got, "password=b") || !strings.Contains(got, `password=<redacted>"`) {
+		t.Errorf("String(%s) = %s", js, got)
 	}
 }
