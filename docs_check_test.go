@@ -93,23 +93,23 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 		for n, m := range probe.DocsYAMLBlock.FindAllSubmatchIndex(data, -1) {
 			meta := strings.Fields(string(data[m[2]:m[3]]))
 			body := data[m[4]:m[5]]
+			line := strings.Count(string(data[:m[4]]), "\n") + 1
+			group, err := blockMarkers(meta)
+			if err != nil {
+				t.Errorf("%s:%d: %v", path, line-1, err)
+				continue
+			}
 			if slices.Contains(meta, fragmentMarker) {
 				continue
 			}
 			b := docsBlock{
 				page: path,
-				line: strings.Count(string(data[:m[4]]), "\n") + 1,
+				line: line,
 				file: filepath.Join(dir, fmt.Sprintf("%s-%d.yml", strings.ReplaceAll(path, string(filepath.Separator), "_"), n)),
 				base: slices.Contains(meta, baseMarker),
 			}
 			if err := os.WriteFile(b.file, body, 0o600); err != nil {
 				return err
-			}
-			group := ""
-			for _, w := range meta {
-				if g, ok := strings.CutPrefix(w, mergeMarker); ok {
-					group = g
-				}
 			}
 			if group != "" {
 				if _, ok := groups[group]; !ok {
@@ -138,6 +138,39 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 	if count == 0 {
 		t.Fatalf("no workflow found under %s", root)
 	}
+}
+
+// blockMarkers returns the group a block is in, from the words after its
+// language, or an error for a word that is not a marker or for markers that
+// do not go together, so that a misspelt one does not leave the block
+// unchecked or checked alone.
+func blockMarkers(meta []string) (string, error) {
+	group, base, fragment := "", false, false
+	for _, w := range meta {
+		switch {
+		case w == fragmentMarker:
+			fragment = true
+		case w == baseMarker:
+			base = true
+		case strings.HasPrefix(w, mergeMarker):
+			if group != "" {
+				return "", fmt.Errorf("more than one %s in %q", mergeMarker, strings.Join(meta, " "))
+			}
+			group = strings.TrimPrefix(w, mergeMarker)
+			if group == "" {
+				return "", fmt.Errorf("%s names no group in %q", mergeMarker, strings.Join(meta, " "))
+			}
+		default:
+			return "", fmt.Errorf("unknown word %q after the language; the markers are %s, %s<group> and %s", w, fragmentMarker, mergeMarker, baseMarker)
+		}
+	}
+	switch {
+	case base && group == "":
+		return "", fmt.Errorf("%s without %s<group>", baseMarker, mergeMarker)
+	case fragment && group != "":
+		return "", fmt.Errorf("%s with %s%s: a block is either skipped or merged", fragmentMarker, mergeMarker, group)
+	}
+	return group, nil
 }
 
 // mergeSets returns the sets of blocks a group is checked as: each block not
@@ -196,5 +229,31 @@ func checkDocs(t *testing.T, opts probe.CheckOptions, name string, blocks []docs
 		}
 		f.File = ""
 		t.Errorf("%s: %s", where, f)
+	}
+}
+
+func TestBlockMarkers(t *testing.T) {
+	tests := []struct {
+		meta  string
+		group string
+		ok    bool
+	}{
+		{"", "", true},
+		{"fragment", "", true},
+		{"merge=suite", "suite", true},
+		{"merge=suite base", "suite", true},
+		{"base merge=suite", "suite", true},
+		{"fragmnet", "", false},
+		{"merge=suite bsae", "", false},
+		{"merge=", "", false},
+		{"base", "", false},
+		{"fragment merge=suite", "", false},
+		{"merge=a merge=b", "", false},
+	}
+	for _, tt := range tests {
+		group, err := blockMarkers(strings.Fields(tt.meta))
+		if (err == nil) != tt.ok || group != tt.group {
+			t.Errorf("blockMarkers(%q) = %q, %v; want %q, ok %v", tt.meta, group, err, tt.group, tt.ok)
+		}
 	}
 }
