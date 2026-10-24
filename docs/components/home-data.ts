@@ -217,15 +217,14 @@ export const agentCheck: ReportLine[] = [
 ]
 
 /*
- * The pair below is the second of two runs of `probe signup.yml` against the
- * sign-up of probe-agent's e2e server, with ANTHROPIC_API_KEY and PASSWORD
- * set: the first recorded the steps in signup.json, and this one replayed
- * them without the model. Only the url was swapped for a presentable one,
- * and the lines Probe prints as a step starts and ends were left out, as in
- * heroReport.
+ * The pair below is the literal output of `probe first-note.yml` against the
+ * notes application of probe-agent's e2e server, whose new-note page fails,
+ * with ANTHROPIC_API_KEY and PASSWORD set. Only the url was swapped for a
+ * presentable one, and the lines Probe prints as a step starts and ends were
+ * left out, as in heroReport.
  */
 
-export const browserWorkflow = `name: Sign-up
+export const personaWorkflow = `name: First note
 
 actions:
   agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
@@ -234,39 +233,42 @@ vars:
   password: "{{PASSWORD}}"
 
 jobs:
-- name: Sign-up
+- name: A first-time visitor
   steps:
-  - name: A new user signs up
+  - name: Writes a first note
     uses: agent
     with:
       url: https://staging.example.com/
-      task: |
-        Sign up as Ada Lovelace with the email address
-        {secret:EMAIL} and the password {secret:PASSWORD},
-        agreeing to the terms.
-      expect: |
-        A page welcomes Ada Lovelace by name and says
-        the account is ready.
+      persona: |
+        Carol, who has never used a notes app and is
+        not technical. She signs up with {secret:EMAIL}
+        and the password {secret:PASSWORD}.
+      goal: |
+        Create an account, and write a first note
+        that says "Buy milk".
       secrets:
-        EMAIL: "ada+{{random_str(8)}}@example.com"
+        EMAIL: "carol+{{random_str(8)}}@example.com"
         PASSWORD: "{{vars.password}}"
-      cache: signup.json
       evidence_dir: out
-    test: res.verdict == "pass"`
+    test: res.verdict != "blocked"`
 
-export const browserReport: ReportLine[] = [
-  { text: 'Sign-up', tone: 'title' },
+export const personaReport: ReportLine[] = [
+  { text: 'First note', tone: 'title' },
   { text: '' },
-  { text: '⏺ Sign-up (Completed in 7.37s)', tone: 'job' },
-  { text: '  ⎿ 0. ✓  A new user signs up', tone: 'pass' },
-  { text: "         ✅ pass: After the signup form was submitted, the browser ended on /welcome. The main heading there welcomes Ada Lovelace by name, and the text below it says the account is ready. This matches the expectation. The only failed request was a 404 for the favicon, which doesn't affect the result." },
-  { text: '           evidence: "Welcome to Acme Notes, Ada Lovelace!"' },
+  { text: '⏺ A first-time visitor (Completed in 48.49s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Writes a first note', tone: 'pass' },
+  { text: '         ❌ fail: The account was created: the welcome page greeted Carol and said the account was ready. No note was ever written, though. The only way to write one is the "Write your first note" link to /notes/new, and that page returned a 500 "Internal Server Error" all three times it was loaded. Nothing in the record shows a "Buy milk" note being saved.' },
+  { text: '           evidence: "Welcome to Acme Notes, Carol!"' },
   { text: '           evidence: "Your account {secret:EMAIL} is ready."' },
-  { text: '           cache: hit, 7 steps replayed without the model' },
-  { text: '           7 steps, stopped: done, 6s' },
-  { text: '           report: out/probe-agent-1961736983/report.md' },
+  { text: '           evidence: "link \\"Write your first note\\" href=\\"/notes/new\\""' },
+  { text: '           evidence: "Internal Server Error"' },
+  { text: '           2 findings' },
+  { text: '           🔴 high: The new-note page (/notes/new) fails with a server error (500)', tone: 'error' },
+  { text: '           🟠 medium: After sign-up, nothing shows Carol is signed in and there is no other way to reach notes', tone: 'warning' },
+  { text: '           24 steps, stopped: done, 47s' },
+  { text: '           report: out/probe-agent-3220800333/report.md' },
   { text: '' },
-  { text: 'Total workflow time: 7.37s ✓ All jobs succeeded', tone: 'total' },
+  { text: 'Total workflow time: 48.49s ✓ All jobs succeeded', tone: 'total' },
 ]
 
 export const installCommand = 'brew install mozership/tap/probe'

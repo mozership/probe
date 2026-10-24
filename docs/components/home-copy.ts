@@ -150,11 +150,11 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       ],
     },
     browser: {
-      heading: 'Test the UI in natural language',
-      body: 'Write what a user does in task, and what has to hold afterwards in expect. The agent action has a model carry out the task in a real Chrome, and another call of the model judge it from what the pages showed, quoting them. The steps of a run that passed are recorded, and the next run replays them without the model. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine.',
-      workflowLabel: 'signup.yml',
-      reportLabel: '$ probe signup.yml',
-      note: 'This is the second run. In the first, the model signed up in 10 steps, which were recorded in signup.json; this one replayed them without the model, and only the judge was asked, so each quote was still checked against what the pages showed.',
+      heading: 'What deterministic tests leave out',
+      body: 'The steps above check what can be stated exactly, and they are what should gate a merge. Whether a first-time user gets through, or whether the application still holds up once data and settings pile up on staging, cannot be written as an expression. The agent action takes it in natural language, as a persona and a goal: a model plays the persona in a real Chrome, and another call of the model reviews the run, keeping only what the pages and the requests bear out. Run it with repeat against staging, and it keeps using the application as people do. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine.',
+      workflowLabel: 'first-note.yml',
+      reportLabel: '$ probe first-note.yml',
+      note: 'The first finding is a server error, which an http step would have caught had someone written one. The second is in no test: after signing up, nothing tells Carol she is signed in, nor how to get to her notes. The test of the step asks only that the review ran; the verdict and the findings are the result to read.',
       link: { label: 'Read the agent action reference', href: '/reference/actions/agent' },
     },
     agents: {
@@ -292,11 +292,11 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       ],
     },
     browser: {
-      heading: '画面のテストは自然言語で',
-      body: 'ユーザーが行うことをtaskに、終わったあとに成り立つべきことをexpectに書きます。agentアクションでは、モデルが実際のChromeでタスクを行い、別に呼び出したモデルがページに表示された内容を引用して判定します。通った実行の手順は記録し、次の実行ではモデルを使わずに再生します。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます。',
-      workflowLabel: 'signup.yml',
-      reportLabel: '$ probe signup.yml',
-      note: 'これは2回目の実行です。1回目はモデルが10手で登録し、その手順をsignup.jsonに記録しました。2回目はモデルを使わずにそれを再生し、モデルには判定だけを頼んだので、引用は今回もページに表示された内容と照合しています。',
+      heading: '決定論的なテストでは書けない品質を',
+      body: 'ここまでのStepは厳密に書ける正しさを確かめるもので、マージの関門になるべきものです。一方で、初めての人が最後までたどり着けるか、データや設定が積み重なったステージングでもアプリケーションが持ちこたえるかは、式では書けません。agentアクションでは、それをペルソナと目標として自然言語で書きます。モデルが実際のChromeでペルソナを演じ、別に呼び出したモデルが、ページとリクエストの記録に裏付けられた指摘だけを残します。repeatを付けてステージングで回せば、人と同じようにアプリケーションを使い続けます。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます。',
+      workflowLabel: 'first-note.yml',
+      reportLabel: '$ probe first-note.yml',
+      note: '1つ目の指摘はサーバーのエラーで、誰かがhttpのStepを書いていれば見つけられたものです。2つ目はどのテストにも書かれていません。登録したあと、ログインしていることも、メモへたどり着く道も、Carolには示されていません。このStepのtestはレビューが実行できたことだけを確かめ、判定と指摘は読むための結果として返ります。',
       link: { label: 'agentアクションのリファレンスを読む', href: '/ja/reference/actions/agent' },
     },
     agents: {

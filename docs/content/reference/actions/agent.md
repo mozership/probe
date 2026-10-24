@@ -11,6 +11,8 @@ It has two modes:
 - **Scenario**, with `task` and `expect`: the tester does the task, and the judge decides whether the expectation holds. For checks that should pass, as before a merge.
 - **Persona**, with `persona` and `goal`: the tester plays the persona pursuing the goal, and notes what is wrong on the way; the reviewer decides whether the persona got there, and which of the notes, and of what the browser recorded, are findings. For looking for what nobody wrote a test of, as on a staging environment again and again.
 
+It does not replace deterministic steps. Check what can be stated exactly, such as a status, a row or a mail, with them, and let them gate a merge. The agent action is for what they cannot state: whether a user gets through, or whether the application still holds up on staging once data and settings pile up. Run its persona tests with [`repeat`](/reference/yaml-configuration#repeat) against staging, and they keep using the application as people do.
+
 ## Basic Syntax
 
 A workflow pins the action by a full commit SHA. The notes of each [release](https://github.com/mozership/probe-agent/releases) start with the action and its commit to copy. The examples here give it a name once, under [`actions`](/reference/yaml-configuration#actions), which needs Probe v1.24.0 or later; with an earlier one, write the action in full in each `uses`.

@@ -7,11 +7,11 @@ import { StructureChart } from './structure-chart'
 import {
   agentCheck,
   agentWorkflow,
-  browserReport,
-  browserWorkflow,
   heroReport,
   heroWorkflow,
   installCommand,
+  personaReport,
+  personaWorkflow,
   sharedJob,
   sharedMarks,
   sharedWorkflow,
@@ -179,12 +179,12 @@ export function Home({ locale }: { locale: Locale }) {
         <div className="lp-pair">
           <SourcePanel
             label={t.browser.workflowLabel}
-            code={browserWorkflow}
+            code={personaWorkflow}
             className="lp-pair__source"
           />
           <figure className="lp-panel lp-panel--readout">
             <figcaption className="lp-panel__label">{t.browser.reportLabel}</figcaption>
-            <Report lines={browserReport} wrap />
+            <Report lines={personaReport} wrap />
           </figure>
         </div>
         <p className="lp-section__note">{t.browser.note}</p>
