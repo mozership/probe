@@ -1009,6 +1009,44 @@ func TestCmd_runProbe_baseline(t *testing.T) {
 	}
 }
 
+func TestCmd_mistypedSubCommand(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gide"), []byte("jobs: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		args       []string
+		expectCode int
+		errOutput  string
+	}{
+		{"close to a subcommand", []string{"probe", "chek", "w.yml"}, probe.ExitConfigError, "[ERROR] unknown command \"chek\"; did you mean \"check\"?\ntry --help to know more\n"},
+		{"in another case", []string{"probe", "Guide"}, probe.ExitConfigError, "[ERROR] unknown command \"Guide\"; did you mean \"guide\"?\ntry --help to know more\n"},
+		{"after a flag", []string{"probe", "--verbose", "fmtt", "w.yml"}, probe.ExitConfigError, "[ERROR] unknown command \"fmtt\"; did you mean \"fmt\"?\ntry --help to know more\n"},
+		{"a file of that name", []string{"probe", "gide"}, 0, ""},
+		{"a path", []string{"probe", "./chek"}, 0, ""},
+		{"a YAML file", []string{"probe", "check.yml"}, 0, ""},
+		{"after --", []string{"probe", "--", "chek"}, 0, ""},
+		{"a --job named as a subcommand", []string{"probe", "--job", "check", "w.yml"}, 0, ""},
+		{"after a flag with a value", []string{"probe", "--report", "json", "chek"}, probe.ExitConfigError, "[ERROR] unknown command \"chek\"; did you mean \"check\"?\ntry --help to know more\n"},
+		{"close to no subcommand", []string{"probe", "workflow"}, 0, ""},
+	}
+
+	t.Chdir(dir)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newBufferCmd()
+			if code := c.start(tt.args); code != tt.expectCode {
+				t.Errorf("start(%v) = %d, want %d", tt.args, code, tt.expectCode)
+			}
+			if errOut := fmt.Sprintf("%s", c.errWriter); errOut != tt.errOutput {
+				t.Errorf("error output = %q, want %q", errOut, tt.errOutput)
+			}
+		})
+	}
+}
+
 func TestCmd_guide(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1021,6 +1059,7 @@ func TestCmd_guide(t *testing.T) {
 		{"print a page", []string{"probe", "guide", "yaml"}, 0, "# YAML Configuration Reference", ""},
 		{"print an action page", []string{"probe", "guide", "actions/shell"}, 0, "# Shell Action", ""},
 		{"unknown topic", []string{"probe", "guide", "nope"}, probe.ExitConfigError, "", "unknown guide topic: nope"},
+		{"mistyped topic", []string{"probe", "guide", "htpp"}, probe.ExitConfigError, "", `unknown guide topic: htpp; did you mean "http"?`},
 		{"two topics", []string{"probe", "guide", "yaml", "cli"}, probe.ExitConfigError, "", "guide takes one topic, not 2"},
 	}
 
@@ -1063,6 +1102,7 @@ func TestCmd_skill(t *testing.T) {
 		{"print", []string{"probe", "skill"}, 0, "name: probe", ""},
 		{"install into a directory", []string{"probe", "skill", "install", dir}, 0, "Wrote " + dir, ""},
 		{"unknown argument", []string{"probe", "skill", "bogus"}, probe.ExitConfigError, "", "unknown skill arguments: bogus"},
+		{"mistyped install", []string{"probe", "skill", "instal", dir}, probe.ExitConfigError, "", `unknown skill argument "instal"; did you mean "install"?`},
 		{"too many arguments", []string{"probe", "skill", "install", "a", "b"}, probe.ExitConfigError, "", "Usage: probe skill"},
 	}
 
@@ -1113,6 +1153,9 @@ func TestCmd_manifest(t *testing.T) {
 		{"action.yml of the working directory", []string{"probe", "manifest", "v0.2.0", checksums}, 0, released, ""},
 		{"no checksums file", []string{"probe", "manifest", "v0.2.0"}, probe.ExitConfigError, "", "       probe manifest <tag>"},
 		{"init without a repository", []string{"probe", "manifest", "init"}, probe.ExitConfigError, "", "Usage: probe manifest init"},
+		{"mistyped init", []string{"probe", "manifest", "ini", "example/probe-greet"}, probe.ExitConfigError, "", `unknown manifest argument "ini"; did you mean "init"?`},
+		{"tag close to init", []string{"probe", "manifest", "lint", checksums, action}, 0, strings.Replace(released, "v0.2.0", "lint", 1), ""},
+		{"tag in capitals", []string{"probe", "manifest", "INIT", checksums, action}, 0, strings.Replace(released, "v0.2.0", "INIT", 1), ""},
 		{"init with too many arguments", []string{"probe", "manifest", "init", "example/probe-greet", "more"}, probe.ExitConfigError, "", "Usage: probe manifest init"},
 		{"init with a bad repository", []string{"probe", "manifest", "init", "probe-greet"}, probe.ExitConfigError, "", "must be <owner>/<repo>"},
 		{"too many arguments", []string{"probe", "manifest", "v0.2.0", checksums, action, "more"}, probe.ExitConfigError, "", "Usage: probe manifest"},

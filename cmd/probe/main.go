@@ -16,6 +16,7 @@ import (
 	"github.com/mozership/probe/actions"
 	"github.com/mozership/probe/actions/grpc"
 	"github.com/mozership/probe/envfile"
+	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/oas"
 	"github.com/mozership/probe/report"
 )
@@ -60,6 +61,9 @@ type Cmd struct {
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
+	// firstFile is the first workflow file given before any --, checked
+	// as a possibly mistyped subcommand.
+	firstFile  string
 	validFlags []string
 	ver        string
 	rev        string
@@ -245,6 +249,9 @@ func (c *Cmd) parseArgs(args []string) error {
 	} else if len(nonFlagArgs) > 0 {
 		// Files given apart are merged as those given with commas are.
 		c.WorkflowPath = strings.Join(nonFlagArgs, ",")
+		if operands != 0 {
+			c.firstFile = nonFlagArgs[0]
+		}
 	}
 
 	return nil
@@ -254,6 +261,23 @@ var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "s
 
 func isSubCommand(name string) bool {
 	return slices.Contains(subCommands, name)
+}
+
+// mistypedSubCommand returns the subcommand that name, given as a workflow
+// file, likely meant, when it looks like neither a path nor a YAML file,
+// is close to a subcommand's name, and no file has it.
+func mistypedSubCommand(name string) string {
+	if name == "" || strings.ContainsAny(name, `./\*?[`) {
+		return ""
+	}
+	s := suggest.Closest(name, subCommands)
+	if s == "" {
+		return ""
+	}
+	if _, err := os.Stat(name); !os.IsNotExist(err) {
+		return ""
+	}
+	return s
 }
 
 func (c *Cmd) isValidFlag(flagName string) bool {
@@ -378,6 +402,9 @@ func (c *Cmd) start(args []string) int {
 		return probe.ExitConfigError
 	}
 
+	// firstFile is set only when no subcommand is given.
+	mistyped := mistypedSubCommand(c.firstFile)
+
 	switch {
 	case c.Help:
 		c.usage()
@@ -386,6 +413,11 @@ func (c *Cmd) start(args []string) int {
 	case c.Version:
 		c.printVersion()
 		return 0
+
+	case mistyped != "":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown command %q; did you mean %q?\n", c.firstFile, mistyped)
+		_, _ = fmt.Fprintf(c.errWriter, "try --help to know more\n")
+		return probe.ExitConfigError
 
 	case c.FmtCheck && c.SubCommand != "fmt":
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
@@ -805,10 +837,24 @@ func (c *Cmd) runSkill() int {
 		_, _ = fmt.Fprintf(c.outWriter, "Wrote %s\n", path)
 		return 0
 	default:
+		if s := suggest.Closest(args[0], []string{"install"}); s != "" && s != args[0] {
+			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill argument %q; did you mean %q?\n", args[0], s)
+			_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
+			return probe.ExitConfigError
+		}
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill arguments: %s\n", strings.Join(args, " "))
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
 		return probe.ExitConfigError
 	}
+}
+
+// fileExists reports whether the first of args names a file that exists.
+func fileExists(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	_, err := os.Stat(args[0])
+	return err == nil
 }
 
 // runManifest prints the action.yml of a release of an external action,
@@ -817,6 +863,15 @@ func (c *Cmd) runSkill() int {
 // from.
 func (c *Cmd) runManifest() int {
 	args := c.SubCommandArgs
+	// A word close to init, such as ini, may yet be a tag: lint is one.
+	// After a tag comes a checksums file, and after init a repository, so
+	// init is suggested only when the next argument names no file.
+	if len(args) > 0 && args[0] != "init" && suggest.Closest(args[0], []string{"init"}) != "" && !fileExists(args[1:]) {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown manifest argument %q; did you mean %q?\n", args[0], "init")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "       probe manifest <tag> <checksums-file> [action-file]\n")
+		return probe.ExitConfigError
+	}
 	if len(args) > 0 && args[0] == "init" {
 		if len(args) != 2 {
 			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] a repository is required\n")
