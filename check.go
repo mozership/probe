@@ -434,15 +434,17 @@ func (c *checker) noteLines(path string, n ast.Node) {
 }
 
 // suggest returns the key of allowed closest to key, when one is close
-// enough to be what was meant. One that differs from key only in case, as
-// api_url does from API_URL, is closest.
+// enough to be what was meant: two edits from it at most, and no more
+// than half its length. One that differs from key only in case, as api_url
+// does from API_URL, is closest.
 func suggest(key string, allowed []string) string {
 	for _, a := range allowed {
 		if strings.EqualFold(key, a) {
 			return a
 		}
 	}
-	best, bestDist := "", 3
+	// A short key is close to too many others: x is two edits from rt.
+	best, bestDist := "", min(3, len(key)/2+1)
 	for _, a := range allowed {
 		if d := distance(key, a); d < bestDist {
 			best, bestDist = a, d
@@ -880,8 +882,10 @@ func exprKeys(t reflect.Type) []string {
 // checkNames checks the names that the expressions and templates read. A
 // name that what they are evaluated against does not have, such as steps in
 // the test of a step, is an error: there is nothing to read it from, so the
-// expression fails. A var that neither the workflow nor the step defines is
-// a warning, as it reads nil unless --var gives it, which check cannot know.
+// expression fails: the step fails, or its skipif, wait or output is left
+// out. A var not defined where it is read, by the workflow or by the step,
+// whose own vars read only those of the workflow, is a warning, as it reads
+// nil unless --var gives it, which check cannot know.
 //
 // Of the templates of a job's name, which are evaluated against the job and
 // so can read more than they are meant to, and of the workflow's vars, which
@@ -889,7 +893,9 @@ func exprKeys(t reflect.Type) []string {
 func (c *checker) checkNames() {
 	workflowVars := varNames(c.wf.Vars)
 	seen := map[string]bool{}
-	read := func(path, where, field, input string, names, vars []string) {
+	// later are the vars the step defines that are not defined yet where
+	// input is read.
+	read := func(path, where, field, input string, names, vars, later []string) {
 		add := func(severity, format string, args ...any) {
 			key := path + "\x00" + fmt.Sprintf(format, args...)
 			if !seen[key] {
@@ -911,7 +917,9 @@ func (c *checker) checkNames() {
 				continue
 			}
 			msg := fmt.Sprintf("vars.%s is not defined by the workflow, so it is nil unless --var gives it", chain[0])
-			if s := suggest(chain[0], vars); s != "" {
+			if slices.Contains(later, chain[0]) {
+				msg = fmt.Sprintf("vars.%s is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it", chain[0])
+			} else if s := suggest(chain[0], vars); s != "" {
 				msg += fmt.Sprintf("; did you mean %q?", s)
 			}
 			add(SeverityWarning, "%s", msg)
@@ -920,19 +928,20 @@ func (c *checker) checkNames() {
 
 	forStrings("vars", c.wf.Vars, func(path, s string) {
 		for _, input := range expr.TemplateExprs(s) {
-			read(path, "", "vars", input, nil, workflowVars)
+			read(path, "", "vars", input, nil, workflowVars, nil)
 		}
 	})
 	c.eachExpr(func(e exprAt) {
 		names, vars := stepNames, workflowVars
+		var later []string
 		if e.step < 0 {
 			if e.field == "name" {
 				names = nil
 			}
 		} else {
-			vars = stepVars(workflowVars, c.wf.Jobs[e.job].Steps[e.step])
+			vars, later = stepVars(workflowVars, c.wf.Jobs[e.job].Steps[e.step], e.field)
 		}
-		read(e.path, e.where, e.field, e.input, names, vars)
+		read(e.path, e.where, e.field, e.input, names, vars, later)
 	})
 	for i, job := range c.wf.Jobs {
 		if job.Repeat == nil {
@@ -942,7 +951,7 @@ func (c *checker) checkNames() {
 			{"test", job.Repeat.Test},
 			{"baseline_test", job.Repeat.BaselineTest},
 		} {
-			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars)
+			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars, nil)
 		}
 	}
 }
@@ -959,7 +968,8 @@ func nameHint(name string, names []string) string {
 	case step && name == "steps":
 		return "; what an earlier step publishes is read under outputs"
 	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":
-		return fmt.Sprintf("; the environment is read only by the workflow's vars, as token: \"{{%s}}\"", name)
+		lower := strings.ToLower(name)
+		return fmt.Sprintf("; the environment is read only by the workflow's vars, as %s: \"{{%s}}\", which a step reads as vars.%s", lower, name, lower)
 	}
 	return ""
 }
@@ -978,26 +988,32 @@ func varNames(vars map[string]any) []string {
 	return names
 }
 
-// stepVars returns the names of the vars a step reads: those of the
-// workflow, and those the step and the entries of its iteration give; nil
-// when they are not known before it runs, as those of an iteration a
-// template gives are not.
-func stepVars(workflow []string, st *Step) []string {
-	if workflow == nil || st.Iteration.Expr != "" {
-		return nil
-	}
+// stepVars returns the names of the vars that field of a step reads, as a
+// run gives them: the step's vars are evaluated against those of the
+// workflow alone; its iteration, when a template gives it, against those
+// and the step's own; and the rest against those, and the keys of the entry
+// of the iteration it runs with. vars is nil when the names are not known
+// before the step runs, as the keys of the entries a template gives are
+// not. later are the names the step defines that field does not read.
+func stepVars(workflow []string, st *Step, field string) (vars, later []string) {
 	own := varNames(st.Vars)
-	if own == nil && len(st.Vars) > 0 {
-		return nil
+	if workflow == nil || (own == nil && len(st.Vars) > 0) {
+		return nil, nil
 	}
-	names := append(slices.Clone(workflow), own...)
 	for _, entry := range st.Iteration.Entries {
 		for name := range entry {
-			names = append(names, name)
+			own = append(own, name)
 		}
 	}
+	switch {
+	case field == "vars":
+		return workflow, own
+	case field != "iteration" && st.Iteration.Expr != "":
+		return nil, nil
+	}
+	names := append(slices.Clone(workflow), own...)
 	slices.Sort(names)
-	return slices.Compact(names)
+	return slices.Compact(names), nil
 }
 
 // listNames lists names as a, b and c.

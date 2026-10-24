@@ -707,11 +707,47 @@ jobs:
 				{SeverityWarning, 4, `vars: vars.bsae is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
 				{SeverityError, 7, `skipif: var is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "vars"?`},
 				{SeverityWarning, 13, `with: vars.bse is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
-				{SeverityError, 13, `with: API_TOKEN is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; the environment is read only by the workflow's vars, as token: "{{API_TOKEN}}"`},
+				{SeverityError, 13, `with: API_TOKEN is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; the environment is read only by the workflow's vars, as api_token: "{{API_TOKEN}}", which a step reads as vars.api_token`},
 				{SeverityError, 14, "test: null is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
 				{SeverityError, 16, "outputs.region: us is not defined"},
 				{SeverityError, 16, "outputs.region: east is not defined"},
 				{SeverityError, 17, `echo: output is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "outputs"?`},
+			},
+		},
+		{
+			name: "the fields of a step and what each reads",
+			workflow: `name: fields
+vars:
+  base: http://localhost
+jobs:
+- name: C
+  steps:
+  - name: "Step {{ vars.nme }} {{ undefined }}"
+    uses: hello
+    vars:
+      a: 1
+      b: "{{ vars.a }}"
+      c: "{{ vars.id }} {{ vars.base }}"
+    iteration:
+    - {id: 7}
+    wait: "{{ vars.delay }}"
+    with: {b: "{{ vars.b }}", c: "{{ vars.c }}", id: "{{ vars.id }}"}
+    test: res.b == "1"
+  - name: Iteration a template gives
+    uses: hello
+    vars:
+      s: 3
+    iteration: "{{ [{'x': vars.s, 'y': vars.t}] }}"
+    with: {x: "{{ vars.x }}"}
+    test: res.x == 3
+`,
+			want: []want{
+				{SeverityWarning, 7, "name: vars.nme is not defined by the workflow"},
+				{SeverityError, 7, "name: undefined is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
+				{SeverityWarning, 11, "vars: vars.a is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it"},
+				{SeverityWarning, 12, "vars: vars.id is not defined yet: a step's vars read only those of the workflow"},
+				{SeverityWarning, 15, "wait: vars.delay is not defined by the workflow"},
+				{SeverityWarning, 22, "iteration: vars.t is not defined by the workflow"},
 			},
 		},
 		{
@@ -722,6 +758,7 @@ jobs:
   repeat:
     count: 2
     test: steps.a.success_rate == 1 && res.code == 200 && vars.limit > 0
+    baseline_test: steps.a.rt.p95 < baseline.steps.a.rt.p95 * vars.factor && outputs.a.x == nil
   steps:
   - name: A
     id: a
@@ -731,6 +768,8 @@ jobs:
 			want: []want{
 				{SeverityError, 6, "repeat.test: res is not defined; it can read baseline, steps and vars"},
 				{SeverityWarning, 6, "repeat.test: vars.limit is not defined by the workflow"},
+				{SeverityError, 7, "repeat.baseline_test: outputs is not defined; it can read baseline, steps and vars"},
+				{SeverityWarning, 7, "repeat.baseline_test: vars.factor is not defined by the workflow"},
 			},
 		},
 		{
@@ -832,6 +871,10 @@ func TestSuggest(t *testing.T) {
 		{"tset", []string{"name", "test"}, "test"},
 		{"api_base_url", []string{"API_BASE_URL", "api_url"}, "API_BASE_URL"},
 		{"steps", []string{"outputs", "status", "vars"}, ""},
+		{"x", []string{"res", "rt"}, ""},
+		{"us", []string{"res", "rt"}, ""},
+		{"rs", []string{"res", "rt"}, "res"},
+		{"var", []string{"outputs", "vars"}, "vars"},
 	}
 	for _, tt := range tests {
 		if got := suggest(tt.key, tt.allowed); got != tt.want {
