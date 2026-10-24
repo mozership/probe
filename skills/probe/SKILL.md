@@ -83,7 +83,7 @@ jobs:
 - `iteration` runs a step once per entry of a list of objects, read as `vars`. In place of the list it takes one template that comes to one when the step is reached: cases kept in a file, `"{{ parse_json(file('cases.json')) }}"`, or what an earlier step published, `"{{ outputs.users.rows }}"`.
 - A job that removes what others made, such as a test database, lists them in `needs` and sets `always: true`: it then runs when one of them failed too, where any other job is skipped.
 - An external action, `github.com/<owner>/<repo>@<commit SHA>`, used in more than one step is given a name once under the top-level `actions`, as `actions: {graphql: github.com/…@<SHA>}`, and `uses` and `defaults` then take the name. A name cannot be that of a built-in action. A job file run by `embedded` uses the names of the workflow that embeds it.
-- List secrets under `secrets` by environment variable name. Never write a credential into the YAML.
+- List secrets under `secrets` by environment variable name. Never write a credential into the YAML. A value shorter than 4 characters is not masked, and Probe warns about it, so a credential that must stay out of the output needs a longer value.
 - Do not guess parameters. If a field is not on the action's `probe guide <action>` page, it does not exist.
 
 ## Run

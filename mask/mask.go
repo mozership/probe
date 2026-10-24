@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // redactedValue replaces the value of a header that carries credentials.
@@ -34,6 +35,15 @@ var sensitiveKeys = map[string]bool{
 	"secret_access_key":   true,
 	"session_token":       true,
 }
+
+// MinLength is the fewest characters a value must have to be masked. A
+// shorter value, such as 1, ok or dev, is as likely to stand inside an
+// unrelated word as for itself: replacing it wherever it appears mangles the
+// whole output, and the letters missing from the words give it away anyway.
+// Such a value is left as it is. A credential header or parameter shown by
+// Map is still replaced outright, whatever its length, since that depends on
+// its name, not its value.
+const MinLength = 4
 
 // dsnKey names the parameter that holds a database URL. Only the password in
 // it is a credential: the rest says which database was used, so it stays
@@ -78,26 +88,51 @@ type Masker struct {
 	mu       sync.RWMutex
 	labels   map[string]string // secret value -> what it is replaced with
 	replacer *strings.Replacer
+	tooShort []string // declared secrets whose values are too short to mask
 }
 
 // New builds a Masker for the environment variables named in secrets.
 // Each value is replaced by <secret:NAME>. A name that is not set, or set to
-// an empty string, has nothing to hide and is skipped.
+// an empty string, has nothing to hide and is skipped. A value shorter than
+// MinLength is not masked either; TooShort names those secrets so that the
+// caller can warn about them.
 func New(secrets []string, env map[string]string) *Masker {
 	m := &Masker{labels: make(map[string]string)}
+	seen := make(map[string]bool, len(secrets))
 	for _, name := range secrets {
-		m.addLocked(env[name], "<secret:"+name+">")
+		value := env[name]
+		if value != "" && tooShort(value) && !seen[name] {
+			m.tooShort = append(m.tooShort, name)
+		}
+		seen[name] = true
+		m.addLocked(value, "<secret:"+name+">")
 	}
 	m.rebuildLocked()
 	return m
 }
 
+// TooShort returns the names of the declared secrets whose values are set but
+// shorter than MinLength, and so are not masked, once each in the order they
+// were declared. It never returns the values.
+func (m *Masker) TooShort() []string {
+	if m == nil {
+		return nil
+	}
+	return m.tooShort
+}
+
+// tooShort reports whether value has fewer than MinLength characters.
+func tooShort(value string) bool {
+	return utf8.RuneCountInString(value) < MinLength
+}
+
 // addLocked registers a value under the label it is replaced with, along with
 // the escaped forms it takes when Go, JSON or a log line quotes it, since a
 // secret containing a quote or a backslash would otherwise slip through in
-// an error message or a dump. Callers must hold mu or own m exclusively.
+// an error message or a dump. A value shorter than MinLength is not
+// registered. Callers must hold mu or own m exclusively.
 func (m *Masker) addLocked(value, label string) bool {
-	if value == "" {
+	if value == "" || tooShort(value) {
 		return false
 	}
 	added := false

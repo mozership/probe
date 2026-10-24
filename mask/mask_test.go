@@ -533,3 +533,74 @@ func TestUserinfo(t *testing.T) {
 		t.Error("HoldsURL should name url and dsn, in any case, and nothing else")
 	}
 }
+
+// TestNew_ShortSecret covers a declared secret too short to mask: replacing
+// it wherever it appears would cut it out of unrelated words, which mangles
+// the output and gives the value away by the letters missing from them.
+func TestNew_ShortSecret(t *testing.T) {
+	env := map[string]string{
+		"ONE":   "x",
+		"THREE": "dev",
+		"KANJI": "秘密鍵",
+		"FOUR":  "abcd",
+		"EMPTY": "",
+	}
+	m := New([]string{"ONE", "THREE", "ONE", "KANJI", "FOUR", "EMPTY", "MISSING"}, env)
+
+	tests := []struct {
+		in, want string
+	}{
+		{"probe.StepContext", "probe.StepContext"},
+		{"x", "x"},
+		{"deploy to dev", "deploy to dev"},
+		{"秘密鍵", "秘密鍵"},
+		{"key abcd", "key <secret:FOUR>"},
+	}
+	for _, tt := range tests {
+		if got := m.String(tt.in); got != tt.want {
+			t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+
+	want := []string{"ONE", "THREE", "KANJI"}
+	if got := m.TooShort(); !reflect.DeepEqual(got, want) {
+		t.Errorf("TooShort() = %q, want %q", got, want)
+	}
+	if got := New([]string{"FOUR"}, env).TooShort(); len(got) != 0 {
+		t.Errorf("a secret long enough to mask should not be reported, got %q", got)
+	}
+	var nilMasker *Masker
+	if got := nilMasker.TooShort(); got != nil {
+		t.Errorf("nil TooShort() = %q", got)
+	}
+}
+
+// TestMasker_ShortCredential covers a credential learned at run time that is
+// too short to mask in free text: it is left there, but Map still hides it
+// under its key, which does not depend on the value.
+func TestMasker_ShortCredential(t *testing.T) {
+	m := New(nil, nil)
+	m.Learn(map[string]any{
+		"password": "ab",
+		"dsn":      "postgres://app:pw@db/main",
+		"headers":  map[string]any{"cookie": "s=1"},
+	})
+
+	for _, in := range []string{"about a table", "pwd", "s=1x"} {
+		if got := m.String(in); got != in {
+			t.Errorf("String(%q) = %q, want it unchanged", in, got)
+		}
+	}
+
+	got := m.Map(map[string]any{
+		"password": "ab",
+		"headers":  map[string]any{"Cookie": "s=1", "Accept": "about"},
+	})
+	if got["password"] != redactedValue {
+		t.Errorf("password = %v, want %s", got["password"], redactedValue)
+	}
+	headers := got["headers"].(map[string]any)
+	if headers["Cookie"] != redactedValue || headers["Accept"] != "about" {
+		t.Errorf("headers = %v", headers)
+	}
+}

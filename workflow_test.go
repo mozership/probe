@@ -2251,3 +2251,41 @@ func TestWorkflow_Start_JobIDsOfAWorkflowMadeInCode(t *testing.T) {
 		t.Errorf("report jobs = %+v, want job_0 and job_1", r.Jobs)
 	}
 }
+
+// TestWorkflow_WarnsOfShortSecret covers a declared secret too short to
+// mask: the output is left readable, and a warning names the secret once
+// without showing its value.
+func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
+	w := &Workflow{
+		Name:    "short secret",
+		Secrets: []string{"PIN", "PIN", "API_KEY"},
+		env:     map[string]string{"PIN": "x", "API_KEY": "sekret-key"},
+		Jobs: []Job{{
+			ID:   "job",
+			Name: "job",
+			Steps: []*Step{{
+				Name:         "reads probe.StepContext",
+				Uses:         "http",
+				With:         map[string]any{"url": "http://api.test/"},
+				actionRunner: &recordingRunner{result: map[string]any{"res": map[string]any{"code": 200}}},
+			}},
+		}},
+		printer: newBufferPrinter(),
+	}
+	if err := w.Start(Config{}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	stdout := w.printer.outWriter.(*bytes.Buffer).String()
+	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	if !strings.Contains(stdout, "probe.StepContext") {
+		t.Errorf("a short secret should not be cut out of words:\n%s", stdout)
+	}
+	warn := "[WARN] the secret PIN is shorter than 4 characters and is not masked"
+	if n := strings.Count(stderr, warn); n != 1 {
+		t.Errorf("want the warning once, got %d times:\n%s", n, stderr)
+	}
+	if strings.Contains(stderr, "API_KEY") {
+		t.Errorf("a secret long enough to mask should not be warned about:\n%s", stderr)
+	}
+}
