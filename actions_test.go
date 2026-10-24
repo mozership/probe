@@ -136,6 +136,30 @@ func TestRunOptions_logLevel(t *testing.T) {
 	}
 }
 
+// Outside a verbose run an action's error records are left out of its log,
+// as the step's result tells the error, while its warnings are kept.
+func TestExcludeErrors(t *testing.T) {
+	for _, verbose := range []bool{false, true} {
+		var buf strings.Builder
+		log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn, Exclude: excludeErrors(verbose)})
+		// go-plugin logs what an action logs through a logger it names.
+		named := log.Named("http")
+		named.Warn("the widget is old")
+		named.Error("widget failed")
+		log.Error("plugin process exited")
+
+		out := buf.String()
+		if !strings.Contains(out, "the widget is old") {
+			t.Errorf("verbose=%v: the warning should be kept, got:\n%s", verbose, out)
+		}
+		for _, msg := range []string{"widget failed", "plugin process exited"} {
+			if got := strings.Contains(out, msg); got != verbose {
+				t.Errorf("verbose=%v: the log has %q = %v, want %v:\n%s", verbose, msg, got, verbose, out)
+			}
+		}
+	}
+}
+
 // countingRunner is a StepActionRunner whose actions count their calls
 // in the state they keep. It records the count each call was given, or "-"
 // for no state. A call with fail fails, and one with keep leaves no state.

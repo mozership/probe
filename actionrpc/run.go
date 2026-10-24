@@ -1,15 +1,22 @@
 package actionrpc
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Run starts the action named name from the running probe binary, calls it
@@ -83,7 +90,8 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 	}
 	// The process ends with ctx as well, so that one that does not come up
 	// is not waited for any longer than one that does not answer.
-	cl, action, err := start(exec.CommandContext(ctx, path), secure, log)
+	p := &process{cmd: exec.CommandContext(ctx, path)}
+	cl, action, err := p.start(ctx, secure, log)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -91,11 +99,18 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 		return err
 	}
 	defer cl.Kill()
-	return action.Cleanup(ctx, call)
+	if err := action.Cleanup(ctx, call); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return p.failed(cl, err)
+	}
+	return nil
 }
 
 func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	cl, action, err := start(cmd, secure, stoppedLogger{Logger: log, ctx: ctx})
+	p := &process{cmd: cmd}
+	cl, action, err := p.start(ctx, secure, log)
 	if err != nil {
 		if over(ctx) {
 			return nil, nil, ctx.Err()
@@ -114,12 +129,146 @@ func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call C
 	result, newState, err := action.RunStepContext(ctx, call)
 	if err != nil {
 		if over(ctx) {
+			p.callFailed.Store(true)
 			return nil, nil, ctx.Err()
 		}
-		return nil, nil, err
+		return nil, nil, p.failed(cl, err)
 	}
 
 	return result, newState, nil
+}
+
+// process is the process that serves an action for one call.
+type process struct {
+	cmd *exec.Cmd
+	// stderr keeps what the process writes to stderr apart from its log
+	// records, which may tell why it exited or did not start.
+	stderr stderrOutput
+	// callFailed is set once the call failed, or the process did not start:
+	// what go-plugin logs of stopping it then says nothing the error does
+	// not.
+	callFailed atomic.Bool
+}
+
+// start starts the process, and returns it along with the action to call.
+// The caller stops the process with Kill. An error is a StartError, unless
+// ctx is done.
+func (p *process) start(ctx context.Context, secure *plugin.SecureConfig, log hclog.Logger) (*plugin.Client, *Client, error) {
+	cl := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  Handshake,
+		Plugins:          PluginMap,
+		Cmd:              p.cmd,
+		SecureConfig:     secure,
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolNetRPC, plugin.ProtocolGRPC},
+		Logger:           stoppedLogger{Logger: log, ctx: ctx, callFailed: &p.callFailed},
+		Stderr:           &p.stderr,
+		UnixSocketConfig: &plugin.UnixSocketConfig{
+			TempDir: os.TempDir(),
+		},
+	})
+
+	raw, err := func() (any, error) {
+		protocol, err := cl.Client()
+		if err != nil {
+			return nil, err
+		}
+		return protocol.Dispense("actions")
+	}()
+	if err != nil {
+		p.callFailed.Store(true)
+		cl.Kill()
+		// Kill waits for the process to exit, so all it wrote is kept.
+		return nil, nil, &StartError{Output: p.stderr.reason(), Err: err}
+	}
+	return cl, raw.(*Client), nil
+}
+
+// failed returns err, the error of a call of the action cl serves, as an
+// ExitError when the call failed for the process having exited, and as it is
+// otherwise.
+func (p *process) failed(cl *plugin.Client, err error) error {
+	p.callFailed.Store(true)
+	// A lost connection is Unavailable. An action may return the code too:
+	// one that marks its errors says so, and of one that does not it is the
+	// process having exited that tells.
+	if status.Code(err) != codes.Unavailable || fromAction(err) {
+		return err
+	}
+	deadline := time.Now().Add(exitWait)
+	for !cl.Exited() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !cl.Exited() {
+		return err
+	}
+	// go-plugin sets that the process exited once it has waited for it,
+	// and so once its state is known, under the lock Exited takes.
+	exitStatus := ""
+	if p.cmd.ProcessState != nil {
+		exitStatus = p.cmd.ProcessState.String()
+	}
+	return &ExitError{Status: exitStatus, Output: p.stderr.reason(), Err: err}
+}
+
+// ExitError is the error of an action whose process exited before it
+// returned, as one that panics does. What the call failed with tells only
+// that the connection was lost, so the error tells how the process exited
+// and what it wrote to stderr that is not one of its log records, such as
+// the message of the panic.
+type ExitError struct {
+	// Status is how the process exited, such as "exit status 2", or empty
+	// when it is not known.
+	Status string
+	// Output is the first lines the process wrote to stderr that are not
+	// its log records, such as the message a panic starts with. It is empty
+	// when it wrote none.
+	Output string
+	// Err is what the call failed with.
+	Err error
+}
+
+func (e *ExitError) Error() string {
+	msg := "the action exited before it returned"
+	if e.Status != "" {
+		msg += " (" + e.Status + ")"
+	}
+	if e.Output != "" {
+		msg += ": " + e.Output
+	}
+	return msg
+}
+
+func (e *ExitError) Unwrap() error {
+	return e.Err
+}
+
+// exitWait is how long a call that lost its connection waits to see whether
+// the action's process exited, which one that crashed does at once. Only an
+// action built against a version of this package from before its errors
+// were marked as its own is waited for when it returns Unavailable itself.
+const exitWait = 250 * time.Millisecond
+
+// StartError is the error of an action whose process could not be started
+// or connected to.
+type StartError struct {
+	// Output is the first lines the process wrote to stderr that are not
+	// its log records, which may say why it did not start. It is empty when
+	// it wrote none.
+	Output string
+	// Err is what starting it failed with, as go-plugin tells it.
+	Err error
+}
+
+func (e *StartError) Error() string {
+	msg := "the action did not start"
+	if e.Output != "" {
+		msg += ": " + e.Output
+	}
+	return msg + "\n" + e.Err.Error()
+}
+
+func (e *StartError) Unwrap() error {
+	return e.Err
 }
 
 // over reports whether ctx is done, waiting for it to be once its deadline
@@ -139,6 +288,8 @@ func over(ctx context.Context) bool {
 type stoppedLogger struct {
 	hclog.Logger
 	ctx context.Context
+	// callFailed is set once the call failed; nil is a call that has not.
+	callFailed *atomic.Bool
 }
 
 func (l stoppedLogger) Error(msg string, args ...any) {
@@ -150,6 +301,97 @@ func (l stoppedLogger) Error(msg string, args ...any) {
 	l.Logger.Error(msg, args...)
 }
 
+// Warn leaves out go-plugin's record of a process it could not shut down
+// gracefully, and so killed, once the call failed: it makes one as well of a
+// process that had exited already, as one that crashed or did not start
+// has, and the error tells what became of the action. One that hangs when
+// it is stopped after a call that succeeded is still told.
+func (l stoppedLogger) Warn(msg string, args ...any) {
+	if msg == "plugin failed to exit gracefully" && l.callFailed != nil && l.callFailed.Load() {
+		l.Debug(msg, args...)
+		return
+	}
+	l.Logger.Warn(msg, args...)
+}
+
+// maxStderr is how much an action writes to stderr apart from its log
+// records that is kept to tell why it exited.
+const maxStderr = 64 << 10
+
+// maxStderrLine is how much of a line an action writes to stderr is kept.
+const maxStderrLine = 4 << 10
+
+// maxReasonLines is how many lines of what an action wrote to stderr the
+// error of one that exited tells.
+const maxReasonLines = 10
+
+// stderrOutput keeps what the process that serves an action writes to
+// stderr apart from its log records, which are JSON, one to a line: what is
+// left is what the Go runtime writes of a panic, or what the action wrote
+// to the descriptor itself. go-plugin writes it here, whether or not its
+// log shows it. What the action writes to os.Stderr is not among it, as
+// go-plugin sends that over the connection, which is lost on exit.
+type stderrOutput struct {
+	mu   sync.Mutex
+	line []byte
+	kept []byte
+}
+
+func (o *stderrOutput) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, b := range p {
+		if b == '\n' {
+			o.keep()
+			continue
+		}
+		// The rest of a line too long to keep is dropped.
+		if len(o.line) < maxStderrLine {
+			o.line = append(o.line, b)
+		}
+	}
+	return len(p), nil
+}
+
+// keep keeps the line written so far, unless it is a log record or there is
+// no room left for it. Callers hold o.mu.
+func (o *stderrOutput) keep() {
+	line := o.line
+	o.line = o.line[:0]
+	if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed) {
+		return
+	}
+	if len(o.kept)+len(line)+1 > maxStderr {
+		return
+	}
+	o.kept = append(o.kept, line...)
+	o.kept = append(o.kept, '\n')
+}
+
+// reason returns the first paragraph of what was kept, as a Go panic starts
+// with its message and then, after a blank line, tells where it happened;
+// at most maxReasonLines lines of it.
+func (o *stderrOutput) reason() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	text := string(o.kept) + string(o.line)
+	var lines []string
+	for line := range strings.SplitSeq(text, "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		if line == "" {
+			if len(lines) > 0 {
+				break
+			}
+			continue
+		}
+		if len(lines) == maxReasonLines {
+			break
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // awaitExit waits for the process that serves an action to exit, as one sent
 // SIGTERM by command does, by StopGrace or by being killed then. It gives up
 // a little later, for Kill to see to the process.
@@ -158,33 +400,4 @@ func awaitExit(cl *plugin.Client) {
 	for !cl.Exited() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-// start starts the process that serves an action, and returns it along with
-// the action to call. The caller stops the process with Kill.
-func start(cmd *exec.Cmd, secure *plugin.SecureConfig, log hclog.Logger) (*plugin.Client, *Client, error) {
-	cl := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  Handshake,
-		Plugins:          PluginMap,
-		Cmd:              cmd,
-		SecureConfig:     secure,
-		AllowedProtocols: []plugin.Protocol{plugin.ProtocolNetRPC, plugin.ProtocolGRPC},
-		Logger:           log,
-		UnixSocketConfig: &plugin.UnixSocketConfig{
-			TempDir: os.TempDir(),
-		},
-	})
-
-	protocol, err := cl.Client()
-	if err != nil {
-		cl.Kill()
-		return nil, nil, err
-	}
-
-	raw, err := protocol.Dispense("actions")
-	if err != nil {
-		cl.Kill()
-		return nil, nil, err
-	}
-	return cl, raw.(*Client), nil
 }

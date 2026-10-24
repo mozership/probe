@@ -97,6 +97,22 @@ func (r *reportRenderer) printStepRepeatResult(counter *StepRepeatCounter, hasTe
 	}
 }
 
+// printStepRepeatError prints under the result of a repeated step why the
+// first of its runs that failed before its test could be evaluated did: the
+// error of its action, a template that could not be evaluated, or the
+// guard's refusal. The count alone would not tell it, and the error is told
+// nowhere else unless the run is verbose.
+func (r *reportRenderer) printStepRepeatError(counter *StepRepeatCounter, output *strings.Builder) {
+	f := counter.Failure
+	if f == nil || f.Message == "" {
+		return
+	}
+	switch f.Kind {
+	case FailureAction, FailureTemplate, FailureRefused:
+		output.WriteString(indentDetail(f.Message))
+	}
+}
+
 // printStepBaseline prints under the times of a repeated step those of the
 // step in the baseline, b, and how much they changed; nothing when there is
 // no baseline to show them against, or the step took no times.
@@ -299,6 +315,7 @@ func (r *reportRenderer) generateJobResultsFromStepResults(jobID string, stepRes
 		if stepResult.RepeatCounter != nil {
 			r.printStepRepeatStart(stepResult.Index, stepResult.RepeatCounter.Name, stepResult.RepeatCounter.SuccessCount+stepResult.RepeatCounter.FailureCount+stepResult.RepeatCounter.SkippedCount, stepResult.RepeatCounter.Warmup, &output)
 			r.printStepRepeatResult(stepResult.RepeatCounter, stepResult.HasTest, &output)
+			r.printStepRepeatError(stepResult.RepeatCounter, &output)
 			r.printStepBaseline(stepResult.RepeatCounter, baseline.Next(stepResult.ID), &output)
 			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
 				echo = strings.TrimRight(echo, " \n\t\r")

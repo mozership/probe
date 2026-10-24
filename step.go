@@ -368,20 +368,22 @@ func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]a
 // evaluated, in which case the action did not run.
 func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	kind := failureKindOf(err)
-	switch kind {
-	case FailureTemplate:
-		st.err = err
-		jCtx.Printer.PrintError("Template evaluation failed: %v", err)
-	case FailureRefused:
-		// The reason is the guard's, which says it all.
-		st.err = err
-		jCtx.Printer.PrintError("%v", err)
-	default:
-		actionErr := NewActionError("step_execute", "action execution failed", err).
-			WithContext("step_name", name).
-			WithContext("action_type", st.Uses)
-		st.err = actionErr
-		jCtx.Printer.PrintError("Action execution failed: %v", actionErr)
+	// The error is kept as it is: what the action, the template or the
+	// guard said is what tells a person why the step failed.
+	st.err = err
+	// The step's result shows the error, so it is told as it happens only
+	// in a verbose run, where it reads in the run's order beside the
+	// exchange. Otherwise it would show twice, and once for each run of a
+	// repeated step, and break into the spinner's line.
+	if jCtx.Verbose {
+		switch kind {
+		case FailureTemplate:
+			jCtx.Printer.PrintError("Template evaluation failed: %v", err)
+		case FailureRefused:
+			jCtx.Printer.PrintError("%v", err)
+		default:
+			jCtx.Printer.PrintError("Action execution failed: %v", err)
+		}
 	}
 	jCtx.SetFailed()
 	jCtx.recordFailure(kind)

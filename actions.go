@@ -56,6 +56,21 @@ func (o RunOptions) logLevel() hclog.Level {
 	}
 }
 
+// excludeErrors returns what leaves an action's error records out of its
+// log, unless verbose is set. An action that fails says why in the error it
+// returns, which the step's result shows, and the records would only say it
+// again, as would go-plugin's of a process that exited with an error or of
+// the panic it wrote: the error tells those too. Warnings are kept, as they
+// tell what the result does not.
+func excludeErrors(verbose bool) func(hclog.Level, string, ...any) bool {
+	if verbose {
+		return nil
+	}
+	return func(level hclog.Level, _ string, _ ...any) bool {
+		return level >= hclog.Error
+	}
+}
+
 // ActionRunner defines the interface for running actions
 type ActionRunner interface {
 	RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error)
@@ -86,9 +101,10 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
 	log := hclog.New(&hclog.LoggerOptions{
-		Name:   "actions",
-		Output: opts.Masker.Writer(os.Stderr),
-		Level:  opts.logLevel(),
+		Name:    "actions",
+		Output:  opts.Masker.Writer(os.Stderr),
+		Level:   opts.logLevel(),
+		Exclude: excludeErrors(opts.Verbose),
 	})
 	// An action that runs steps of its own, as embedded does, says which
 	// external actions they ran that are to clean up, however it ends.

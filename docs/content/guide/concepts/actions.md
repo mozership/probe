@@ -929,6 +929,12 @@ func main() {
 }
 ```
 
+The error `Run` returns is what the step's result and the files `--report` writes show, as it is, so word it for the person who reads why the step failed. An action that panics or exits before it returns fails its step with how its process exited and, for a panic, the panic message.
+
+Records the action logs at error level are shown only with `--verbose`, since the error it returns already says what they would. Log at warning level what the user must see whatever the step's result says, and at debug level what helps to find a fault.
+
+Build the action against the `actionrpc` of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `actionrpc` puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.
+
 Build it for every platform it supports, publish the executables, and commit an `action.yml` with their URLs and digests. Users then pin the commit that holds that `action.yml`. [mozership/probe-graphql](https://github.com/mozership/probe-graphql) does this with GoReleaser and a workflow that commits the digests after each release.
 
 `probe manifest` writes the `action.yml` of a release. It reads the `action.yml` of the repository, puts the tag in `runs.url` and the digests of the checksums file in `runs.checksums`, and prints the result:

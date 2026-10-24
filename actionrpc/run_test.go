@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // That an action stopped once ctx is done exited by the signal is not an
@@ -95,5 +98,184 @@ func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
 	}
 	if _, err := os.Stat(pidfile + ".term"); err != nil {
 		t.Errorf("the action was not sent SIGTERM: %v", err)
+	}
+}
+
+// An action's error is told as the action said it, whatever gRPC carried it
+// in, and one whose process exited before it returned is told so, with how
+// it exited and what it wrote of why.
+func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "failing")
+	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/failing-action").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+
+	tests := []struct {
+		mode     string
+		want     string
+		wantCode codes.Code
+	}{
+		{mode: "error", want: "the widget broke", wantCode: codes.Unknown},
+		{mode: "status", want: "no such widget", wantCode: codes.NotFound},
+		{mode: "unavailable", want: "the widget is down", wantCode: codes.Unavailable},
+		{mode: "panic", want: "the action exited before it returned (exit status 2): panic: the widget exploded", wantCode: codes.Unavailable},
+		{mode: "exit", want: "the action exited before it returned (exit status 3): the widget is gone", wantCode: codes.Unavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			_, _, err := RunExecutableStep(bin, nil, Call{With: map[string]any{"mode": tt.mode}}, hclog.NewNullLogger())
+			if err == nil {
+				t.Fatal("RunExecutableStep() succeeded, want an error")
+			}
+			if err.Error() != tt.want {
+				t.Errorf("error = %q, want %q", err.Error(), tt.want)
+			}
+			// What gRPC carried the error in is kept for code to read.
+			if got := status.Code(err); got != tt.wantCode {
+				t.Errorf("status.Code() = %v, want %v", got, tt.wantCode)
+			}
+			// An action that returned Unavailable is told as it said it,
+			// not as one that exited.
+			if tt.mode == "unavailable" {
+				var exitErr *ExitError
+				if errors.As(err, &exitErr) {
+					t.Errorf("error = %#v, want the action's own", exitErr)
+				}
+				if !fromAction(err) {
+					t.Errorf("error = %v, want it marked as the action's own, so that it is not waited on", err)
+				}
+			}
+		})
+	}
+}
+
+// The cleanup of an action tells why it failed as a call of the action does.
+func TestCleanupExecutableTellsWhyTheCleanupFailed(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "failing")
+	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/failing-action").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	tests := map[string]string{
+		"error": "the widget would not go",
+		"panic": "the action exited before it returned (exit status 2): panic: the widget exploded while cleaning up",
+	}
+	for runID, want := range tests {
+		t.Run(runID, func(t *testing.T) {
+			err := CleanupExecutable(context.Background(), bin, nil, CleanupCall{RunID: runID}, hclog.NewNullLogger())
+			if err == nil || err.Error() != want {
+				t.Errorf("CleanupExecutable() error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+// An executable that does not serve an action is told not to have started,
+// with what it wrote of why.
+func TestRunExecutableStepTellsWhyAnActionDidNotStart(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "broken")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\necho 'cannot read the config' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := RunExecutableStep(exe, nil, Call{With: map[string]any{}}, hclog.NewNullLogger())
+	var startErr *StartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("error = %v, want a StartError", err)
+	}
+	if !strings.HasPrefix(err.Error(), "the action did not start: cannot read the config\n") {
+		t.Errorf("error = %q, want it to start with why the action did not start", err.Error())
+	}
+	if startErr.Err == nil || !strings.Contains(err.Error(), startErr.Err.Error()) {
+		t.Errorf("error = %q, want it to keep what go-plugin said", err.Error())
+	}
+}
+
+// go-plugin's record of a process it killed for not exiting gracefully is
+// left out once the call failed, as the error tells what became of the
+// action, and told otherwise, of an action that hangs when it is stopped.
+func TestStoppedLoggerLeavesOutTheKillAfterAFailedCall(t *testing.T) {
+	var buf bytes.Buffer
+	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
+	failed := &atomic.Bool{}
+	l := stoppedLogger{Logger: inner, ctx: context.Background(), callFailed: failed}
+
+	l.Warn("plugin failed to exit gracefully", "call", "succeeded")
+	failed.Store(true)
+	l.Warn("plugin failed to exit gracefully", "call", "failed")
+	l.Warn("another warning")
+
+	got := buf.String()
+	for _, want := range []string{"call=succeeded", "another warning"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log should have %q, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "call=failed") {
+		t.Errorf("log should leave out the kill after a failed call, got:\n%s", got)
+	}
+}
+
+// What a process writes to stderr is kept apart from its log records, and
+// its first paragraph tells why it exited.
+func TestStderrOutputReason(t *testing.T) {
+	tests := []struct {
+		name  string
+		write []string
+		want  string
+	}{
+		{
+			name:  "nothing",
+			write: nil,
+			want:  "",
+		},
+		{
+			name:  "log records only",
+			write: []string{`{"@level":"error","@message":"failed"}`, "\n"},
+			want:  "",
+		},
+		{
+			name: "a panic among log records",
+			write: []string{
+				`{"@level":"debug","@message":"called"}`, "\n",
+				"panic: boom", "\n",
+				"[signal SIGSEGV: segmentation violation]", "\n",
+				"", "\n",
+				"goroutine 1 [running]:", "\n",
+				"main.main()", "\n",
+			},
+			want: "panic: boom\n[signal SIGSEGV: segmentation violation]",
+		},
+		{
+			name:  "a line written in parts, without its newline",
+			write: []string{"\n\nfatal: ", "giving up"},
+			want:  "fatal: giving up",
+		},
+		{
+			name:  "a line that only starts as JSON",
+			write: []string{"{not json\n"},
+			want:  "{not json",
+		},
+		{
+			name:  "a line longer than is kept",
+			write: []string{strings.Repeat("x", maxStderrLine), strings.Repeat("y", 100), "\n", "next\n"},
+			want:  strings.Repeat("x", maxStderrLine) + "\nnext",
+		},
+		{
+			name:  "more lines than are told",
+			write: []string{strings.Repeat("line\n", maxReasonLines+5)},
+			want:  strings.TrimSuffix(strings.Repeat("line\n", maxReasonLines), "\n"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			o := &stderrOutput{}
+			for _, w := range tt.write {
+				if _, err := o.Write([]byte(w)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := o.reason(); got != tt.want {
+				t.Errorf("reason() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

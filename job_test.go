@@ -388,7 +388,7 @@ func TestJob_RunIndependently_Failure(t *testing.T) {
 
 	vars := map[string]any{"test_var": "test_value"}
 	printer := newBufferPrinter()
-	success, outputs, _, errorMsg, duration := job.RunIndependently(vars, printer, "test-job")
+	success, outputs, report, errorMsg, duration := job.RunIndependently(vars, printer, "test-job")
 
 	// Job with nonexistent action should fail
 	if success {
@@ -407,22 +407,15 @@ func TestJob_RunIndependently_Failure(t *testing.T) {
 		t.Errorf("Expected positive duration, got: %v", duration)
 	}
 
-	// Verify error message was written to printer's error buffer
+	// The step's result tells the action's error, as it is.
+	if !strings.Contains(report, "mock action execution failed") {
+		t.Errorf("Expected the report to contain the action's error, but got: %s", report)
+	}
+
+	// Outside a verbose run the error is not also told as it happens.
 	if errBuffer, ok := printer.errWriter.(*bytes.Buffer); ok {
-		errorOutput := errBuffer.String()
-		if errorOutput == "" {
-			t.Errorf("Expected error output in printer buffer, but got empty string")
-		}
-
-		// Verify the error message contains expected content
-		expectedContent := "mock action execution failed"
-		if !strings.Contains(errorOutput, expectedContent) {
-			t.Errorf("Expected error output to contain '%s', but got: %s", expectedContent, errorOutput)
-		}
-
-		// Verify it contains error formatting
-		if !strings.Contains(errorOutput, "Error:") {
-			t.Errorf("Expected error output to contain 'Error:' prefix, but got: %s", errorOutput)
+		if errBuffer.Len() != 0 {
+			t.Errorf("Expected no error output while the job ran, but got: %s", errBuffer.String())
 		}
 	} else {
 		t.Errorf("Expected printer.errWriter to be *bytes.Buffer, but got %T", printer.errWriter)

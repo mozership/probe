@@ -18,6 +18,7 @@ import (
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/pb"
 	"github.com/mozership/probe/truncate"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -304,7 +305,7 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 			call.Cleanups.Add(d.GetCleanups()...)
 			call.Processes.Add(processesFromPB(d.GetProcesses())...)
 		}
-		return nil, nil, fromStatus(err)
+		return nil, nil, fromRPC(err)
 	}
 	call.Cleanups.Add(runRes.GetCleanups()...)
 	call.Processes.Add(processesFromPB(runRes.GetProcesses())...)
@@ -329,6 +330,81 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 // steps left behind. It gives up once ctx is done.
 func (m *Client) Cleanup(ctx context.Context, call CleanupCall) error {
 	_, err := m.client.Cleanup(ctx, &pb.CleanupRequest{RunId: call.RunID})
+	if err != nil {
+		return fromRPC(err)
+	}
+	return nil
+}
+
+// actionError is an error of an action as the runner receives it: in the
+// gRPC status it was sent in. It reads as what the action said, without the
+// code and the wording gRPC puts around it, which tell a person nothing of
+// why the step failed. The status is kept, so that status.Code and
+// status.FromError still read it.
+type actionError struct{ s *status.Status }
+
+func (e *actionError) Error() string {
+	if msg := e.s.Message(); msg != "" {
+		return msg
+	}
+	return "the action failed with " + e.s.Code().String()
+}
+
+// GRPCStatus returns the status the error was sent in.
+func (e *actionError) GRPCStatus() *status.Status {
+	return e.s
+}
+
+// actionErrorInfo marks the gRPC status an action's error is carried in, as
+// one the action returned rather than one of the connection to it, which
+// gRPC gives a code an action can return as well.
+var actionErrorInfo = &errdetails.ErrorInfo{Domain: "probe", Reason: "ACTION_ERROR"}
+
+// sentByAction returns err in the gRPC status it is sent in, marked as the
+// action's error. A refusal of the guard has a mark of its own.
+func sentByAction(err error) error {
+	s, ok := status.FromError(err)
+	if !ok {
+		s = status.New(codes.Unknown, err.Error())
+	}
+	if hasInfo(s, refusedInfo) {
+		return err
+	}
+	if d, detailErr := s.WithDetails(actionErrorInfo); detailErr == nil {
+		return d.Err()
+	}
+	return err
+}
+
+// fromAction reports whether err is an error the action returned, as
+// sentByAction marked it. An action built against an earlier version of
+// this package does not mark its errors.
+func fromAction(err error) bool {
+	s, ok := status.FromError(err)
+	return ok && hasInfo(s, actionErrorInfo)
+}
+
+// hasInfo reports whether s carries info among its details.
+func hasInfo(s *status.Status, info *errdetails.ErrorInfo) bool {
+	for _, d := range s.Details() {
+		if i, ok := d.(*errdetails.ErrorInfo); ok && i.GetDomain() == info.GetDomain() && i.GetReason() == info.GetReason() {
+			return true
+		}
+	}
+	return false
+}
+
+// fromRPC returns err, the error of a call of an action, as the action's
+// own error: a refusal of the guard as one, and any other status as an
+// actionError. An error that is not a status is left as it is.
+func fromRPC(err error) error {
+	err = fromStatus(err)
+	if IsRefused(err) {
+		return err
+	}
+	if s, ok := status.FromError(err); ok {
+		return &actionError{s: s}
+	}
 	return err
 }
 
@@ -393,7 +469,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	// also when it is its result that cannot be sent.
 	defer func() {
 		if err != nil {
-			err = withLeftBehind(err, cleanups.List(), processes.List())
+			err = sentByAction(withLeftBehind(err, cleanups.List(), processes.List()))
 		}
 	}()
 
