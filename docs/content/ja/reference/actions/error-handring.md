@@ -1,6 +1,6 @@
 # アクションエラーハンドリング
 
-ステップは`test`が偽になったとき、またはアクション自体がエラーを返したときに失敗します。失敗しても同じジョブの残りのステップは実行され、ジョブは失敗扱いになります。そのジョブを`needs`に指定したジョブはスキップされ、ワークフローの終了ステータスは`test`の失敗なら`1`、アクションのエラーなら`3`になります。
+ステップは`test`が偽になったとき、またはアクション自体がエラーを返したときに失敗します。失敗しても同じジョブの残りのステップは実行され、ジョブは失敗扱いになります。そのジョブを`needs`に指定したジョブは、`always: true`がない限りスキップされます。ワークフローの終了ステータスは、`test`の失敗なら`1`、アクションのエラーなら`3`になります。
 
 失敗を無視するための設定はありません。ワークフローを失敗させたくないチェックは、`test`で判定せず結果をoutputsとして記録します。
 
@@ -49,9 +49,12 @@ steps:
 
 ## 後続の分岐
 
-他のジョブが失敗したかどうかで分岐する手段はありません。ジョブが失敗すると後続はスキップされるためです。結果に応じて処理を変えたい場合は、結果をoutputsとして公開し、後続のジョブの`skipif`でその値を評価します。
+ジョブが失敗すると、それを`needs`に指定したジョブはスキップされます。失敗したときにも動かしたいジョブには`always: true`を付け、結果をoutputsとして公開して、そのジョブの`skipif`で値を評価します。リクエストが接続できなかったステップはoutputsを公開しないため、`??`で既定値を与えます。
 
 ```yaml
+name: Health
+vars:
+  api_url: "{{API_URL}}"
 jobs:
 - id: health-check
   name: Health Check
@@ -62,12 +65,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.api_url}}/health"
+      test: res.code == 200
       outputs:
         healthy: res.code == 200
 
 - name: Alert
   needs: [health-check]
-  skipif: outputs.health.healthy
+  always: true
+  skipif: outputs.health?.healthy ?? false
   steps:
     - name: Notify
       uses: hello

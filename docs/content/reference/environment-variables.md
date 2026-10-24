@@ -110,12 +110,14 @@ export API_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```yaml
 # workflow.yml
 vars:
+  api_url: "{{API_URL}}"
   api_token: "{{API_TOKEN}}"
 
 jobs:
 - name: API checks
   defaults:
     http:
+      url: "{{vars.api_url}}"
       headers:
         Authorization: "Bearer {{vars.api_token}}"
   steps:
@@ -142,36 +144,31 @@ vars:
   username: "{{API_USERNAME}}"
   password: "{{API_PASSWORD}}"
 
-steps:
-  - name: "Authenticated Request"
-    uses: http
-    with:
-      method: GET
-      url: "https://api.example.com/protected"
-      headers:
-        Authorization: "Basic {{encode_base64(vars.username + ':' + vars.password)}}"
+jobs:
+- name: Protected API
+  steps:
+    - name: "Authenticated Request"
+      uses: http
+      with:
+        method: GET
+        url: "https://api.example.com/protected"
+        headers:
+          Authorization: "Basic {{encode_base64(vars.username + ':' + vars.password)}}"
+      test: res.code == 200
 ```
 
-### Email Authentication
+### Email Delivery
 
-Mail steps need the server, the port and the account to authenticate with.
+The [SMTP action](/reference/actions/smtp) has no parameters for authentication, so a mail step needs only the server and the addresses.
 
 #### SMTP Configuration
 
-A mail step needs the host, the port and the account it authenticates with.
+A mail step needs the server's `host:port`, the sender and the recipient.
 
 ```bash
-# Gmail with app password
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="alerts@example.com"
-export SMTP_PASSWORD="app-specific-password"
-
-# Office 365
-export SMTP_HOST="smtp.office365.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="alerts@company.com"
-export SMTP_PASSWORD="account-password"
+export SMTP_ADDR="mail.example.com:25"
+export MAIL_FROM="probe@example.com"
+export MAIL_TO="postmaster@example.com"
 ```
 
 ```yaml
@@ -246,25 +243,30 @@ vars:
 jobs:
 - id: monitoring
   name: monitoring
+  skipif: vars.enable_monitoring != "true" || vars.enable_performance_tracking != "true"
   steps:
     - name: "Performance Check"
       uses: http
       with:
         method: GET
         url: "{{vars.api_base_url}}/metrics"
+      test: res.code == 200 && rt.sec < 1
 
 - id: notifications
   name: notifications
   needs: [monitoring]
+  skipif: vars.enable_slack_notifications != "true"
   steps:
     - name: "Slack Alert"
       uses: http
       with:
         url: "{{vars.slack_webhook_url}}"
         method: "POST"
-        body: |
-          {
-          }
+        headers:
+          content-type: application/json
+        body:
+          text: "The performance check passed"
+      test: res.code == 200
 ```
 
 ## CI/CD Integration Variables
@@ -285,7 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Run Probe Tests
         env:
           API_TOKEN: ${{ secrets.API_TOKEN }}
@@ -521,23 +523,22 @@ vars:
   environment: "{{ENVIRONMENT}}"
   default_timeout: "{{DEFAULT_TIMEOUT ?? 'not set'}}"
 
-steps:
-  - name: "Debug Environment"
-    uses: hello
-    with:
-      message: |
+jobs:
+- name: Debug
+  steps:
+    - name: "Debug Environment"
+      uses: hello
+      echo: |
         Environment Debug:
         API_URL: "{{vars.api_base_url}}"
         Environment: "{{vars.environment}}"
         Timeout: "{{vars.default_timeout}}"
-        
-  - name: "Test Variable Access"
-    uses: hello
-    echo: |
-      Available variables:
-      {{range $key, $value := vars}}
-        {{$key}}: {{$value}}
-      {{end}}
+
+    - name: "Test Variable Access"
+      uses: hello
+      echo: |
+        Available variables:
+        {{toJSON(vars)}}
 ```
 
 ## Common Patterns
@@ -589,18 +590,38 @@ export ENABLE_SLACK_ALERTS=$([[ "$ENVIRONMENT" == "production" ]] && echo "true"
 ```yaml
 # workflow.yml
 vars:
+  api_base_url: "{{API_BASE_URL}}"
+  slack_webhook_url: "{{SLACK_WEBHOOK_URL}}"
   skip_performance_tests: "{{SKIP_PERFORMANCE_TESTS}}"
   enable_slack_alerts: "{{ENABLE_SLACK_ALERTS}}"
 
 jobs:
 - id: performance-tests
   name: performance-tests
-  # Performance test steps
-    
+  skipif: vars.skip_performance_tests == "true"
+  steps:
+    - name: "Response time"
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.api_base_url}}/health"
+      test: res.code == 200 && rt.sec < 0.5
+
 - id: alerts
   name: alerts
   needs: [performance-tests]
-  # Alert steps
+  skipif: vars.enable_slack_alerts != "true"
+  steps:
+    - name: "Slack Alert"
+      uses: http
+      with:
+        url: "{{vars.slack_webhook_url}}"
+        method: "POST"
+        headers:
+          content-type: application/json
+        body:
+          text: "The performance tests passed"
+      test: res.code == 200
 ```
 
 ## See Also

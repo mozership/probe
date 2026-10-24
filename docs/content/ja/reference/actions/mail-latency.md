@@ -11,13 +11,12 @@
 このアクションはディレクトリ内のメールを読み、計測結果をCSVとして書き出します。
 
 ```yaml
-steps:
-  - name: Measure delivery latency
-    uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
-    with:
-      mail_dir: "/var/mail/probe/new"
-      output_dir: "./reports"
-    test: res.status == 0
+- name: Measure delivery latency
+  uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+  with:
+    mail_dir: "/var/mail/probe/new"
+    output_dir: "./reports"
+  test: res.status == 0
 ```
 
 ## パラメータ
@@ -59,35 +58,40 @@ CSVにはメール1通につき1行を書き出します。列は以下のとお
 SMTPで送ったメールが届くのを待ってから計測する例です。
 
 ```yaml
+name: Mail latency
+vars:
+  smtp_addr: localhost:25
+  run_id: "{{random_str(8)}}"
+  maildir: /var/mail/probe
 jobs:
-  - name: Mail delivery latency
-    steps:
-      - name: Send a probe mail
-        uses: smtp
-        with:
-          addr: "{{vars.smtp_addr}}"
-          from: "probe@example.com"
-          to: "probe@example.com"
-          subject: "probe {{vars.run_id}}"
-          session: 1
-          message: 1
-          length: 500
-        test: res.code == 0 && res.sent > 0
+- name: Mail delivery latency
+  steps:
+    - name: Send a probe mail
+      uses: smtp
+      with:
+        addr: "{{vars.smtp_addr}}"
+        from: "probe@example.com"
+        to: "probe@example.com"
+        subject: "probe {{vars.run_id}}"
+        session: 1
+        message: 1
+        length: 500
+      test: res.code == 0 && res.sent > 0
 
-      - name: Measure
-        id: latency
-        uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
-        wait: 30s
-        with:
-          mail_dir: "{{vars.maildir}}/new"
-          output_dir: "./reports"
-        test: res.status == 0
-        outputs:
-          report: res.output_file
+    - name: Measure
+      id: latency
+      uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+      wait: 30s
+      with:
+        mail_dir: "{{vars.maildir}}/new"
+        output_dir: "./reports"
+      test: res.status == 0
+      outputs:
+        report: res.output_file
 
-      - name: Report
-        uses: hello
-        echo: "CSV: {{outputs.latency.report}}"
+    - name: Report
+      uses: hello
+      echo: "CSV: {{outputs.latency.report}}"
 ```
 
 ## 関連項目

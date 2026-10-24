@@ -57,7 +57,7 @@ probe health-check.yml
 
 ### マルチサービスヘルス監視
 
-複数のサービスを並列で監視します：
+複数のサービスを並列で監視します。集計のジョブには`always: true`があるため、チェックが失敗しても結果を報告します。接続できなかったチェックはoutputsを公開しないため、集計では各出力をデフォルト値付きで読みます。
 
 ```yaml
 name: Multi-Service Health Monitor
@@ -133,6 +133,7 @@ jobs:
 - id: summary-report
   name: Health Summary
   needs: [user-service, order-service, payment-service, notification-service]
+  always: true
   steps:
     - name: Generate Health Report
       uses: hello
@@ -140,23 +141,23 @@ jobs:
         🎯 Multi-Service Health Report
         ===============================
 
-        User Service: {{outputs['user-service'].healthy ? "✅" : "❌"}} ({{outputs['user-service'].response_time}}ms)
-          Active Users: {{outputs['user-service'].user_count}}
+        User Service: {{(outputs['user-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['user-service']?.response_time ?? "-"}}ms)
+          Active Users: {{outputs['user-service']?.user_count ?? "-"}}
 
-        Order Service: {{outputs['order-service'].healthy ? "✅" : "❌"}} ({{outputs['order-service'].response_time}}ms)
-          Pending Orders: {{outputs['order-service'].pending_orders}}
+        Order Service: {{(outputs['order-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['order-service']?.response_time ?? "-"}}ms)
+          Pending Orders: {{outputs['order-service']?.pending_orders ?? "-"}}
 
-        Payment Service: {{outputs['payment-service'].healthy ? "✅" : "❌"}} ({{outputs['payment-service'].response_time}}ms)
-          Transaction Queue: {{outputs['payment-service'].transaction_queue}}
+        Payment Service: {{(outputs['payment-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['payment-service']?.response_time ?? "-"}}ms)
+          Transaction Queue: {{outputs['payment-service']?.transaction_queue ?? "-"}}
 
-        Notification Service: {{outputs['notification-service'].healthy ? "✅" : "❌"}} ({{outputs['notification-service'].response_time}}ms)
-          Notification Queue: {{outputs['notification-service'].queue_size}}
+        Notification Service: {{(outputs['notification-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['notification-service']?.response_time ?? "-"}}ms)
+          Notification Queue: {{outputs['notification-service']?.queue_size ?? "-"}}
 
         Overall System Status: {{
-          outputs['user-service'].healthy &&
-          outputs['order-service'].healthy &&
-          outputs['payment-service'].healthy &&
-          outputs['notification-service'].healthy ?
+          (outputs['user-service']?.healthy ?? false) &&
+          (outputs['order-service']?.healthy ?? false) &&
+          (outputs['payment-service']?.healthy ?? false) &&
+          (outputs['notification-service']?.healthy ?? false) ?
           "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 ISSUES DETECTED"
         }}
 
@@ -635,7 +636,7 @@ smtpアクションが送るのは生成されたテストメッセージで、�
 ### マルチ環境設定
 
 **base-monitoring.yml:**
-```yaml fragment
+```yaml merge=env-monitoring base
 name: Service Health Monitor
 description: すべての環境用のベース監視ワークフロー
 
@@ -673,6 +674,7 @@ jobs:
 - id: monitoring-report
   name: Monitoring Report
   needs: [service-health]
+  always: true
   defaults:
     http:
       headers:
@@ -683,8 +685,8 @@ jobs:
       uses: hello
       echo: |
         Environment: {{vars.ENVIRONMENT}}
-        API: {{outputs['api-health'].api_healthy ? "✅" : "❌"}} ({{outputs['api-health'].response_time}}ms)
-        Database: {{outputs['database-health'].db_healthy ? "✅" : "❌"}} ({{outputs['database-health'].db_response_time}}ms)
+        API: {{(outputs['api-health']?.api_healthy ?? false) ? "✅" : "❌"}} ({{outputs['api-health']?.response_time ?? "-"}}ms)
+        Database: {{(outputs['database-health']?.db_healthy ?? false) ? "✅" : "❌"}} ({{outputs['database-health']?.db_response_time ?? "-"}}ms)
 
   # プロダクション固有のセキュリティ監視
 - id: security-monitoring
@@ -705,15 +707,16 @@ jobs:
 ```
 
 **development.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: development
   API_URL: http://localhost:3000
   DB_API_URL: http://localhost:5432
+  SECURITY_API_URL: http://localhost:4000  # 未使用: セキュリティチェックはプロダクションでのみ実行
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: production
   API_URL: https://api.yourcompany.com
@@ -730,7 +733,7 @@ probe base-monitoring.yml,development.yml
 probe base-monitoring.yml,production.yml
 ```
 
-後のファイルに`jobs`があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは`base-monitoring.yml`に置き、`skipif`で`ENVIRONMENT`が`production`のときだけ実行します。
+後のファイルに`jobs`があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは`base-monitoring.yml`に置き、`skipif`で`ENVIRONMENT`が`production`のときだけ実行します。`development.yml`にも`SECURITY_API_URL`を定義し、どちらの実行でもジョブが読む変数がすべて設定されるようにしています。`monitoring-report`には`always: true`があるため、チェックが失敗してもスキップされずに結果を報告します。
 
 ## ベストプラクティス
 
@@ -764,17 +767,39 @@ probe base-monitoring.yml,production.yml
 独立した確認は別々のジョブにします。そうすれば全体の所要時間は合計ではなく、最も遅いものの時間になります。
 
 ```yaml
+vars:
+  SERVICE_A_URL: https://service-a.yourcompany.com
+  SERVICE_B_URL: https://service-b.yourcompany.com
+
 # 良い例: 独立したチェックを並列実行
 jobs:
-  service-a-check:    # 並列実行
-  service-b-check:    # 並列実行
-  service-c-check:    # 並列実行
+- name: Service A Check  # 並列実行
+  steps:
+    - name: Service A Health
+      id: service-a
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_A_URL}}/health"
+      test: res.code == 200
+      # 良い例: 効率的な出力
+      outputs:
+        healthy: res.code == 200          # ブール値フラグ
+        response_time: (rt.sec * 1000)    # 特定のメトリクス
+        # 避ける: レスポンス全体の保存: full_response: res.body
 
-# 良い例: 効率的な出力
-outputs:
-  service_healthy: res.code == 200  # ブール値フラグ
-  response_time: (rt.sec * 1000)            # 特定のメトリクス
-  # 避ける: レスポンス全体の保存: full_response: res.body
+- name: Service B Check  # 並列実行
+  steps:
+    - name: Service B Health
+      id: service-b
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_B_URL}}/health"
+      test: res.code == 200
+      outputs:
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
 ```
 
 ### 4. 文書化と保守

@@ -17,12 +17,18 @@
 
 ```yaml
 jobs:
-- id: job-id
-  name: Human Readable Name # オプション: 表示名
+- id: other-job
+  name: Other Job
+  steps:
+    - name: Prepare
+      uses: hello
+
+- id: job-id               # オプション: needsから参照する識別子
+  name: Human Readable Name # 必須: 表示名
   needs: [other-job]       # オプション: ジョブ依存関係
-  timeout: 300s            # オプション: ジョブタイムアウト
   steps:                   # 必須: ステップの配列
-    # ステップ定義...
+    - name: Say hello
+      uses: hello
 ```
 
 ### ジョブライフサイクル
@@ -41,6 +47,10 @@ jobs:
 `needs`キーワードを使用して実行依存関係を作成します：
 
 ```yaml
+vars:
+  DB_API: "{{DB_API}}"
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: setup
   name: Environment Setup
@@ -49,31 +59,34 @@ jobs:
       id: setup
       uses: http
       with:
-        post: "/init"
+        method: GET
+        url: "{{vars.DB_API}}/init"
       test: res.code == 200
       outputs:
         db_session_id: res.body.session_id
 
 - id: test-suite-a
   name: API Test Suite A
-  needs: [setup]           # setup の完了を待つ
+  needs: [setup]           # setupの完了を待つ
   steps:
     - name: Test User API
       uses: http
       with:
-        get: "/users"
+        method: GET
+        url: "{{vars.API_URL}}/users"
         headers:
           X-Session-ID: "{{outputs.setup.db_session_id}}"
       test: res.code == 200
 
 - id: test-suite-b
   name: API Test Suite B
-  needs: [setup]           # setup にも依存
+  needs: [setup]           # setupにも依存
   steps:
     - name: Test Order API
       uses: http
       with:
-        get: "/orders"
+        method: GET
+        url: "{{vars.API_URL}}/orders"
         headers:
           X-Session-ID: "{{outputs.setup.db_session_id}}"
       test: res.code == 200
@@ -85,7 +98,8 @@ jobs:
     - name: Clean Database
       uses: http
       with:
-        post: "/cleanup"
+        method: GET
+        url: "{{vars.DB_API}}/cleanup"
         headers:
           X-Session-ID: "{{outputs.setup.db_session_id}}"
       test: res.code == 200
@@ -95,9 +109,12 @@ jobs:
 
 ジョブは`skipif`が真になったときにスキップされます。式からは`vars`と、依存しているジョブが公開した`outputs`を参照できます。
 
-ジョブが失敗すると、それに依存するジョブはまとめてスキップされます。結果で分岐したい場合は、`test`で失敗させるのではなくoutputsとして公開してください。
+ジョブが失敗すると、それに依存するジョブはまとめてスキップされるため、Detailed Health Checkには`skipif`が要りません。[`always`](/ja/reference/yaml-configuration#always)を持つジョブは、`needs`のジョブがどう終わったかにかかわらず、それらがすべて終わると実行され、公開された値をもとに`skipif`で実行するかを決めます。接続の拒否などでリクエスト自体が失敗すると`outputs.ping`はないため、`??`でそれも応答なしとして扱います。
 
 ```yaml
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: health-check
   name: Basic Health Check
@@ -108,12 +125,12 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/ping"
+      test: res.code == 200
       outputs:
         service_responsive: res.code == 200
 
 - name: Detailed Health Check
   needs: [health-check]
-  skipif: "!outputs.ping.service_responsive"
   steps:
     - name: Deep Health Check
       uses: http
@@ -124,7 +141,8 @@ jobs:
 
 - name: Send Notification
   needs: [health-check]
-  skipif: outputs.ping.service_responsive
+  always: true
+  skipif: outputs.ping?.service_responsive ?? false
   steps:
     - name: Alert Team
       uses: hello
@@ -162,9 +180,9 @@ jobs:
 
 ```yaml
 steps:
-  - name: Step Name          # 必須: 説明的な名前
+  - name: Step Name          # オプション: 説明的な名前
     id: step-id             # オプション: 参照用の一意識別子
-    action: http            # オプション: 実行するアクション
+    uses: http              # 必須: 実行するアクション
     with:                   # オプション: アクションパラメータ
       url: https://api.example.com
       method: GET
@@ -202,17 +220,18 @@ HTTPリクエストなどの特定のアクションを実行：
 
 #### 2. Echoステップ
 
-メッセージや計算された値を表示：
+メッセージや計算された値を表示します。どのステップもアクションを指定するため、表示だけをするステップは`hello`を使います：
 
 ```yaml
 - name: Display Results
+  uses: hello
   echo: |
     Test Results Summary:
-    
+
     User ID: {{outputs['previous-step'].user_id}}
     Email: {{outputs['previous-step'].user_email}}
     Last Login: {{outputs['previous-step'].last_login}}
-    
+
     Response Time: {{outputs['previous-step'].response_time}}ms
     Test Completed: {{unixtime()}}
 ```
@@ -240,6 +259,9 @@ HTTPリクエストなどの特定のアクションを実行：
 ジョブ内のステップはデフォルトで順次実行されます：
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: sequential-test
   name: Sequential Step Execution
@@ -319,9 +341,12 @@ steps:
 
 ### 1. エラー回復パターン
 
-回復ステップによる堅牢なエラーハンドリングを実装：
+回復ステップによる堅牢なエラーハンドリングを実装します。各エンドポイントは、それより前のものが失敗したときだけ試し、試さなかったものはレポートに`-`と表示します：
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: resilient-check
   name: Resilient Service Check
@@ -340,6 +365,7 @@ jobs:
     - name: Try Alternative Endpoint
       id: alt-attempt
       uses: http
+      skipif: outputs.primary_success ?? false
       timeout: 15s
       with:
         method: GET
@@ -351,6 +377,7 @@ jobs:
     - name: Fallback to Legacy Endpoint
       id: legacy-attempt
       uses: http
+      skipif: (outputs.primary_success ?? false) || (outputs.alt_success ?? false)
       timeout: 20s
       with:
         method: GET
@@ -363,15 +390,15 @@ jobs:
       uses: hello
       echo: |
         Service Health Check Results:
-          
-        Primary API (v1): {{outputs['primary-attempt'].primary_success ? "✅" : "❌"}}
-        Alternative API (v2): {{outputs['alt-attempt'].alt_success ? "✅" : "❌"}}
-        Legacy API: {{outputs['legacy-attempt'].legacy_success ? "✅" : "❌"}}
-          
+
+        Primary API (v1): {{(outputs.primary_success ?? false) ? "✅" : "❌"}}
+        Alternative API (v2): {{outputs.alt_success == nil ? "-" : outputs.alt_success ? "✅" : "❌"}}
+        Legacy API: {{outputs.legacy_success == nil ? "-" : outputs.legacy_success ? "✅" : "❌"}}
+
         Overall Status: {{
-          outputs['primary-attempt'].primary_success || 
-          outputs['alt-attempt'].alt_success || 
-          outputs['legacy-attempt'].legacy_success ? "HEALTHY" : "DOWN"
+          (outputs.primary_success ?? false) ||
+          (outputs.alt_success ?? false) ||
+          (outputs.legacy_success ?? false) ? "HEALTHY" : "DOWN"
         }}
 ```
 
@@ -380,6 +407,9 @@ jobs:
 分析のため複数のステップでデータを収集：
 
 ```yaml
+vars:
+  BASE_URL: "{{BASE_URL}}"
+
 jobs:
 - id: performance-analysis
   name: Performance Analysis
@@ -393,7 +423,8 @@ jobs:
       test: res.code == 200
       outputs:
         homepage_time: (rt.sec * 1000)
-        homepage_size: res.body_size
+        # JSONのボディは受け取ったままの形がrawbodyにあり、それ以外のボディはres.bodyそのもの
+        homepage_size: len(res.rawbody ?? res.body)
 
     - name: Test API Endpoint
       id: api
@@ -404,7 +435,7 @@ jobs:
       test: res.code == 200
       outputs:
         api_time: (rt.sec * 1000)
-        api_size: res.body_size
+        api_size: len(res.rawbody ?? res.body)
 
     - name: Test Search Function
       id: search
@@ -415,31 +446,31 @@ jobs:
       test: res.code == 200
       outputs:
         search_time: (rt.sec * 1000)
-        search_size: res.body_size
+        search_size: len(res.rawbody ?? res.body)
 
     - name: Performance Summary
       uses: hello
       echo: |
         Performance Analysis Results:
-          
+
         Homepage:
           Response Time: {{outputs.homepage.homepage_time}}ms
           Size: {{outputs.homepage.homepage_size}} bytes
-            
+
         API Endpoint:
           Response Time: {{outputs.api.api_time}}ms
           Size: {{outputs.api.api_size}} bytes
-            
+
         Search Function:
           Response Time: {{outputs.search.search_time}}ms
           Size: {{outputs.search.search_size}} bytes
-            
+
         Average Response Time: {{
           (outputs.homepage.homepage_time + 
            outputs.api.api_time + 
            outputs.search.search_time) / 3
         }}ms
-          
+
         Total Data Transfer: {{
           outputs.homepage.homepage_size + 
           outputs.api.api_size + 
@@ -449,9 +480,12 @@ jobs:
 
 ### 3. 動的ステップ設定
 
-実行時条件に基づいてステップを設定：
+実行時条件に基づいてステップを設定します。最初のステップがサービスの設定を読み、後続の各ステップの`skipif`がその値からステップを実行するかを決めます：
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: adaptive-monitoring
   name: Adaptive Monitoring
@@ -476,8 +510,9 @@ jobs:
       test: res.code == 200
 
     - name: Detailed Monitoring
-      id: adaptive-monitoring
+      id: detailed
       uses: http
+      skipif: outputs.monitoring_level != "detailed"
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/metrics"
@@ -488,6 +523,7 @@ jobs:
 
     - name: Feature-Specific Tests
       uses: http
+      skipif: '!("beta" in (outputs.feature_flags ?? []))'
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/beta/features"
@@ -495,6 +531,9 @@ jobs:
 
     - name: Production Alerts
       uses: hello
+      skipif: |
+        outputs.environment != "production" ||
+        ((outputs.detailed?.cpu_usage ?? 0) < 80 && (outputs.detailed?.memory_usage ?? 0) < 80)
       echo: |
         🚨 PRODUCTION ALERT: High resource usage detected!
         CPU: {{outputs.detailed.cpu_usage}}%
@@ -539,19 +578,26 @@ steps:
 
 ### ジョブ参照
 
-他のジョブからジョブ結果を参照：
+他のジョブからジョブ結果を参照します。API FunctionalityはDatabase Connectivityが成功した後にだけ実行され、そのステップが公開した値を読みます：
 
 ```yaml
+vars:
+  DB_API: "{{DB_API}}"
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: database-check
   name: Database Connectivity
   steps:
     - name: Test Database
+      id: db
       uses: http
       with:
         method: GET
         url: "{{vars.DB_API}}/ping"
       test: res.code == 200
+      outputs:
+        db_version: res.body.version
 
 - id: api-check
   name: API Functionality
@@ -564,9 +610,9 @@ jobs:
         url: "{{vars.API_URL}}/health"
       test: res.code == 200
 
-    - name: Skip Message
+    - name: Report
       uses: hello
-      echo: "Skipping API test due to database connectivity issues"
+      echo: "API checked against database {{outputs.db.db_version}}"
 ```
 
 ## パフォーマンス最適化
@@ -578,6 +624,12 @@ jobs:
 可能な限りジョブが並列実行されるよう構造化：
 
 ```yaml
+vars:
+  FRONTEND_URL: "{{FRONTEND_URL}}"
+  BACKEND_URL: "{{BACKEND_URL}}"
+  DB_URL: "{{DB_URL}}"
+  APP_URL: "{{APP_URL}}"
+
 jobs:
   # これらのジョブは並列実行可能（依存関係なし）
 - id: frontend-test
@@ -628,6 +680,9 @@ jobs:
 ベターなリソース利用のためステップ実行を最適化：
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: efficient-monitoring
   name: Efficient Resource Monitoring
@@ -635,15 +690,18 @@ jobs:
     # タイムアウトを使用してハングを防止
     - name: Quick Health Check
       uses: http
-      timeout: 5s                    # ping 用の短いタイムアウト
+      timeout: 5s                    # ping用の短いタイムアウト
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/ping"
       test: res.code == 200
+      outputs:
+        responsive: res.code == 200
 
     # 条件付きの高コスト操作
     - name: Detailed Analysis
       uses: http
+      skipif: "!(outputs.responsive ?? false)"
       timeout: 30s                   # 詳細分析用の長いタイムアウト
       with:
         method: GET
@@ -675,7 +733,7 @@ jobs:
 
 ジョブサイズの適切なバランスを保つ：
 
-```yaml
+```yaml fragment
 # 良い例: 焦点を絞った、一貫性のあるジョブ
 jobs:
 - id: authentication-tests

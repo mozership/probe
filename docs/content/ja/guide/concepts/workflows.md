@@ -66,6 +66,10 @@ vars:
 **デフォルト**: 各ジョブ内でそのジョブのすべてのステップに適用される共通設定を設定します。トップレベルの`defaults`はすべてのジョブに適用され、ジョブ自身の`defaults`がそれより優先されます。
 
 ```yaml
+name: Health Check
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - name: Health Check
   defaults:
@@ -193,7 +197,7 @@ vars:
   API_URL: "{{API_URL}}"
 
 jobs:
-  # ステージ 1: インフラチェック（並列）
+  # ステージ1: インフラチェック（並列）
 - id: database-check
   name: Database Connectivity
   steps:
@@ -214,7 +218,7 @@ jobs:
         url: "{{vars.REDIS_HEALTH_URL}}"
       test: res.code == 200
 
-# ステージ 2: アプリケーションチェック（インフラに依存）
+# ステージ2: アプリケーションチェック（インフラに依存）
 - id: api-validation
   name: API Service Validation
   needs: [database-check, cache-check]
@@ -226,7 +230,7 @@ jobs:
         url: "{{vars.API_URL}}/health"
       test: res.code == 200
 
-# ステージ 3: エンドツーエンドテスト（API に依存）
+# ステージ3: エンドツーエンドテスト（APIに依存）
 - id: e2e-tests
   name: End-to-End Tests
   needs: [api-validation]
@@ -270,7 +274,6 @@ jobs:
         url: https://us-east.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-east'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -285,7 +288,6 @@ jobs:
         url: https://us-west.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-west'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -300,7 +302,6 @@ jobs:
         url: https://eu.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'eu'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -339,7 +340,7 @@ jobs:
 ワークフローを単一のよく定義された目的に焦点を絞って保持します。
 
 ```yaml
-# 良い例: API ヘルスチェックに焦点
+# 良い例: APIヘルスチェックに焦点
 name: API Health Check
 description: Monitor the health of our REST API endpoints
 
@@ -375,11 +376,11 @@ description: Test core business functionality
 設定マージを使用して異なる環境で動作するワークフローを設計します。
 
 **base-monitoring.yml:**
-```yaml
+```yaml merge=monitoring base
 name: Service Monitoring
 description: Monitor critical services
 vars:
-  # production.yml または staging.yml の vars で置き換わる
+  # production.ymlまたはstaging.ymlのvarsで置き換わる
   API_BASE_URL: "{{API_BASE_URL}}"
 
 jobs:
@@ -395,13 +396,13 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.staging.example.com
 ```
@@ -424,6 +425,10 @@ probe base-monitoring.yml,staging.yml
 ジョブは`skipif`が真になったときにスキップされます。式からは`vars`と、依存しているジョブの`outputs`を参照できます。
 
 ```yaml
+name: Conditional Diagnostics
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: health-check
   name: Basic Health Check
@@ -434,12 +439,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+      test: res.code == 200
       outputs:
         service_healthy: res.code == 200
 
 - name: Deep Diagnostic
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Run Diagnostics
       id: diagnostics
@@ -447,19 +454,19 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/diagnostics"
-      outputs:
-        diagnostics_ok: res.code == 200
+      test: res.code == 200
 
 - name: Send Alert
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Critical Alert
       uses: hello
       echo: "CRITICAL: {{vars.service_url}} is not healthy"
 ```
 
-ジョブが失敗すると後続がまとめてスキップされるため、ヘルスチェックは`test`で失敗させず、結果をoutputsとして公開しています。
+ヘルスチェックは結果を`test`で確かめ、同じ結果をoutputsとしても公開しています。依存先のジョブが失敗したジョブはスキップされるので、チェックが失敗したときのための2つのジョブには`always: true`を付けています。接続できなかったチェックは出力を公開しないため、出力は`?.`と`??`で読みます。
 
 
 ### 2. 動的設定
@@ -467,6 +474,12 @@ jobs:
 式を使用して、実行時の条件に応じてワークフローの設定値を決めます。
 
 ```yaml
+name: Load Test
+vars:
+  load_test_url: "{{LOAD_TEST_URL}}"
+  load_test_users: "{{LOAD_TEST_USERS ?? 10}}"
+  load_test_duration: "{{LOAD_TEST_DURATION ?? 60}}"
+
 jobs:
 - id: load-test
   name: Load Testing
@@ -476,13 +489,13 @@ jobs:
       id: params
       echo: "Load test configuration determined"
       outputs:
-        concurrent_users: vars.LOAD_TEST_USERS ?? 10
-        test_duration: vars.LOAD_TEST_DURATION ?? 60
+        concurrent_users: int(vars.load_test_users)
+        test_duration: int(vars.load_test_duration)
 
     - name: Execute Load Test
       uses: http
       with:
-        url: "{{vars.LOAD_TEST_URL}}"
+        url: "{{vars.load_test_url}}"
         method: POST
         body: |
           {
@@ -497,7 +510,7 @@ jobs:
 複雑なワークフローを再利用可能なコンポーネントに分解します。`jobs`を持てるのは1ファイルだけなので、共有するファイルではジョブをYAMLアンカーの下に置き、ワークフロー側で自分のジョブと並べて列挙します。
 
 **common-setup.yml:**
-```yaml
+```yaml merge=composition base
 shared:
   setup_job: &setup_job
     id: setup
@@ -513,7 +526,7 @@ shared:
 ```
 
 **main-workflow.yml:**
-```yaml fragment
+```yaml merge=composition
 name: Complete System Test
 description: Full system validation with common setup
 
@@ -521,7 +534,7 @@ vars:
   API_URL: "{{API_URL}}"
 
 jobs:
-- *setup_job    # common-setup.yml で定義
+- *setup_job    # common-setup.ymlで定義
 - id: api-tests
   name: API Tests
   needs: [setup]
@@ -594,25 +607,25 @@ jobs:
 name: E-commerce Checkout Flow Test
 description: |
   以下を含む完全な e コマースチェックアウトプロセスを検証します：
-  
+
   1. プロダクトカタログブラウジング
   2. ショッピングカート管理  
   3. ユーザー認証
   4. 決済処理
   5. 注文確認
   6. メール通知配信
-  
+
   このワークフローは、プロダクト選択から注文完了までの実際の
   ユーザージャーニーをシミュレートし、すべての重要なビジネス
   ロジックが正しく機能することを確認します。
-  
+
   前提条件:
   - 有効な決済方法を持つテストユーザーアカウント
   - テストデータが投入されたプロダクトカタログ
   - 通知用に設定されたメールサービス
-  
+
   予想実行時間: 2-3分
-  
+
   テストされる失敗シナリオ:
   - 無効な決済情報
   - 在庫切れプロダクト
@@ -624,6 +637,11 @@ description: |
 失敗シナリオを計画します：
 
 ```yaml
+name: Service Failover
+vars:
+  primary_service_url: "{{PRIMARY_SERVICE_URL}}"
+  fallback_service_url: "{{FALLBACK_SERVICE_URL}}"
+
 jobs:
 - id: primary-check
   name: Primary Service Check
@@ -633,7 +651,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.PRIMARY_SERVICE_URL}}"
+        url: "{{vars.primary_service_url}}"
       test: res.code == 200
       outputs:
         primary_healthy: res.code == 200
@@ -646,7 +664,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.FALLBACK_SERVICE_URL}}"
+        url: "{{vars.fallback_service_url}}"
       test: res.code == 200
       outputs:
         fallback_healthy: res.code == 200
@@ -678,7 +696,7 @@ jobs:
 
 最適なパフォーマンスのためワークフローを設計します：
 
-```yaml
+```yaml fragment
 # 良い例: 独立操作の並列実行
 jobs:
 - id: frontend-check   # これらは並列実行される
@@ -702,7 +720,7 @@ jobs:
   name: check-a
 - id: check-b
   name: check-b
-  needs: [check-a]  # B が実際に A に依存する場合のみ
+  needs: [check-a]  # Bが実際にAに依存する場合のみ
 ```
 
 ## よくあるアンチパターン

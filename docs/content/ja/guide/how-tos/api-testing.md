@@ -1145,7 +1145,7 @@ jobs:
 
 検証対象ごとにケースをジョブにまとめておけば、失敗した箇所を特定できます。
 
-```yaml
+```yaml fragment
 # 良い例: 整理されたテスト構造
 jobs:
 - name: authentication     # 関連テストをグループ化

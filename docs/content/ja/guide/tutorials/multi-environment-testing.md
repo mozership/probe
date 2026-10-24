@@ -55,7 +55,7 @@ deployment-tests/
 ```
 
 **config/base.yml:**
-```yaml
+```yaml merge=env base
 name: "Multi-Environment Deployment Testing"
 description: "開発、ステージング、プロダクション環境での包括的テスト"
 
@@ -63,19 +63,19 @@ vars: &base_vars
   # 共通設定
   API_VERSION: "v2"
   USER_AGENT: "Probe Multi-Env Tester v1.0"
-  
+
   # テストユーザー設定
   TEST_USER_EMAIL: "test@example.com"
   TEST_USER_PASSWORD: "TestPassword123!"
-  
+
   # パフォーマンスしきい値（ベース - 環境ごとに上書きされる）
   RESPONSE_TIME_THRESHOLD: 2000
   CRITICAL_RESPONSE_TIME: 5000
-  
+
   # ヘルスチェック設定
   HEALTH_CHECK_INTERVAL: 30
   MAX_CONSECUTIVE_FAILURES: 3
-  
+
   # 機能テスト
   FEATURE_VALIDATION_ENABLED: true
   A_B_TEST_VALIDATION_ENABLED: false
@@ -88,7 +88,7 @@ shared:
 
 共通ヘッダーはここでYAMLアンカーとして定義し、各ジョブが`defaults`に取り込みます：
 
-```yaml
+```yaml merge=env
 jobs:
 - name: Environment checks
   defaults:
@@ -96,39 +96,44 @@ jobs:
       headers:
         <<: *common_headers
   steps:
-    # ...
+    - name: "API Health"
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/health"
+      test: res.code == 200
 ```
 
 ファイルをマージすると、後のファイルのトップレベルのキーは前のファイルの同じキーを丸ごと置き換えます。そのため、環境ファイルに自分の`vars`だけを書くと、`base.yml`の`vars`は失われます。ファイルは読み込まれる前に1つのYAML文書につなげられるので、各環境ファイルはYAMLのマージキー`<<: *base_vars`でベースの変数を取り込みます。環境ファイルの`vars`も`env_vars`としてアンカーを付け、独自の変数を足すワークフローファイルから取り込めるようにします。
 
 **config/environments/development.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
   # 環境識別
   ENVIRONMENT: "development"
   ENVIRONMENT_COLOR: "🟡"
-  
+
   # API設定
   API_BASE_URL: "https://api-dev.example.com"
   WEB_BASE_URL: "https://web-dev.example.com"
-  
+
   # 緩いパフォーマンスしきい値
   RESPONSE_TIME_THRESHOLD: 5000    # 5秒（より緩い）
   CRITICAL_RESPONSE_TIME: 10000    # 10秒
-  
+
   # 開発環境固有設定
   DEBUG_MODE: true
   DETAILED_LOGGING: true
   SKIP_PERFORMANCE_TESTS: false   # 開発環境でもパフォーマンステスト
   SKIP_LOAD_TESTS: true           # 重い負荷テストはスキップ
-  
+
   # 機能フラグ（開発環境は全機能を有効化）
   ENABLE_NEW_FEATURES: true
   ENABLE_EXPERIMENTAL_FEATURES: true
   ENABLE_DEBUG_ENDPOINTS: true
-  
+
   # 開発データ
   USE_TEST_DATA: true
   RESET_DATA_BEFORE_TESTS: true
@@ -136,33 +141,33 @@ vars: &env_vars
 ```
 
 **config/environments/staging.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
   # 環境識別
   ENVIRONMENT: "staging"
   ENVIRONMENT_COLOR: "🟠"
-  
+
   # API設定
   API_BASE_URL: "https://api-staging.example.com"
   WEB_BASE_URL: "https://web-staging.example.com"
-  
+
   # プロダクション類似のパフォーマンスしきい値
   RESPONSE_TIME_THRESHOLD: 2000    # 2秒
   CRITICAL_RESPONSE_TIME: 5000     # 5秒
-  
+
   # ステージング環境固有設定
   DEBUG_MODE: false
   DETAILED_LOGGING: true
   SKIP_PERFORMANCE_TESTS: false
   SKIP_LOAD_TESTS: false
-  
+
   # 機能フラグ（ステージングはプロダクション + 承認済み機能をミラー）
   ENABLE_NEW_FEATURES: true
   ENABLE_EXPERIMENTAL_FEATURES: false  # 安定機能のみ
   ENABLE_DEBUG_ENDPOINTS: false
-  
+
   # ステージングデータ
   USE_TEST_DATA: false
   USE_PRODUCTION_LIKE_DATA: true
@@ -171,38 +176,38 @@ vars: &env_vars
 ```
 
 **config/environments/production.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
   # 環境識別
   ENVIRONMENT: "production"
   ENVIRONMENT_COLOR: "🔴"
-  
+
   # API設定
   API_BASE_URL: "https://api.example.com"
   WEB_BASE_URL: "https://web.example.com"
-  
+
   # 厳密なパフォーマンスしきい値
   RESPONSE_TIME_THRESHOLD: 1500    # 1.5秒
   CRITICAL_RESPONSE_TIME: 3000     # 3秒
-  
+
   # プロダクション設定
   DEBUG_MODE: false
   DETAILED_LOGGING: false
   SKIP_PERFORMANCE_TESTS: false
   SKIP_LOAD_TESTS: true            # プロダクションへの影響を避ける
-  
+
   # 機能フラグ（プロダクションは安定・承認済み機能のみ）
   ENABLE_NEW_FEATURES: false
   ENABLE_EXPERIMENTAL_FEATURES: false
   ENABLE_DEBUG_ENDPOINTS: false
-  
+
   # プロダクションデータ
   USE_TEST_DATA: false
   USE_PRODUCTION_DATA: true
   RESET_DATA_BEFORE_TESTS: false
-  
+
   # プロダクション固有監視
   ENABLE_REAL_USER_MONITORING: true
   ENABLE_ERROR_TRACKING: true
@@ -214,7 +219,7 @@ vars: &env_vars
 包括的なヘルス検証を作成します：
 
 **workflows/health-check.yml:**
-```yaml fragment
+```yaml merge=env
 name: "Environment Health Check"
 description: "マージした設定が指す環境の包括的ヘルス検証"
 
@@ -367,7 +372,7 @@ jobs:
 包括的なデプロイ確認を作成します：
 
 **workflows/deployment-validation.yml:**
-```yaml fragment
+```yaml merge=env
 name: "Deployment Validation"
 description: "マージした設定が指す環境でのデプロイ成功を検証"
 
@@ -599,7 +604,7 @@ jobs:
           outputs['config-validation'].config_valid &&
           outputs['auth-test'].auth_response_time < vars.RESPONSE_TIME_THRESHOLD &&
           outputs['data-test'].data_response_time < vars.RESPONSE_TIME_THRESHOLD &&
-          outputs['mutation-test'].mutation_response_time < vars.RESPONSE_TIME_THRESHOLD ? 
+          outputs['mutation-test'].mutation_response_time < vars.RESPONSE_TIME_THRESHOLD ?
           "✅ DEPLOYMENT SUCCESSFUL" : "❌ DEPLOYMENT ISSUES DETECTED"
         }}
 

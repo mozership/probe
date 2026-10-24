@@ -50,8 +50,8 @@ GETリクエストに必要なのはURLだけです。
   uses: http
   timeout: 30s                                  # オプション: リクエストタイムアウト
   with:
-    url: https://api.example.com/users/123        # 必須: ターゲット URL
-    method: POST                                  # オプション: HTTP メソッド (デフォルト: GET)
+    url: https://api.example.com/users/123        # 必須: ターゲットURL
+    method: POST                                  # オプション: HTTPメソッド (デフォルト: GET)
     headers:                                      # オプション: リクエストヘッダー
       Content-Type: "application/json"
       Authorization: "Bearer {{vars.api_token}}"
@@ -76,18 +76,24 @@ HTTPアクションは豊富なレスポンスオブジェクトを提供しま�
 ```yaml
 # 利用可能なレスポンスプロパティ:
 test: |
-  res.code == 200 &&                    # HTTP ステータスコード
-  (rt.sec * 1000) < 1000 &&                      # レスポンス時間（ミリ秒）
-  res.body_size < 10000 &&               # レスポンスボディサイズ（バイト）
-  res.headers["Content-Type"] == "application/json" &&  # レスポンスヘッダー
-  res.body.success == true &&            # 解析された JSON ボディ（該当する場合）
-  res.body contains "success"           # テキストとしてのレスポンスボディ
+  res.code == 200 &&                    // HTTP ステータスコード
+  (rt.sec * 1000) < 1000 &&                      // レスポンス時間（ミリ秒）
+  len(res.rawbody) < 10000 &&         // 解析前のボディのサイズ（バイト）
+  res.headers["Content-Type"] == "application/json" &&  // レスポンスヘッダー
+  res.body.success == true &&            // 解析された JSON ボディ（該当する場合）
+  res.rawbody contains "success"        // 解析前のボディのテキスト
 ```
 
 #### 一般的なHTTPパターン
 
 **API認証:**
 ```yaml
+name: API authentication
+vars:
+  api_base_url: "{{API_BASE_URL}}"
+  api_username: "{{API_USERNAME}}"
+  api_password: "{{API_PASSWORD}}"
+
 jobs:
 - id: api-test
   name: api-test
@@ -133,7 +139,7 @@ jobs:
       --boundary123
       Content-Disposition: form-data; name="file"; filename="test.txt"
       Content-Type: text/plain
-      
+
       This is test file content
       --boundary123--
   test: res.code == 201
@@ -207,11 +213,11 @@ jobs:
 ```yaml
 # 利用可能なレスポンスプロパティ:
 test: |
-  res.code == 0 &&                         # 終了コード（0 = 成功）
-  res.stdout contains "success" &&        # 標準出力
-  res.stderr == "" &&                      # 標準エラー（空 = エラーなし）
-  req.cmd == "npm run build" &&           # 元のコマンド
-  req.shell == "/bin/bash"                # 実行に使用されたシェル
+  res.code == 0 &&                         // 終了コード（0 = 成功）
+  res.stdout contains "success" &&        // 標準出力
+  res.stderr == "" &&                      // 標準エラー（空 = エラーなし）
+  req.cmd == "npm run build" &&           // 元のコマンド
+  req.shell == "/bin/bash"                // 実行に使用されたシェル
 ```
 
 #### 一般的なShellパターン
@@ -284,7 +290,7 @@ shellアクションは複数のセキュリティレイヤーを実装します
   id: hello
   uses: hello
   with:
-    message: "Test message"           # res にそのまま返る
+    message: "Test message"           # resにそのまま返る
   echo: "{{res.message}}"
   outputs:
     greeting: res.message
@@ -298,57 +304,25 @@ test: status == 0 && res.message != nil
 
 ### SMTPアクション
 
-`smtp`アクションは通知とアラートのメール送信機能を有効にします。
+`smtp`アクションは、生成したメッセージをSMTPサーバーに配送し、配送を計測・検証します。本文は生成され、`length`でその大きさを指定します。
 
 ```yaml
 - name: Send Email Notification
   uses: smtp
   with:
-    addr: "smtp.gmail.com              # SMTP サーバーホスト:587                         # SMTP サーバーポート"
-    from: alerts@mycompany.com        # 送信者メールアドレス
-    to: ["admin@mycompany.com", "team@mycompany.com"]  # 受信者
-    subject: "System Alert: {{vars.alert_type}}"       # メール件名
+    addr: "smtp.example.com:587"      # SMTPサーバーのhost:port
+    from: alerts@mycompany.com        # エンベロープの送信者
+    to: "admin@mycompany.com, team@mycompany.com"  # 受信者（カンマ区切り）
+    subject: "System Alert: {{vars.alert_type}}"       # 件名
     session: 1
     message: 1
     length: 500
-  echo: |                           # メール本文（プレーンテキストまたは HTML）
-  test: res.code == "sent"
+  test: res.code == 0 && res.sent > 0
   outputs:
-    message_id: res.message_id
-    recipients_count: res.recipients_count
+    sent_count: res.sent              # サーバーが受け付けたメッセージ数
 ```
 
-**SMTP設定例:**
-
-**Gmail:**
-```yaml
-with:
-  host: smtp.gmail.com
-  port: 587
-  username: "your-email@gmail.com"
-  password: "your-app-password"
-  tls: true
-```
-
-**AWS SES:**
-```yaml
-with:
-  host: email-smtp.us-east-1.amazonaws.com
-  port: 587
-  username: "{{vars.aws_ses_username}}"
-  password: "{{vars.aws_ses_password}}"
-  tls: true
-```
-
-**Office 365:**
-```yaml
-with:
-  host: smtp.office365.com
-  port: 587
-  username: "your-email@company.com"
-  password: "{{vars.o365_password}}"
-  tls: true
-```
+このアクションには認証のパラメータがなく、465番ポートのように最初からTLSで始まる接続にも対応していません。そのため、テスト対象のサーバーのように、ログインせずにメールを受け付けるサーバーに向いています。`STARTTLS`の使い方は`starttls`と`insecure_skip_tls`で指定します。すべてのパラメータは[SMTPアクション](/reference/actions/smtp)を参照してください。
 
 ## リトライ機能
 
@@ -394,7 +368,7 @@ Probeは全てのアクションで利用可能な統一されたリトライ機
 
 ### 成功条件
 
-リトライが成功したかどうかは、ステップの`test`で判定します。`test`が真になった時点で成功として結果を返し、偽のままなら次の試行に進みます。`test`のないステップはリトライせず、1回だけ実行します。
+リトライが成功したかどうかは、ステップの`test`で判定します。`test`が真になった時点で成功として結果を返し、偽のままなら次の試行に進みます。`test`がなく、`openapi`のような契約によるチェックもないステップは、確かめるものがないためリトライせず、1回だけ実行します。
 
 ### 実行フロー
 
@@ -460,15 +434,17 @@ Probeは全てのアクションで利用可能な統一されたリトライ機
   test: res.code == 0
 ```
 
-### 高度なリトライパターン
+### 段階的なリトライ
 
-リトライのパラメータにも式を書けます。これにより、環境に応じた待ち時間や、条件を満たしたときだけのリトライを表現できます。
+`max_attempts`、`interval`、`initial_delay`は固定の値で、テンプレートや式は書けません。待ち方を変えたい場合は、ステップを分けてそれぞれに設定します。
 
-#### 段階的な遅延
-
-依存の順に待つジョブを並べれば、起動の順序に沿ったリトライになります。
+軽いチェックを短い間隔で繰り返してから、詳しいチェックを長い間隔で待つと、起動の順序に沿ったリトライになります。
 
 ```yaml
+name: Staged startup
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: staged-startup
   name: staged-startup
@@ -495,32 +471,16 @@ jobs:
       test: res.code == 200 && res.body.database_connected == true
 ```
 
-#### 条件付きリトライ
-
-リトライのパラメータに式を書けば、環境に応じて待ち方を変えられます。
-
-```yaml
-- name: "Environment-Aware Health Check"
-  uses: http
-  with:
-    method: GET
-    url: "{{vars.service_url}}/health"
-  retry:
-    max_attempts: "{{vars.environment == 'production' ? 60 : 10}}"
-    interval: "{{vars.environment == 'production' ? '5s' : '1s'}}"
-  test: res.code == 200
-```
-
 ### ベストプラクティス
 
-リトライを設定するときは、1回あたりのタイムアウト、試行回数の上限、初期遅延の3つを対象の性質に合わせます。
+リトライを設定するときは、1回あたりのタイムアウト、試行回数の上限、初期遅延の3つを対象の性質に合わせます。どの例も`test`を持つので、`test`が偽の間は試行を繰り返します。
 
 #### 1. 適切なタイムアウト設定
 
-1回あたりのタイムアウトは、リトライ間隔より短くします。
+1回あたりのタイムアウトを短くすると、応答しない試行で待つ時間が減ります。
 
 ```yaml
-# 良い例: リトライ間隔より短いタイムアウト
+# 良い例: 1回あたりのタイムアウトを短くする
 - name: "Quick API Check"
   uses: http
   timeout: "2s"        # 短いタイムアウト
@@ -529,7 +489,8 @@ jobs:
     url: "{{vars.api_url}}/ping"
   retry:
     max_attempts: 10
-    interval: "3s"       # タイムアウトより長い間隔
+    interval: "3s"
+  test: res.code == 200
 ```
 
 #### 2. 実用的な最大試行回数
@@ -545,6 +506,7 @@ jobs:
   retry:
     max_attempts: 30     # 30回 × 2秒 = 最大1分待機
     interval: "2s"
+  test: res.code == 0
 ```
 
 #### 3. 初期遅延の活用
@@ -562,6 +524,7 @@ jobs:
     max_attempts: 20
     interval: "3s"
     initial_delay: "15s"  # データベース起動に時間がかかる場合
+  test: res.code == 0
 ```
 
 ## 高度なアクション使用方法
@@ -573,6 +536,12 @@ jobs:
 アクション失敗に対する堅牢なエラーハンドリングを実装します：
 
 ```yaml
+name: Resilient HTTP check
+vars:
+  primary_url: "{{PRIMARY_URL}}"
+  secondary_url: "{{SECONDARY_URL}}"
+  smtp_host: "{{SMTP_HOST}}"
+
 jobs:
 - id: resilient-http-check
   name: resilient-http-check
@@ -603,6 +572,7 @@ jobs:
 
     - name: Alert on Total Failure
       uses: smtp
+      skipif: (outputs.primary?.primary_healthy ?? false) || (outputs.secondary?.secondary_healthy ?? false)
       with:
         addr: "{{vars.smtp_host}}:587"
         from: "alerts@company.com"
@@ -611,14 +581,15 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         CRITICAL ALERT: All monitored endpoints are down
-          
+
         Primary Endpoint: FAILED
         Secondary Endpoint: FAILED
-          
+
         Time: {{unixtime()}}
-          
+
         Immediate investigation required!
 ```
 
@@ -627,6 +598,13 @@ jobs:
 アクションを組み合わせて複雑なワークフローを作成します：
 
 ```yaml
+name: Comprehensive API testing
+vars:
+  api_url: "{{API_URL}}"
+  client_id: "{{CLIENT_ID}}"
+  client_secret: "{{CLIENT_SECRET}}"
+  smtp_host: "{{SMTP_HOST}}"
+
 jobs:
 - id: comprehensive-api-test
   name: Comprehensive API Testing
@@ -680,6 +658,7 @@ jobs:
     # 4. パフォーマンス検証
     - name: Validate Performance
       uses: smtp
+      skipif: (outputs.functional?.test_duration ?? 0) < 2000
       with:
         addr: "{{vars.smtp_host}}:587"
         from: "performance@company.com"
@@ -688,21 +667,23 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         Performance Alert
-          
+
         API Version: {{outputs.health.api_version}}
         Response Time: {{outputs.functional.test_duration}}ms
         Expected: < 2000ms
-          
+
         Please investigate performance degradation.
 
-        功通知
+
+    # 5. 成功通知
     - name: Success Report
       uses: hello
       echo: |
         ✅ API Test Suite Completed Successfully
-          
+
         Health Check: ✅ (v{{outputs.health.api_version}})
         Authentication: ✅ (expires in {{outputs.auth.token_expires}}s)
         Functionality: ✅ ({{outputs.functional.test_duration}}ms)
@@ -714,6 +695,11 @@ jobs:
 実行時の条件に基づいてアクションを動的に設定します：
 
 ```yaml
+name: Adaptive monitoring
+vars:
+  config_service_url: "{{CONFIG_SERVICE_URL}}"
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: adaptive-monitoring
   name: adaptive-monitoring
@@ -733,10 +719,10 @@ jobs:
     - name: Environment-Specific Health Check
       id: health
       uses: http
-      timeout: "{{outputs.vars.environment == 'production' ? '5s' : '30s'}}"
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+        timeout: "{{outputs.env.environment == 'production' ? '5s' : '30s'}}"
       test: res.code == 200
       outputs:
         service_status: res.body.status
@@ -744,22 +730,24 @@ jobs:
 
     - name: Conditional Alert
       uses: smtp
+      skipif: outputs.health?.error_count == 0
       with:
-        addr: "{{outputs.vars.smtp_config.host}}:{{outputs.vars.smtp_config.port}}"
+        addr: "{{outputs.env.smtp_config.host}}:{{outputs.env.smtp_config.port}}"
         from: "monitoring@company.com"
-        to: "{{outputs.vars.environment == 'production' ? ['ops@company.com', 'management@company.com'] : ['dev@company.com']}}"
-        subject: "{{outputs.vars.environment == 'production' ? 'PRODUCTION' : 'NON-PROD'}} Alert: Service Errors Detected"
+        to: "{{outputs.env.environment == 'production' ? 'ops@company.com, management@company.com' : 'dev@company.com'}}"
+        subject: "{{outputs.env.environment == 'production' ? 'PRODUCTION' : 'NON-PROD'}} Alert: Service Errors Detected"
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         Service Error Alert
-          
-        Environment: {{outputs.vars.environment}}
+
+        Environment: {{outputs.env.environment}}
         Service Status: {{outputs.health.service_status}}
         Error Count: {{outputs.health.error_count}}
-          
-        {{outputs.vars.environment == "production" ? "IMMEDIATE ACTION REQUIRED" : "Please investigate when convenient"}}
+
+        {{outputs.env.environment == "production" ? "IMMEDIATE ACTION REQUIRED" : "Please investigate when convenient"}}
 ```
 
 ## アクションアーキテクチャ詳細
@@ -808,7 +796,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
 # 良い例: 期待されるレスポンス時間に基づく具体的なタイムアウト
 - name: Quick Health Check
   uses: http
-  timeout: 5s              # クイックping は高速でレスポンスすべき
+  timeout: 5s              # クイックpingは高速でレスポンスすべき
   with:
     method: GET
     url: "{{vars.api_url}}/ping"
@@ -855,9 +843,9 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
     method: GET
     url: "{{vars.api_url}}/secure"
     headers:
-      Authorization: "Bearer {{vars.api_token}}"  # vars から
+      Authorization: "Bearer {{vars.api_token}}"  # varsから
 
-# 良い例: 安全な SMTP 設定を使用
+# 良い例: 安全なSMTP設定を使用
 - name: Send Alert
   uses: smtp
   with:
@@ -1013,7 +1001,7 @@ httpアクションの`openapi`のように、ステップを契約に照らし�
 
 ```yaml
 - name: Ask the API who I am
-  uses: github.com/mozership/probe-graphql@<40文字のコミットSHA>
+  uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
   with:
     url: https://api.example.com/graphql
     query: '{ viewer { login } }'
@@ -1037,7 +1025,7 @@ Probeは最初のジョブを始める前にすべての外部アクションを
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@<40文字のコミットSHA> # v0.2.0
+  graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
 
 jobs:
 - name: Who am I

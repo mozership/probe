@@ -57,7 +57,7 @@ probe health-check.yml
 
 ### Multi-Service Health Monitoring
 
-Monitor multiple services in parallel:
+Monitor multiple services in parallel. The summary job has `always: true`, so it reports even when a check fails, and it reads each output with a default because a check that could not connect publishes none:
 
 ```yaml
 name: Multi-Service Health Monitor
@@ -133,6 +133,7 @@ jobs:
 - id: summary-report
   name: Health Summary
   needs: [user-service, order-service, payment-service, notification-service]
+  always: true
   steps:
     - name: Generate Health Report
       uses: hello
@@ -140,23 +141,23 @@ jobs:
         🎯 Multi-Service Health Report
         ===============================
 
-        User Service: {{outputs['user-service'].healthy ? "✅" : "❌"}} ({{outputs['user-service'].response_time}}ms)
-          Active Users: {{outputs['user-service'].user_count}}
+        User Service: {{(outputs['user-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['user-service']?.response_time ?? "-"}}ms)
+          Active Users: {{outputs['user-service']?.user_count ?? "-"}}
 
-        Order Service: {{outputs['order-service'].healthy ? "✅" : "❌"}} ({{outputs['order-service'].response_time}}ms)
-          Pending Orders: {{outputs['order-service'].pending_orders}}
+        Order Service: {{(outputs['order-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['order-service']?.response_time ?? "-"}}ms)
+          Pending Orders: {{outputs['order-service']?.pending_orders ?? "-"}}
 
-        Payment Service: {{outputs['payment-service'].healthy ? "✅" : "❌"}} ({{outputs['payment-service'].response_time}}ms)
-          Transaction Queue: {{outputs['payment-service'].transaction_queue}}
+        Payment Service: {{(outputs['payment-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['payment-service']?.response_time ?? "-"}}ms)
+          Transaction Queue: {{outputs['payment-service']?.transaction_queue ?? "-"}}
 
-        Notification Service: {{outputs['notification-service'].healthy ? "✅" : "❌"}} ({{outputs['notification-service'].response_time}}ms)
-          Notification Queue: {{outputs['notification-service'].queue_size}}
+        Notification Service: {{(outputs['notification-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['notification-service']?.response_time ?? "-"}}ms)
+          Notification Queue: {{outputs['notification-service']?.queue_size ?? "-"}}
 
         Overall System Status: {{
-          outputs['user-service'].healthy &&
-          outputs['order-service'].healthy &&
-          outputs['payment-service'].healthy &&
-          outputs['notification-service'].healthy ?
+          (outputs['user-service']?.healthy ?? false) &&
+          (outputs['order-service']?.healthy ?? false) &&
+          (outputs['payment-service']?.healthy ?? false) &&
+          (outputs['notification-service']?.healthy ?? false) ?
           "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 ISSUES DETECTED"
         }}
 
@@ -635,7 +636,7 @@ Thresholds and endpoints differ between environments, so one monitoring file has
 ### Multi-Environment Configuration
 
 **base-monitoring.yml:**
-```yaml fragment
+```yaml merge=env-monitoring base
 name: Service Health Monitor
 description: Base monitoring workflow for all environments
 
@@ -673,6 +674,7 @@ jobs:
 - id: monitoring-report
   name: Monitoring Report
   needs: [service-health]
+  always: true
   defaults:
     http:
       headers:
@@ -683,8 +685,8 @@ jobs:
       uses: hello
       echo: |
         Environment: {{vars.ENVIRONMENT}}
-        API: {{outputs['api-health'].api_healthy ? "✅" : "❌"}} ({{outputs['api-health'].response_time}}ms)
-        Database: {{outputs['database-health'].db_healthy ? "✅" : "❌"}} ({{outputs['database-health'].db_response_time}}ms)
+        API: {{(outputs['api-health']?.api_healthy ?? false) ? "✅" : "❌"}} ({{outputs['api-health']?.response_time ?? "-"}}ms)
+        Database: {{(outputs['database-health']?.db_healthy ?? false) ? "✅" : "❌"}} ({{outputs['database-health']?.db_response_time ?? "-"}}ms)
 
   # Production-specific security monitoring
 - id: security-monitoring
@@ -705,15 +707,16 @@ jobs:
 ```
 
 **development.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: development
   API_URL: http://localhost:3000
   DB_API_URL: http://localhost:5432
+  SECURITY_API_URL: http://localhost:4000  # unused: the security checks run only in production
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=env-monitoring
 vars:
   ENVIRONMENT: production
   API_URL: https://api.yourcompany.com
@@ -730,7 +733,7 @@ probe base-monitoring.yml,development.yml
 probe base-monitoring.yml,production.yml
 ```
 
-A later file that has `jobs` replaces every job of the earlier file, so the production-only check is in `base-monitoring.yml`, and its `skipif` runs it only when `ENVIRONMENT` is `production`.
+A later file that has `jobs` replaces every job of the earlier file, so the production-only check is in `base-monitoring.yml`, and its `skipif` runs it only when `ENVIRONMENT` is `production`. `development.yml` still defines `SECURITY_API_URL`, so every variable the jobs read is set in both runs. `monitoring-report` has `always: true` so that it reports a failed check rather than being skipped.
 
 ## Best Practices
 
@@ -764,17 +767,39 @@ An alert that fires on every blip stops being read, so the condition decides wha
 Independent checks belong in separate jobs so the whole run takes as long as the slowest one, not their sum.
 
 ```yaml
+vars:
+  SERVICE_A_URL: https://service-a.yourcompany.com
+  SERVICE_B_URL: https://service-b.yourcompany.com
+
 # Good: Parallel independent checks
 jobs:
-  service-a-check:    # Runs in parallel
-  service-b-check:    # Runs in parallel
-  service-c-check:    # Runs in parallel
+- name: Service A Check  # Runs in parallel
+  steps:
+    - name: Service A Health
+      id: service-a
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_A_URL}}/health"
+      test: res.code == 200
+      # Good: Efficient outputs
+      outputs:
+        healthy: res.code == 200          # Boolean flag
+        response_time: (rt.sec * 1000)    # Specific metric
+        # Avoid storing entire response: full_response: res.body
 
-# Good: Efficient outputs
-outputs:
-  service_healthy: res.code == 200  # Boolean flag
-  response_time: (rt.sec * 1000)            # Specific metric
-  # Avoid storing entire response: full_response: res.body
+- name: Service B Check  # Runs in parallel
+  steps:
+    - name: Service B Health
+      id: service-b
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.SERVICE_B_URL}}/health"
+      test: res.code == 200
+      outputs:
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
 ```
 
 ### 4. Documentation and Maintenance

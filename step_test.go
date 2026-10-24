@@ -2010,8 +2010,8 @@ func TestStep_executeSingleAction_Trace(t *testing.T) {
 }
 
 func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
-	// A later step publishing a name already taken gets a warning, not an
-	// error-labelled message.
+	// A later step without an id publishing a name already taken gets a
+	// warning, not an error-labelled message, as its value cannot be read.
 	errOut := new(bytes.Buffer)
 	printer := NewPrinter(false)
 	printer.errWriter = errOut
@@ -2023,13 +2023,22 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	}
 	_ = jCtx.Outputs.Set("first", map[string]any{"token": "one"})
 
-	st := &stepRun{Step: &Step{ID: "second", Outputs: map[string]string{"token": "res.v"}}, expr: &expr.Expr{}}
+	st := &stepRun{Step: &Step{Outputs: map[string]string{"token": "res.v"}}, expr: &expr.Expr{}}
 	st.ctx = StepContext{Res: map[string]any{"v": "two"}}
 	st.saveOutputs(jCtx)
 
 	out := errOut.String()
 	if !strings.Contains(out, "[WARN]") || strings.Contains(out, "Error:") {
 		t.Errorf("output = %q, want a warning and no error", out)
+	}
+
+	// One with an id is read through it, and is not warned of.
+	errOut.Reset()
+	st = &stepRun{Step: &Step{ID: "third", Outputs: map[string]string{"token": "res.v"}}, expr: &expr.Expr{}}
+	st.ctx = StepContext{Res: map[string]any{"v": "three"}}
+	st.saveOutputs(jCtx)
+	if out := errOut.String(); out != "" {
+		t.Errorf("output = %q, want none for a step read through its id", out)
 	}
 }
 

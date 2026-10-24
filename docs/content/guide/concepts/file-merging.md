@@ -31,14 +31,14 @@ probe "configs/*.yml"
 The safe way to split a workflow is to let each file own different top-level keys.
 
 **vars.yml:**
-```yaml
+```yaml merge=vars-file base
 vars:
   api_url: "{{API_URL ?? 'https://api.example.com'}}"
   timeout: "{{REQUEST_TIMEOUT ?? '30s'}}"
 ```
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=vars-file
 name: API Health Check
 description: Basic API monitoring
 
@@ -66,7 +66,7 @@ probe vars.yml,workflow.yml
 Because the last definition wins, an environment file can replace one key outright. Keep every value the workflow needs in that file - what it leaves out is gone, not inherited.
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=override base
 name: API Health Check
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=override
 vars:
   api_url: https://api.production.example.com
   environment: production
@@ -101,7 +101,7 @@ The `vars` block from `production.yml` is the one that is used. If `workflow.yml
 Since the files become one document, an anchor is the way to share a value without redefining a key.
 
 **shared.yml:**
-```yaml
+```yaml merge=anchors base
 shared:
   json_headers: &json_headers
     content-type: application/json
@@ -111,7 +111,7 @@ shared:
 ```
 
 **workflow.yml:**
-```yaml fragment
+```yaml merge=anchors
 name: API Test
 vars:
   api_url: "{{API_URL}}"

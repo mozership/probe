@@ -106,23 +106,23 @@ Outputs can contain various data types:
     user_count: res.body.stats.user_count
     server_version: res.body.version
     is_healthy: res.body.health.status == "healthy"
-    
+
     # Complex objects
     user_profile: res.body.user
     configuration: res.body.config
     metrics: res.body.metrics
-    
+
     # Arrays
     active_users: 'filter(res.body.users, #.active == true)'
     error_codes: 'map(res.body.errors, #.code)'
-    
+
     # Computed values
     success_rate: (res.body.successful_requests / res.body.total_requests) * 100
     avg_response_time: sum(res.body.response_times) / len(res.body.response_times)
-    
+
     # Response metadata
     response_time: (rt.sec * 1000)
-    response_size: res.body_size
+    response_size: len(res.rawbody ?? res.body)
     content_type: res.headers["Content-Type"]
 ```
 
@@ -165,7 +165,7 @@ steps:
       Test Duration: {{outputs['app-test'].test_duration}}ms
 ```
 
-An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and Probe warns about each later one, whose value is read through its step's id. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also a step's id stays that step's outputs, and a step publishing it is warned the same way.
+An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and each later value is read through its step's id, as `outputs.<id>.<name>`. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also the id of a step that publishes is that step's outputs or the value, whichever is published first, so give such an output another name; `probe check` warns of it. A step without an id whose name another step took first has no way to read its value, and Probe warns of it; `probe check` also warns of `outputs.<name>` read by itself while more than one step publishes the name.
 
 ## Cross-Job Data Flow
 
@@ -176,6 +176,9 @@ Data can flow between jobs through job-level outputs and dependencies.
 `needs` both orders the jobs and makes the earlier job's outputs readable.
 
 ```yaml
+vars:
+  SETUP_API: "{{SETUP_API}}"
+
 jobs:
 - id: initialization
   name: System Initialization
@@ -203,22 +206,24 @@ jobs:
   needs: [initialization]  # Wait for initialization to complete
   steps:
     - name: Test User API
+      id: user-api
       uses: http
       with:
         method: GET
-        url: "{{outputs.initialization.api_endpoint}}/users"
+        url: "{{outputs['env-setup'].api_endpoint}}/users"
         headers:
-          X-Environment: "{{outputs.initialization.environment_id}}"
+          X-Environment: "{{outputs['env-setup'].environment_id}}"
       test: res.code == 200
       outputs:
         user_count: res.body.total_users
         api_response_time: (rt.sec * 1000)
 
     - name: Test Database Connectivity
+      id: db-check
       uses: http
       with:
         method: GET
-        url: "{{outputs.initialization.database_url}}/ping"
+        url: "{{outputs['env-setup'].database_url}}/ping"
       test: res.code == 200
       outputs:
         db_response_time: (rt.sec * 1000)
@@ -232,17 +237,17 @@ jobs:
       echo: |
         Test Execution Report
         =====================
-          
-        Environment: {{outputs.initialization.environment_name}}
-        Environment ID: {{outputs.initialization.environment_id}}
-          
+
+        Environment: {{outputs['env-setup'].environment_name}}
+        Environment ID: {{outputs['env-setup'].environment_id}}
+
         API Tests:
-        - User Count: {{outputs['api-tests'].user_count}}
-        - API Response Time: {{outputs['api-tests'].api_response_time}}ms
-          
+        - User Count: {{outputs['user-api'].user_count}}
+        - API Response Time: {{outputs['user-api'].api_response_time}}ms
+
         Database Tests:
-        - DB Response Time: {{outputs['api-tests'].db_response_time}}ms
-          
+        - DB Response Time: {{outputs['db-check'].db_response_time}}ms
+
         Overall Status: All tests completed successfully
 
 - id: cleanup
@@ -252,22 +257,30 @@ jobs:
     - name: Destroy Test Environment
       uses: http
       with:
-        url: "{{vars.SETUP_API}}/environments/{{outputs.initialization.environment_id}}"
+        url: "{{vars.SETUP_API}}/environments/{{outputs['env-setup'].environment_id}}"
         method: DELETE
       test: res.code == 204
 ```
 
 ### Cross-Job Output References
 
-Access outputs from other jobs using the `outputs['job-name'].output-name` syntax:
+An output of another job is read through the id of the step that published it, as `outputs['step-id'].output_name`, not through the job's id. Here the job and its step share the id `data-collection`:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: data-collection
   name: data-collection
   steps:
     - name: Collect User Data
       id: data-collection
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/users/stats"
+      test: res.code == 200
       outputs:
         total_users: res.body.count
         active_users: res.body.active_count
@@ -294,6 +307,9 @@ Data does not always move straight from one step to the next. It can be transfor
 Transform data through multiple steps:
 
 ```yaml
+vars:
+  DATA_API: "{{DATA_API}}"
+
 jobs:
 - id: data-processing-pipeline
   name: Data Processing Pipeline
@@ -304,6 +320,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.DATA_API}}/raw-data"
+      test: res.code == 200
       outputs:
         raw_records: res.body.records
         total_count: res.body.total
@@ -315,23 +332,23 @@ jobs:
       echo: "Filtering data..."
       outputs:
         # Filter active records
-        active_records: "{{filter(outputs['raw-data'].raw_records, #.status == 'active')}}"
-        active_count: "{{len(filter(outputs['raw-data'].raw_records, #.status == 'active'))}}"
-          
+        active_records: "filter(outputs['raw-data'].raw_records, #.status == 'active')"
+        active_count: "len(filter(outputs['raw-data'].raw_records, #.status == 'active'))"
+
     - name: Aggregate Data
       uses: hello
       id: aggregated-data
       echo: "Aggregating data..."
       outputs:
         # Group by category and calculate metrics
-        categories: "{{groupBy(outputs['filtered-data'].active_records, #.category)}}"
-        avg_score: "{{sum(map(outputs['filtered-data'].active_records, #.score)) / outputs['filtered-data'].active_count}}"
-          
+        categories: "groupBy(outputs['filtered-data'].active_records, #.category)"
+        avg_score: "sum(map(outputs['filtered-data'].active_records, #.score)) / outputs['filtered-data'].active_count"
+
     - name: Generate Summary
       uses: hello
       echo: |
         Data Processing Summary:
-          
+
         Raw Records: {{outputs['raw-data'].total_count}}
         Active Records: {{outputs['filtered-data'].active_count}}
         Processing Rate: {{(outputs['filtered-data'].active_count / outputs['raw-data'].total_count) * 100}}%
@@ -344,6 +361,10 @@ jobs:
 Control data flow based on conditions:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  PROCESSING_API: "{{PROCESSING_API}}"
+
 jobs:
 - id: adaptive-processing
   name: adaptive-processing
@@ -354,11 +375,12 @@ jobs:
       with:
         method: GET
         url: "{{vars.API_URL}}/data-quality"
+      test: res.code == 200
       outputs:
         quality_score: res.body.quality_score
         has_errors: res.body.error_count > 0
         record_count: res.body.record_count
-          
+
     - name: Standard Processing
       id: standard-processing
       uses: http
@@ -371,10 +393,11 @@ jobs:
             "record_count": {{outputs['quality-check'].record_count}},
             "quality_mode": "standard"
           }
+      test: res.code == 200
       outputs:
         processing_result: res.body.result
         processing_time: (rt.sec * 1000)
-          
+
     - name: Enhanced Processing
       id: enhanced-processing
       uses: http
@@ -388,22 +411,23 @@ jobs:
             "quality_mode": "enhanced",
             "error_correction": true
           }
+      test: res.code == 200
       outputs:
         processing_result: res.body.result
         processing_time: (rt.sec * 1000)
         corrections_applied: res.body.corrections
-          
+
     - name: Processing Summary
       uses: hello
       echo: |
         Data Processing Complete:
-          
+
         Quality Score: {{outputs['quality-check'].quality_score}}
         Processing Mode: {{outputs['quality-check'].quality_score >= 0.8 ? "Standard" : "Enhanced"}}
-          
-        {{outputs['standard-processing'] ? "Standard Processing Time: " + outputs['standard-processing'].processing_time + "ms" : ""}}
-        {{outputs['enhanced-processing'] ? "Enhanced Processing Time: " + outputs['enhanced-processing'].processing_time + "ms" : ""}}
-        {{outputs['enhanced-processing'] ? "Corrections Applied: " + outputs['enhanced-processing'].corrections_applied : ""}}
+
+        {{outputs['standard-processing'] == nil ? "" : "Standard Processing Time: " + string(outputs['standard-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Enhanced Processing Time: " + string(outputs['enhanced-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Corrections Applied: " + string(outputs['enhanced-processing'].corrections_applied)}}
 ```
 
 ### Data Accumulation Patterns
@@ -411,6 +435,11 @@ jobs:
 Collect data from multiple sources:
 
 ```yaml
+vars:
+  SOURCE_A_URL: "{{SOURCE_A_URL}}"
+  SOURCE_B_URL: "{{SOURCE_B_URL}}"
+  SOURCE_C_URL: "{{SOURCE_C_URL}}"
+
 jobs:
 - id: multi-source-data-collection
   name: multi-source-data-collection
@@ -421,6 +450,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_A_URL}}/data"
+      test: res.code == 200
       outputs:
         source_a_count: res.body.count
         source_a_data: res.body.data
@@ -432,6 +462,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_B_URL}}/data"
+      test: res.code == 200
       outputs:
         source_b_count: res.body.count
         source_b_data: res.body.data
@@ -443,6 +474,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SOURCE_C_URL}}/data"
+      test: res.code == 200
       outputs:
         source_c_count: res.body.count
         source_c_data: res.body.data
@@ -452,14 +484,14 @@ jobs:
       uses: hello
       echo: |
         Multi-Source Data Summary:
-          
+
         Source A: {{outputs['source-a'].source_a_count}} records ({{outputs['source-a'].source_a_time}}ms)
         Source B: {{outputs['source-b'].source_b_count}} records ({{outputs['source-b'].source_b_time}}ms)
         Source C: {{outputs['source-c'].source_c_count}} records ({{outputs['source-c'].source_c_time}}ms)
-          
+
         Total Records: {{outputs['source-a'].source_a_count + outputs['source-b'].source_b_count + outputs['source-c'].source_c_count}}
         Average Response Time: {{(outputs['source-a'].source_a_time + outputs['source-b'].source_b_time + outputs['source-c'].source_c_time) / 3}}ms
-          
+
         Fastest Source: {{
           outputs['source-a'].source_a_time <= outputs['source-b'].source_b_time && outputs['source-a'].source_a_time <= outputs['source-c'].source_c_time ? "Source A" :
           outputs['source-b'].source_b_time <= outputs['source-c'].source_c_time ? "Source B" : "Source C"
@@ -491,11 +523,11 @@ Ensure data quality in outputs:
     user_count: len(res.body.users)
     valid_users: 'filter(res.body.users, #.id != nil && #.email != nil)'
     admin_users: 'filter(res.body.users, #.role == "admin")'
-    
+
     # Data quality metrics
     data_completeness: 'len(filter(res.body.users, #.id != nil && #.email != nil)) / len(res.body.users)'
     has_admin_users: 'any(res.body.users, #.role == "admin")'
-    
+
     # Response metadata
     data_freshness: res.headers["Last-Modified"]
     cache_status: res.headers["X-Cache-Status"]
@@ -515,12 +547,12 @@ Clean and sanitize data before use:
   outputs:
     # Raw data
     raw_input: res.body.input
-    
+
     # Sanitized data
     clean_email: trim(lower(res.body.input.email))
     clean_name: trim(res.body.input.name)
     safe_description: res.body.input.description[0:500]  # Limit length
-    
+
     # Validation flags
     email_valid: res.body.input.email matches "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
     name_valid: len(res.body.input.name) >= 2 && len(res.body.input.name) <= 50
@@ -583,15 +615,15 @@ Extract only needed data:
     record_count: res.body.metadata.total_records
     last_updated: res.body.metadata.last_updated
     status: res.body.metadata.status
-    
+
     # Extract specific records by criteria
     critical_items: 'filter(res.body.data, #.priority == "critical")'
     error_items: 'filter(res.body.data, #.status == "error")'
-    
+
     # Compute aggregates
     avg_score: 'sum(map(res.body.data, #.score)) / len(res.body.data)'
     max_score: 'max(map(res.body.data, #.score))'
-    
+
     # Don't store the entire dataset
     # full_dataset: res.body.data  # Avoid this for large datasets
 ```
@@ -627,11 +659,11 @@ Maintain consistent data types:
 outputs:
   user_count: len(res.body.users)          # Always number
   is_admin: res.body.user.role == "admin"    # Always boolean
-  user_email: res.body.user.email || ""      # Always string (with default)
+  user_email: res.body.user.email ?? ""      # Always string (with default)
 
 # Avoid: Inconsistent types
 outputs:
-  user_count: len(res.body.users) || "unknown"  # Number or string
+  user_count: res.body.user_count ?? "unknown"  # Number or string
 ```
 
 ### 3. Error-Safe Data Access
@@ -641,9 +673,9 @@ Handle potential null/undefined values:
 ```yaml
 # Good: Safe data access
 outputs:
-  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : nil'
-  email_verified: res.body.user && res.body.user.email_verified == true
-  profile_complete: res.body.user && res.body.user.profile && res.body.user.profile.complete == true
+  user_id: 'res.body.user != nil ? res.body.user.id : nil'
+  email_verified: res.body.user != nil && res.body.user.email_verified == true
+  profile_complete: res.body.user?.profile != nil && res.body.user.profile.complete == true
 
 # Good: Using safe navigation
 test: res.body.user?.id != nil && res.body.user?.email != nil
@@ -654,12 +686,23 @@ test: res.body.user?.id != nil && res.body.user?.email != nil
 Document what data flows where:
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  smtp_addr: "{{SMTP_ADDR}}"
+
 jobs:
 - id: user-setup
   name: User Account Setup
   steps:
     - name: Create User Account
       id: user-setup
+      uses: http
+      with:
+        method: POST
+        url: "{{vars.api_url}}/users"
+        body: |
+          {"username": "probe_{{random_str(8)}}"}
+      test: res.code == 201
       # Produces: user_id, username, email
       outputs:
         user_id: res.body.user.id
@@ -681,6 +724,7 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0
       echo: "Click here to verify user {{outputs['user-setup'].user_id}}"
 ```
 

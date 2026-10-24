@@ -66,6 +66,10 @@ vars:
 **Defaults**: Set common `with` values for the steps of a job, keyed by action name. A top-level `defaults` sets them for every job, and a job's own come before it.
 
 ```yaml
+name: Health Check
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - name: Health Check
   defaults:
@@ -270,7 +274,6 @@ jobs:
         url: https://us-east.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-east'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -285,7 +288,6 @@ jobs:
         url: https://us-west.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-west'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -300,7 +302,6 @@ jobs:
         url: https://eu.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'eu'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -375,7 +376,7 @@ description: Test core business functionality
 Design workflows that work across different environments using configuration merging.
 
 **base-monitoring.yml:**
-```yaml
+```yaml merge=monitoring base
 name: Service Monitoring
 description: Monitor critical services
 vars:
@@ -395,13 +396,13 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.staging.example.com
 ```
@@ -424,6 +425,10 @@ The techniques below let one file cover cases that would otherwise need several:
 A job is skipped when its `skipif` expression is true. The expression reads `vars` and the `outputs` of the jobs it depends on.
 
 ```yaml
+name: Conditional Diagnostics
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: health-check
   name: Basic Health Check
@@ -434,12 +439,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+      test: res.code == 200
       outputs:
         service_healthy: res.code == 200
 
 - name: Deep Diagnostic
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Run Diagnostics
       id: diagnostics
@@ -447,19 +454,19 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/diagnostics"
-      outputs:
-        diagnostics_ok: res.code == 200
+      test: res.code == 200
 
 - name: Send Alert
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Critical Alert
       uses: hello
       echo: "CRITICAL: {{vars.service_url}} is not healthy"
 ```
 
-Because a failing job skips everything downstream of it, the health check publishes its result as an output rather than asserting it with `test`.
+The health check asserts its result with `test` and also publishes it as an output. A job whose needed job failed is skipped, so the two jobs that are there for a failed check have `always: true`. They read the output with `?.` and `??`, because a check that could not connect publishes none.
 
 
 ### 2. Dynamic Configuration
@@ -467,6 +474,12 @@ Because a failing job skips everything downstream of it, the health check publis
 Use expressions to make workflows adapt to runtime conditions.
 
 ```yaml
+name: Load Test
+vars:
+  load_test_url: "{{LOAD_TEST_URL}}"
+  load_test_users: "{{LOAD_TEST_USERS ?? 10}}"
+  load_test_duration: "{{LOAD_TEST_DURATION ?? 60}}"
+
 jobs:
 - id: load-test
   name: Load Testing
@@ -476,13 +489,13 @@ jobs:
       id: params
       echo: "Load test configuration determined"
       outputs:
-        concurrent_users: vars.LOAD_TEST_USERS ?? 10
-        test_duration: vars.LOAD_TEST_DURATION ?? 60
+        concurrent_users: int(vars.load_test_users)
+        test_duration: int(vars.load_test_duration)
 
     - name: Execute Load Test
       uses: http
       with:
-        url: "{{vars.LOAD_TEST_URL}}"
+        url: "{{vars.load_test_url}}"
         method: POST
         body: |
           {
@@ -497,7 +510,7 @@ jobs:
 Break complex workflows into reusable components. Only one file can hold `jobs`, so the shared file keeps its job under a YAML anchor, and the workflow lists it among its own jobs.
 
 **common-setup.yml:**
-```yaml
+```yaml merge=composition base
 shared:
   setup_job: &setup_job
     id: setup
@@ -513,7 +526,7 @@ shared:
 ```
 
 **main-workflow.yml:**
-```yaml fragment
+```yaml merge=composition
 name: Complete System Test
 description: Full system validation with common setup
 
@@ -594,25 +607,25 @@ Include comprehensive documentation:
 name: E-commerce Checkout Flow Test
 description: |
   Validates the complete e-commerce checkout process including:
-  
+
   1. Product catalog browsing
   2. Shopping cart management  
   3. User authentication
   4. Payment processing
   5. Order confirmation
   6. Email notification delivery
-  
+
   This workflow simulates a real user journey from product selection
   to order completion, ensuring all critical business logic functions
   correctly.
-  
+
   Prerequisites:
   - Test user account with valid payment method
   - Product catalog populated with test data
   - Email service configured for notifications
-  
+
   Expected duration: 2-3 minutes
-  
+
   Failure scenarios tested:
   - Invalid payment information
   - Out of stock products
@@ -624,6 +637,11 @@ description: |
 Plan for failure scenarios:
 
 ```yaml
+name: Service Failover
+vars:
+  primary_service_url: "{{PRIMARY_SERVICE_URL}}"
+  fallback_service_url: "{{FALLBACK_SERVICE_URL}}"
+
 jobs:
 - id: primary-check
   name: Primary Service Check
@@ -633,7 +651,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.PRIMARY_SERVICE_URL}}"
+        url: "{{vars.primary_service_url}}"
       test: res.code == 200
       outputs:
         primary_healthy: res.code == 200
@@ -646,7 +664,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.FALLBACK_SERVICE_URL}}"
+        url: "{{vars.fallback_service_url}}"
       test: res.code == 200
       outputs:
         fallback_healthy: res.code == 200
@@ -678,7 +696,7 @@ With `always: true` the notification job runs even when a check failed. A check 
 
 Design workflows for optimal performance:
 
-```yaml
+```yaml fragment
 # Good: Parallel execution for independent operations
 jobs:
 - id: frontend-check   # These run in parallel

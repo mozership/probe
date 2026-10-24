@@ -226,7 +226,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 1
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -243,7 +242,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 2
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -260,7 +258,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 3
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -277,7 +274,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 4
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -926,7 +922,7 @@ Once the failure is classified, the response follows from the class.
 
 Each job tries something cheaper than the next, and only the last one gives up.
 
-```yaml
+```yaml fragment
 # Good: Progressive error handling
 jobs:
 - id: quick-retry        # Try immediate retry

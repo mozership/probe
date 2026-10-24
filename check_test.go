@@ -410,6 +410,122 @@ jobs:
 `,
 		},
 		{
+			name: "output names published twice or taken by a step id",
+			workflow: `name: names
+jobs:
+- name: Users
+  steps:
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /login
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      user: res.body.user
+  - name: Refresh
+    id: refresh
+    uses: http
+    with:
+      get: /refresh
+    test: res.code == 200 && outputs.login.token != "" && outputs.user != nil
+    outputs:
+      token: res.body.token
+      user: res.body.user
+  - name: Without an id
+    uses: http
+    with:
+      get: /again
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: Admin
+  steps:
+  - name: Admin login
+    id: admin
+    uses: http
+    with:
+      get: /admin
+    test: res.code == 200
+    outputs:
+      login: res.body.user
+  - name: Id only
+    id: session
+    uses: http
+    with:
+      get: /session
+    test: res.code == 200
+  - name: Named as an id that publishes nothing
+    uses: hello
+    outputs:
+      session: res.status
+`,
+			want: []want{
+				{SeverityWarning, 22, `outputs: user is also published by job 0 "Users", step 0 "Login", and outputs.user, which holds the value of whichever publishes it first, is read; read outputs.refresh.user for this one`},
+				{SeverityWarning, 29, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 39, `outputs: login is the id of job 0 "Users", step 0 "Login" too, so outputs.login is that step's outputs or this value, whichever is published first; give this output another name`},
+			},
+		},
+		{
+			name: "a step without an id whose name another step may take first",
+			workflow: `name: first
+jobs:
+- name: A
+  needs: [b]
+  steps:
+  - name: Later
+    uses: http
+    with:
+      get: /a
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: B
+  id: b
+  steps:
+  - name: Without an id first
+    uses: http
+    with:
+      get: /b0
+    test: res.code == 200
+    outputs:
+      session: res.body.session
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /b
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      session: res.body.session
+- name: C
+  steps:
+  - name: Parallel without an id
+    uses: http
+    with:
+      get: /c
+    test: res.code == 200
+    outputs:
+      code: res.code
+- name: D
+  steps:
+  - name: Parallel too
+    id: d
+    uses: http
+    with:
+      get: /d
+    test: res.code == 200
+    outputs:
+      code: res.code
+`,
+			want: []want{
+				{SeverityWarning, 12, `outputs: token is also published by job 1 "B", step 1 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 40, `outputs: code is also published by job 3 "D", step 0 "Parallel too", so outputs.code holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+			},
+		},
+		{
 			name: "steps nothing checks and tests that read nothing",
 			workflow: `name: tests
 jobs:

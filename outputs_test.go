@@ -88,10 +88,10 @@ func TestOutputsFlatAccess(t *testing.T) {
 		"token": "profile_token", // Conflicts with existing "token"
 		"name":  "john_doe",
 	})
-	// The first publisher keeps the name, and the later one is told how to
-	// read its own value
-	if err == nil || !strings.Contains(err.Error(), "outputs.token keeps the value of 'auth'; read outputs.profile.token") {
-		t.Errorf("Expected a warning for profile's token, got: %v", err)
+	// The first publisher keeps the name, and the later one's value is read
+	// through its id, which is no cause for a warning
+	if err != nil {
+		t.Errorf("Expected no warning for profile's token, read through its id, got: %v", err)
 	}
 
 	// Original flat access should be preserved
@@ -175,14 +175,13 @@ func TestOutputsNoFlatAccessForStepIDConflict(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// Try to create another step with output name "token": a warning, since
-	// the name stays the step's
+	// Another step with output name "token": the name stays the step's,
+	// and the value is read through the id of its own step, without a word
 	err = outputs.Set("auth", map[string]any{
 		"token": "auth_token",
 	})
-	var taken *NameTakenError
-	if !errors.As(err, &taken) {
-		t.Errorf("Expected a name-taken warning, got: %v", err)
+	if err != nil {
+		t.Errorf("Expected no warning, got: %v", err)
 	}
 
 	// Flat access to "token" should not work because "token" is a step ID
@@ -229,7 +228,7 @@ func TestOutputsConflictWarning(t *testing.T) {
 	}
 
 	// Verify the error message
-	expectedMsg := "cannot create step-based outputs for 'foo' because flat output with same name exists"
+	expectedMsg := "the outputs of 'foo' cannot be read as outputs.foo.<name>, since outputs.foo is an output published before"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
 	}
@@ -251,14 +250,12 @@ func TestOutputsConflictWarning(t *testing.T) {
 }
 
 func TestOutputsFirstPublisherKeepsName(t *testing.T) {
-	// Every later publisher is warned, and the first value stays.
+	// The first value stays, and each later one is read through its step's
+	// id, so no publisher is warned.
 	outputs := NewOutputs()
-	if err := outputs.Set("a", map[string]any{"token": "a"}); err != nil {
-		t.Fatalf("Unexpected warning for the first publisher: %v", err)
-	}
-	for _, step := range []string{"b", "c"} {
-		if err := outputs.Set(step, map[string]any{"token": step}); err == nil {
-			t.Errorf("Expected a warning for %s", step)
+	for _, step := range []string{"a", "b", "c"} {
+		if err := outputs.Set(step, map[string]any{"token": step}); err != nil {
+			t.Errorf("Unexpected warning for %s: %v", step, err)
 		}
 	}
 	if v, _ := outputs.GetFlat("token"); v != "a" {
@@ -286,20 +283,21 @@ func TestOutputsSameStepAgain(t *testing.T) {
 }
 
 func TestOutputsNameTakenByStepID(t *testing.T) {
-	// A name that is a step's id holds that step's outputs; each step that
-	// publishes the name is told, rather than its value dropping silently.
+	// A name that is a step's id holds that step's outputs. A step with an
+	// id that publishes the name is read through its id without a word; one
+	// without an id is told, rather than its value dropping silently.
 	outputs := NewOutputs()
 	_ = outputs.Set("token", map[string]any{"value": "v"})
-	for _, step := range []string{"auth", "profile"} {
-		err := outputs.Set(step, map[string]any{"token": step})
-		var taken *NameTakenError
-		if !errors.As(err, &taken) {
-			t.Fatalf("%s: got %v, want a name-taken warning", step, err)
-		}
-		msg := taken.Error()
-		if !strings.Contains(msg, "has the name of the step 'token'") || !strings.Contains(msg, "read outputs."+step+".token") {
-			t.Errorf("%s: warning = %q, want it to name the step and the way to read the value", step, msg)
-		}
+	if err := outputs.Set("auth", map[string]any{"token": "auth"}); err != nil {
+		t.Errorf("auth: got %v, want no warning", err)
+	}
+	err := outputs.SetFlat("job_0.step_2", map[string]any{"token": "flat"})
+	var taken *NameTakenError
+	if !errors.As(err, &taken) {
+		t.Fatalf("got %v, want a name-taken warning", err)
+	}
+	if msg := taken.Error(); !strings.Contains(msg, "has the name of the step 'token'") || !strings.Contains(msg, "give the step an id") {
+		t.Errorf("warning = %q, want it to name the step and the way to read the value", msg)
 	}
 	if got, _ := outputs.Get("token"); got["value"] != "v" {
 		t.Errorf("outputs.token = %v, want the step's outputs", got)
@@ -369,11 +367,12 @@ func TestRunOutputs(t *testing.T) {
 		t.Error("parent has the run's outputs before publish")
 	}
 
-	// A name the parent's steps took stays theirs, as in a workflow
-	err := run.Set("other", map[string]any{"token": "run-token"})
+	// A name the parent's steps took stays theirs, as in a workflow; a step
+	// without an id that publishes it is told
+	err := run.SetFlat("job_0.step_1", map[string]any{"token": "run-token"})
 	var taken *NameTakenError
 	if !errors.As(err, &taken) {
-		t.Errorf("Set() = %v, want a name-taken warning", err)
+		t.Errorf("SetFlat() = %v, want a name-taken warning", err)
 	}
 	if v, _ := run.GetFlat("token"); v != "parent-token" {
 		t.Errorf("run token = %v, want the parent's", v)

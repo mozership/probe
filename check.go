@@ -744,9 +744,17 @@ func (c *checker) checkOutputs() {
 		}
 	}
 	needs := c.ancestors()
+	// The names read by themselves, as outputs.token, rather than through
+	// the id of the step that publishes them.
+	flat := map[string]bool{}
 
 	c.eachExpr(func(e exprAt) {
 		chains := expr.Reads(e.input, "outputs")
+		for _, chain := range chains {
+			if len(byID[chain[0]]) == 0 {
+				flat[chain[0]] = true
+			}
+		}
 		// outputs.auth.token also reads outputs.auth, which is not reported
 		// on its own.
 		deeper := map[string]bool{}
@@ -768,6 +776,61 @@ func (c *checker) checkOutputs() {
 			}
 		}
 	})
+	c.checkOutputNames(byID, byKey, flat, needs)
+}
+
+// checkOutputNames warns of an output name that more than one step
+// publishes where a value is lost by it. outputs.<name> holds the value of
+// the step that publishes it first, and each value is read through the id
+// of its step, which draws no warning. What does is a step without an id
+// publishing a name another step may publish first, as its value then
+// cannot be read, and outputs.<name> read by itself while more than one step publishes
+// it. An output named as the id of a step that publishes is warned of
+// whoever reads it: outputs.<name> is that step's outputs or the value,
+// whichever is published first.
+func (c *checker) checkOutputNames(byID, byKey map[string][]publisher, flat map[string]bool, needs []map[int]bool) {
+	for _, key := range slices.Sorted(maps.Keys(byKey)) {
+		pubs := byKey[key]
+		for n, p := range pubs {
+			path := fmt.Sprintf("jobs[%d].steps[%d].outputs.%s", p.job, p.step, key)
+			where := c.stepWhere(p.job, p.step)
+			if owners := byID[key]; len(owners) > 0 && p.id != key {
+				owner := owners[0]
+				c.add(SeverityWarning, c.line(path), where, "outputs: %s is the id of %s too, so outputs.%s is that step's outputs or this value, whichever is published first; give this output another name", key, c.stepWhere(owner.job, owner.step), key)
+				continue
+			}
+			if p.id == "" && len(pubs) > 1 {
+				if other, ok := publishedBefore(p, pubs, needs); ok {
+					c.add(SeverityWarning, c.line(path), where, "outputs: %s is also published by %s, so outputs.%s holds the value of whichever publishes it first, and this step has no id to read its own through; give it one", key, c.stepWhere(other.job, other.step), key)
+				}
+				continue
+			}
+			if n == 0 {
+				continue
+			}
+			first := c.stepWhere(pubs[0].job, pubs[0].step)
+			switch {
+			case flat[key]:
+				c.add(SeverityWarning, c.line(path), where, "outputs: %s is also published by %s, and outputs.%s, which holds the value of whichever publishes it first, is read; read outputs.%s.%s for this one", key, first, key, p.id, key)
+			}
+		}
+	}
+}
+
+// publishedBefore returns another step of pubs that may publish the name
+// before p does, and whether there is one. A step sure to come after p, as
+// a later step of its job or a step of a job that needs p's, does not.
+func publishedBefore(p publisher, pubs []publisher, needs []map[int]bool) (publisher, bool) {
+	for _, o := range pubs {
+		switch {
+		case o.job == p.job && o.step == p.step:
+		case o.job == p.job && o.step > p.step:
+		case o.job != p.job && needs[o.job][p.job]:
+		default:
+			return o, true
+		}
+	}
+	return publisher{}, false
 }
 
 // exprAt is an expression of a job or a step, or one of the templates of

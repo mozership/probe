@@ -177,7 +177,7 @@ probe base.yml,overrides.yml
 **1. Environment-specific configuration:**
 
 **base-workflow.yml:**
-```yaml fragment
+```yaml merge=env base
 name: API Health Check
 jobs:
 - id: health-check
@@ -192,14 +192,14 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=env
 # Production-specific settings
 vars:
   API_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
-```yaml
+```yaml merge=env
 # Staging-specific settings
 vars:
   API_URL: https://api.staging.example.com
@@ -217,7 +217,7 @@ probe base-workflow.yml,staging.yml
 **2. Shared configuration:**
 
 **common-config.yml:**
-```yaml
+```yaml merge=anchors base
 # Shared header block, referenced from the workflow by its anchor
 shared:
   common_headers: &common_headers
@@ -225,16 +225,21 @@ shared:
 ```
 
 **api-check.yml:**
-```yaml fragment
+```yaml merge=anchors
 name: API Monitoring
 jobs:
 - name: API checks
   defaults:
     http:
+      url: https://api.example.com
       headers:
         <<: *common_headers
   steps:
-    # ... step definitions
+    - name: Health
+      uses: http
+      with:
+        get: /health
+      test: res.code == 200
 ```
 
 ```bash

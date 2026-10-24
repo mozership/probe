@@ -69,7 +69,7 @@ jobs:
         notifications_available: res.code == 200
 
     # サービス可用性に基づく条件付きロジック
-    # リクエストが届かなかったステップは outputs を公開しないため、
+    # リクエストが届かなかったステップはoutputsを公開しないため、
     # それぞれを既定値付きで読む
     - name: Service Availability Report
       uses: hello
@@ -166,7 +166,7 @@ jobs:
         static_data: true
 
     # スキップされたステップと、リクエストが届かなかったステップは
-    # outputs を公開しないため、その outputs.<id> は nil になる
+    # outputsを公開しないため、そのoutputs.<id>はnilになる
     - name: Service Resolution Summary
       uses: hello
       echo: |
@@ -226,7 +226,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 1
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -243,7 +242,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 2
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -260,7 +258,6 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 3
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
@@ -277,12 +274,11 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 4
         response_time: (rt.sec * 1000)
         error_code: 'res.code != 200 ? res.code : nil'
 
     # スキップされた試行と、リクエストが届かなかった試行は
-    # outputs を公開しないため、その outputs.<id> は nil になる
+    # outputsを公開しないため、そのoutputs.<id>はnilになる
     - name: Retry Summary
       uses: hello
       echo: |
@@ -390,7 +386,7 @@ jobs:
         response_time: (rt.sec * 1000)
 
     # サーキットブレーカー状態を更新（サーキットが開いていてプローブの時期でない場合を除く）
-    # リクエストが届かなかったテストは outputs を公開せず、失敗として扱う
+    # リクエストが届かなかったテストはoutputsを公開せず、失敗として扱う
     - name: Update Circuit Breaker
       uses: http
       skipif: outputs.decision.circuit_open && !outputs.decision.should_probe
@@ -495,8 +491,8 @@ jobs:
         active_connections: res.body.active_connections
         error_rate: res.body.error_rate_1min
 
-# サービスが異常だとヘルスチェックが失敗し、それを needs に持つジョブはスキップされる。
-# そのため always で実行し、不要なときは skipif で自らスキップする
+# サービスが異常だとヘルスチェックが失敗し、それをneedsに持つジョブはスキップされる。
+# そのためalwaysで実行し、不要なときはskipifで自らスキップする
 - id: automated-recovery
   name: Automated Recovery Procedures
   needs: [health-monitoring]
@@ -926,7 +922,7 @@ outputs:
 
 各ジョブは次のジョブより軽い手段を試し、最後のジョブで初めて打ち切ります。
 
-```yaml
+```yaml fragment
 # 良い例: 段階的エラーハンドリング
 jobs:
 - id: quick-retry        # 即座にリトライを試行

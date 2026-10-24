@@ -250,6 +250,9 @@ Within a job, steps run one after another in the order they are written, and a s
 Within a job, steps execute sequentially in the order defined:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: user-workflow
   name: User Management Workflow
@@ -345,17 +348,20 @@ State is what one part of a run leaves for another: a job's status, a step's out
 
 ### Job State Tracking
 
-Probe tracks comprehensive state information for each job:
+Each job ends as succeeded, failed or skipped. That state is not a value an expression can read: it decides whether the jobs that need the job run, and what the job learned reaches them through its steps' outputs:
 
 ```yaml
-# Job states available for reference:
 jobs:
 - id: example-job
   name: example-job
   steps:
     - name: Example Step
+      id: example
       uses: hello
-      echo: "Job states can be referenced from other jobs"
+      with:
+        message: ready
+      outputs:
+        message: res.message
 
 - id: dependent-job
   name: dependent-job
@@ -365,8 +371,8 @@ jobs:
       uses: hello
       echo: |
         Job State Information:
-          
-          
+        example-job succeeded, so this job runs
+        Message from example-job: {{outputs.example.message}}
 ```
 
 ### Step State and Output Management
@@ -391,8 +397,6 @@ steps:
     uses: hello
     echo: |
       Previous Step Information:
-      
-      
       Step outputs:
       Response time: {{outputs['api-test'].response_time}}ms
       Status code: {{outputs['api-test'].status_code}}
@@ -404,14 +408,22 @@ steps:
 Jobs can reference state from other jobs:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: health-check
   name: Health Check
   steps:
     - name: Check Service
       id: health-check
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health"
+      test: res.code == 200
       outputs:
-        service_healthy: true
+        service_healthy: res.code == 200
 
 - id: performance-test
   name: Performance Test
@@ -419,8 +431,13 @@ jobs:
   steps:
     - name: Load Test
       id: performance-test
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/load"
+      test: res.code == 200
       outputs:
-        avg_response_time: 250
+        avg_response_time: (rt.sec * 1000)
 
 - id: reporting
   name: Generate Report
@@ -430,13 +447,9 @@ jobs:
       uses: hello
       echo: |
         System Status Report:
-          
-        Performance Test: {{
-            "⏸️ Skipped"
-        }}
-          
-          "Average Response Time: " + outputs['performance-test'].avg_response_time + "ms" : 
-          "Performance data not available"}}
+
+        Service healthy: {{outputs['health-check'].service_healthy}}
+        Average Response Time: {{outputs['performance-test'].avg_response_time}}ms
 ```
 
 ## Timing and Performance
@@ -448,6 +461,9 @@ How long a run takes is decided by three things: when each job starts, how long 
 Probe tracks timing information at multiple levels:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: timing-example
   name: Timing Example
@@ -476,11 +492,11 @@ jobs:
       uses: hello
       echo: |
         Operation Timing:
-          
+
         Quick operation: {{outputs.quick.ping_time}}ms
         Slow operation: {{outputs.slow.query_time}}ms
         Total step time: {{outputs.quick.ping_time + outputs.slow.query_time}}ms
-          
+
         Performance classification:
         Quick: {{outputs.quick.ping_time < 100 ? "Excellent" : (outputs.quick.ping_time < 500 ? "Good" : "Slow")}}
         Slow: {{outputs.slow.query_time < 1000 ? "Fast" : (outputs.slow.query_time < 5000 ? "Acceptable" : "Too Slow")}}
@@ -488,13 +504,17 @@ jobs:
 
 ### Timeout Management
 
-Configure timeouts at different levels:
+Each step sets its own `timeout`, which is 5 minutes when it is not given. A job has no timeout of its own:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  DB_API: "{{DB_API}}"
+  EXTERNAL_API: "{{EXTERNAL_API}}"
+
 jobs:
 - id: timeout-management
   name: Timeout Management Example
-  timeout: 300s  # Job-level timeout (5 minutes)
   steps:
     - name: Quick API Call
       uses: http
@@ -645,6 +665,11 @@ A failure does not stop at the step that produced it. What happens next is gover
 Understanding how errors propagate through the execution model:
 
 ```yaml
+vars:
+  CRITICAL_SERVICE: "{{CRITICAL_SERVICE}}"
+  SERVICE_URL: "{{SERVICE_URL}}"
+  INDEPENDENT_SERVICE: "{{INDEPENDENT_SERVICE}}"
+
 jobs:
 - id: critical-foundation
   name: Critical Foundation
@@ -682,6 +707,7 @@ jobs:
 - id: conditional-cleanup
   name: Conditional Cleanup
   needs: [critical-foundation, dependent-service, resilient-check]
+  always: true  # Runs even when a needed job failed
   steps:
     - name: Cleanup Failed State
       uses: hello
@@ -691,9 +717,12 @@ jobs:
 
 ### Recovery Execution Model
 
-Implement recovery workflows that execute based on failure patterns:
+A recovery job needs the job it recovers and sets `always: true`, so it runs even when that job failed. Its steps are skipped when the main process succeeded, and `?? false` covers a request that never connected and so published nothing:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: primary-workflow
   name: Primary Workflow
@@ -710,10 +739,13 @@ jobs:
 
 - id: recovery-workflow
   name: Recovery Workflow
+  needs: [primary-workflow]
+  always: true
   steps:
     - name: Diagnose Failure
       id: diagnose
       uses: http
+      skipif: outputs.main?.process_successful ?? false
       with:
         method: GET
         url: "{{vars.API_URL}}/diagnostics"
@@ -723,6 +755,7 @@ jobs:
 
     - name: Automated Recovery
       uses: http
+      skipif: outputs.main?.process_successful ?? false
       with:
         url: "{{vars.API_URL}}/recovery/auto"
         method: POST
@@ -730,11 +763,12 @@ jobs:
 
     - name: Manual Recovery Alert
       uses: hello
+      skipif: outputs.main?.process_successful ?? false
       echo: "🚨 Critical failure detected - manual intervention required"
 
 - id: validation-workflow
   name: Validation Workflow
-  needs: [primary-workflow, recovery-workflow]
+  needs: [recovery-workflow]
   steps:
     - name: Validate Final State
       id: validation-workflow
@@ -754,11 +788,10 @@ jobs:
       uses: hello
       echo: |
         Workflow Execution Summary:
-          
-          
-        Overall result: {{
-          "❌ System failed"
-        }}
+
+
+        Recovery needed: {{outputs.main?.process_successful ? "no" : "yes"}}
+        System healthy: {{outputs['validation-workflow'].system_healthy}}
 ```
 
 ## Resource Management
@@ -770,6 +803,10 @@ Each action runs in a process of its own, so a run has processes to start and st
 Probe starts an action for each step that uses it:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  SMTP_HOST: "{{SMTP_HOST}}"
+
 jobs:
 - id: multi-action-workflow
   name: Multi Action Workflow
@@ -793,6 +830,7 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0
       echo: "API test completed successfully"
     - name: Debug Message
       uses: hello
@@ -818,6 +856,9 @@ Action lifecycle:
 Probe optimizes execution for performance and resource usage:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: optimized-workflow
   name: Performance Optimized Workflow
@@ -850,7 +891,6 @@ jobs:
         Processing Summary:
         Total users: {{outputs['user-data'].user_count}}
         First user: {{outputs['user-data'].first_user_id}}
-        # Efficient output without storing unnecessary data
 ```
 
 ## Best Practices
@@ -861,7 +901,7 @@ The points below follow from the execution model: how dependencies are shaped, w
 
 Declare a dependency only where the data or the ordering actually requires it; every extra one removes parallelism.
 
-```yaml
+```yaml fragment
 # Good: Logical dependency grouping
 jobs:
 - id: infrastructure
@@ -923,7 +963,7 @@ description: |
   2. Service health checks (parallel, depends on infrastructure)
   3. Integration testing (sequential, depends on services)
   4. Reporting (depends on all previous stages)
-  
+
   Expected execution time: 2-5 minutes
   Critical path: infrastructure → services → integration → reporting
 ```

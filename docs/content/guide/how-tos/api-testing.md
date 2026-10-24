@@ -1145,7 +1145,7 @@ The points below cover how tests are structured, where their data comes from, wh
 
 Grouping cases into jobs by what they cover makes a failure locatable.
 
-```yaml
+```yaml fragment
 # Good: Organized test structure
 jobs:
 - name: authentication     # Group related tests
