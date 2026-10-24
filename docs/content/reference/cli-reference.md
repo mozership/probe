@@ -279,6 +279,32 @@ PRIVATE_KEY='taken as it is, $ and \ included'
 
 A variable whose value must not be shown is named under [`secrets`](/reference/yaml-configuration#secrets) as usual; where the value comes from makes no difference.
 
+### `--job`
+
+**Type:** String, can be repeated  
+**Values:** a comma separated list of job ids or names  
+**Description:** Run only these jobs of the workflow, with the jobs they need. A job is named by its `id`, or by its `name` as written when no job has that `id`. A job without an `id` has the one its place gives it, such as `job_2` for the third job.
+
+```bash
+probe --job tests workflow.yml
+probe --job "User API" --job tests,lint workflow.yml
+```
+
+```
+Running 3 of 5 jobs: Tests, Setup (needed), Cleanup (always)
+```
+
+- The jobs in the [`needs`](/reference/yaml-configuration#needs) of a selected job run before it, and those they need, however far down, since a job may read what they publish.
+- A job with [`always`](/reference/yaml-configuration#always) runs when a job it needs runs, as the job that removes what that job made has to. It waits for those of its `needs` that run, and does not bring the others.
+- The other jobs are not run, and are not in the terminal report, the report files or their counts: the run is that of a workflow of the jobs that run. The exit status is theirs. The line above, on the standard error, says which jobs run and why, so that the run is not taken for one of the whole workflow.
+- The external actions and the job files of an [`embedded`](/reference/actions/embedded) step are fetched and read for the jobs that run alone. The whole workflow is still read and checked as it is for a run of it.
+- A value that is no job's `id` or `name`, or a `name` that several jobs have, stops Probe before any job runs, with exit status 2. A name close to one of a job is suggested; a name several jobs have is told by their ids.
+- A name that has a comma in it is split at the comma: select its job by its `id`.
+
+There is no environment variable for it, as there is for `--report`: a run set to some of the jobs from the environment would look like a run of them all.
+
+[`probe dag --job`](#dag) draws the jobs a run with the same `--job` runs.
+
 ## Subcommands
 
 A subcommand replaces the run with something else: `gen` writes a starting workflow, `dag` prints the dependency graph a workflow describes, `check` finds what is wrong or weak in a workflow without running it, `coverage` tells how much of an OpenAPI document a run checked, `guide` prints this documentation, `skill` sets up a coding agent to use Probe, and `manifest` writes the `action.yml` of a release of an external action.
@@ -307,6 +333,7 @@ Several files are merged as a run merges them.
 ```bash
 probe dag <workflow-file>...
 probe dag --mermaid <workflow-file>...
+probe dag --job <job> <workflow-file>...
 ```
 
 **Options:**
@@ -314,6 +341,7 @@ probe dag --mermaid <workflow-file>...
 | Option | Description |
 |--------|-------------|
 | `--mermaid` | Output in Mermaid flowchart format instead of ASCII art |
+| `--job` | Draw only the jobs a run with the same [`--job`](#--job) runs |
 
 **ASCII Output Example:**
 ```

@@ -88,6 +88,17 @@ func (w *Workflow) Start(c Config) error {
 	if found := w.problems(); len(found) > 0 {
 		return problemsError(found)
 	}
+	// A run narrowed to some jobs is the run of a workflow of those jobs
+	// alone: the others are not run, reported or counted, and the actions
+	// and files only they use are not fetched or read.
+	var selected *jobSelection
+	if len(c.Jobs) > 0 {
+		jobs, sel, err := selectJobs(w.Jobs, c.Jobs)
+		if err != nil {
+			return err
+		}
+		w.Jobs, selected = jobs, sel
+	}
 	scheduler, err := w.initJobScheduler()
 	if err != nil {
 		return err
@@ -124,6 +135,11 @@ func (w *Workflow) Start(c Config) error {
 
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
+	if selected != nil {
+		// Said apart from the report, which is that of the jobs that run,
+		// so that a run of some jobs is not taken for one of them all.
+		w.printer.Fprintln(w.printer.errWriter, colorDim().Sprint(selected))
+	}
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.

@@ -61,6 +61,10 @@ type Config struct {
 	// cannot give to an external action under actions. When it is empty,
 	// the names a workflow gives are not checked against them.
 	Actions []string
+	// Jobs narrows the run to the jobs of these ids or names, with the jobs
+	// they need and those that always run after them; all jobs when it is
+	// empty.
+	Jobs []string
 }
 
 func New(path string, v bool) *Probe {
@@ -95,7 +99,7 @@ func (p *Probe) ExitStatus() int {
 
 // DagAscii returns the ASCII art representation of the workflow job dependencies with steps
 func (p *Probe) DagAscii() (string, error) {
-	if err := p.Load(); err != nil {
+	if err := p.loadSelected(); err != nil {
 		return "", err
 	}
 	return dag.ASCII{}.Render(p.workflow.Graph()), nil
@@ -103,10 +107,27 @@ func (p *Probe) DagAscii() (string, error) {
 
 // DagMermaid returns the Mermaid format representation of the workflow job dependencies
 func (p *Probe) DagMermaid() (string, error) {
-	if err := p.Load(); err != nil {
+	if err := p.loadSelected(); err != nil {
 		return "", err
 	}
 	return dag.Mermaid{}.Render(p.workflow.Graph()), nil
+}
+
+// loadSelected loads the workflow with only the jobs Config.Jobs selects,
+// as a run would run them.
+func (p *Probe) loadSelected() error {
+	if err := p.Load(); err != nil {
+		return err
+	}
+	if len(p.Config.Jobs) == 0 {
+		return nil
+	}
+	jobs, _, err := selectJobs(p.workflow.Jobs, p.Config.Jobs)
+	if err != nil {
+		return err
+	}
+	p.workflow.Jobs = jobs
+	return nil
 }
 
 func (p *Probe) Load() error {

@@ -108,7 +108,7 @@ func TestCmd_usage(t *testing.T) {
 }
 
 func TestCmd_start(t *testing.T) {
-	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/mozership/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>...\n       probe gen <openapi-file>\n       probe dag [--mermaid] <workflow-file>...\n       probe check <workflow-file>...\n       probe fmt [--check] <workflow-file>...\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to a YAML workflow file, a directory or a glob.\n                   Several are merged in their order into one workflow,\n                   given apart or with commas: \"base.yml override.yml\" or\n                   \"base.yml,override.yml\".\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>...    Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format\n  check <file>...  Find what is wrong or weak in a workflow without running it\n  fmt <file>...    Format workflow files in place, and print those it changed\n                   A directory is every YAML file under it, and - is the\n                   standard input, formatted to the standard output\n                   Use --check to change nothing, and exit with 1 when a\n                   file is not formatted\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --baseline     Compare the response times to those of a --report json file (env: PROBE_BASELINE)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n"
+	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/mozership/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>...\n       probe gen <openapi-file>\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n       probe check <workflow-file>...\n       probe fmt [--check] <workflow-file>...\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n\nArguments:\n  workflow-file    Path to a YAML workflow file, a directory or a glob.\n                   Several are merged in their order into one workflow,\n                   given apart or with commas: \"base.yml override.yml\" or\n                   \"base.yml,override.yml\".\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>...    Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format, and --job to\n                   show only the jobs a run with it runs\n  check <file>...  Find what is wrong or weak in a workflow without running it\n  fmt <file>...    Format workflow files in place, and print those it changed\n                   A directory is every YAML file under it, and - is the\n                   standard input, formatted to the standard output\n                   Use --check to change nothing, and exit with 1 when a\n                   file is not formatted\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show verbose log\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --baseline     Compare the response times to those of a --report json file (env: PROBE_BASELINE)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n      --job          Run only these jobs, by id or name, as job,..., and the jobs they need; can be repeated\n"
 
 	tests := []struct {
 		name           string
@@ -292,7 +292,7 @@ func TestCmd_start(t *testing.T) {
 			}
 
 			// Check validFlags
-			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file"}
+			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"}
 			if len(c.validFlags) != len(expectedFlags) {
 				t.Errorf("start(%v) validFlags length = %d, want %d", tt.args, len(c.validFlags), len(expectedFlags))
 			}
@@ -1270,6 +1270,101 @@ func TestCmd_parseArgs_var(t *testing.T) {
 		if err := newBufferCmd().parseArgs(args); err == nil {
 			t.Errorf("parseArgs(%q) = nil, want an error", args)
 		}
+	}
+}
+
+func TestCmd_parseArgs_job(t *testing.T) {
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"--job", "tests, Lint", "w.yml", "--job=setup"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"tests", "Lint", "setup"}; !reflect.DeepEqual(c.Jobs, want) {
+		t.Errorf("Jobs = %q, want %q", c.Jobs, want)
+	}
+	for _, args := range [][]string{
+		{"w.yml", "--job"},
+		{"--job=", "w.yml"},
+		{"--job", " , ", "w.yml"},
+	} {
+		if err := newBufferCmd().parseArgs(args); err == nil {
+			t.Errorf("parseArgs(%q) = nil, want --job to need a job", args)
+		}
+	}
+}
+
+// --job narrows a run, or the graph of dag, to some jobs; it narrows
+// nothing else, and says so.
+func TestCmd_job(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// The steps are skipped, so that no action is started.
+	wf := "name: Jobs\njobs:\n" +
+		"- id: setup\n  name: Setup\n  steps:\n  - uses: hello\n    skipif: \"true\"\n" +
+		"- name: Tests\n  needs: [setup]\n  steps:\n  - uses: hello\n    skipif: \"true\"\n" +
+		"- name: Other job\n  steps:\n  - uses: hello\n    skipif: \"true\"\n"
+	if err := os.WriteFile("w.yml", []byte(wf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("run", func(t *testing.T) {
+		c := newBufferCmd()
+		if err := c.parseArgs([]string{"--job", "Tests", "--report", "json=r.json", "w.yml"}); err != nil {
+			t.Fatal(err)
+		}
+		if code := c.runProbe(); code != 0 {
+			t.Fatalf("runProbe() = %d, want 0; stderr: %s", code, c.errWriter)
+		}
+		data, err := os.ReadFile("r.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{`"id": "setup"`, `"id": "job_1"`, `"total": 2`} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("report should contain %q, got: %s", want, data)
+			}
+		}
+		if strings.Contains(string(data), "Other job") {
+			t.Errorf("report should not contain the job not selected, got: %s", data)
+		}
+	})
+
+	t.Run("unknown job", func(t *testing.T) {
+		c := newBufferCmd()
+		if err := c.parseArgs([]string{"--job", "Test", "w.yml"}); err != nil {
+			t.Fatal(err)
+		}
+		if code := c.runProbe(); code != probe.ExitConfigError {
+			t.Errorf("runProbe() = %d, want %d", code, probe.ExitConfigError)
+		}
+		want := `[ERROR] no job has the id or name "Test"; did you mean "Tests"?`
+		if errOut := fmt.Sprintf("%s", c.errWriter); !strings.Contains(errOut, want) {
+			t.Errorf("error output should contain %q, got: %s", want, errOut)
+		}
+	})
+
+	t.Run("dag", func(t *testing.T) {
+		c := newBufferCmd()
+		c.mocking = false
+		if code := c.start([]string{"probe", "dag", "--job", "setup", "w.yml"}); code != 0 {
+			t.Fatalf("start() = %d, want 0; stderr: %s", code, c.errWriter)
+		}
+		out := fmt.Sprintf("%s", c.outWriter)
+		if !strings.Contains(out, "Setup") || strings.Contains(out, "Tests") || strings.Contains(out, "Other job") {
+			t.Errorf("output should have the job selected alone, got: %s", out)
+		}
+	})
+
+	for _, sub := range []string{"check", "fmt"} {
+		t.Run(sub, func(t *testing.T) {
+			c := newBufferCmd()
+			if code := c.start([]string{"probe", sub, "--job", "setup", "w.yml"}); code != probe.ExitConfigError {
+				t.Errorf("start() = %d, want %d", code, probe.ExitConfigError)
+			}
+			want := "--job can only be used to run a workflow or with the dag subcommand"
+			if errOut := fmt.Sprintf("%s", c.errWriter); !strings.Contains(errOut, want) {
+				t.Errorf("error output should contain %q, got: %s", want, errOut)
+			}
+		})
 	}
 }
 

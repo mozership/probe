@@ -54,6 +54,9 @@ type Cmd struct {
 	Vars []string
 	// EnvFiles are the files the --env-file flags name, in their order.
 	EnvFiles []string
+	// Jobs are the ids or names of the jobs the --job flags select, in
+	// their order.
+	Jobs []string
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
@@ -70,7 +73,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"},
 		ver:        ver,
 		rev:        rev,
 		inReader:   os.Stdin,
@@ -181,8 +184,8 @@ func (c *Cmd) parseArgs(args []string) error {
 					c.AllowActions = flagValue
 				}
 				c.markGuardFlag(flagName)
-			case "var", "env-file":
-				// Both can be given more than once.
+			case "var", "env-file", "job":
+				// Each can be given more than once.
 				if !hasValue {
 					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
 						return fmt.Errorf("flag needs an argument: %s", arg)
@@ -190,12 +193,16 @@ func (c *Cmd) parseArgs(args []string) error {
 					flagValue = args[i+1]
 					skipNext = true
 				}
-				if flagName == "env-file" {
-					files := splitList(flagValue)
-					if len(files) == 0 {
+				if flagName == "env-file" || flagName == "job" {
+					items := splitList(flagValue)
+					if len(items) == 0 {
 						return fmt.Errorf("flag needs an argument: %s", arg)
 					}
-					c.EnvFiles = append(c.EnvFiles, files...)
+					if flagName == "job" {
+						c.Jobs = append(c.Jobs, items...)
+					} else {
+						c.EnvFiles = append(c.EnvFiles, items...)
+					}
 					break
 				}
 				if _, _, err := parseVar(flagValue); err != nil {
@@ -278,7 +285,7 @@ https://github.com/mozership/probe (ver: %s, rev: %s)
 	head := `
 Usage: probe [options] <workflow-file>...
        probe gen <openapi-file>
-       probe dag [--mermaid] <workflow-file>...
+       probe dag [--mermaid] [--job <job>] <workflow-file>...
        probe check <workflow-file>...
        probe fmt [--check] <workflow-file>...
        probe coverage <openapi-file|proto-file> <report-file>
@@ -296,7 +303,8 @@ Arguments:
 Subcommands:
   gen <file>       Generate probe workflow YAML from OpenAPI specification
   dag <file>...    Show job dependency graph as ASCII art (default)
-                   Use --mermaid to output in Mermaid format
+                   Use --mermaid to output in Mermaid format, and --job to
+                   show only the jobs a run with it runs
   check <file>...  Find what is wrong or weak in a workflow without running it
   fmt <file>...    Format workflow files in place, and print those it changed
                    A directory is every YAML file under it, and - is the
@@ -346,6 +354,7 @@ func (c *Cmd) printOptions() {
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
 		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
 		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
+		{"", "--job", "Run only these jobs, by id or name, as job,..., and the jobs they need; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -383,12 +392,16 @@ func (c *Cmd) start(args []string) int {
 		_, _ = fmt.Fprint(c.errWriter, fmtUsage)
 		return probe.ExitConfigError
 
+	case len(c.Jobs) > 0 && c.SubCommand != "" && c.SubCommand != "dag":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --job can only be used to run a workflow or with the dag subcommand\n")
+		return probe.ExitConfigError
+
 	case c.SubCommand != "":
 		return c.runSubCommand()
 
 	case c.DagMermaid:
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --mermaid can only be used with the dag subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>...\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 
 	case c.WorkflowPath == "":
@@ -517,6 +530,7 @@ func (c *Cmd) runProbe() int {
 	}
 	p.Config.Env = env
 	p.Config.Vars = c.vars()
+	p.Config.Jobs = c.Jobs
 
 	if err := p.Do(); err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
@@ -528,7 +542,7 @@ func (c *Cmd) runProbe() int {
 func (c *Cmd) runDag() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>...\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 	}
 
@@ -539,6 +553,7 @@ func (c *Cmd) runDag() int {
 	p := probe.New(strings.Join(c.SubCommandArgs, ","), c.Verbose)
 	p.Config.Actions = actions.Names()
 	p.Config.Warn = c.errWriter
+	p.Config.Jobs = c.Jobs
 	var graph string
 	var err error
 	if c.DagMermaid {
