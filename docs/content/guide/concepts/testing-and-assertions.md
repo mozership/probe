@@ -36,11 +36,25 @@ test: |
   ⎿ 0. ✗  API Health Check
            failed: res.body.status == "healthy"
              res.body.status = "degraded"
-           request: ...
-           response: ...
+           request:
+             headers:
+               Accept: */*
+               User-Agent: probe-http/1.0.0
+             method: GET
+             timeout: 30s
+             url: https://api.example.com/health
+           response:
+             body:
+               status: degraded
+             code: 200
+             headers:
+               Content-Type: application/json
+             status: 200 OK
 ```
 
 The condition is shown as Probe read it, so its spacing and quotes may differ from the workflow's. The values are shown for a comparison, such as `==`, `<`, `in` or `contains`, and for what a `!` negates; a value written in the test itself, such as `"healthy"`, is not repeated. Conditions joined with `||` are one condition, and are shown together. A test that starts with `let` is taken apart after what it declares, and each condition reads it. A test that calls a function whose value changes from one call to the next, `random_int`, `random_str`, `unixtime` or `now`, is not taken apart, as evaluating it again could name another condition; it shows the request and the response only. The same line is the message of the failure in the files `--report` writes, as `test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`.
+
+The request and the response are laid out key by key, in the order of their names, as `--verbose` shows them. Their own fields that are empty, such as a body a `GET` did not send, are left out; a zero or a `false` is kept, and what a field holds, such as the keys of a JSON body or the columns of a row, is shown whole, empty values and all. A value is cut after 512 bytes or 20 lines, and a map or a list after 30 entries, with how much was cut, as `… (1234 more bytes)` or `… (80 more lines)`, so that a large body cannot bury why the step failed; `--verbose` shows them whole. A text of several lines, such as the output of a command, is written under its name, a line at a time, after `|`, or `|-` when it does not end in a newline. A text of one line is quoted when it could be read as something else: `"1"` is a string, `1` a number, and `""` is empty. Binary data is shown as its size only. Secrets are hidden in both, as everywhere else. An action whose response sets `dump` to `false` keeps both out.
 
 ### Test Expression Context
 

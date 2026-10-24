@@ -873,7 +873,7 @@ func TestPrinter_PrintTestResult(t *testing.T) {
 			testExpr: "res.status == 200",
 			context:  map[string]any{"status": 200},
 			verbose:  true,
-			expected: "[DEBUG] Test: Success (input: res.status == 200, env: map[string]interface {}{\"status\":200})\n",
+			expected: "[DEBUG] Test: Success (input: res.status == 200)\n[DEBUG] Env:\n[DEBUG]   status: 200\n",
 		},
 		{
 			name:     "failed test in verbose mode",
@@ -881,7 +881,24 @@ func TestPrinter_PrintTestResult(t *testing.T) {
 			testExpr: "res.status == 200",
 			context:  map[string]any{"status": 404},
 			verbose:  true,
-			expected: "[DEBUG] Test: Failure (input: res.status == 200, env: map[string]interface {}{\"status\":404})\n",
+			expected: "[DEBUG] Test: Failure (input: res.status == 200)\n[DEBUG] Env:\n[DEBUG]   status: 404\n",
+		},
+		{
+			name:     "the context of a step, without its request and response",
+			success:  false,
+			testExpr: "res.code == 200",
+			context: StepContext{
+				Vars:   map[string]any{"host": "example.com"},
+				Req:    map[string]any{"url": "http://example.com"},
+				Res:    map[string]any{"code": 404},
+				RT:     ResponseTime{Duration: "1.5ms", Sec: 0.0015},
+				Status: 0,
+			},
+			verbose: true,
+			expected: "[DEBUG] Test: Failure (input: res.code == 200)\n[DEBUG] Env:\n" +
+				"[DEBUG]   outputs: {}\n[DEBUG]   repeat_index: 0\n[DEBUG]   report: \"\"\n" +
+				"[DEBUG]   rt:\n[DEBUG]     duration: 1.5ms\n[DEBUG]     sec: 0.0015\n" +
+				"[DEBUG]   status: 0\n[DEBUG]   vars:\n[DEBUG]     host: example.com\n",
 		},
 		{
 			name:     "test in non-verbose mode",
@@ -1216,6 +1233,10 @@ func TestPrinter_MasksOutput(t *testing.T) {
 		map[string]any{"headers": map[string]any{"authorization": "Bearer x"}, "body": `pa"ss`},
 		map[string]any{"body": `pa"ss`})
 	p.Fprint(p.outWriter, failure)
+	// A secret where a long body is cut is hidden before it is cut, not
+	// shown in part.
+	p.Fprint(p.outWriter, exchangeDetail(p.Masker(), nil,
+		map[string]any{"body": strings.Repeat("x", 510) + `pa"ss`}))
 
 	p.verbose = true
 	p.PrintTestResult(false, "t", StepContext{
