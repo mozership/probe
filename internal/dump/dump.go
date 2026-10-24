@@ -11,12 +11,14 @@
 //   - The keys of a map are sorted, so the same data is always laid out the
 //     same way.
 //   - A string of several lines is written under its key, as a YAML block, and
-//     each of its lines is indented there.
+//     each of its lines is indented there. So is a line that ends in a
+//     newline, as a body often does, so that its quotes are not escaped.
 //   - A string of one line is quoted, as Go quotes it, when it could be read
 //     as something else: when it is empty, looks like a number, true, false
 //     or null, has a space at either end, or holds a control character, such
-//     as the newline at its end. A control character is never written as it
-//     is, in a key either, so that it cannot move the cursor of a terminal.
+//     as a newline that is all it holds. A control character is never written
+//     as it is, in a key either, so that it cannot move the cursor of a
+//     terminal.
 //   - A block is written after |, as YAML writes it, when the string ends in
 //     a newline, and after |- when it does not.
 //   - A string that is not UTF-8, or a []byte, is not written at all, only how
@@ -221,7 +223,14 @@ func (o Options) stringEntry(prefix, s string) []string {
 	// One line, a newline at its end aside, unless lines were cut after it.
 	shown, rest, unit := o.cut(s)
 	text := strings.TrimSuffix(shown, "\n")
-	if !strings.Contains(text, "\n") && (rest == 0 || unit == "byte") {
+	// A line that ends in a newline is a block of one line, so that the
+	// quotes in it, as an HTML or a JSON body holds, are not escaped.
+	oneLine := !strings.Contains(text, "\n") && (rest == 0 || unit == "byte")
+	if oneLine && strings.HasSuffix(shown, "\n") && text != "" &&
+		strings.IndexFunc(strings.TrimSuffix(text, "\r"), isEscaped) < 0 {
+		oneLine = false
+	}
+	if oneLine {
 		if needsQuotes(shown) {
 			shown = strconv.Quote(shown)
 		}

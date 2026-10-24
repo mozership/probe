@@ -69,7 +69,8 @@ $ probe workflow.yml --verbose
 [DEBUG]   timeout: 30s
 [DEBUG]   url: https://example.com/
 [DEBUG] Response:
-[DEBUG]   body: <!doctype html><html lang=en>…
+[DEBUG]   body: |
+[DEBUG]     <!doctype html><html lang=en><head><meta charset=utf-8>…
 [DEBUG]   code: 200
 [DEBUG]   cookies: {}
 [DEBUG]   filepath: ""

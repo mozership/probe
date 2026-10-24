@@ -100,7 +100,17 @@ func TestLines(t *testing.T) {
 		{
 			name: "one line with a newline at its end",
 			data: map[string]any{"stderr": "oops\n"},
-			want: `stderr: "oops\n"`,
+			want: "stderr: |\n  oops",
+		},
+		{
+			name: "one line with quotes and a newline at its end",
+			data: map[string]any{"body": "<a href=\"/\">x</a>\r\n"},
+			want: "body: |\n  <a href=\"/\">x</a>",
+		},
+		{
+			name: "one line with a control character and a newline at its end",
+			data: map[string]any{"s": "a\x1bb\n"},
+			want: `s: "a\x1bb\n"`,
 		},
 		{
 			name: "nothing but a newline",
