@@ -22,7 +22,7 @@ func TestActionLogsHideCookies(t *testing.T) {
 	defer srv.Close()
 
 	var buf bytes.Buffer
-	a := &Action{log: hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug, JSONFormat: true})}
+	a := &Action{log: hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Trace, JSONFormat: true})}
 	if _, _, err := a.RunStep(actionrpc.Call{With: map[string]any{
 		"url":     srv.URL,
 		"get":     "/path",

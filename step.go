@@ -71,6 +71,9 @@ type stepRun struct {
 	// contract is the check the action made of the last attempt against a
 	// contract, or nil when it checked it against none.
 	contract *actionrpc.ContractCheck
+	// given is the step's with, its templates evaluated, as the action was
+	// given it; nil until they are.
+	given map[string]any
 }
 
 // newStepRun begins a run of st whose templates ev evaluates, or a new
@@ -147,6 +150,7 @@ func (st *stepRun) prepare(jCtx *JobContext) (string, bool) {
 // executeAction executes the step action and returns the result
 // If retry is configured, it will retry until status == 0 or max attempts reached
 func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, error) {
+	st.given = nil
 	expW, err := st.expr.EvalTemplateMap(st.With, st.ctx)
 	if err != nil {
 		// The credentials that could be evaluated are learned, so that an
@@ -155,6 +159,8 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 		jCtx.Printer.Masker().Learn(expW)
 		return actionResult{}, redactCredentialErrors(prefixFieldErrors(err, "with."), st.With)
 	}
+
+	st.given = expW
 
 	runner := st.actionRunner
 	if runner == nil {
@@ -218,7 +224,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	// takes a while, in the background while the next one changes the step.
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
-	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
+	opts := RunOptions{Verbose: jCtx.Verbose, Trace: jCtx.Trace, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
 	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}, Contract: &actionrpc.Contract{}}
 	go func() {
 		defer done()
@@ -388,9 +394,15 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	jCtx.SetFailed()
 	jCtx.recordFailure(kind)
 
-	// Create and add step result for failed action execution
+	// Create and add step result for failed action execution. An action
+	// that failed returned no request, and what the step gave it is shown
+	// in its place, so that the run still tells what the step asked for.
 	if jCtx.Verbose {
-		jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
+		if len(st.ctx.Req) == 0 && len(st.given) > 0 {
+			jCtx.Printer.PrintGivenRequest(st.idx, name, st.given)
+		} else {
+			jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
+		}
 	}
 
 	// Handle repeat execution

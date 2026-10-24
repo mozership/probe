@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/procgroup"
@@ -43,11 +42,15 @@ type cleanups struct {
 	// the run this one is part of, which calls them when it is over. One
 	// that comes to be owed after that is passed on as well.
 	passedOn *actionrpc.Cleanups
+	// written are the actions as a step's uses writes them, by their names
+	// in full, for their log records to be named as the step's are.
+	written map[string]string
 }
 
 // newCleanups returns the cleanups of the run runID, whose actions log and
-// warn through printer.
-func newCleanups(runID string, printer *Printer) *cleanups {
+// warn through printer. trace shows how the actions' processes are run as
+// well, in a verbose run.
+func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 	c := &cleanups{runID: runID, warn: printer.LogWarn}
 	c.clean = func(uses string) error {
 		// The action was resolved when its step ran, so this fetches
@@ -56,16 +59,7 @@ func newCleanups(runID string, printer *Printer) *cleanups {
 		if err != nil {
 			return err
 		}
-		level := hclog.Warn
-		if printer.verbose {
-			level = hclog.Debug
-		}
-		log := hclog.New(&hclog.LoggerOptions{
-			Name:    "actions",
-			Output:  printer.Masker().Writer(os.Stderr),
-			Level:   level,
-			Exclude: excludeErrors(printer.verbose),
-		})
+		log := newActionLog(c.nameOf(uses), os.Stderr, printer.Masker(), actionLogLevel(printer.verbose, trace), printer.verbose)
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		return actionrpc.CleanupExecutable(ctx, exe.Path, exe.SHA256, actionrpc.CleanupCall{RunID: runID}, log)
@@ -169,6 +163,31 @@ func (c *cleanups) run() {
 	for _, uses := range slices.Backward(owed) {
 		c.call(uses)
 	}
+}
+
+// writtenAs records that a step's uses writes the action named uses in full
+// as written.
+func (c *cleanups) writtenAs(uses, written string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.written == nil {
+		c.written = make(map[string]string)
+	}
+	c.written[uses] = written
+}
+
+// nameOf returns the action named uses in full as a step's uses writes it,
+// or as it is when no step of this run wrote it, as one an embedded job ran.
+func (c *cleanups) nameOf(uses string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if w, ok := c.written[uses]; ok {
+		return w
+	}
+	return uses
 }
 
 func (c *cleanups) runningCount() int {

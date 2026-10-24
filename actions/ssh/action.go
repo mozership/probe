@@ -24,7 +24,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	actionrpc.LogParams(a.log, "received ssh request parameters", with)
 
 	before := WithBefore(func(host string, port int, user string, cmd string) {
-		a.log.Debug("ssh connection prepared", "host", host, "port", port, "user", user, "cmd", cmd)
+		a.log.Trace("ssh connection prepared", "host", host, "port", port, "user", user, "cmd", cmd)
 	})
 	// Only the name is logged: the value may be a secret.
 	envRefused := WithEnvRefused(func(name string, err error) {

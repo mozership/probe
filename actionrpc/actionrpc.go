@@ -254,7 +254,7 @@ type Plugin struct {
 
 func (p *Plugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
 	log := hclog.New(&hclog.LoggerOptions{
-		Level:      hclog.Debug,
+		Level:      hclog.Trace,
 		Output:     os.Stderr,
 		JSONFormat: true,
 	})
@@ -451,7 +451,9 @@ func structToMap(s *structpb.Struct) map[string]any {
 	return m
 }
 
-// Server answers the runner's calls with an Action.
+// Server answers the runner's calls with an Action. It logs at trace level
+// alone: its records tell how a call went through it, and what it returns,
+// an error as well, the runner tells itself.
 type Server struct {
 	Impl Action
 	log  hclog.Logger
@@ -476,7 +478,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	// The state is left out: it may hold credentials, such as cookies, that
 	// the runner has not learned to hide.
 	if m.log != nil {
-		m.log.Debug("ActionsServer.Run called", "request", req.GetWith())
+		m.log.Trace("ActionsServer.Run called", "request", req.GetWith())
 	}
 
 	// Convert protobuf.Struct to map[string]any
@@ -498,7 +500,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	}
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("Action execution failed", "error", err)
+			m.log.Trace("Action execution failed", "error", err)
 		}
 		return &pb.RunResponse{}, toStatus(err)
 	}
@@ -507,21 +509,21 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	// runner learns those in a result only once it has the result, after
 	// these records have gone out.
 	if m.log != nil {
-		m.log.Debug("ActionsServer received from action", "result", forLog(v))
+		m.log.Trace("ActionsServer received from action", "result", forLog(v))
 	}
 
 	// Convert map[string]any to protobuf.Struct
 	convertedResult, err := convertForProtobuf(v)
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("ActionsServer cannot send the action's result", "error", err)
+			m.log.Trace("ActionsServer cannot send the action's result", "error", err)
 		}
 		return &pb.RunResponse{}, fmt.Errorf("cannot send the action's result: %w", err)
 	}
 	resultMap, ok := convertedResult.(map[string]any)
 	if !ok {
 		if m.log != nil {
-			m.log.Error("ActionsServer convertForProtobuf did not return map[string]any", "type", fmt.Sprintf("%T", convertedResult))
+			m.log.Trace("ActionsServer convertForProtobuf did not return map[string]any", "type", fmt.Sprintf("%T", convertedResult))
 		}
 		return &pb.RunResponse{}, fmt.Errorf("convertForProtobuf returned invalid type: expected map[string]any, got %T", convertedResult)
 	}
@@ -529,14 +531,11 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	resultStruct, err := structpb.NewStruct(resultMap)
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("ActionsServer failed to convert result to protobuf struct", "error", err)
+			m.log.Trace("ActionsServer failed to convert result to protobuf struct", "error", err)
 		}
 		return &pb.RunResponse{}, fmt.Errorf("failed to convert result to protobuf struct: %v", err)
 	}
 
-	if m.log != nil {
-		m.log.Debug("ActionsServer final result struct", "result", forLog(resultMap))
-	}
 	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List(), Processes: processesToPB(processes.List()), Contract: contractToPB(contract.Check())}
 	if newState != nil {
 		convertedState, err := convertForProtobuf(newState)
@@ -561,11 +560,11 @@ func (m *Server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.Clean
 		return &pb.CleanupResponse{}, status.Error(codes.Unimplemented, "the action does not clean up: it has no Cleanup")
 	}
 	if m.log != nil {
-		m.log.Debug("ActionsServer.Cleanup called", "run_id", req.GetRunId())
+		m.log.Trace("ActionsServer.Cleanup called", "run_id", req.GetRunId())
 	}
 	if err := c.Cleanup(CleanupCall{RunID: req.GetRunId()}); err != nil {
 		if m.log != nil {
-			m.log.Error("Action cleanup failed", "error", err)
+			m.log.Trace("Action cleanup failed", "error", err)
 		}
 		return &pb.CleanupResponse{}, err
 	}
@@ -758,27 +757,34 @@ func convertFloatToInt(value any) any {
 // LogParams records the parameters an action received, truncating long
 // values so that a large request body does not flood the log. Actions are
 // separate processes, so their log records reach the workflow runner as JSON
-// on stderr and are re-filtered there by the runner's own level.
+// on stderr and are re-filtered there by the runner's own level. The record
+// is at trace level, shown only with -vv: a verbose run shows the step's
+// request and response, which the parameters would only say again.
 func LogParams(log hclog.Logger, msg string, with map[string]any) {
-	log.Debug(msg, "params", forLog(with))
+	log.Trace(msg, "params", forLog(with))
 }
 
 // LogOutcome records how an action finished. subject names what was
 // attempted, for example "http request", and is used to build the message.
+// It is recorded at trace level, as LogParams records the parameters: a
+// verbose run shows the step's response, and the error the action returns,
+// which the runner prints itself.
 func LogOutcome(log hclog.Logger, subject string, ret map[string]any, err error) {
 	if err != nil {
-		log.Error(subject+" failed", "error", err)
+		log.Trace(subject+" failed", "error", err)
 		return
 	}
-	log.Debug(subject+" completed successfully", "result", forLog(ret))
+	log.Trace(subject+" completed successfully", "result", forLog(ret))
 }
 
 // forLog returns a copy of data fit to log: credentials hidden, then long
-// values truncated. The runner hides credentials in the log as well, but
-// only where it finds them whole, and a truncated value is no longer whole,
-// so they are hidden here first.
+// strings truncated, with its maps and lists kept as such, for the runner to
+// lay them out. The runner hides credentials in the log as well, but only
+// where it finds them whole, and a truncated value is no longer whole, so
+// they are hidden here first.
 func forLog(data map[string]any) map[string]any {
 	m := mask.New(nil, nil)
 	m.Learn(data)
-	return truncate.Map(m.Map(data), truncate.MaxLogLength)
+	out, _ := truncate.Value(m.Map(data), truncate.MaxLogLength).(map[string]any)
+	return out
 }

@@ -51,6 +51,9 @@ type Cmd struct {
 	ReadOnly       bool
 	AllowHosts     string
 	AllowActions   string
+	// Trace is -v given twice, as -vv: it also shows how each action's
+	// process is started, called and stopped.
+	Trace bool
 	// Vars are the --var flags given, each as name=value, in their order.
 	Vars []string
 	// EnvFiles are the files the --env-file flags name, in their order.
@@ -77,7 +80,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"},
 		ver:        ver,
 		rev:        rev,
 		inReader:   os.Stdin,
@@ -144,7 +147,16 @@ func (c *Cmd) parseArgs(args []string) error {
 			case "timing":
 				c.Timing = true
 			case "verbose", "v":
+				// A second one, as -v -v, is -vv.
+				c.Trace = c.Verbose
 				c.Verbose = true
+			case "vv":
+				// Only as -vv, without a value: it is -v given twice.
+				if arg != "-vv" {
+					return fmt.Errorf("unknown flag: %s", arg)
+				}
+				c.Verbose = true
+				c.Trace = true
 			case "mermaid":
 				c.DagMermaid = true
 			case "check":
@@ -369,7 +381,7 @@ func (c *Cmd) printOptions() {
 		{"-h", "--help", "Show command usage"},
 		{"", "--version", "Show version information"},
 		{"", "--timing", "Show timing (start time, response time)"},
-		{"-v", "--verbose", "Show verbose log"},
+		{"-v", "--verbose", "Show each step's request, response and test; -vv also how actions are run"},
 		{"", "--output", "Report output: auto, spinner or stream (env: PROBE_OUTPUT)"},
 		{"", "--report", "Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)"},
 		{"", "--baseline", "Compare the response times to those of a --report json file (env: PROBE_BASELINE)"},
@@ -497,6 +509,7 @@ func (c *Cmd) runGen() int {
 
 func (c *Cmd) runProbe() int {
 	p := probe.New(c.WorkflowPath, c.Verbose)
+	p.Config.Trace = c.Trace
 	p.Config.Actions = actions.Names()
 	p.Config.Warn = c.errWriter
 	if c.Timing {

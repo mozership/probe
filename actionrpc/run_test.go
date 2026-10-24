@@ -22,11 +22,11 @@ import (
 // That an action stopped once ctx is done exited by the signal is not an
 // error, while that it exited by itself with one, or any other error, still
 // is.
-func TestStoppedLoggerLeavesOutTheExitOfAStoppedAction(t *testing.T) {
+func TestPluginLogLeavesOutTheExitOfAStoppedAction(t *testing.T) {
 	var buf bytes.Buffer
-	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
+	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug})
 	ctx, cancel := context.WithCancel(context.Background())
-	l := stoppedLogger{Logger: inner, ctx: ctx}
+	l := newPluginLog(ctx, inner, "/bin/action", nil)
 
 	l.Error("plugin process exited", "error", "exit status 2")
 	l.Error("something else")
@@ -42,6 +42,49 @@ func TestStoppedLoggerLeavesOutTheExitOfAStoppedAction(t *testing.T) {
 	}
 	if strings.Contains(got, "signal: terminated") {
 		t.Errorf("log should leave out the exit of a stopped action, got:\n%s", got)
+	}
+}
+
+// go-plugin's own records of starting, calling and stopping an action's
+// process are at trace level, whatever level go-plugin gives them, while the
+// records of the action, which go-plugin logs through the logger it names
+// after the process, keep theirs, without the timestamp go-plugin adds.
+func TestPluginLogPutsGoPluginsRecordsAtTraceLevel(t *testing.T) {
+	var buf bytes.Buffer
+	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Trace, DisableTime: true})
+	var l hclog.Logger = newPluginLog(context.Background(), inner, "/path/to/my-action", nil)
+
+	l.Debug("starting plugin", "path", "/path/to/my-action")
+	l.Info("plugin process exited", "id", 1)
+	l.Log(hclog.Debug, "using plugin", "version", 1)
+	l.Named("stdio").Debug("received EOF, stopping recv loop")
+	l.Warn("plugin failed to exit gracefully")
+	action := l.Named("my-action")
+	action.Debug("retrying", "attempt", 2, "timestamp", "2026-10-24T15:54:26.523+0900")
+	action.Info("connected")
+	action.Trace("parameters received")
+
+	want := []string{
+		"[TRACE] starting plugin: path=/path/to/my-action",
+		"[TRACE] plugin process exited: id=1",
+		"[TRACE] using plugin: version=1",
+		"[TRACE] stdio: received EOF, stopping recv loop",
+		"[WARN]  plugin failed to exit gracefully",
+		"[DEBUG] retrying: attempt=2",
+		"[INFO]  connected",
+		"[TRACE] parameters received",
+	}
+	got := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("log =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if !l.IsDebug() || !l.Named("stdio").IsInfo() {
+		t.Error("go-plugin's records should be logged when trace records are")
+	}
+
+	quiet := newPluginLog(context.Background(), hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug}), "/bin/a", nil)
+	if quiet.IsDebug() {
+		t.Error("go-plugin's debug records should not be logged when only debug records are")
 	}
 }
 
@@ -192,11 +235,11 @@ func TestRunExecutableStepTellsWhyAnActionDidNotStart(t *testing.T) {
 // go-plugin's record of a process it killed for not exiting gracefully is
 // left out once the call failed, as the error tells what became of the
 // action, and told otherwise, of an action that hangs when it is stopped.
-func TestStoppedLoggerLeavesOutTheKillAfterAFailedCall(t *testing.T) {
+func TestPluginLogLeavesOutTheKillAfterAFailedCall(t *testing.T) {
 	var buf bytes.Buffer
 	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
 	failed := &atomic.Bool{}
-	l := stoppedLogger{Logger: inner, ctx: context.Background(), callFailed: failed}
+	l := newPluginLog(context.Background(), inner, "/bin/action", failed)
 
 	l.Warn("plugin failed to exit gracefully", "call", "succeeded")
 	failed.Store(true)

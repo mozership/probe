@@ -21,7 +21,9 @@ import (
 
 // Run starts the action named name from the running probe binary, calls it
 // once with the given parameters, and stops it. The action's own log records
-// reach log, which decides what of them is shown.
+// reach log at the levels the action gave them, and go-plugin's records of
+// starting, calling and stopping the process at trace level; log decides
+// what of them is shown.
 func Run(name string, with map[string]any, log hclog.Logger) (map[string]any, error) {
 	result, _, err := RunStep(name, Call{With: with}, log)
 	return result, err
@@ -160,7 +162,7 @@ func (p *process) start(ctx context.Context, secure *plugin.SecureConfig, log hc
 		Cmd:              p.cmd,
 		SecureConfig:     secure,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolNetRPC, plugin.ProtocolGRPC},
-		Logger:           stoppedLogger{Logger: log, ctx: ctx, callFailed: &p.callFailed},
+		Logger:           newPluginLog(ctx, log, p.cmd.Path, &p.callFailed),
 		Stderr:           &p.stderr,
 		UnixSocketConfig: &plugin.UnixSocketConfig{
 			TempDir: os.TempDir(),
@@ -279,39 +281,6 @@ func over(ctx context.Context) bool {
 		<-ctx.Done()
 	}
 	return ctx.Err() != nil
-}
-
-// stoppedLogger is the log go-plugin is given for an action that is stopped
-// once ctx is done. That the action exited by the signal it was sent then is
-// what the runner meant to happen, so it is not logged as an error, which a
-// person would see whether or not the step's failure says why.
-type stoppedLogger struct {
-	hclog.Logger
-	ctx context.Context
-	// callFailed is set once the call failed; nil is a call that has not.
-	callFailed *atomic.Bool
-}
-
-func (l stoppedLogger) Error(msg string, args ...any) {
-	// The message is go-plugin's, for a process that exited with an error.
-	if msg == "plugin process exited" && l.ctx.Err() != nil {
-		l.Debug(msg, args...)
-		return
-	}
-	l.Logger.Error(msg, args...)
-}
-
-// Warn leaves out go-plugin's record of a process it could not shut down
-// gracefully, and so killed, once the call failed: it makes one as well of a
-// process that had exited already, as one that crashed or did not start
-// has, and the error tells what became of the action. One that hangs when
-// it is stopped after a call that succeeded is still told.
-func (l stoppedLogger) Warn(msg string, args ...any) {
-	if msg == "plugin failed to exit gracefully" && l.callFailed != nil && l.callFailed.Load() {
-		l.Debug(msg, args...)
-		return
-	}
-	l.Logger.Warn(msg, args...)
 }
 
 // maxStderr is how much an action writes to stderr apart from its log

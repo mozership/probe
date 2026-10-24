@@ -777,7 +777,7 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 			Result:       rs,
 			JobScheduler: scheduler,
 			background:   procgroup.NewTracker(),
-			cleanups:     newCleanups(w.runID, w.printer),
+			cleanups:     newCleanups(w.runID, w.printer, c.Trace),
 			baseDir:      w.basePath,
 			runID:        w.runID,
 			actions:      w.named,

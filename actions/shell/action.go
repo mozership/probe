@@ -32,10 +32,10 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	actionrpc.LogParams(a.log, "received shell request parameters", with)
 
 	before := WithBefore(func(cmd string, shell string, workdir string) {
-		a.log.Debug("shell command prepared", "cmd", cmd, "shell", shell, "workdir", workdir)
+		a.log.Trace("shell command prepared", "cmd", cmd, "shell", shell, "workdir", workdir)
 	})
 	after := WithAfter(func(result *Result) {
-		a.log.Debug("shell command completed", "result", result)
+		a.log.Trace("shell command completed", "result", result)
 		// One run in the foreground has exited by now.
 		if result.Req.Background && result.Res.PID > 0 {
 			call.Processes.Add(actionrpc.Process{PID: result.Res.PID, Log: result.Res.Log})

@@ -67,20 +67,39 @@ The options change how a run reports itself rather than what it does: how much d
 
 **Type:** Boolean flag  
 **Default:** `false`  
-**Description:** Enable verbose output showing detailed execution information
+**Description:** Show what each step did: the request its action was given, the response it returned, and how its test went. Give it twice, as `-vv`, to show how each action is run as well
 
 **Example:**
 ```bash
 probe -v workflow.yml
 probe --verbose workflow.yml
+probe -vv workflow.yml
 ```
 
 **Verbose Output Includes:**
-- Step-by-step execution details
-- HTTP request/response information
-- Template evaluation results
-- Timing information
-- Debug messages
+- The request and the response of each step, and its response time. For a step whose action failed before it returned a request, the parameters the step gave the action, its templates evaluated, in their place
+- The result of the test and the values it read (`Env`)
+- The records actions log at debug, info and error level, which a run without `-v` leaves out
+
+The verbose output goes to standard error, and the report to standard output as it does without `-v`. Each record an action logs is shown as the rest of the verbose output is, its level and the action first, then its fields:
+
+```
+[DEBUG] ./my-action: retrying the request
+[DEBUG]   attempt: 2
+```
+
+**`-vv`**, or `-v` given twice, also shows what helps to debug an action rather than a workflow: how Probe starts the action's process, calls it and stops it, and the records actions log at trace level, such as the parameters they received and the result they returned. These are left out of `-v`, as the request and the response already show what they would.
+
+```
+[TRACE] http: starting plugin
+[TRACE]   args:
+[TRACE]     - probe
+[TRACE]     - builtin-actions
+[TRACE]     - http
+[TRACE]   path: /usr/local/bin/probe
+…
+[TRACE] http: plugin exited
+```
 
 ### `-h, --help`
 

@@ -103,6 +103,73 @@ jobs:
 	}
 }
 
+// A verbose run shows the records an action logs at debug level, and one
+// with -vv those at trace level as well, along with how the runner started,
+// called and stopped the action's process. Each reads as the rest of the
+// verbose output does, without timestamps or values printed as Go maps.
+func TestEndToEndVerboseLevelsOfAnExternalAction(t *testing.T) {
+	dir := t.TempDir()
+	probeBin := filepath.Join(dir, "probe")
+	bin := filepath.Join(dir, "greet", "greet")
+	for _, b := range [][]string{{probeBin, "./cmd/probe"}, {bin, "./testdata/external-action"}} {
+		if out, err := exec.Command("go", "build", "-o", b[0], b[1]).CombinedOutput(); err != nil {
+			t.Fatalf("go build %s: %v\n%s", b[1], err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "greet", "action.yml"), []byte("runs:\n  using: binary\n  path: greet\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	workflow := filepath.Join(dir, "workflow.yml")
+	if err := os.WriteFile(workflow, []byte(`name: external
+jobs:
+- name: greet
+  steps:
+  - name: greet probe
+    uses: ./greet
+    with:
+      name: probe
+    test: res.greeting == "hello probe"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) string {
+		var o, e strings.Builder
+		cmd := exec.Command(probeBin, append(args, workflow)...)
+		cmd.Stdout, cmd.Stderr = &o, &e
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("probe %v: %v\n%s%s", args, err, o.String(), e.String())
+		}
+		return e.String()
+	}
+
+	debug := "[DEBUG] ./greet: greeting\n[DEBUG]   name: probe\n[DEBUG]   with:\n[DEBUG]     name: probe\n"
+	internals := []string{"[TRACE] ./greet: starting plugin", "[TRACE] ./greet: plugin address", "[TRACE] ./greet: ActionsServer.Run called", "[TRACE] ./greet: greeted", "[TRACE] ./greet: plugin exited"}
+	tests := []struct {
+		args          []string
+		debug, traces bool
+	}{
+		{nil, false, false},
+		{[]string{"-v"}, true, false},
+		{[]string{"-vv"}, true, true},
+	}
+	for _, tt := range tests {
+		stderr := run(tt.args...)
+		if got := strings.Contains(stderr, debug); got != tt.debug {
+			t.Errorf("probe %v: has the action's debug record = %v, want %v:\n%s", tt.args, got, tt.debug, stderr)
+		}
+		for _, want := range internals {
+			if got := strings.Contains(stderr, want); got != tt.traces {
+				t.Errorf("probe %v: has %q = %v, want %v:\n%s", tt.args, want, got, tt.traces, stderr)
+			}
+		}
+		for _, noise := range []string{"timestamp", "map[", "actions."} {
+			if strings.Contains(stderr, noise) {
+				t.Errorf("probe %v: the output has %q:\n%s", tt.args, noise, stderr)
+			}
+		}
+	}
+}
+
 // A local action in an embedded job is found next to the job file, as one in
 // a workflow is found next to the workflow file.
 func TestEndToEndLocalExternalActionInEmbeddedJob(t *testing.T) {
@@ -270,9 +337,11 @@ jobs:
 		t.Errorf("the action's warning is not shown:\n%s", stderr)
 	}
 
-	// A verbose run shows the action's own records as well.
+	// A verbose run shows the action's own records as well, and, for the
+	// refused request, which returned none, what the step gave the action.
 	_, stderr = run("-v", "--output", "stream")
-	for _, want := range []string{"[ERROR]", "widget failed", "panic: the widget exploded"} {
+	given := fmt.Sprintf("[DEBUG] Request (as the step gave it; the action returned none):\n[DEBUG]   get: /x\n[DEBUG]   url: http://%s\n", addr)
+	for _, want := range []string{"[ERROR]", "widget failed", "panic: the widget exploded", given} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("the verbose output does not have %q:\n%s", want, stderr)
 		}
