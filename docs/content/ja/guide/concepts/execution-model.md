@@ -811,7 +811,7 @@ jobs:
 - id: multi-action-workflow
   name: Multi Action Workflow
   steps:
-    # このステップのために http アクションが起動される
+    # このステップのためにhttpアクションが起動される
     - name: API Test
       uses: http
       with:
@@ -819,7 +819,7 @@ jobs:
         url: "{{vars.API_URL}}/test"
       test: res.code == 200
 
-    # このステップのために smtp アクションが起動される
+    # このステップのためにsmtpアクションが起動される
     - name: Send Notification
       uses: smtp
       with:
@@ -837,7 +837,7 @@ jobs:
       with:
         message: "Debug checkpoint reached"
 
-    # http アクションが新しいプロセスで再び起動される
+    # httpアクションが新しいプロセスで再び起動される
     - name: Follow-up API Test
       uses: http
       with:

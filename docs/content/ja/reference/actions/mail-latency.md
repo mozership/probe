@@ -64,34 +64,34 @@ vars:
   run_id: "{{random_str(8)}}"
   maildir: /var/mail/probe
 jobs:
-  - name: Mail delivery latency
-    steps:
-      - name: Send a probe mail
-        uses: smtp
-        with:
-          addr: "{{vars.smtp_addr}}"
-          from: "probe@example.com"
-          to: "probe@example.com"
-          subject: "probe {{vars.run_id}}"
-          session: 1
-          message: 1
-          length: 500
-        test: res.code == 0 && res.sent > 0
+- name: Mail delivery latency
+  steps:
+    - name: Send a probe mail
+      uses: smtp
+      with:
+        addr: "{{vars.smtp_addr}}"
+        from: "probe@example.com"
+        to: "probe@example.com"
+        subject: "probe {{vars.run_id}}"
+        session: 1
+        message: 1
+        length: 500
+      test: res.code == 0 && res.sent > 0
 
-      - name: Measure
-        id: latency
-        uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
-        wait: 30s
-        with:
-          mail_dir: "{{vars.maildir}}/new"
-          output_dir: "./reports"
-        test: res.status == 0
-        outputs:
-          report: res.output_file
+    - name: Measure
+      id: latency
+      uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+      wait: 30s
+      with:
+        mail_dir: "{{vars.maildir}}/new"
+        output_dir: "./reports"
+      test: res.status == 0
+      outputs:
+        report: res.output_file
 
-      - name: Report
-        uses: hello
-        echo: "CSV: {{outputs.latency.report}}"
+    - name: Report
+      uses: hello
+      echo: "CSV: {{outputs.latency.report}}"
 ```
 
 ## 関連項目

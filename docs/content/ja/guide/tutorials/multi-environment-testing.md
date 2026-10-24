@@ -107,7 +107,7 @@ jobs:
 ファイルをマージすると、後のファイルのトップレベルのキーは前のファイルの同じキーを丸ごと置き換えます。そのため、環境ファイルに自分の`vars`だけを書くと、`base.yml`の`vars`は失われます。ファイルは読み込まれる前に1つのYAML文書につなげられるので、各環境ファイルはYAMLのマージキー`<<: *base_vars`でベースの変数を取り込みます。環境ファイルの`vars`も`env_vars`としてアンカーを付け、独自の変数を足すワークフローファイルから取り込めるようにします。
 
 **config/environments/development.yml:**
-```yaml merge=env base
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -141,7 +141,7 @@ vars: &env_vars
 ```
 
 **config/environments/staging.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -176,7 +176,7 @@ vars: &env_vars
 ```
 
 **config/environments/production.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -1138,7 +1138,7 @@ jobs:
         url: "{{vars.BLUE_URL}}/health"
       test: res.code == 200
       outputs:
-        blue_time: rt.sec * 1000
+        time: rt.sec * 1000
 
     - name: "Test Green Environment"
       id: green-test
@@ -1148,14 +1148,14 @@ jobs:
         url: "{{vars.GREEN_URL}}/health"
       test: res.code == 200
       outputs:
-        green_time: rt.sec * 1000
+        time: rt.sec * 1000
 
     - name: "Compare Environment Performance"
       uses: hello
       echo: |
-        Blue Environment: {{outputs['blue-test'].blue_time}}ms
-        Green Environment: {{outputs['green-test'].green_time}}ms
-        Performance Difference: {{abs(outputs['blue-test'].blue_time - outputs['green-test'].green_time)}}ms
+        Blue Environment: {{outputs['blue-test'].time}}ms
+        Green Environment: {{outputs['green-test'].time}}ms
+        Performance Difference: {{abs(outputs['blue-test'].time - outputs['green-test'].time)}}ms
 ```
 
 ### カナリアデプロイテスト

@@ -61,7 +61,7 @@ test: |
 テスト式は包括的なレスポンスデータにアクセスできます：
 
 ```yaml
-# HTTP レスポンステストコンテキスト
+# HTTPレスポンステストコンテキスト
 test: |
   res.code == 200 &&           // HTTP ステータスコード
   (rt.sec * 1000) < 1000 &&             // レスポンス時間（ミリ秒）
@@ -88,7 +88,7 @@ test: res.code >= 200 && res.code < 300
 # 複数の許可されるコード
 test: res.code in [200, 201, 202]
 
-# クライアント vs サーバーエラー
+# クライアントエラーとサーバーエラー
 test: res.code < 400  # 成功またはリダイレクト
 test: res.code >= 400 && res.code < 500  # クライアントエラー
 test: res.code >= 500  # サーバーエラー
@@ -121,7 +121,7 @@ test: |
 # コンテンツ存在
 test: len(res.rawbody ?? res.body) > 0  # コンテンツあり
 test: len(res.rawbody ?? res.body) > 100  # 最小コンテンツサイズ
-test: len(res.rawbody ?? res.body) < 1048576  # 最大 1MB レスポンス
+test: len(res.rawbody ?? res.body) < 1048576  # 最大1MBレスポンス
 
 # サイズベース検証
 test: |
@@ -167,7 +167,7 @@ test: |
 ボディがパースされていれば、テストはフィールド名をたどって中身を参照できます。
 
 ```yaml
-# JSON 構造検証
+# JSON構造検証
 test: |
   res.code == 200 &&
   res.body != nil &&
@@ -280,7 +280,7 @@ test: |
 # レスポンス内のメール検証
 test: res.body matches "user-\\d+@example\\.com"
 
-# URL パターン検証
+# URLパターン検証
 test: res.body matches "https://[a-zA-Z0-9.-]+/api/v\\d+/"
 
 # データフォーマット検証
@@ -585,7 +585,7 @@ jobs:
         res.code == 401 &&
         res.body.error == "invalid_credentials"
 
-    # CRUD 操作テスト
+    # CRUD操作テスト
     - name: Create User
       id: create-user
       uses: http
@@ -853,7 +853,7 @@ jobs:
         url: "{{vars.API_URL}}/ping"
       test: res.code == 200
       outputs:
-        smoke_passed: res.code == 200
+        passed: res.code == 200
 
 - id: functional-tests
   name: Functional Tests
@@ -866,7 +866,7 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: res.code == 200
       outputs:
-        functional_passed: res.code == 200
+        passed: res.code == 200
 
 - id: security-tests
   name: Security Tests
@@ -879,7 +879,7 @@ jobs:
         url: "{{vars.API_URL}}/admin/users"
       test: res.code == 401
       outputs:
-        security_passed: res.code == 401
+        passed: res.code == 401
 
 - id: test-summary
   name: Test Results Summary
@@ -892,9 +892,9 @@ jobs:
         Test Execution Summary
         ======================
 
-        Smoke: {{(outputs.smoke?.smoke_passed ?? false) ? "passed" : "failed"}}
-        Functional: {{(outputs.functional?.functional_passed ?? false) ? "passed" : "failed"}}
-        Security: {{(outputs.security?.security_passed ?? false) ? "passed" : "failed"}}
+        Smoke: {{(outputs.smoke?.passed ?? false) ? "passed" : "failed"}}
+        Functional: {{(outputs.functional?.passed ?? false) ? "passed" : "failed"}}
+        Security: {{(outputs.security?.passed ?? false) ? "passed" : "failed"}}
 
         Finished At: {{unixtime()}}
         Test Environment: {{vars.NODE_ENV}}

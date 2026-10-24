@@ -107,7 +107,7 @@ jobs:
 When files are merged, a top-level key in a later file replaces the same key of an earlier file as a whole, so an environment file that wrote only its own `vars` would drop those of `base.yml`. The files are joined into one YAML document before they are read, so each environment file pulls the base vars in with the YAML merge key `<<: *base_vars`. It is anchored in turn as `env_vars`, for a workflow file that adds vars of its own.
 
 **config/environments/development.yml:**
-```yaml merge=env base
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -141,7 +141,7 @@ vars: &env_vars
 ```
 
 **config/environments/staging.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -176,7 +176,7 @@ vars: &env_vars
 ```
 
 **config/environments/production.yml:**
-```yaml
+```yaml merge=env variant
 vars: &env_vars
   <<: *base_vars
 
@@ -1138,7 +1138,7 @@ jobs:
         url: "{{vars.BLUE_URL}}/health"
       test: res.code == 200
       outputs:
-        blue_time: rt.sec * 1000
+        time: rt.sec * 1000
 
     - name: "Test Green Environment"
       id: green-test
@@ -1148,14 +1148,14 @@ jobs:
         url: "{{vars.GREEN_URL}}/health"
       test: res.code == 200
       outputs:
-        green_time: rt.sec * 1000
+        time: rt.sec * 1000
 
     - name: "Compare Environment Performance"
       uses: hello
       echo: |
-        Blue Environment: {{outputs['blue-test'].blue_time}}ms
-        Green Environment: {{outputs['green-test'].green_time}}ms
-        Performance Difference: {{abs(outputs['blue-test'].blue_time - outputs['green-test'].green_time)}}ms
+        Blue Environment: {{outputs['blue-test'].time}}ms
+        Green Environment: {{outputs['green-test'].time}}ms
+        Performance Difference: {{abs(outputs['blue-test'].time - outputs['green-test'].time)}}ms
 ```
 
 ### Canary Deployment Testing

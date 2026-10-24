@@ -853,7 +853,7 @@ jobs:
         url: "{{vars.API_URL}}/ping"
       test: res.code == 200
       outputs:
-        smoke_passed: res.code == 200
+        passed: res.code == 200
 
 - id: functional-tests
   name: Functional Tests
@@ -866,7 +866,7 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: res.code == 200
       outputs:
-        functional_passed: res.code == 200
+        passed: res.code == 200
 
 - id: security-tests
   name: Security Tests
@@ -879,7 +879,7 @@ jobs:
         url: "{{vars.API_URL}}/admin/users"
       test: res.code == 401
       outputs:
-        security_passed: res.code == 401
+        passed: res.code == 401
 
 - id: test-summary
   name: Test Results Summary
@@ -892,9 +892,9 @@ jobs:
         Test Execution Summary
         ======================
 
-        Smoke: {{(outputs.smoke?.smoke_passed ?? false) ? "passed" : "failed"}}
-        Functional: {{(outputs.functional?.functional_passed ?? false) ? "passed" : "failed"}}
-        Security: {{(outputs.security?.security_passed ?? false) ? "passed" : "failed"}}
+        Smoke: {{(outputs.smoke?.passed ?? false) ? "passed" : "failed"}}
+        Functional: {{(outputs.functional?.passed ?? false) ? "passed" : "failed"}}
+        Security: {{(outputs.security?.passed ?? false) ? "passed" : "failed"}}
 
         Finished At: {{unixtime()}}
         Test Environment: {{vars.NODE_ENV}}

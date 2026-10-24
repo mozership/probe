@@ -274,8 +274,8 @@ jobs:
         url: https://us-east.api.example.com/health
       test: res.code == 200
       outputs:
-        us_east_status: res.body.status
-        us_east_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 - id: us-west-check
   name: US West Region Check
@@ -288,8 +288,8 @@ jobs:
         url: https://us-west.api.example.com/health
       test: res.code == 200
       outputs:
-        us_west_status: res.body.status
-        us_west_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 - id: eu-check
   name: Europe Region Check
@@ -302,8 +302,8 @@ jobs:
         url: https://eu.api.example.com/health
       test: res.code == 200
       outputs:
-        eu_status: res.body.status
-        eu_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 # Fan-in: Aggregate results
 - id: summary
@@ -315,14 +315,14 @@ jobs:
       echo: |
         Regional Health Check Results:
 
-        US East: {{outputs.us_east_status}} ({{outputs.us_east_time}}ms)
-        US West: {{outputs.us_west_status}} ({{outputs.us_west_time}}ms)
-        Europe: {{outputs.eu_status}} ({{outputs.eu_time}}ms)
+        US East: {{outputs['us-east-check'].status}} ({{outputs['us-east-check'].response_time}}ms)
+        US West: {{outputs['us-west-check'].status}} ({{outputs['us-west-check'].response_time}}ms)
+        Europe: {{outputs['eu-check'].status}} ({{outputs['eu-check'].response_time}}ms)
 
         Total regions healthy: {{
-          (outputs.us_east_status == "healthy" ? 1 : 0) +
-          (outputs.us_west_status == "healthy" ? 1 : 0) +
-          (outputs.eu_status == "healthy" ? 1 : 0)
+          (outputs['us-east-check'].status == "healthy" ? 1 : 0) +
+          (outputs['us-west-check'].status == "healthy" ? 1 : 0) +
+          (outputs['eu-check'].status == "healthy" ? 1 : 0)
         }}/3
 ```
 

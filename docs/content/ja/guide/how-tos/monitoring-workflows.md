@@ -81,8 +81,8 @@ jobs:
         url: "{{vars.USER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        user_healthy: res.code == 200
-        user_response_time: (rt.sec * 1000)
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
         user_count: res.body.active_users
 
 - id: order-service
@@ -96,8 +96,8 @@ jobs:
         url: "{{vars.ORDER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        order_healthy: res.code == 200
-        order_response_time: (rt.sec * 1000)
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
         pending_orders: res.body.pending_orders
 
 - id: payment-service
@@ -111,8 +111,8 @@ jobs:
         url: "{{vars.PAYMENT_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        payment_healthy: res.code == 200
-        payment_response_time: (rt.sec * 1000)
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
         transaction_queue: res.body.queue_length
 
 - id: notification-service
@@ -126,8 +126,8 @@ jobs:
         url: "{{vars.NOTIFICATION_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        notification_healthy: res.code == 200
-        notification_response_time: (rt.sec * 1000)
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
         queue_size: res.body.notification_queue
 
 - id: summary-report
@@ -141,23 +141,23 @@ jobs:
         🎯 Multi-Service Health Report
         ===============================
 
-        User Service: {{(outputs['user-service']?.user_healthy ?? false) ? "✅" : "❌"}} ({{outputs['user-service']?.user_response_time ?? "-"}}ms)
+        User Service: {{(outputs['user-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['user-service']?.response_time ?? "-"}}ms)
           Active Users: {{outputs['user-service']?.user_count ?? "-"}}
 
-        Order Service: {{(outputs['order-service']?.order_healthy ?? false) ? "✅" : "❌"}} ({{outputs['order-service']?.order_response_time ?? "-"}}ms)
+        Order Service: {{(outputs['order-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['order-service']?.response_time ?? "-"}}ms)
           Pending Orders: {{outputs['order-service']?.pending_orders ?? "-"}}
 
-        Payment Service: {{(outputs['payment-service']?.payment_healthy ?? false) ? "✅" : "❌"}} ({{outputs['payment-service']?.payment_response_time ?? "-"}}ms)
+        Payment Service: {{(outputs['payment-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['payment-service']?.response_time ?? "-"}}ms)
           Transaction Queue: {{outputs['payment-service']?.transaction_queue ?? "-"}}
 
-        Notification Service: {{(outputs['notification-service']?.notification_healthy ?? false) ? "✅" : "❌"}} ({{outputs['notification-service']?.notification_response_time ?? "-"}}ms)
+        Notification Service: {{(outputs['notification-service']?.healthy ?? false) ? "✅" : "❌"}} ({{outputs['notification-service']?.response_time ?? "-"}}ms)
           Notification Queue: {{outputs['notification-service']?.queue_size ?? "-"}}
 
         Overall System Status: {{
-          (outputs['user-service']?.user_healthy ?? false) &&
-          (outputs['order-service']?.order_healthy ?? false) &&
-          (outputs['payment-service']?.payment_healthy ?? false) &&
-          (outputs['notification-service']?.notification_healthy ?? false) ?
+          (outputs['user-service']?.healthy ?? false) &&
+          (outputs['order-service']?.healthy ?? false) &&
+          (outputs['payment-service']?.healthy ?? false) &&
+          (outputs['notification-service']?.healthy ?? false) ?
           "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 ISSUES DETECTED"
         }}
 
@@ -552,9 +552,9 @@ jobs:
         url: "{{vars.USER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        user_healthy: res.code == 200
-        user_status_code: res.code
-        user_response_time: rt.sec * 1000
+        healthy: res.code == 200
+        status_code: res.code
+        response_time: rt.sec * 1000
 
     - name: Payment Service Check
       id: payment_service
@@ -564,9 +564,9 @@ jobs:
         url: "{{vars.PAYMENT_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        payment_healthy: res.code == 200
-        payment_status_code: res.code
-        payment_response_time: rt.sec * 1000
+        healthy: res.code == 200
+        status_code: res.code
+        response_time: rt.sec * 1000
 
     - name: Order Service Check
       id: order_service
@@ -576,9 +576,9 @@ jobs:
         url: "{{vars.ORDER_SERVICE_URL}}/health"
       test: res.code == 200
       outputs:
-        order_healthy: res.code == 200
-        order_status_code: res.code
-        order_response_time: rt.sec * 1000
+        healthy: res.code == 200
+        status_code: res.code
+        response_time: rt.sec * 1000
 
     # 接続の拒否などでリクエスト自体が失敗したチェックはoutputsを公開しないため、
     # フォールバックでそれも停止として扱う
@@ -586,8 +586,8 @@ jobs:
       id: summary
       uses: hello
       outputs:
-        all_healthy: (outputs.user_service?.user_healthy ?? false) && (outputs.payment_service?.payment_healthy ?? false) && (outputs.order_service?.order_healthy ?? false)
-        slow: (outputs.user_service?.user_response_time ?? 0) > 2000 || (outputs.payment_service?.payment_response_time ?? 0) > 2000 || (outputs.order_service?.order_response_time ?? 0) > 2000
+        all_healthy: (outputs.user_service?.healthy ?? false) && (outputs.payment_service?.healthy ?? false) && (outputs.order_service?.healthy ?? false)
+        slow: (outputs.user_service?.response_time ?? 0) > 2000 || (outputs.payment_service?.response_time ?? 0) > 2000 || (outputs.order_service?.response_time ?? 0) > 2000
 
     - name: Critical Service Alert
       uses: smtp
@@ -601,9 +601,9 @@ jobs:
       echo: |
         CRITICAL SERVICE HEALTH ALERT
         Time: {{unixtime()}}
-        User Service: {{outputs.user_service?.user_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.user_service?.user_status_code ?? "-"}})
-        Payment Service: {{outputs.payment_service?.payment_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.payment_service?.payment_status_code ?? "-"}})
-        Order Service: {{outputs.order_service?.order_healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.order_service?.order_status_code ?? "-"}})
+        User Service: {{outputs.user_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.user_service?.status_code ?? "-"}})
+        Payment Service: {{outputs.payment_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.payment_service?.status_code ?? "-"}})
+        Order Service: {{outputs.order_service?.healthy ?? false ? "healthy" : "DOWN"}} (HTTP {{outputs.order_service?.status_code ?? "-"}})
 
     - name: Performance Warning Alert
       uses: smtp
@@ -617,9 +617,9 @@ jobs:
       echo: |
         PERFORMANCE WARNING (threshold: 2000ms)
         Time: {{unixtime()}}
-        User Service: {{outputs.user_service?.user_response_time ?? "-"}}ms
-        Payment Service: {{outputs.payment_service?.payment_response_time ?? "-"}}ms
-        Order Service: {{outputs.order_service?.order_response_time ?? "-"}}ms
+        User Service: {{outputs.user_service?.response_time ?? "-"}}ms
+        Payment Service: {{outputs.payment_service?.response_time ?? "-"}}ms
+        Order Service: {{outputs.order_service?.response_time ?? "-"}}ms
 
     - name: All Clear Notification
       uses: hello
@@ -776,6 +776,7 @@ jobs:
 - name: Service A Check  # 並列実行
   steps:
     - name: Service A Health
+      id: service-a
       uses: http
       with:
         method: GET
@@ -783,21 +784,22 @@ jobs:
       test: res.code == 200
       # 良い例: 効率的な出力
       outputs:
-        service_a_healthy: res.code == 200     # ブール値フラグ
-        service_a_time: (rt.sec * 1000)        # 特定のメトリクス
+        healthy: res.code == 200          # ブール値フラグ
+        response_time: (rt.sec * 1000)    # 特定のメトリクス
         # 避ける: レスポンス全体の保存: full_response: res.body
 
 - name: Service B Check  # 並列実行
   steps:
     - name: Service B Health
+      id: service-b
       uses: http
       with:
         method: GET
         url: "{{vars.SERVICE_B_URL}}/health"
       test: res.code == 200
       outputs:
-        service_b_healthy: res.code == 200
-        service_b_time: (rt.sec * 1000)
+        healthy: res.code == 200
+        response_time: (rt.sec * 1000)
 ```
 
 ### 4. 文書化と保守

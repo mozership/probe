@@ -197,7 +197,7 @@ vars:
   API_URL: "{{API_URL}}"
 
 jobs:
-  # ステージ 1: インフラチェック（並列）
+  # ステージ1: インフラチェック（並列）
 - id: database-check
   name: Database Connectivity
   steps:
@@ -218,7 +218,7 @@ jobs:
         url: "{{vars.REDIS_HEALTH_URL}}"
       test: res.code == 200
 
-# ステージ 2: アプリケーションチェック（インフラに依存）
+# ステージ2: アプリケーションチェック（インフラに依存）
 - id: api-validation
   name: API Service Validation
   needs: [database-check, cache-check]
@@ -230,7 +230,7 @@ jobs:
         url: "{{vars.API_URL}}/health"
       test: res.code == 200
 
-# ステージ 3: エンドツーエンドテスト（API に依存）
+# ステージ3: エンドツーエンドテスト（APIに依存）
 - id: e2e-tests
   name: End-to-End Tests
   needs: [api-validation]
@@ -274,8 +274,8 @@ jobs:
         url: https://us-east.api.example.com/health
       test: res.code == 200
       outputs:
-        us_east_status: res.body.status
-        us_east_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 - id: us-west-check
   name: US West Region Check
@@ -288,8 +288,8 @@ jobs:
         url: https://us-west.api.example.com/health
       test: res.code == 200
       outputs:
-        us_west_status: res.body.status
-        us_west_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 - id: eu-check
   name: Europe Region Check
@@ -302,8 +302,8 @@ jobs:
         url: https://eu.api.example.com/health
       test: res.code == 200
       outputs:
-        eu_status: res.body.status
-        eu_time: (rt.sec * 1000)
+        status: res.body.status
+        response_time: (rt.sec * 1000)
 
 # ファンイン: 結果を集約
 - id: summary
@@ -315,14 +315,14 @@ jobs:
       echo: |
         Regional Health Check Results:
 
-        US East: {{outputs.us_east_status}} ({{outputs.us_east_time}}ms)
-        US West: {{outputs.us_west_status}} ({{outputs.us_west_time}}ms)
-        Europe: {{outputs.eu_status}} ({{outputs.eu_time}}ms)
+        US East: {{outputs['us-east-check'].status}} ({{outputs['us-east-check'].response_time}}ms)
+        US West: {{outputs['us-west-check'].status}} ({{outputs['us-west-check'].response_time}}ms)
+        Europe: {{outputs['eu-check'].status}} ({{outputs['eu-check'].response_time}}ms)
 
         Total regions healthy: {{
-          (outputs.us_east_status == "healthy" ? 1 : 0) +
-          (outputs.us_west_status == "healthy" ? 1 : 0) +
-          (outputs.eu_status == "healthy" ? 1 : 0)
+          (outputs['us-east-check'].status == "healthy" ? 1 : 0) +
+          (outputs['us-west-check'].status == "healthy" ? 1 : 0) +
+          (outputs['eu-check'].status == "healthy" ? 1 : 0)
         }}/3
 ```
 
@@ -340,7 +340,7 @@ jobs:
 ワークフローを単一のよく定義された目的に焦点を絞って保持します。
 
 ```yaml
-# 良い例: API ヘルスチェックに焦点
+# 良い例: APIヘルスチェックに焦点
 name: API Health Check
 description: Monitor the health of our REST API endpoints
 
@@ -380,7 +380,7 @@ description: Test core business functionality
 name: Service Monitoring
 description: Monitor critical services
 vars:
-  # production.yml または staging.yml の vars で置き換わる
+  # production.ymlまたはstaging.ymlのvarsで置き換わる
   API_BASE_URL: "{{API_BASE_URL}}"
 
 jobs:
@@ -534,7 +534,7 @@ vars:
   API_URL: "{{API_URL}}"
 
 jobs:
-- *setup_job    # common-setup.yml で定義
+- *setup_job    # common-setup.ymlで定義
 - id: api-tests
   name: API Tests
   needs: [setup]
@@ -720,7 +720,7 @@ jobs:
   name: check-a
 - id: check-b
   name: check-b
-  needs: [check-a]  # B が実際に A に依存する場合のみ
+  needs: [check-a]  # Bが実際にAに依存する場合のみ
 ```
 
 ## よくあるアンチパターン

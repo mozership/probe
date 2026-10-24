@@ -67,7 +67,7 @@ jobs:
 
 - id: test-suite-a
   name: API Test Suite A
-  needs: [setup]           # setup の完了を待つ
+  needs: [setup]           # setupの完了を待つ
   steps:
     - name: Test User API
       uses: http
@@ -80,7 +80,7 @@ jobs:
 
 - id: test-suite-b
   name: API Test Suite B
-  needs: [setup]           # setup にも依存
+  needs: [setup]           # setupにも依存
   steps:
     - name: Test Order API
       uses: http
@@ -690,7 +690,7 @@ jobs:
     # タイムアウトを使用してハングを防止
     - name: Quick Health Check
       uses: http
-      timeout: 5s                    # ping 用の短いタイムアウト
+      timeout: 5s                    # ping用の短いタイムアウト
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/ping"

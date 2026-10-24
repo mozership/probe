@@ -165,7 +165,7 @@ steps:
       Test Duration: {{outputs['app-test'].test_duration}}ms
 ```
 
-An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and Probe warns about each later one, whose value is read through its step's id. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also a step's id stays that step's outputs, and a step publishing it is warned the same way.
+An output can also be read by its name alone, as `outputs.test_result`. When more than one step publishes the same name, the name belongs to the step that published it first: `outputs.<name>` keeps that step's value, and each later value is read through its step's id, as `outputs.<id>.<name>`. Steps in a job run in order, so which one comes first is fixed; between jobs that run at the same time it is not, so read a name that such jobs share through the step's id. A name that is also a step's id stays that step's outputs. A step without an id whose name is taken so has no way to read its value, and Probe warns of it; `probe check` also warns of `outputs.<name>` read by itself while more than one step publishes the name.
 
 ## Cross-Job Data Flow
 
@@ -395,8 +395,8 @@ jobs:
           }
       test: res.code == 200
       outputs:
-        standard_result: res.body.result
-        standard_time: (rt.sec * 1000)
+        processing_result: res.body.result
+        processing_time: (rt.sec * 1000)
 
     - name: Enhanced Processing
       id: enhanced-processing
@@ -413,8 +413,8 @@ jobs:
           }
       test: res.code == 200
       outputs:
-        enhanced_result: res.body.result
-        enhanced_time: (rt.sec * 1000)
+        processing_result: res.body.result
+        processing_time: (rt.sec * 1000)
         corrections_applied: res.body.corrections
 
     - name: Processing Summary
@@ -425,9 +425,9 @@ jobs:
         Quality Score: {{outputs['quality-check'].quality_score}}
         Processing Mode: {{outputs['quality-check'].quality_score >= 0.8 ? "Standard" : "Enhanced"}}
 
-        {{outputs.standard_time != nil ? "Standard Processing Time: " + string(outputs.standard_time) + "ms" : ""}}
-        {{outputs.enhanced_time != nil ? "Enhanced Processing Time: " + string(outputs.enhanced_time) + "ms" : ""}}
-        {{outputs.corrections_applied != nil ? "Corrections Applied: " + string(outputs.corrections_applied) : ""}}
+        {{outputs['standard-processing'] == nil ? "" : "Standard Processing Time: " + string(outputs['standard-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Enhanced Processing Time: " + string(outputs['enhanced-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Corrections Applied: " + string(outputs['enhanced-processing'].corrections_applied)}}
 ```
 
 ### Data Accumulation Patterns

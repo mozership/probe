@@ -352,13 +352,13 @@ jobs:
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        attempt1_success: res.code == 200
-        attempt1_time: (rt.sec * 1000)
+        success: res.code == 200
+        response_time: (rt.sec * 1000)
 
     - name: Retry After Brief Delay
       id: attempt2
       uses: http
-      skipif: outputs.attempt1_success ?? false
+      skipif: outputs.attempt1?.success ?? false
       wait: 2s
       timeout: 15s
       with:
@@ -366,13 +366,13 @@ jobs:
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        attempt2_success: res.code == 200
-        attempt2_time: (rt.sec * 1000)
+        success: res.code == 200
+        response_time: (rt.sec * 1000)
 
     - name: Final Attempt with Extended Timeout
       id: attempt3
       uses: http
-      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false)
+      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false)
       wait: 5s
       timeout: 30s
       with:
@@ -380,35 +380,35 @@ jobs:
         url: "{{vars.API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        attempt3_success: res.code == 200
-        attempt3_time: (rt.sec * 1000)
+        success: res.code == 200
+        response_time: (rt.sec * 1000)
 
     - name: Fallback to Alternative Endpoint
       id: fallback
       uses: http
-      skipif: (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false) || (outputs.attempt3_success ?? false)
+      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false) || (outputs.attempt3?.success ?? false)
       timeout: 20s
       with:
         method: GET
         url: "{{vars.FALLBACK_API_URL}}/endpoint"
       test: res.code == 200
       outputs:
-        fallback_success: res.code == 200
-        fallback_time: (rt.sec * 1000)
+        success: res.code == 200
+        response_time: (rt.sec * 1000)
 
     - name: Results Summary
       uses: hello
       echo: |
         API Test Results:
 
-        Attempt 1: {{(outputs.attempt1_success ?? false) ? "✅ Success (" + string(outputs.attempt1_time) + "ms)" : "❌ Failed"}}
-        {{outputs.attempt2_success == nil ? "" : "Attempt 2: " + (outputs.attempt2_success ? "✅ Success (" + string(outputs.attempt2_time) + "ms)" : "❌ Failed")}}
-        {{outputs.attempt3_success == nil ? "" : "Attempt 3: " + (outputs.attempt3_success ? "✅ Success (" + string(outputs.attempt3_time) + "ms)" : "❌ Failed")}}
-        {{outputs.fallback_success == nil ? "" : "Fallback: " + (outputs.fallback_success ? "✅ Success (" + string(outputs.fallback_time) + "ms)" : "❌ Failed")}}
+        Attempt 1: {{(outputs.attempt1?.success ?? false) ? "✅ Success (" + string(outputs.attempt1.response_time) + "ms)" : "❌ Failed"}}
+        {{outputs.attempt2 == nil ? "" : "Attempt 2: " + (outputs.attempt2.success ? "✅ Success (" + string(outputs.attempt2.response_time) + "ms)" : "❌ Failed")}}
+        {{outputs.attempt3 == nil ? "" : "Attempt 3: " + (outputs.attempt3.success ? "✅ Success (" + string(outputs.attempt3.response_time) + "ms)" : "❌ Failed")}}
+        {{outputs.fallback == nil ? "" : "Fallback: " + (outputs.fallback.success ? "✅ Success (" + string(outputs.fallback.response_time) + "ms)" : "❌ Failed")}}
 
         Final Result: {{
-          (outputs.attempt1_success ?? false) || (outputs.attempt2_success ?? false) ||
-          (outputs.attempt3_success ?? false) || (outputs.fallback_success ?? false) ?
+          (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false) ||
+          (outputs.attempt3?.success ?? false) || (outputs.fallback?.success ?? false) ?
           "✅ API Accessible" : "❌ All attempts failed"
         }}
 ```
@@ -586,9 +586,9 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        service_a_ok: res.code == 200
-        service_a_status: 'res.code != 200 ? res.status : nil'
-        service_a_trace: res.headers["X-Trace-Id"]
+        success: res.code == 200
+        error_code: 'res.code != 200 ? res.status : nil'
+        trace_id: res.headers["X-Trace-Id"]
 
     - name: Service B Test
       id: service-b
@@ -600,9 +600,9 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        service_b_ok: res.code == 200
-        service_b_status: 'res.code != 200 ? res.status : nil'
-        service_b_trace: res.headers["X-Trace-Id"]
+        success: res.code == 200
+        error_code: 'res.code != 200 ? res.status : nil'
+        trace_id: res.headers["X-Trace-Id"]
 
     - name: Service C Test
       id: service-c
@@ -614,9 +614,9 @@ jobs:
           X-Correlation-ID: "{{outputs.init.correlation_id}}"
       test: res.code == 200
       outputs:
-        service_c_ok: res.code == 200
-        service_c_status: 'res.code != 200 ? res.status : nil'
-        service_c_trace: res.headers["X-Trace-Id"]
+        success: res.code == 200
+        error_code: 'res.code != 200 ? res.status : nil'
+        trace_id: res.headers["X-Trace-Id"]
 
     - name: Error Correlation Report
       uses: hello
@@ -627,20 +627,20 @@ jobs:
         Test Duration: {{unixtime() - outputs.init.start_time}} seconds
 
         Service Status Summary:
-        - Service A: {{(outputs.service_a_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_a_status ?? "no response") + ")"}}
-          {{outputs.service_a_trace == nil ? "" : "Trace ID: " + outputs.service_a_trace}}
+        - Service A: {{(outputs['service-a']?.success ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs['service-a']?.error_code ?? "no response") + ")"}}
+          {{outputs['service-a']?.trace_id == nil ? "" : "Trace ID: " + outputs['service-a'].trace_id}}
 
-        - Service B: {{(outputs.service_b_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_b_status ?? "no response") + ")"}}
-          {{outputs.service_b_trace == nil ? "" : "Trace ID: " + outputs.service_b_trace}}
+        - Service B: {{(outputs['service-b']?.success ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs['service-b']?.error_code ?? "no response") + ")"}}
+          {{outputs['service-b']?.trace_id == nil ? "" : "Trace ID: " + outputs['service-b'].trace_id}}
 
-        - Service C: {{(outputs.service_c_ok ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs.service_c_status ?? "no response") + ")"}}
-          {{outputs.service_c_trace == nil ? "" : "Trace ID: " + outputs.service_c_trace}}
+        - Service C: {{(outputs['service-c']?.success ?? false) ? "✅ Healthy" : "❌ Failed (" + (outputs['service-c']?.error_code ?? "no response") + ")"}}
+          {{outputs['service-c']?.trace_id == nil ? "" : "Trace ID: " + outputs['service-c'].trace_id}}
 
         Error Pattern Analysis:
-        {{!(outputs.service_a_ok ?? false) && !(outputs.service_b_ok ?? false) && !(outputs.service_c_ok ?? false) ? "🚨 Total system failure - check infrastructure" : ""}}
-        {{!(outputs.service_a_ok ?? false) && (outputs.service_b_ok ?? false) && (outputs.service_c_ok ?? false) ? "⚠️ Service A isolated failure" : ""}}
-        {{(outputs.service_a_ok ?? false) && !(outputs.service_b_ok ?? false) && (outputs.service_c_ok ?? false) ? "⚠️ Service B isolated failure" : ""}}
-        {{(outputs.service_a_ok ?? false) && (outputs.service_b_ok ?? false) && !(outputs.service_c_ok ?? false) ? "⚠️ Service C isolated failure" : ""}}
+        {{!(outputs['service-a']?.success ?? false) && !(outputs['service-b']?.success ?? false) && !(outputs['service-c']?.success ?? false) ? "🚨 Total system failure - check infrastructure" : ""}}
+        {{!(outputs['service-a']?.success ?? false) && (outputs['service-b']?.success ?? false) && (outputs['service-c']?.success ?? false) ? "⚠️ Service A isolated failure" : ""}}
+        {{(outputs['service-a']?.success ?? false) && !(outputs['service-b']?.success ?? false) && (outputs['service-c']?.success ?? false) ? "⚠️ Service B isolated failure" : ""}}
+        {{(outputs['service-a']?.success ?? false) && (outputs['service-b']?.success ?? false) && !(outputs['service-c']?.success ?? false) ? "⚠️ Service C isolated failure" : ""}}
 
         Investigation Steps:
         1. Check application logs with correlation ID: {{outputs.init.correlation_id}}
@@ -698,7 +698,7 @@ jobs:
         method: POST
       test: res.code == 200
       outputs:
-        health_restart_initiated: res.code == 200
+        restart_initiated: res.code == 200
 
     # A service already restarted for its health is not restarted again.
     - name: Restart Service (Memory Issue)
@@ -710,7 +710,7 @@ jobs:
         method: POST
       test: res.code == 200
       outputs:
-        memory_restart_initiated: res.code == 200
+        restart_initiated: res.code == 200
 
     - name: Wait for Service Recovery
       id: recovery-wait
@@ -735,8 +735,8 @@ jobs:
         {{outputs['memory-check'] == nil ? "" : "Memory Usage: " + string(outputs['memory-check'].memory_usage) + "% " + (outputs['memory-check'].memory_ok ? "✅ Normal" : "⚠️ High")}}
 
         Recovery Actions:
-        {{(outputs.health_restart_initiated ?? false) ? "🔄 Service restarted due to health check failure" : ""}}
-        {{(outputs.memory_restart_initiated ?? false) ? "🔄 Service restarted due to high memory usage (" + string(outputs['memory-check'].memory_usage) + "%)" : ""}}
+        {{(outputs['restart-health']?.restart_initiated ?? false) ? "🔄 Service restarted due to health check failure" : ""}}
+        {{(outputs['restart-memory']?.restart_initiated ?? false) ? "🔄 Service restarted due to high memory usage (" + string(outputs['memory-check'].memory_usage) + "%)" : ""}}
 
         Recovery Result:
         {{outputs['recovery-wait'] == nil ? "ℹ️ No recovery action needed" : (outputs['recovery-wait'].recovery_successful ? "✅ Service recovered successfully" : "❌ Service failed to recover")}}

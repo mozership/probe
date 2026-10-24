@@ -50,8 +50,8 @@ GETリクエストに必要なのはURLだけです。
   uses: http
   timeout: 30s                                  # オプション: リクエストタイムアウト
   with:
-    url: https://api.example.com/users/123        # 必須: ターゲット URL
-    method: POST                                  # オプション: HTTP メソッド (デフォルト: GET)
+    url: https://api.example.com/users/123        # 必須: ターゲットURL
+    method: POST                                  # オプション: HTTPメソッド (デフォルト: GET)
     headers:                                      # オプション: リクエストヘッダー
       Content-Type: "application/json"
       Authorization: "Bearer {{vars.api_token}}"
@@ -290,7 +290,7 @@ shellアクションは複数のセキュリティレイヤーを実装します
   id: hello
   uses: hello
   with:
-    message: "Test message"           # res にそのまま返る
+    message: "Test message"           # resにそのまま返る
   echo: "{{res.message}}"
   outputs:
     greeting: res.message
@@ -796,7 +796,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
 # 良い例: 期待されるレスポンス時間に基づく具体的なタイムアウト
 - name: Quick Health Check
   uses: http
-  timeout: 5s              # クイックping は高速でレスポンスすべき
+  timeout: 5s              # クイックpingは高速でレスポンスすべき
   with:
     method: GET
     url: "{{vars.api_url}}/ping"
@@ -843,9 +843,9 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
     method: GET
     url: "{{vars.api_url}}/secure"
     headers:
-      Authorization: "Bearer {{vars.api_token}}"  # vars から
+      Authorization: "Bearer {{vars.api_token}}"  # varsから
 
-# 良い例: 安全な SMTP 設定を使用
+# 良い例: 安全なSMTP設定を使用
 - name: Send Alert
   uses: smtp
   with:

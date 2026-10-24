@@ -13,19 +13,19 @@ vars:                         # 任意: ワークフロー変数
   key: value
 secrets:                      # 任意: 出力で伏せる環境変数
   - NAME
-defaults:                     # 任意: すべてのジョブに効く、アクションごとの with の既定値
+defaults:                     # 任意: すべてのジョブに効く、アクションごとのwithの既定値
   http:
     url: string
 actions:                      # 任意: 外部アクションに付ける名前
   name: string
 jobs:                         # 必須: ジョブのリスト
   - name: string              # 必須: ジョブ名
-    id: string                # 任意: ジョブ ID。needs から参照する
+    id: string                # 任意: ジョブID。needsから参照する
     needs: [job-id, ...]      # 任意: 依存するジョブ
     always: boolean           # 任意: 依存先のジョブが失敗しても実行する
     skipif: expression        # 任意: 真ならジョブをスキップ
     fail_fast: boolean        # 任意: 失敗したステップより後のステップをスキップ
-    defaults:                 # 任意: アクションごとの with の既定値
+    defaults:                 # 任意: アクションごとのwithの既定値
       http:
         url: string
     repeat:                   # 任意: ジョブを繰り返す
@@ -37,8 +37,8 @@ jobs:                         # 必須: ジョブのリスト
       baseline_test: expression # 任意: 以前の実行と比べるアサーション
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
-        id: string            # 任意: ステップ ID。outputs をこの ID から読める
-        uses: string          # 必須: アクション名、または actions で付けた名前
+        id: string            # 任意: ステップID。outputsをこのIDから読める
+        uses: string          # 必須: アクション名、またはactionsで付けた名前
         with:                 # 任意: アクション引数
           key: value
         test: expression      # 任意: アサーション
@@ -191,7 +191,7 @@ jobs:
         headers:
           authorization: "Bearer {{vars.token}}"
     steps:
-      - name: List users          # 既定の url に、両方のヘッダーを付けて送る
+      - name: List users          # 既定のurlに、両方のヘッダーを付けて送る
         uses: http
         with:
           get: /users
@@ -401,7 +401,7 @@ jobs:
       - name: Health
         uses: http
         with:
-          get: /health        # 既定の url からの相対パス
+          get: /health        # 既定のurlからの相対パス
         test: res.code == 200
 ```
 
@@ -726,7 +726,7 @@ Goのduration文字列か、秒数の数値で指定します。
 ```yaml
 timeout: "30s"
 timeout: "5m"
-interval: 10        # 10 秒
+interval: 10        # 10秒
 ```
 
 ### 式とテンプレート
@@ -756,7 +756,7 @@ skipif: vars.environment == "local"
 | ステップの`echo` | 本文の代わりにエラーを表示し、ステップの結果は変わりません |
 
 ```yaml
-# 先行するステップが outputs.login を出力していなければ、ステップは失敗する
+# 先行するステップがoutputs.loginを出力していなければ、ステップは失敗する
 headers:
   authorization: "Bearer {{outputs.login.token}}"
 

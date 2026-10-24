@@ -157,7 +157,7 @@ jobs:
 - name: Environment-specific URL
   echo: "URL: {{vars.NODE_ENV == 'production' ? 'https://api.prod.com' : 'https://api.dev.com'}}"
 
-# Null 合体
+# Null合体
 - name: Default Configuration
   echo: "Timeout: {{vars.TIMEOUT || '30s'}}"
 ```
@@ -246,17 +246,17 @@ test: res.code in [200, 201, 202]
 
 # レスポンス時間テスト
 test: (rt.sec * 1000) < 1000                           # 1秒未満
-test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500      # 100-500ms の間
+test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500      # 100-500msの間
 
 # レスポンスサイズテスト
 test: len(res.rawbody) > 0                     # コンテンツあり
-test: len(res.rawbody) < 1048576               # 1MB 未満
+test: len(res.rawbody) < 1048576               # 1MB未満
 
 # ヘッダーテスト
 test: res.headers["Content-Type"] == "application/json"
 test: res.headers["X-Rate-Limit-Remaining"] > "10"
 
-# JSON レスポンステスト
+# JSONレスポンステスト
 test: res.body.status == "success"
 test: len(res.body.data.users) > 0
 test: res.body.error == nil
@@ -279,7 +279,7 @@ test: len(res.body) > 100
 # レスポンステキストのパターンマッチング
 test: res.body matches "user-\\d+@example\\.com"
 
-# JSON フィールドパターン検証
+# JSONフィールドパターン検証
 test: res.body.user.email matches "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
 ```
 
@@ -736,13 +736,13 @@ url: "{{vars.BASE_URL}}/users/{{outputs.user.id}}"
 テンプレートは値をそのまま埋め込みます。そのため、前後のクォートは書く側の責任になります。
 
 ```yaml
-# エラー: JSON でクォート不足
+# エラー: JSONでクォート不足
 body: |
   {
     "name": {{outputs.user.name}}      # エラー: クォートなし
   }
 
-# 解決方法: 適切な JSON クォート
+# 解決方法: 適切なJSONクォート
 body: |
   {
     "name": "{{outputs.user.name}}"    # 正解: 文字列をクォート
@@ -791,7 +791,7 @@ probe -v workflow.yml
 存在しないフィールドはnullになり、それをそのまま比較しても意味のある結果は得られません。先に存在を確認します。
 
 ```yaml
-# 良い例: 潜在的な nil 値を処理
+# 良い例: 潜在的なnil値を処理
 test: res.body.user != nil && res.body.user.active == true
 
 # 良い例: デフォルト値を使用

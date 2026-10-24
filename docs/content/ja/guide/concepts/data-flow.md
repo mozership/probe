@@ -165,7 +165,7 @@ steps:
       Test Duration: {{outputs['app-test'].test_duration}}ms
 ```
 
-出力は`outputs.test_result`のように名前だけでも読めます。複数のステップが同じ名前を公開した場合、その名前は最初に公開したステップのものになります。`outputs.<name>`はそのステップの値を保ち、Probeは後から公開したステップごとに警告を出します。後のステップの値は、そのステップのidから読みます。ジョブ内のステップは順に実行されるため、どのステップが先かは決まっています。一方、同時に動くジョブの間では決まらないため、そうしたジョブが共有する名前はステップのidから読んでください。ステップのidと同じ名前は、そのステップの出力を指したままとなり、その名前を公開したステップにも同じように警告が出ます。
+出力は`outputs.test_result`のように名前だけでも読めます。複数のステップが同じ名前を公開した場合、その名前は最初に公開したステップのものになります。`outputs.<name>`はそのステップの値を保ち、後から公開したステップの値は`outputs.<id>.<name>`のようにそのステップのidから読みます。ジョブ内のステップは順に実行されるため、どのステップが先かは決まっています。一方、同時に動くジョブの間では決まらないため、そうしたジョブが共有する名前はステップのidから読んでください。ステップのidと同じ名前は、そのステップの出力を指したままとなります。こうして名前を取られたステップにidがないと、その値を読む方法がないため、Probeは警告を出します。`probe check`は、複数のステップが公開する名前を`outputs.<name>`のように名前だけで読んでいる場合にも警告します。
 
 ## ジョブ間データフロー
 
@@ -203,7 +203,7 @@ jobs:
 
 - id: api-tests
   name: API Testing Suite
-  needs: [initialization]  # initialization の完了を待つ
+  needs: [initialization]  # initializationの完了を待つ
   steps:
     - name: Test User API
       id: user-api
@@ -252,7 +252,7 @@ jobs:
 
 - id: cleanup
   name: Environment Cleanup
-  needs: [reporting]  # reporting 完了後に実行
+  needs: [reporting]  # reporting完了後に実行
   steps:
     - name: Destroy Test Environment
       uses: http
@@ -395,8 +395,8 @@ jobs:
           }
       test: res.code == 200
       outputs:
-        standard_result: res.body.result
-        standard_time: (rt.sec * 1000)
+        processing_result: res.body.result
+        processing_time: (rt.sec * 1000)
 
     - name: Enhanced Processing
       id: enhanced-processing
@@ -413,8 +413,8 @@ jobs:
           }
       test: res.code == 200
       outputs:
-        enhanced_result: res.body.result
-        enhanced_time: (rt.sec * 1000)
+        processing_result: res.body.result
+        processing_time: (rt.sec * 1000)
         corrections_applied: res.body.corrections
 
     - name: Processing Summary
@@ -425,9 +425,9 @@ jobs:
         Quality Score: {{outputs['quality-check'].quality_score}}
         Processing Mode: {{outputs['quality-check'].quality_score >= 0.8 ? "Standard" : "Enhanced"}}
 
-        {{outputs.standard_time != nil ? "Standard Processing Time: " + string(outputs.standard_time) + "ms" : ""}}
-        {{outputs.enhanced_time != nil ? "Enhanced Processing Time: " + string(outputs.enhanced_time) + "ms" : ""}}
-        {{outputs.corrections_applied != nil ? "Corrections Applied: " + string(outputs.corrections_applied) : ""}}
+        {{outputs['standard-processing'] == nil ? "" : "Standard Processing Time: " + string(outputs['standard-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Enhanced Processing Time: " + string(outputs['enhanced-processing'].processing_time) + "ms"}}
+        {{outputs['enhanced-processing'] == nil ? "" : "Corrections Applied: " + string(outputs['enhanced-processing'].corrections_applied)}}
 ```
 
 ### データ蓄積パターン
@@ -714,7 +714,7 @@ jobs:
   needs: [user-setup]
   steps:
     - name: Send Verification Email
-      # 使用: user-setup からの user_id, email
+      # 使用: user-setupからのuser_id, email
       uses: smtp
       with:
         addr: "{{vars.smtp_addr}}"

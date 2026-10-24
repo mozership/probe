@@ -100,7 +100,7 @@ jobs:
 ```
 
 **config/development.yml:**
-```yaml merge=suite base
+```yaml merge=suite variant
 vars:
   <<: *base_vars
   ENVIRONMENT: "development"
@@ -111,7 +111,7 @@ vars:
 ```
 
 **config/staging.yml:**
-```yaml
+```yaml merge=suite variant
 vars:
   <<: *base_vars
   ENVIRONMENT: "staging"
@@ -122,7 +122,7 @@ vars:
 ```
 
 **config/production.yml:**
-```yaml
+```yaml merge=suite variant
 vars:
   <<: *base_vars
   ENVIRONMENT: "production"
@@ -166,8 +166,8 @@ jobs:
         res.body.user.email == vars.TEST_USER_EMAIL &&
         res.body.token != nil
       outputs:
-        registered_user_id: res.body.user.id
-        registration_token: res.body.token
+        user_id: res.body.user.id
+        auth_token: res.body.token
 
     - name: "Test User Login"
       id: login
