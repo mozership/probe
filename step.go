@@ -398,7 +398,7 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	// that failed returned no request, and what the step gave it is shown
 	// in its place, so that the run still tells what the step asked for.
 	if jCtx.Verbose {
-		if len(st.ctx.Req) == 0 && st.given != nil {
+		if len(st.ctx.Req) == 0 && len(st.given) > 0 {
 			jCtx.Printer.PrintGivenRequest(st.idx, name, st.given)
 		} else {
 			jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
