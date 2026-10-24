@@ -148,8 +148,16 @@ func (m *Masker) addLocked(value, label string) bool {
 		}
 		return false
 	}
+	// A value holding a URL with a password, such as a declared DSN, is
+	// also registered with that password redacted, as String finds it
+	// after hiding the passwords of URLs, so that it is still replaced
+	// with its label as a whole.
+	forms := escapedForms(value)
+	if r := redactURLPasswords(value); r != value {
+		forms = append(forms, escapedForms(r)...)
+	}
 	added := false
-	for _, v := range escapedForms(value) {
+	for _, v := range forms {
 		if _, exists := m.labels[v]; exists {
 			continue
 		}
@@ -430,6 +438,72 @@ func redactURLPassword(rawURL string) string {
 	return scheme + "://" + user + ":" + redactedValue + rest[len(userinfo):]
 }
 
+// urlAuthorityEnd holds the bytes that end the authority of a URL found in
+// text: the start of its path, query or fragment, and what stands around a
+// URL in a message or a log line. < and > are not allowed in a URL, and stop
+// a scan at a label such as <redacted> that is already in the text.
+var urlAuthorityEnd = func() (set [256]bool) {
+	for _, c := range []byte("/?#\"'`<> \t\r\n") {
+		set[c] = true
+	}
+	return set
+}()
+
+// redactURLPasswords returns s with the password of every URL in it, such
+// as postgres://app:pw@db/main in a driver's error or a remote quoted in a
+// response body, replaced by <redacted>, whatever its length and whether or
+// not it was ever learned. As Userinfo does, the user info is taken to end
+// at the last @ of the authority, so that a password holding an unescaped @
+// is hidden whole, and the user name to end at its first colon.
+//
+// It runs on everything Probe writes, so it looks at each @, which is rare
+// in most output, rather than at each URL: a URL with user info has an @
+// right after "://" and the characters of a host name or an address.
+func redactURLPasswords(s string) string {
+	if strings.IndexByte(s, '@') < 0 || !strings.Contains(s, "://") {
+		return s
+	}
+	var b strings.Builder
+	done := 0
+	for i := 0; i < len(s); {
+		k := strings.IndexByte(s[i:], '@')
+		if k < 0 {
+			break
+		}
+		// The authority the @ stands in runs back to the "://" before
+		// it and on to where its path, or the text around it, begins.
+		start := i + k
+		for start > i && !urlAuthorityEnd[s[start-1]] {
+			start--
+		}
+		end := i + k + 1
+		for end < len(s) && !urlAuthorityEnd[s[end]] {
+			end++
+		}
+		i = end
+		if !strings.HasSuffix(s[:start], "://") {
+			continue
+		}
+		authority := s[start:end]
+		at := strings.LastIndexByte(authority, '@')
+		colon := strings.IndexByte(authority[:at], ':')
+		if colon < 0 || colon+1 == at {
+			continue
+		}
+		if done == 0 {
+			b.Grow(len(s))
+		}
+		b.WriteString(s[done : start+colon+1])
+		b.WriteString(redactedValue)
+		done = start + at
+	}
+	if done == 0 {
+		return s
+	}
+	b.WriteString(s[done:])
+	return b.String()
+}
+
 // dsnPassword returns the password in a URL-style DSN, both as written and
 // percent-decoded, or nothing when it has none.
 func dsnPassword(dsn string) []string {
@@ -474,11 +548,12 @@ func collectStrings(v any, found *[]string) {
 	}
 }
 
-// String hides every secret value in s.
+// String hides every secret value in s, and the password of every URL in it.
 func (m *Masker) String(s string) string {
 	if m == nil {
 		return s
 	}
+	s = redactURLPasswords(s)
 	m.mu.RLock()
 	r := m.replacer
 	m.mu.RUnlock()

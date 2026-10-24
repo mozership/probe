@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -690,5 +691,130 @@ func TestMasker_ShortSecretAsNumber(t *testing.T) {
 	}
 	if got := New(nil, nil).Value(float64(123)); got != float64(123) {
 		t.Errorf("a masker with no secrets changed a number: %v", got)
+	}
+}
+
+// benchMasker is a masker with a declared secret and a learned credential,
+// as a typical run has.
+func benchMasker() *Masker {
+	m := New([]string{"TOKEN"}, map[string]string{"TOKEN": "tok-1234567890"})
+	m.Learn(map[string]any{"headers": map[string]any{"authorization": "Bearer runtime-token"}})
+	return m
+}
+
+func BenchmarkString(b *testing.B) {
+	body := strings.Repeat(`{"id":1,"name":"alice","email":"alice@example.com","home":"https://example.com/alice"},`, 2000)
+	cases := map[string]string{
+		"plain line":    "00:16:02.765 [check] ▸ GET /users returned 200 in 12ms",
+		"line with url": `level=info msg="connecting" url=https://api.example.com/v1/users?page=2`,
+		"url password":  `level=error msg="dial failed" dsn=postgres://app:pw@db:5432/main err="connection refused"`,
+		"large body":    body,
+	}
+	m := benchMasker()
+	for name, s := range cases {
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(int64(len(s)))
+			for b.Loop() {
+				_ = m.String(s)
+			}
+		})
+	}
+}
+
+// TestMasker_StringRedactsURLPasswords covers the password of a URL in free
+// text, such as a driver's error or a remote quoted in a response body,
+// which is hidden by its place in the URL, whatever its length and though
+// it was never learned.
+func TestMasker_StringRedactsURLPasswords(t *testing.T) {
+	m := New(nil, nil)
+	tests := []struct {
+		name, in, want string
+	}{
+		{"in quotes", `dial "postgres://app:pw@db/main": refused`, `dial "postgres://app:<redacted>@db/main": refused`},
+		{"in single quotes", `remote 'https://x-access-token:abc@github.com/o/r.git'`, `remote 'https://x-access-token:<redacted>@github.com/o/r.git'`},
+		{"key=value", `level=error dsn=mysql://root:a@tcp(db:3306)/app err=refused`, `level=error dsn=mysql://root:<redacted>@tcp(db:3306)/app err=refused`},
+		{"several on a line", `from redis://u:p1@a:6379 to redis://v:p2@b:6379/1`, `from redis://u:<redacted>@a:6379 to redis://v:<redacted>@b:6379/1`},
+		{"at the end", "url=amqp://guest:guest@mq", "url=amqp://guest:<redacted>@mq"},
+		{"no password", `GET https://example.com/a@b?q=c@d#e@f`, `GET https://example.com/a@b?q=c@d#e@f`},
+		{"user only", `ssh://git@github.com/o/r and redis://app@cache`, `ssh://git@github.com/o/r and redis://app@cache`},
+		{"empty password", `redis://app:@cache`, `redis://app:@cache`},
+		{"password only", `redis://:secret@cache`, `redis://:<redacted>@cache`},
+		{"ipv6 host", `http://u:p@[::1]:8080/x and http://[fe80::1]:80/`, `http://u:<redacted>@[::1]:8080/x and http://[fe80::1]:80/`},
+		{"password with @ and :", `redis://app:p@ss:w@rd@cache:6379`, `redis://app:<redacted>@cache:6379`},
+		{"ambiguous user with @", `http://a@b:c@d/`, `http://a@b:<redacted>@d/`},
+		{"percent-encoded", `postgres://app:p%40ss%3Aw@db/main`, `postgres://app:<redacted>@db/main`},
+		{"an email after a url", `see https://example.com/docs or mail me@example.com`, `see https://example.com/docs or mail me@example.com`},
+		{"no scheme", `app:pw@db and me@example.com`, `app:pw@db and me@example.com`},
+		{"json", `{"remote":"https://x:tok@github.com","by":"me@example.com"}`, `{"remote":"https://x:<redacted>@github.com","by":"me@example.com"}`},
+		{"already redacted", `postgres://app:<redacted>@db/main`, `postgres://app:<redacted>@db/main`},
+		{"multi-line", "a\nhttps://u:p@h\nb", "a\nhttps://u:<redacted>@h\nb"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.String(tt.in); got != tt.want {
+				t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			// Masking twice, as a masked map printed through a masking
+			// writer is, changes nothing more.
+			if got := m.String(m.String(tt.in)); got != tt.want {
+				t.Errorf("String twice = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMasker_StringRedactsURLPasswordsEscaped covers a URL quoted by Go or
+// encoded as JSON, neither of which escapes a slash or an @, so the password
+// is found as it is in plain text.
+func TestMasker_StringRedactsURLPasswordsEscaped(t *testing.T) {
+	m := New(nil, nil)
+	url := "postgres://app:pw@db/main"
+	js, _ := json.Marshal(map[string]string{"dsn": url})
+	for _, in := range []string{fmt.Sprintf("%q", url), fmt.Sprintf("%q", fmt.Sprintf("open %q", url)), string(js)} {
+		out := m.String(in)
+		if strings.Contains(out, ":pw@") || !strings.Contains(out, "app:<redacted>@db") {
+			t.Errorf("String(%s) = %s", in, out)
+		}
+	}
+}
+
+// TestMasker_StringRedactsURLPasswordsInLongBody covers a large response body
+// holding a URL with a password among many without one.
+func TestMasker_StringRedactsURLPasswordsInLongBody(t *testing.T) {
+	m := New(nil, nil)
+	item := `{"home":"https://example.com/u","mail":"u@example.com"},`
+	body := strings.Repeat(item, 5000) + `{"remote":"https://x-access-token:ghs_abc@github.com/o/r"}` + strings.Repeat(item, 5000)
+	want := strings.Repeat(item, 5000) + `{"remote":"https://x-access-token:<redacted>@github.com/o/r"}` + strings.Repeat(item, 5000)
+	if got := m.String(body); got != want {
+		t.Error("the long body was not masked as expected")
+	}
+}
+
+// TestMasker_SecretURLStaysWhole covers a declared secret that is itself a
+// URL with a password: it is still replaced with its label as a whole, not
+// left with only its password hidden.
+func TestMasker_SecretURLStaysWhole(t *testing.T) {
+	m := New([]string{"DSN"}, map[string]string{"DSN": "postgres://app:long-password@db/main"})
+	for in, want := range map[string]string{
+		"open postgres://app:long-password@db/main: refused":   "open <secret:DSN>: refused",
+		`open "postgres://app:long-password@db/main": refused`: `open "<secret:DSN>": refused`,
+	} {
+		if got := m.String(in); got != want {
+			t.Errorf("String(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := m.Map(map[string]any{"dsn": "postgres://app:long-password@db/main"}); got["dsn"] != "<secret:DSN>" {
+		t.Errorf("Map dsn = %v", got["dsn"])
+	}
+}
+
+// TestMasker_WriterRedactsURLPasswords covers a log line written through the
+// masking writer, such as an action's own log record.
+func TestMasker_WriterRedactsURLPasswords(t *testing.T) {
+	var buf bytes.Buffer
+	w := New(nil, nil).Writer(&buf)
+	_, _ = io.WriteString(w, "[ERROR] connect redis://app:pw@cache:6379/0: refused\n")
+	if got, want := buf.String(), "[ERROR] connect redis://app:<redacted>@cache:6379/0: refused\n"; got != want {
+		t.Errorf("wrote %q, want %q", got, want)
 	}
 }
