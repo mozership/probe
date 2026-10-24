@@ -13,6 +13,7 @@ export default {
   embedded: 'EMBEDDED',
   hello: 'HELLO',
   '-- external': { type: 'separator', title: 'External' },
+  agent: 'AGENT',
   browser: 'BROWSER',
   container: 'CONTAINER',
   graphql: 'GRAPHQL',

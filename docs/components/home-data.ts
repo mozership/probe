@@ -216,6 +216,61 @@ export const agentCheck: ReportLine[] = [
   { text: '3 errors, 1 warning', tone: 'total' },
 ]
 
+/*
+ * The pair below is the literal output of `probe first-note.yml` against the
+ * notes application of probe-agent's e2e server, whose new-note page fails,
+ * with ANTHROPIC_API_KEY and PASSWORD set. Only the url was swapped for a
+ * presentable one, and the lines Probe prints as a step starts and ends were
+ * left out, as in heroReport.
+ */
+
+export const personaWorkflow = `name: First note
+
+actions:
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+
+vars:
+  password: "{{PASSWORD}}"
+
+jobs:
+- name: A first-time visitor
+  steps:
+  - name: Writes a first note
+    uses: agent
+    with:
+      url: https://staging.example.com/
+      persona: |
+        Carol, who has never used a notes app and is
+        not technical. She signs up with {secret:EMAIL}
+        and the password {secret:PASSWORD}.
+      goal: |
+        Create an account, and write a first note
+        that says "Buy milk".
+      secrets:
+        EMAIL: "carol+{{random_str(8)}}@example.com"
+        PASSWORD: "{{vars.password}}"
+      evidence_dir: out
+    test: res.verdict != "blocked"`
+
+export const personaReport: ReportLine[] = [
+  { text: 'First note', tone: 'title' },
+  { text: '' },
+  { text: '⏺ A first-time visitor (Completed in 48.49s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Writes a first note', tone: 'pass' },
+  { text: '         ❌ fail: The account was created: the welcome page greeted Carol and said the account was ready. No note was ever written, though. The only way to write one is the "Write your first note" link to /notes/new, and that page returned a 500 "Internal Server Error" all three times it was loaded. Nothing in the record shows a "Buy milk" note being saved.' },
+  { text: '           evidence: "Welcome to Acme Notes, Carol!"' },
+  { text: '           evidence: "Your account {secret:EMAIL} is ready."' },
+  { text: '           evidence: "link \\"Write your first note\\" href=\\"/notes/new\\""' },
+  { text: '           evidence: "Internal Server Error"' },
+  { text: '           2 findings' },
+  { text: '           🔴 high: The new-note page (/notes/new) fails with a server error (500)', tone: 'error' },
+  { text: '           🟠 medium: After sign-up, nothing shows Carol is signed in and there is no other way to reach notes', tone: 'warning' },
+  { text: '           24 steps, stopped: done, 47s' },
+  { text: '           report: out/probe-agent-3220800333/report.md' },
+  { text: '' },
+  { text: 'Total workflow time: 48.49s ✓ All jobs succeeded', tone: 'total' },
+]
+
 export const installCommand = 'brew install mozership/tap/probe'
 
 export const sourceCommands = 'go install github.com/mozership/probe/cmd/probe@latest'

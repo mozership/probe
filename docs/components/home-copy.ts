@@ -15,6 +15,7 @@ export type HomeCopy = {
   flowNote: string
   heroReportLabel: string
   channels: {
+    kicker: string
     heading: string
     body: string
     chart: {
@@ -29,6 +30,7 @@ export type HomeCopy = {
     link: { label: string; href: string }
   }
   graph: {
+    kicker: string
     heading: string
     body: string
     chart: {
@@ -41,14 +43,26 @@ export type HomeCopy = {
     link: { label: string; href: string }
   }
   shared: {
+    kicker: string
     heading: string
     body: string
     workflowLabel: string
     jobLabel: string
     link: { label: string; href: string }
   }
-  parts: { heading: string; body: string; items: Part[] }
+  parts: { kicker: string; heading: string; body: string; items: Part[] }
+  browser: {
+    kicker: string
+    heading: string
+    body: string
+    workflowLabel: string
+    reportLabel: string
+    note: string
+    providers: { label: string; items: { id: string; name: string }[] }
+    link: { label: string; href: string }
+  }
   agents: {
+    kicker: string
     heading: string
     body: string
     workflowLabel: string
@@ -57,7 +71,7 @@ export type HomeCopy = {
     items: Feature[]
     link: { label: string; href: string }
   }
-  install: { heading: string; body: string; sourceLabel: string; docsLink: string; docsHref: string }
+  install: { kicker: string; heading: string; body: string; sourceLabel: string; docsLink: string; docsHref: string }
   copy: { idle: string; done: string }
 }
 
@@ -73,6 +87,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     flowNote: 'Create account posts the form and publishes the id that comes back. Database and Mailbox both depend on it, so Probe runs them at the same time — one asks SQLite for the row, the other opens the mailbox over IMAP. Activate waits for both before following the confirmation link.',
     heroReportLabel: '$ probe signup-flow.yml',
     channels: {
+      kicker: 'Architecture',
       heading: 'Supported actions',
       body: 'A step names an action in uses, and Probe starts that action as its own process and talks to it over gRPC. The built-in actions go through exactly the same handshake an action you write does, so none of them is a special case. What Probe cannot reach yet, you can add.',
       chart: {
@@ -81,12 +96,13 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         runnerNote: 'workflow runner',
         builtInLabel: 'Built in',
         externalLabel: 'Yours',
-        externalNames: ['graphql', 'jmap'],
+        externalNames: ['agent', 'graphql', 'jmap'],
         transport: 'gRPC',
       },
       link: { label: 'Read the actions reference', href: '/reference/actions-reference' },
     },
     graph: {
+      kicker: 'Structure',
       heading: 'What a workflow is made of',
       body: 'A workflow is a set of jobs, and a job is a sequence of steps. Steps run one after another, in the order you wrote them. Jobs run in parallel by default; only the ones with needs wait for what they depend on. Add repeat to a job and the same file runs on an interval and reports a success rate.',
       chart: {
@@ -99,6 +115,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'Read the jobs and steps guide', href: '/guide/concepts/jobs-and-steps' },
     },
     shared: {
+      kicker: 'Reuse',
       heading: 'Shared steps, in a file of their own',
       body: 'A scenario usually starts by logging in, and every scenario after the first repeats it. Put those steps in a job file and any workflow runs it with uses: embedded, handing it vars and reading its outputs back. The job\'s steps appear nested under the step that called it, so a failure still says which one broke.',
       workflowLabel: 'orders.yml',
@@ -106,6 +123,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'Read the embedded action reference', href: '/reference/actions/embedded' },
     },
     parts: {
+      kicker: 'Syntax',
       heading: 'What a step can say',
       body: 'Whatever action a step names, these fields are available to it.',
       items: [
@@ -141,7 +159,21 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         },
       ],
     },
+    browser: {
+      kicker: 'Quality',
+      heading: 'What deterministic tests leave out',
+      body: 'The steps above check what can be stated exactly, and they are what should gate a merge. Whether a first-time user gets through, or whether the application still holds up once data and settings pile up on staging, cannot be written as an expression. The agent action takes it in natural language, as a persona and a goal: a model plays the persona in a real Chrome, and another call of the model reviews the run, keeping only what the pages and the requests bear out. Run it with repeat against staging, and it keeps using the application as people do.',
+      workflowLabel: 'first-note.yml',
+      reportLabel: '$ probe first-note.yml',
+      note: 'The first finding is a server error, which an http step would have caught had someone written one. The second is in no test: after signing up, nothing tells Carol she is signed in, nor how to get to her notes. The test of the step asks only that the review ran; the verdict and the findings are the result to read.',
+      providers: {
+        label: 'Works with',
+        items: [{ id: 'claude', name: 'Claude' }, { id: 'openai', name: 'OpenAI' }, { id: 'gemini', name: 'Gemini' }, { id: 'xai', name: 'xAI' }, { id: 'sakura', name: 'Sakura AI Engine' }],
+      },
+      link: { label: 'Read the agent action reference', href: '/reference/actions/agent' },
+    },
     agents: {
+      kicker: 'Coding agents',
       heading: 'Built for coding agents',
       body: 'When an agent writes the code and the tests, something has to check both. Probe teaches the agent how to use the version it runs, finds mistakes in a workflow before it runs, judges responses by your spec rather than by the agent\'s own test, and refuses writes, and connections to hosts you did not allow, before they are sent.',
       workflowLabel: 'agent-workflow.yml',
@@ -188,6 +220,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'Set up a project for an agent', href: '/guide/how-tos/coding-agents' },
     },
     install: {
+      kicker: 'Get started',
       heading: 'Install',
       body: 'Probe is a single binary with no runtime dependencies. Homebrew installs it with one command.',
       sourceLabel: 'Or install with Go',
@@ -207,6 +240,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     flowNote: '最初にCreate accountがフォームを送信し、返ってきたidを後続へ渡します。これを待つのがDatabaseとMailboxで、この2つは互いに依存しないため同時に走ります。DatabaseはSQLiteにレコードの状態を問い合わせ、MailboxはIMAPでメールボックスを開いて確認メールを探します。Activateはその両方が終わるのを待ってから、確認リンクをたどります。',
     heroReportLabel: '$ probe signup-flow.yml',
     channels: {
+      kicker: '仕組み',
       heading: 'サポートしているアクション',
       body: 'Stepのusesにアクション名を書くと、Probeはそのアクションを別プロセスとして起動し、gRPC越しにやり取りします。ビルトインのアクションも、自作のアクションとまったく同じ手順で接続されます。特別扱いされているものは1つもないので、必要なアクションが無ければ自分で追加できます。',
       chart: {
@@ -215,12 +249,13 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         runnerNote: 'ワークフロー実行',
         builtInLabel: 'ビルトイン',
         externalLabel: '自作のアクション',
-        externalNames: ['graphql', 'jmap'],
+        externalNames: ['agent', 'graphql', 'jmap'],
         transport: 'gRPC',
       },
       link: { label: 'アクションリファレンスを読む', href: '/ja/reference/actions/variables' },
     },
     graph: {
+      kicker: '構造',
       heading: 'Workflowの構成要素',
       body: 'WorkflowはJobの集まりで、JobはStepの並びです。Stepは書いた順に1つずつ走ります。Jobは既定で並列に走り、needsを書いたものだけが依存先の完了を待ちます。Jobにrepeatを足せば、同じファイルが一定間隔で走り、成功率を返します。',
       chart: {
@@ -233,6 +268,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'ジョブとステップを読む', href: '/ja/guide/concepts/jobs-and-steps' },
     },
     shared: {
+      kicker: '再利用',
       heading: '共通処理は別のファイルに',
       body: 'シナリオの多くはログインから始まり、2つ目以降のシナリオでも同じ手順を書くことになります。その手順をジョブファイルに置けば、どのWorkflowからもuses: embeddedで実行でき、varsを渡してoutputsを受け取れます。呼び出したジョブのStepはレポートでも入れ子で表示されるため、失敗したときにどのStepかがわかります。',
       workflowLabel: 'orders.yml',
@@ -240,6 +276,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'embeddedアクションのリファレンスを読む', href: '/ja/reference/actions/embedded' },
     },
     parts: {
+      kicker: '記法',
       heading: 'Stepで使用できる便利な機能',
       body: 'Stepにはアクションの設定以外に、以下の共通機能があります。',
       items: [
@@ -275,7 +312,21 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         },
       ],
     },
+    browser: {
+      kicker: '品質',
+      heading: '決定論的なテストでは書けない品質を',
+      body: 'ここまでのStepは厳密に書ける正しさを確かめるもので、マージの関門になるべきものです。一方で、初めての人が最後までたどり着けるか、データや設定が積み重なったステージングでもアプリケーションが持ちこたえるかは、式では書けません。agentアクションでは、それをペルソナと目標として自然言語で書きます。モデルが実際のChromeでペルソナを演じ、別に呼び出したモデルが、ページとリクエストの記録に裏付けられた指摘だけを残します。repeatを付けてステージングで回せば、人と同じようにアプリケーションを使い続けます。',
+      workflowLabel: 'first-note.yml',
+      reportLabel: '$ probe first-note.yml',
+      note: '1つ目の指摘はサーバーのエラーで、誰かがhttpのStepを書いていれば見つけられたものです。2つ目はどのテストにも書かれていません。登録したあと、ログインしていることも、メモへたどり着く道も、Carolには示されていません。このStepのtestはレビューが実行できたことだけを確かめ、判定と指摘は読むための結果として返ります。',
+      providers: {
+        label: '使えるモデル',
+        items: [{ id: 'claude', name: 'Claude' }, { id: 'openai', name: 'OpenAI' }, { id: 'gemini', name: 'Gemini' }, { id: 'xai', name: 'xAI' }, { id: 'sakura', name: 'さくらのAI Engine' }],
+      },
+      link: { label: 'agentアクションのリファレンスを読む', href: '/ja/reference/actions/agent' },
+    },
     agents: {
+      kicker: 'AIエージェント',
       heading: 'AIエージェントのために',
       body: 'AIエージェントがコードとテストを書くなら、その両方を確かめる仕組みが要ります。Probeは動いているバージョンの使い方をAIエージェントに教え、Workflowの誤りを実行前に見つけ、レスポンスの正しさをAIエージェント自身のtestではなく仕様で判定し、書き込みや許可していないホストへの接続を送信前に拒否します。',
       workflowLabel: 'agent-workflow.yml',
@@ -322,6 +373,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       link: { label: 'AIエージェント向けにプロジェクトを設定する', href: '/ja/guide/how-tos/coding-agents' },
     },
     install: {
+      kicker: 'はじめる',
       heading: 'インストール',
       body: 'Probeは実行時の依存がない、単体のバイナリです。Homebrewなら1つのコマンドで入ります。',
       sourceLabel: 'Goでインストールする場合',

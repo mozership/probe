@@ -131,7 +131,7 @@ These actions are built in. Each has a page in the [reference](/reference/action
 | [`embedded`](/reference/actions/embedded) | Running another job file from a step |
 | [`hello`](/reference/actions/hello) | Printing a report line |
 
-External actions live in repositories of their own, and a step pins one by commit: [browser](/reference/actions/browser), [container](/reference/actions/container), [graphql](/reference/actions/graphql), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [s3](/reference/actions/s3) and [websocket](/reference/actions/websocket).
+External actions live in repositories of their own, and a step pins one by commit: [agent](/reference/actions/agent), [browser](/reference/actions/browser), [container](/reference/actions/container), [graphql](/reference/actions/graphql), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [s3](/reference/actions/s3) and [websocket](/reference/actions/websocket).
 
 ### Custom Actions
 

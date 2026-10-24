@@ -846,6 +846,7 @@ These external actions are published alongside Probe, each in a repository of it
 
 | Action | What it does | Latest |
 |---|---|---|
+| [agent](/reference/actions/agent) | Tests a web application from a task, or a persona and a goal, written in natural language: a model uses it through a real Chrome, and another call of the model judges it from what the pages showed. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine | v0.2.0 |
 | [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 | v0.2.0 |
 | [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman | v0.1.0 |
 | [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart | v0.2.0 |

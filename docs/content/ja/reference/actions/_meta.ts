@@ -14,6 +14,7 @@ export default {
   hello: 'HELLO',
   embedded: 'EMBEDDED',
   '-- external': { type: 'separator', title: '外部' },
+  agent: 'AGENT',
   browser: 'BROWSER',
   container: 'CONTAINER',
   graphql: 'GRAPHQL',

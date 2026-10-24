@@ -133,6 +133,7 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 
 | アクション | 用途 |
 |---|---|
+| [agent](https://probe.linyo.ws/ja/reference/actions/agent) | 自然言語で書いたタスクからの、モデルによるWebアプリケーションのテスト |
 | [browser](https://probe.linyo.ws/ja/reference/actions/browser) | 実際のブラウザの操作 |
 | [container](https://probe.linyo.ws/ja/reference/actions/container) | 実行のためのコンテナの起動と、終了後の削除 |
 | [graphql](https://probe.linyo.ws/ja/reference/actions/graphql) | HTTPでのGraphQLのクエリ |

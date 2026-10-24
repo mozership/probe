@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { CopyCommand } from './copy-command'
 import { Flowchart } from './flowchart'
 import { PluginChart } from './plugin-chart'
+import { ProviderMark } from './provider-icons'
 import { SourcePanel } from './source-panel'
 import { StructureChart } from './structure-chart'
 import {
@@ -10,6 +11,8 @@ import {
   heroReport,
   heroWorkflow,
   installCommand,
+  personaReport,
+  personaWorkflow,
   sharedJob,
   sharedMarks,
   sharedWorkflow,
@@ -102,6 +105,7 @@ export function Home({ locale }: { locale: Locale }) {
       <div className="lp-duo">
         <section className="lp-section lp-duo__item">
           <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.graph.kicker}</p>
             <h2 className="lp-section__heading">{t.graph.heading}</h2>
             <p className="lp-section__body">{t.graph.body}</p>
           </div>
@@ -117,6 +121,7 @@ export function Home({ locale }: { locale: Locale }) {
 
         <section className="lp-section lp-duo__item">
           <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.channels.kicker}</p>
             <h2 className="lp-section__heading">{t.channels.heading}</h2>
             <p className="lp-section__body">{t.channels.body}</p>
           </div>
@@ -133,6 +138,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.shared.kicker}</p>
           <h2 className="lp-section__heading">{t.shared.heading}</h2>
           <p className="lp-section__body">{t.shared.body}</p>
         </div>
@@ -154,6 +160,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.parts.kicker}</p>
           <h2 className="lp-section__heading">{t.parts.heading}</h2>
           <p className="lp-section__body">{t.parts.body}</p>
         </div>
@@ -169,7 +176,46 @@ export function Home({ locale }: { locale: Locale }) {
       </section>
 
       <section className="lp-section">
+        <div className="lp-section__intro">
+          <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.browser.kicker}</p>
+            <h2 className="lp-section__heading">{t.browser.heading}</h2>
+            <p className="lp-section__body">{t.browser.body}</p>
+          </div>
+          <div className="lp-providers">
+            <p className="lp-providers__label">{t.browser.providers.label}</p>
+            <ul className="lp-providers__list">
+              {t.browser.providers.items.map(p => (
+                <li key={p.id} className="lp-providers__item">
+                  <ProviderMark id={p.id} />
+                  {p.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        {/* The workflow is the longer, so it scrolls to the height of the report. */}
+        <div className="lp-pair">
+          <SourcePanel
+            label={t.browser.workflowLabel}
+            code={personaWorkflow}
+            className="lp-pair__source"
+          />
+          <figure className="lp-panel lp-panel--readout">
+            <figcaption className="lp-panel__label">{t.browser.reportLabel}</figcaption>
+            <Report lines={personaReport} wrap />
+          </figure>
+        </div>
+        <p className="lp-section__note">{t.browser.note}</p>
+
+        <Link className="lp-button lp-button--solid lp-section__link" href={t.browser.link.href}>
+          {t.browser.link.label}
+        </Link>
+      </section>
+
+      <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.agents.kicker}</p>
           <h2 className="lp-section__heading">{t.agents.heading}</h2>
           <p className="lp-section__body">{t.agents.body}</p>
         </div>
@@ -203,6 +249,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section lp-section--install">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.install.kicker}</p>
           <h2 className="lp-section__heading">{t.install.heading}</h2>
           <p className="lp-section__body">{t.install.body}</p>
         </div>
