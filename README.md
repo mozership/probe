@@ -133,6 +133,7 @@ These are external actions, each in a repository of its own, which a step pins b
 
 | Action | Use it for |
 |---|---|
+| [agent](https://probe.linyo.ws/reference/actions/agent) | Testing a web application from a task written in words, with a model |
 | [browser](https://probe.linyo.ws/reference/actions/browser) | Driving a real browser |
 | [container](https://probe.linyo.ws/reference/actions/container) | Containers started for a run, and removed after it |
 | [graphql](https://probe.linyo.ws/reference/actions/graphql) | GraphQL queries over HTTP |
