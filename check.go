@@ -13,6 +13,7 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -71,10 +72,20 @@ type CheckOptions struct {
 	// openapi asks the http action. A step with such a key and no test is
 	// not warned of as unchecked.
 	Contracts map[string][]string
+	// Fields are the fields of the req and the res each action returns, by
+	// its name, so that a test, an echo or an output that reads another is
+	// reported. What a step of an action it does not name reads is not
+	// checked.
+	Fields map[string]actionrpc.Fields
+	// Required are the keys of with each action cannot run without, by its
+	// name, each as the keys that stand for one another, of which one is
+	// enough: as get stands for method in the http action.
+	Required map[string][][]string
 	// Manifest reads the action.yml of an external action, a local one
 	// relative to baseDir, so that its with is checked against the params
-	// it declares. When it is nil, the with of an external action is not
-	// checked, and nothing is read from the network.
+	// it declares, and what a step reads of its res against the fields of
+	// res it declares. When it is nil, neither is checked, and nothing is
+	// read from the network.
 	Manifest func(uses, baseDir string) (*actionref.Manifest, error)
 }
 
@@ -111,6 +122,10 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.opts.Params = maps.Clone(opts.Params)
 	if c.opts.Params == nil {
 		c.opts.Params = map[string][]string{}
+	}
+	c.opts.Fields = maps.Clone(opts.Fields)
+	if c.opts.Fields == nil {
+		c.opts.Fields = map[string]actionrpc.Fields{}
 	}
 	c.mapFiles(files, contents)
 	for _, r := range redefinedJobs(files, contents) {
@@ -149,10 +164,12 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.checkActions()
 	c.checkEmbedded()
 	c.checkWith()
+	c.checkRequired()
 	c.checkNeeds()
 	c.checkProblems(problems)
 	c.checkOutputs()
 	c.checkNames()
+	c.checkResults()
 	c.checkTests()
 	c.checkRepeatTests()
 	return c.sorted(), nil
@@ -548,7 +565,7 @@ func (c *checker) checkEmbedded() {
 
 // readParams reads the params the external action uses declares in its
 // action.yml, once for each action, for checkWith to check its with
-// against. An action.yml that cannot be read leaves its with unchecked,
+// against, and the fields of res it declares, for checkResults. An action.yml that cannot be read leaves its with unchecked,
 // with a warning, as the run reads it again and fails then if it still
 // cannot.
 func (c *checker) readParams(uses string, line int, where string) {
@@ -569,6 +586,9 @@ func (c *checker) readParams(uses string, line int, where string) {
 	}
 	if m.Params != nil {
 		c.opts.Params[uses] = m.Params
+	}
+	if m.Res != nil {
+		c.opts.Fields[uses] = actionrpc.Fields{Res: m.Res}
 	}
 }
 
@@ -659,6 +679,40 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 		}
 		c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
 	}
+}
+
+// checkRequired reports a step whose with, the defaults merged into it,
+// lacks a key its action cannot run without, as the action refuses to run
+// it. A with with a key that holds a template, which names its key only
+// when it runs, is not checked.
+func (c *checker) checkRequired() {
+	for i, job := range c.wf.Jobs {
+		for j, st := range job.Steps {
+			groups := c.opts.Required[st.Uses]
+			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate) {
+				continue
+			}
+			for _, group := range groups {
+				if slices.ContainsFunc(group, func(key string) bool { _, ok := st.With[key]; return ok }) {
+					continue
+				}
+				path := fmt.Sprintf("jobs[%d].steps[%d].with", i, j)
+				c.add(SeverityError, c.line(path), c.stepWhere(i, j), "with: the %s action cannot run without %s, which neither the step nor its defaults give", st.Uses, orNames(group))
+			}
+		}
+	}
+}
+
+func isTemplate(s string) bool {
+	return len(expr.TemplateExprs(s)) > 0
+}
+
+// orNames lists names as a, b or c.
+func orNames(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
 func (c *checker) checkNeeds() {
@@ -992,6 +1046,92 @@ func (c *checker) checkNames() {
 			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars, nil)
 		}
 	}
+}
+
+// The fields of a step that are evaluated once its action has returned, and
+// can read what it returned under res and req: test, echo and outputs. The
+// rest are evaluated before it runs.
+func readsResult(field string) bool {
+	return field == "test" || field == "echo" || strings.HasPrefix(field, "outputs.")
+}
+
+// checkResults checks what the expressions and templates of each step read
+// under res and req. Those evaluated before the step runs, such as its
+// skipif, read them empty, which is an error. Those evaluated after, its
+// test, echo and outputs, may read only the fields the step's action
+// returns, as it declares them: a field it never returns reads nil, which
+// is an error for a built-in action, and a warning for an external one,
+// whose action.yml says what it returns without Probe knowing it. Only the
+// top level is checked, as what is under a field, such as a body, is data.
+func (c *checker) checkResults() {
+	seen := map[string]bool{}
+	add := func(severity string, e exprAt, format string, args ...any) {
+		key := e.path + "\x00" + fmt.Sprintf(format, args...)
+		if !seen[key] {
+			seen[key] = true
+			c.add(severity, c.line(e.path), e.where, "%s: "+format, append([]any{e.field}, args...)...)
+		}
+	}
+	c.eachExpr(func(e exprAt) {
+		if e.step < 0 {
+			return
+		}
+		st := c.wf.Jobs[e.job].Steps[e.step]
+		if !readsResult(e.field) {
+			for _, name := range expr.Names(e.input) {
+				if name == "res" || name == "req" {
+					add(SeverityError, e, "%s is empty here, as the step has not run yet when its %s is evaluated; %s is read by the step's test, echo and outputs", name, e.field, name)
+				}
+			}
+			return
+		}
+		fields, ok := c.resultFields(st)
+		if !ok {
+			return
+		}
+		severity := SeverityError
+		if actionref.IsExternal(st.Uses) {
+			severity = SeverityWarning
+		}
+		for _, name := range []string{"req", "res"} {
+			declared, checked := fields[name]
+			if !checked {
+				continue
+			}
+			for _, chain := range expr.Reads(e.input, name) {
+				if slices.Contains(declared, chain[0]) {
+					continue
+				}
+				msg := fmt.Sprintf("%s.%s is not a field the %s action returns", name, chain[0], st.Uses)
+				if s := suggest.Closest(chain[0], declared); s != "" {
+					msg += fmt.Sprintf("; did you mean %q?", s)
+				} else {
+					msg += fmt.Sprintf("; its %s has %s", name, listNames(declared))
+				}
+				add(severity, e, "%s", msg)
+			}
+		}
+	})
+}
+
+// resultFields returns the fields of req and of res that the action of st
+// returns, by req and res, leaving out either one its action does not
+// declare, and false when what st reads of neither is checked: for an
+// action that declares nothing, and for one that returns the keys of with,
+// for a step whose with has a key that holds a template, which names its
+// key only when it runs.
+func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
+	f, ok := c.opts.Fields[st.Uses]
+	if !ok || (f.With && slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate)) {
+		return nil, false
+	}
+	req, res := f.Of(st.With)
+	out := map[string][]string{"res": addedResFields(res)}
+	// An external action declares only the fields of its res.
+	if !actionref.IsExternal(st.Uses) {
+		out["req"] = req
+	}
+	return out, true
 }
 
 // nameHint returns what name, which is not among names, was likely meant

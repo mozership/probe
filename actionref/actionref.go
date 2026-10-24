@@ -124,6 +124,10 @@ type Manifest struct {
 	// check a step's with against. Nil, when action.yml does not say, takes
 	// any key.
 	Params []string `yaml:"params"`
+	// Res are the top-level fields of the res the action returns, for probe
+	// check to report a step that reads another. Nil, when action.yml does
+	// not say, leaves what a step reads of res unchecked.
+	Res []string `yaml:"res"`
 	// Cleanup says that the action is to be told once a run is over, for it
 	// to remove what its steps left behind in it.
 	Cleanup bool `yaml:"cleanup"`

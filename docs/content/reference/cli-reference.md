@@ -463,6 +463,9 @@ It reports as an **error**:
 - what a run refuses to load, such as a missing `name` or a duplicate id
 - an action that is neither built in nor external, and an external action that cannot be parsed
 - a key of a step's `with`, or of a job's `defaults`, that the built-in action does not take, which it ignores, such as `bdoy` for `body`; and `defaults` for a name no action has, which apply to no step. Only the keys directly under them are checked, not those of a map such as `headers`; a key that holds a template, an external action and `hello`, which takes any key, are not
+- a step whose `with`, with the `defaults` merged into it, lacks a key its built-in action cannot run without, such as `dsn` of the db action, or the method of the http action, which `method` or a shorthand such as `get` gives. A step whose `with` has a key that holds a template is not checked
+- a field of `res` or `req` that a step's `test`, `echo` or `outputs` read and that its built-in action never returns, which reads nil, such as `res.status_code` of the http action, whose status code is `res.code`. `res.rawbody`, which the runner adds to an action with a body, and `res.json`, which it adds to one with `stdout`, are fields too, and the `res` and `req` of a step of the hello action hold the keys of its `with`. Only the top level is checked, as what is under a field, such as `res.body`, is data; a field read by a key known only when it runs, such as `res[k]`, is not checked
+- `res` or `req` read in a step's `name`, `with`, `vars`, `iteration`, `wait` or `skipif`, which are evaluated before the step runs and read them empty
 - a `needs` that names no job, and `needs` that go round
 - a step id a run refuses
 - an expression in `test`, `skipif`, `outputs`, `repeat.test` or `repeat.baseline_test`, or a template in `name`, `with`, `vars` or `echo`, that does not parse
@@ -477,6 +480,7 @@ It reports as a **warning**:
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
 - an output whose value cannot be read as it is meant to be: one that a step without an id publishes under a name another step publishes too, so that it cannot be read at all; `outputs.<name>` read by itself while more than one step publishes the name, which holds the value of the step that publishes it first; and one named as the id of a step that publishes, so that `outputs.<name>` is that step's outputs or the value, whichever is published first. A value each step publishes under the same name, read through the step's id as `outputs.<id>.<name>`, is not warned of
 - a step that nothing checks: it has no `test`, it is not a step of the hello action, which does nothing that could fail, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
+- a field of `res` that a step of an external action reads and that the `res` of its `action.yml` does not declare. An action whose `action.yml` declares no `res` is not checked
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
 - a var read as `vars.<name>` that neither the workflow's `vars`, nor the step's `vars`, nor the entries of an `iteration` written in the step define, which reads nil unless [`--var`](#--var) gives it. A step's own `vars` read only those of the workflow, so one that reads another var of the step, or a key of its `iteration`, is reported too. A var read by a key known only when it runs, such as `vars[k]`, and, in a step whose `iteration` is a template, the vars its other fields read, are not checked. Files read together are checked as one workflow, so give `probe check` the files the run reads
@@ -631,7 +635,7 @@ Print an `action.yml` to start a new action from, for the GitHub repository `<ow
 probe manifest init mozership/probe-greet > action.yml
 ```
 
-The action is named after the repository, without a leading `probe-`, and `runs.url` names the executable of each platform `<repo>_{os}_{arch}`, which is what GoReleaser names one it publishes unarchived. The tag in `runs.url` is a placeholder and there are no checksums, so the action cannot be used from this commit: the first release puts both in. The description, `guard`, `params` and `cleanup` are left for you to fill in, each with a comment that says what it is for.
+The action is named after the repository, without a leading `probe-`, and `runs.url` names the executable of each platform `<repo>_{os}_{arch}`, which is what GoReleaser names one it publishes unarchived. The tag in `runs.url` is a placeholder and there are no checksums, so the action cannot be used from this commit: the first release puts both in. The description, `guard`, `params`, `res` and `cleanup` are left for you to fill in, each with a comment that says what it is for.
 
 #### `manifest <tag>`
 
@@ -648,7 +652,7 @@ It reads `action-file` and prints it with two changes:
 - `runs.url` takes `tag` in place of the tag it has. It must be the address of a release asset on GitHub, `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`, and `<asset>` must have one `{os}` and one `{arch}`, with a character between them that is not a lowercase letter or a digit, such as `_`.
 - `runs.checksums` becomes the digests of `checksums-file`. A line is taken when its file is `<asset>` with a platform in place of `{os}` and `{arch}`, and any other line is left out, as are the checksums `action-file` had.
 
-`name`, `description`, `guard`, `params` and `cleanup` are printed as they were read. The output is always written in the same form, with the checksums sorted by platform. The comment lines `action-file` starts with are kept, and no other comment is.
+`name`, `description`, `guard`, `params`, `res` and `cleanup` are printed as they were read. The output is always written in the same form, with the checksums sorted by platform. The comment lines `action-file` starts with are kept, and no other comment is.
 
 **Example:**
 ```bash

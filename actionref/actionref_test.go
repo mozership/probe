@@ -105,12 +105,12 @@ func TestParseManifest(t *testing.T) {
 }
 
 func TestParseManifestDeclarations(t *testing.T) {
-	m, err := ParseManifest([]byte("runs:\n  using: binary\n  path: x\nguard: [read-only, allow-host]\nparams: [url, calls]\n"))
+	m, err := ParseManifest([]byte("runs:\n  using: binary\n  path: x\nguard: [read-only, allow-host]\nparams: [url, calls]\nres: [code, body]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(m.Guard, []string{"read-only", "allow-host"}) || !reflect.DeepEqual(m.Params, []string{"url", "calls"}) {
-		t.Errorf("Guard = %v, Params = %v", m.Guard, m.Params)
+	if !reflect.DeepEqual(m.Guard, []string{"read-only", "allow-host"}) || !reflect.DeepEqual(m.Params, []string{"url", "calls"}) || !reflect.DeepEqual(m.Res, []string{"code", "body"}) {
+		t.Errorf("Guard = %v, Params = %v, Res = %v", m.Guard, m.Params, m.Res)
 	}
 
 	// An action.yml that says nothing declares no guard, and leaves the keys
@@ -119,8 +119,8 @@ func TestParseManifestDeclarations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Guard != nil || m.Params != nil {
-		t.Errorf("Guard = %v, Params = %v, want both nil", m.Guard, m.Params)
+	if m.Guard != nil || m.Params != nil || m.Res != nil {
+		t.Errorf("Guard = %v, Params = %v, Res = %v, want all nil", m.Guard, m.Params, m.Res)
 	}
 	// Nor does it ask for a cleanup.
 	if m.Cleanup {
@@ -613,14 +613,14 @@ func TestRelease(t *testing.T) {
 			name: "replaces the tag and the checksums, and keeps the rest",
 			manifest: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom']\ncleanup:   true # removes its files\n" +
+				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom']\ncleanup:   true # removes its files\nres:\n  - greeting\n" +
 				"runs:\n    using: binary\n    checksums:\n        linux_amd64: " + c + "\n        freebsd_amd64: " + c + "\n" +
 				"    url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n",
 			tag:       "v0.2.0",
 			checksums: checksums,
 			want: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard: [allow-host]\nparams: [name, \"to, whom\"]\ncleanup: true\n" +
+				"guard: [allow-host]\nparams: [name, \"to, whom\"]\nres: [greeting]\ncleanup: true\n" +
 				"runs:\n  using: binary\n" +
 				"  url: https://github.com/example/probe-greet/releases/download/v0.2.0/probe-greet_{os}_{arch}\n" +
 				"  checksums:\n" +

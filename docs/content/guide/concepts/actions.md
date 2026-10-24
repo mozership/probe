@@ -202,7 +202,7 @@ Every field the action accepts, in one step.
       BUILD_VERSION: "{{vars.version}}"
   test: res.code == 0 && res.stdout contains "Deploy successful"
   outputs:
-    deploy_time: res.rt
+    deploy_time: rt.duration
     deploy_log: res.stdout
 ```
 
@@ -882,6 +882,7 @@ runs:
 | `runs.checksums` | SHA-256 digest of the executable for each `<os>_<arch>`, in lowercase hex |
 | `guard` | The kinds of guard the action keeps to itself: `read-only`, `allow-host` or both. Probe takes the action at its word and runs it under a guard of those kinds. Without it, the action is refused under any guard unless `--allow-action` names it. See [Guard](/guide/concepts/guard) |
 | `params` | The keys the action takes in `with`, for `probe check` to report a key it does not take. Without it, `with` is not checked; `[]` takes no key |
+| `res` | The top-level fields of the `res` the action returns, such as `[code, body]`, for `probe check` to warn of a step that reads another. Without it, what a step reads of `res` is not checked |
 | `cleanup` | `true` for an action that Probe is to call once the workflow is over, for it to remove what its steps left behind. Without it, the action is not called. See [Cleaning Up After a Run](#cleaning-up-after-a-run) |
 
 `runs` takes exactly one of `url` and `path`. With `url`, a checksum for the running platform is required, and a download with another digest is refused. The digest is checked again each time the executable is started. The commit in `uses` fixes `action.yml`, and `action.yml` fixes the digest, so the commit decides exactly which executable runs.
@@ -950,9 +951,9 @@ probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
 
-The name, the description, `guard`, `params` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
+The name, the description, `guard`, `params`, `res` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
 
-For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params` and `cleanup`, and commit it; the first release then puts its tag and digests in:
+For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params`, `res` and `cleanup`, and commit it; the first release then puts its tag and digests in:
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml

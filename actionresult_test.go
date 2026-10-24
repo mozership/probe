@@ -1,7 +1,9 @@
 package probe
 
 import (
+	"maps"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/mozership/probe/jsonutil"
@@ -72,5 +74,28 @@ func TestStep_processActionResult_ReplacesTheContext(t *testing.T) {
 	}
 	if st.ctx.Status != 0 || st.ctx.Res["code"] != 200 {
 		t.Errorf("ctx = %+v, want the second result", st.ctx)
+	}
+}
+
+// What readActionResult adds to res is among the fields addedResFields
+// tells check of, for each field it comes from.
+func TestAddedResFields(t *testing.T) {
+	for _, res := range []map[string]any{
+		{"body": `{"id": 1}`, "code": 200},
+		{"stdout": `[1, 2]`, "stderr": ""},
+		{"body": `{"id": 1}`, "stdout": `{"ok": true}`},
+		{"body": "text", "stdout": "text"},
+	} {
+		declared := slices.Collect(maps.Keys(res))
+		r := readActionResult(map[string]any{"res": maps.Clone(res), "status": 0})
+		fields := addedResFields(declared)
+		for key := range r.Res {
+			if !slices.Contains(fields, key) {
+				t.Errorf("res of %v gained %s, which addedResFields(%v) = %v leaves out", res, key, declared, fields)
+			}
+		}
+	}
+	if got := addedResFields([]string{"code"}); !slices.Equal(got, []string{"code"}) {
+		t.Errorf("addedResFields([code]) = %v, want nothing added to a res without body or stdout", got)
 	}
 }
