@@ -918,7 +918,11 @@ func TestMasker_SecretInURLKeepsItsName(t *testing.T) {
 		{"angle brackets around a url", `see <https://h/?token=abc>`, `see <https://h/?token=<redacted>>`},
 		{"secret then more in a value", `http://h/?token=long-passwordTAIL&x=1`, `http://h/?token=<redacted>&x=1`},
 		{"secret inside a value", `http://h/?token=HEADlong-passwordTAIL`, `http://h/?token=<redacted>`},
-		{"angle brackets in a value", `http://h/?token=a<b>c&x=1`, `http://h/?token=<redacted>&x=1`},
+		// A URL cannot hold a < as it is, so the URL ends there and what
+		// follows is text around it.
+		{"angle brackets in a value", `http://h/?token=a<b>c&x=1`, `http://h/?token=<redacted><b>c&x=1`},
+		{"secret then a tag", `<url>http://h/?token=long-passwordTAIL</url>`, `<url>http://h/?token=<redacted></url>`},
+		{"label then a tag", `<url>http://h/?token=long-password</url>`, `<url>http://h/?token=<secret:PASS></url>`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -940,5 +944,33 @@ func TestMasker_SecretInURLKeepsItsName(t *testing.T) {
 	got := m.Map(map[string]any{"dsn": "postgres://app-user:pw@db.internal/main?password=x"})
 	if want := "postgres://<secret:USER>:<redacted>@<secret:HOST>/main?password=<redacted>"; got["dsn"] != want {
 		t.Errorf("Map dsn = %v, want %v", got["dsn"], want)
+	}
+}
+
+// TestMasker_QueryCredentialsInMarkup covers a URL in XML or HTML, whose
+// value ends at the tag after it, so that the markup around it stays.
+func TestMasker_QueryCredentialsInMarkup(t *testing.T) {
+	m := New(nil, nil)
+	tests := []struct {
+		name, in, want string
+	}{
+		{"xml element", `<url>https://h/?token=abc</url>`, `<url>https://h/?token=<redacted></url>`},
+		{"minified s3 xml",
+			`<R><Location>https://b.s3.amazonaws.com/k?X-Amz-Credential=AK%2F1&X-Amz-Signature=f00d&X-Amz-Expires=60</Location><Next>https://b.s3.amazonaws.com/n?X-Amz-Security-Token=tok&a=1</Next><Key>k&amp;password=visible-text</Key></R>`,
+			`<R><Location>https://b.s3.amazonaws.com/k?X-Amz-Credential=AK%2F1&X-Amz-Signature=<redacted>&X-Amz-Expires=60</Location><Next>https://b.s3.amazonaws.com/n?X-Amz-Security-Token=<redacted>&a=1</Next><Key>k&amp;password=visible-text</Key></R>`},
+		{"html attribute", `<a href="https://h/?a=1&amp;token=abc">next</a>`, `<a href="https://h/?a=1&amp;token=<redacted>">next</a>`},
+		{"html text", `<p>https://h/?token=abc</p>`, `<p>https://h/?token=<redacted></p>`},
+		{"angle brackets around a url", `see <https://h/?token=abc> now`, `see <https://h/?token=<redacted>> now`},
+		{"a > in a value not in brackets", `see https://h/?token=a>b now`, `see https://h/?token=<redacted> now`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.String(tt.in); got != tt.want {
+				t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			if got := m.String(m.String(tt.in)); got != tt.want {
+				t.Errorf("String twice = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

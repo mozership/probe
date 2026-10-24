@@ -433,7 +433,45 @@ func redactURLPassword(rawURL string) string {
 // isLabel reports whether v is a label a value was replaced with, such as
 // <redacted> or <secret:NAME>, which a URL cannot hold as it is.
 func isLabel(v string) bool {
-	return len(v) > 2 && v[0] == '<' && strings.IndexByte(v, '>') == len(v)-1
+	return v != "" && labelAt(v) == len(v)
+}
+
+// labelAt returns the length of the label t starts with, <redacted> or
+// <secret:NAME>, or 0 when it starts with none.
+func labelAt(t string) int {
+	if strings.HasPrefix(t, redactedValue) {
+		return len(redactedValue)
+	}
+	if strings.HasPrefix(t, "<secret:") {
+		if j := strings.IndexByte(t, '>'); j > 0 {
+			return j + 1
+		}
+	}
+	return 0
+}
+
+// paramEnd returns where a parameter of a URL in text ends when the URL
+// ends inside it, or len(param) when it does not. A URL cannot hold a < as
+// it is, so one ends it, as the </ of a closing tag or the < of the next
+// element in XML or HTML does, unless it starts a label the replacer put
+// there, which is taken as a part of the value. A URL written in angle
+// brackets, as <https://...>, also ends at a >.
+func paramEnd(param string, angled bool) int {
+	for i := 0; i < len(param); i++ {
+		switch param[i] {
+		case '<':
+			n := labelAt(param[i:])
+			if n == 0 {
+				return i
+			}
+			i += n - 1
+		case '>':
+			if angled {
+				return i
+			}
+		}
+	}
+	return len(param)
 }
 
 // userinfoColon returns where the user name of userinfo ends, at its first
@@ -574,18 +612,19 @@ func redactQueryCredentials(s string) string {
 		if !strings.Contains(s[start:q], "://") {
 			continue
 		}
+		// A URL that comes right after a <, with no > before its query,
+		// is written in angle brackets.
+		angled := s[start] == '<' && strings.IndexByte(s[start:q], '>') < 0
 		for p := q + 1; p < end; {
 			stop, sep := nextParam(s[p:end])
 			stop += p
 			param := s[p:stop]
+			ended := false
+			if n := paramEnd(param, angled); n < len(param) {
+				param, ended = param[:n], true
+			}
 			if eq := strings.IndexByte(param, '='); eq > 0 && isQueryCredential(strings.TrimPrefix(param[:eq], "amp;")) {
 				value := param[eq+1:]
-				// A URL written in angle brackets, as <https://...>, ends
-				// before the bracket that closes it, also once its value
-				// has been redacted.
-				if v := strings.TrimSuffix(value, ">"); v != value && (strings.IndexByte(v, '<') < 0 || isLabel(v)) {
-					value = v
-				}
 				if value != "" && !isLabel(value) {
 					if done == 0 {
 						b.Grow(len(s))
@@ -594,6 +633,12 @@ func redactQueryCredentials(s string) string {
 					b.WriteString(redactedValue)
 					done = p + eq + 1 + len(value)
 				}
+			}
+			if ended {
+				// What follows, such as the next element of an XML
+				// body, may hold another URL.
+				i = p + len(param)
+				break
 			}
 			if sep == 0 {
 				break
