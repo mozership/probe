@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -122,7 +123,6 @@ func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mode, func(t *testing.T) {
-			start := time.Now()
 			_, _, err := RunExecutableStep(bin, nil, Call{With: map[string]any{"mode": tt.mode}}, hclog.NewNullLogger())
 			if err == nil {
 				t.Fatal("RunExecutableStep() succeeded, want an error")
@@ -134,16 +134,36 @@ func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
 			if got := status.Code(err); got != tt.wantCode {
 				t.Errorf("status.Code() = %v, want %v", got, tt.wantCode)
 			}
-			// An action that returned Unavailable is not waited for to
-			// exit, as one that lost the connection is.
+			// An action that returned Unavailable is told as it said it,
+			// not as one that exited.
 			if tt.mode == "unavailable" {
-				if took := time.Since(start); took >= exitWait {
-					t.Errorf("RunExecutableStep() took %s, want less than %s", took, exitWait)
-				}
 				var exitErr *ExitError
 				if errors.As(err, &exitErr) {
 					t.Errorf("error = %#v, want the action's own", exitErr)
 				}
+				if !fromAction(err) {
+					t.Errorf("error = %v, want it marked as the action's own, so that it is not waited on", err)
+				}
+			}
+		})
+	}
+}
+
+// The cleanup of an action tells why it failed as a call of the action does.
+func TestCleanupExecutableTellsWhyTheCleanupFailed(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "failing")
+	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/failing-action").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	tests := map[string]string{
+		"error": "the widget would not go",
+		"panic": "the action exited before it returned (exit status 2): panic: the widget exploded while cleaning up",
+	}
+	for runID, want := range tests {
+		t.Run(runID, func(t *testing.T) {
+			err := CleanupExecutable(context.Background(), bin, nil, CleanupCall{RunID: runID}, hclog.NewNullLogger())
+			if err == nil || err.Error() != want {
+				t.Errorf("CleanupExecutable() error = %v, want %q", err, want)
 			}
 		})
 	}
@@ -169,18 +189,28 @@ func TestRunExecutableStepTellsWhyAnActionDidNotStart(t *testing.T) {
 	}
 }
 
-// The log keeps how the process exited for the error of a call it did not
-// return from, whether or not it shows it.
-func TestStoppedLoggerKeepsHowTheProcessExited(t *testing.T) {
-	exit := &exitStatus{}
-	l := stoppedLogger{Logger: hclog.NewNullLogger(), ctx: context.Background(), exit: exit}
-	l.Error("something else", "error", "not this")
-	if got := exit.get(); got != "" {
-		t.Errorf("exit status = %q after another record, want none", got)
+// go-plugin's record of a process it killed for not exiting gracefully is
+// left out once the call failed, as the error tells what became of the
+// action, and told otherwise, of an action that hangs when it is stopped.
+func TestStoppedLoggerLeavesOutTheKillAfterAFailedCall(t *testing.T) {
+	var buf bytes.Buffer
+	inner := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Warn})
+	failed := &atomic.Bool{}
+	l := stoppedLogger{Logger: inner, ctx: context.Background(), callFailed: failed}
+
+	l.Warn("plugin failed to exit gracefully", "call", "succeeded")
+	failed.Store(true)
+	l.Warn("plugin failed to exit gracefully", "call", "failed")
+	l.Warn("another warning")
+
+	got := buf.String()
+	for _, want := range []string{"call=succeeded", "another warning"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log should have %q, got:\n%s", want, got)
+		}
 	}
-	l.Error("plugin process exited", "plugin", "/bin/x", "id", 1, "error", "exit status 2")
-	if got := exit.get(); got != "exit status 2" {
-		t.Errorf("exit status = %q, want %q", got, "exit status 2")
+	if strings.Contains(got, "call=failed") {
+		t.Errorf("log should leave out the kill after a failed call, got:\n%s", got)
 	}
 }
 
@@ -225,6 +255,11 @@ func TestStderrOutputReason(t *testing.T) {
 			want:  "{not json",
 		},
 		{
+			name:  "a line longer than is kept",
+			write: []string{strings.Repeat("x", maxStderrLine), strings.Repeat("y", 100), "\n", "next\n"},
+			want:  strings.Repeat("x", maxStderrLine) + "\nnext",
+		},
+		{
 			name:  "more lines than are told",
 			write: []string{strings.Repeat("line\n", maxReasonLines+5)},
 			want:  strings.TrimSuffix(strings.Repeat("line\n", maxReasonLines), "\n"),
@@ -242,19 +277,5 @@ func TestStderrOutputReason(t *testing.T) {
 				t.Errorf("reason() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-// What the process wrote to its stderr itself, such as a panic, tells why
-// it exited before what the action wrote to os.Stderr does.
-func TestActionStderrReasonPrefersTheProcessStderr(t *testing.T) {
-	a := &actionStderr{}
-	_, _ = a.synced.Write([]byte("written by the action\n"))
-	if got := a.reason(); got != "written by the action" {
-		t.Errorf("reason() = %q, want what the action wrote", got)
-	}
-	_, _ = a.fd.Write([]byte("panic: boom\n"))
-	if got := a.reason(); got != "panic: boom" {
-		t.Errorf("reason() = %q, want the panic", got)
 	}
 }

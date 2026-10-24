@@ -7,6 +7,8 @@
 //     lost connection has as well
 //   - panic panics
 //   - exit writes why to stderr and exits with 3
+//
+// Its cleanup fails the same way for the run named "error" or "panic".
 package main
 
 import (
@@ -42,6 +44,16 @@ func (a action) Run(with map[string]any) (map[string]any, error) {
 		os.Exit(3)
 	}
 	return map[string]any{"req": with, "res": map[string]any{}, "status": 0}, nil
+}
+
+func (a action) Cleanup(call actionrpc.CleanupCall) error {
+	switch call.RunID {
+	case "error":
+		return errors.New("the widget would not go")
+	case "panic":
+		panic("the widget exploded while cleaning up")
+	}
+	return nil
 }
 
 func main() {
