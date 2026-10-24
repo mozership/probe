@@ -12,8 +12,13 @@
 //     same way.
 //   - A string of several lines is written under its key, as a YAML block, and
 //     each of its lines is indented there.
-//   - A control character in a string is escaped, so that it cannot move the
-//     cursor of a terminal, and an empty string is written as "".
+//   - A string of one line is quoted, as Go quotes it, when it could be read
+//     as something else: when it is empty, looks like a number, true, false
+//     or null, has a space at either end, or holds a control character, such
+//     as the newline at its end. A control character is never written as it
+//     is, in a key either, so that it cannot move the cursor of a terminal.
+//   - A block is written after |, as YAML writes it, when the string ends in
+//     a newline, and after |- when it does not.
 //   - A string that is not UTF-8, or a []byte, is not written at all, only how
 //     many bytes it holds, as binary data is no use on a terminal.
 //
@@ -23,6 +28,7 @@ package dump
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -40,9 +46,12 @@ type Options struct {
 	// MaxItems is how many entries of a map or a list are shown, or 0 for all
 	// of them.
 	MaxItems int
-	// OmitEmpty leaves out the entries of a map whose value is nil, an empty
-	// string or an empty map or list. A zero or a false is kept, as it is a
-	// value a test may have read.
+	// OmitEmpty leaves out the entries of the map given to Lines whose value
+	// is nil, an empty string or an empty map or list, such as the empty
+	// fields every action fills in. A zero or a false is kept, as it is a
+	// value a test may have read. The maps nested in it are laid out whole:
+	// what they hold is the data, such as a body or a row, empty values and
+	// all.
 	OmitEmpty bool
 }
 
@@ -53,7 +62,7 @@ const indent = "  "
 // lines of an entry nested in another are indented by two spaces for each
 // level; the entries of m itself are not indented.
 func Lines(m map[string]any, o Options) []string {
-	return o.mapLines(reflect.ValueOf(m))
+	return o.mapLines(reflect.ValueOf(m), o.OmitEmpty)
 }
 
 // entry lays out a value after the prefix it is written with: a key and a
@@ -64,7 +73,7 @@ func (o Options) entry(prefix string, v any) []string {
 	case v == nil:
 		return []string{prefix + " null"}
 	case rv.Kind() == reflect.Map:
-		lines := o.mapLines(rv)
+		lines := o.mapLines(rv, false)
 		if len(lines) == 0 {
 			return []string{prefix + " {}"}
 		}
@@ -79,7 +88,8 @@ func (o Options) entry(prefix string, v any) []string {
 	case rv.Kind() == reflect.String:
 		return o.stringEntry(prefix, rv.String())
 	default:
-		return []string{prefix + " " + scalarText(v)}
+		text, rest := o.cutBytes(scalarText(v))
+		return []string{prefix + " " + text + moreText(rest, "byte", " ")}
 	}
 }
 
@@ -110,8 +120,9 @@ func indentLine(l string) string {
 	return indent + l
 }
 
-// mapLines lays out the entries of a map, sorted by their keys.
-func (o Options) mapLines(rv reflect.Value) []string {
+// mapLines lays out the entries of a map, sorted by their keys, and leaves
+// out those whose values are empty when omit is set.
+func (o Options) mapLines(rv reflect.Value, omit bool) []string {
 	keys := rv.MapKeys()
 	names := make([]string, len(keys))
 	for i, k := range keys {
@@ -121,29 +132,61 @@ func (o Options) mapLines(rv reflect.Value) []string {
 	for i := range order {
 		order[i] = i
 	}
-	sort.Slice(order, func(a, b int) bool { return names[order[a]] < names[order[b]] })
+	sort.Slice(order, func(a, b int) bool {
+		i, j := order[a], order[b]
+		if x, ok := number(keys[i]); ok {
+			if y, ok := number(keys[j]); ok && x != y {
+				return x < y
+			}
+		}
+		return names[i] < names[j]
+	})
 
 	var lines []string
 	shown := 0
 	for n, i := range order {
 		v := rv.MapIndex(keys[i]).Interface()
-		if o.OmitEmpty && isEmpty(v) {
+		if omit && isEmpty(v) {
 			continue
 		}
 		if o.MaxItems > 0 && shown == o.MaxItems {
-			lines = append(lines, moreText(o.countShown(rv, keys, order[n:]), "keys"))
+			lines = append(lines, moreText(countShown(rv, keys, order[n:], omit), "key", ""))
 			break
 		}
-		lines = append(lines, o.entry(names[i]+":", v)...)
+		lines = append(lines, o.entry(keyText(names[i])+":", v)...)
 		shown++
 	}
 	return lines
 }
 
+// number is a key of a numeric kind as a float, for the keys to be sorted
+// as numbers: 2 before 10.
+func number(k reflect.Value) (float64, bool) {
+	switch k.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(k.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return float64(k.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return k.Float(), true
+	default:
+		return 0, false
+	}
+}
+
+// keyText is a key as it is written: quoted when it is empty or holds a
+// control character.
+func keyText(k string) string {
+	if k == "" || strings.IndexFunc(k, isEscaped) >= 0 {
+		return strconv.Quote(k)
+	}
+	return k
+}
+
 // countShown is how many of the keys, in the given order, would be shown
 // were there no limit.
-func (o Options) countShown(rv reflect.Value, keys []reflect.Value, order []int) int {
-	if !o.OmitEmpty {
+func countShown(rv reflect.Value, keys []reflect.Value, order []int, omit bool) int {
+	if !omit {
 		return len(order)
 	}
 	n := 0
@@ -160,7 +203,7 @@ func (o Options) listLines(rv reflect.Value) []string {
 	var lines []string
 	for i := range rv.Len() {
 		if o.MaxItems > 0 && i == o.MaxItems {
-			lines = append(lines, moreText(rv.Len()-i, "items"))
+			lines = append(lines, moreText(rv.Len()-i, "item", ""))
 			break
 		}
 		lines = append(lines, o.entry("-", rv.Index(i).Interface())...)
@@ -171,43 +214,54 @@ func (o Options) listLines(rv reflect.Value) []string {
 // stringEntry lays out a string: on the line of its prefix when it is one
 // line, or under it, as a YAML block, when it is several.
 func (o Options) stringEntry(prefix, s string) []string {
-	switch {
-	case !utf8.ValidString(s):
+	if !utf8.ValidString(s) {
 		return []string{prefix + " " + binaryText(len(s))}
-	case s == "":
-		return []string{prefix + ` ""`}
 	}
 
-	shown, rest := o.cut(s)
+	// One line, a newline at its end aside, unless lines were cut after it.
+	shown, rest, unit := o.cut(s)
 	text := strings.TrimSuffix(shown, "\n")
-	// One line, unless more lines were cut after it.
-	if !strings.Contains(text, "\n") && (rest == 0 || !strings.HasSuffix(shown, "\n")) {
-		if text == "" {
-			// Nothing but a newline, which is written escaped.
-			text = shown
+	if !strings.Contains(text, "\n") && (rest == 0 || unit == "byte") {
+		if needsQuotes(shown) {
+			shown = strconv.Quote(shown)
 		}
-		line := prefix + " " + escapeControls(text)
-		if rest > 0 {
-			line += moreText(rest, "bytes")
-		}
-		return []string{line}
+		return []string{prefix + " " + shown + moreText(rest, unit, " ")}
 	}
 
-	out := []string{prefix + " |"}
+	header := prefix + " |"
+	if !strings.HasSuffix(s, "\n") {
+		header += "-"
+	}
+	out := []string{header}
 	for l := range strings.SplitSeq(text, "\n") {
 		out = append(out, indentLine(escapeControls(strings.TrimSuffix(l, "\r"))))
 	}
 	if rest > 0 {
-		out = append(out, indent+moreText(rest, "bytes"))
+		out = append(out, indent+moreText(rest, unit, ""))
 	}
 	return out
 }
 
-// cut returns as much of s as is shown, and how many bytes of it are not.
-// It cuts at the end of a line when there are too many lines, and never in
-// the middle of a character.
-func (o Options) cut(s string) (string, int) {
-	end := len(s)
+// needsQuotes tells a string of one line that is quoted, as it could be read
+// as something else written plain: an empty string, a number, true, false or
+// null, a string with a space at either end, or one with a control character
+// in it.
+func needsQuotes(s string) bool {
+	switch s {
+	case "", "true", "false", "null", "{}", "[]":
+		return true
+	}
+	if strings.TrimSpace(s) != s || strings.IndexFunc(s, isEscaped) >= 0 || strings.HasPrefix(s, `"`) {
+		return true
+	}
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
+// cut returns as much of s as is shown, and how much of it is not, in the
+// unit it was cut by: lines when there are too many of them, as it cuts at
+// the end of a line then, or bytes. It never cuts in a character.
+func (o Options) cut(s string) (string, int, string) {
 	if o.MaxLines > 0 {
 		at := 0
 		for range o.MaxLines {
@@ -218,13 +272,28 @@ func (o Options) cut(s string) (string, int) {
 			}
 			at += i + 1
 		}
-		end = min(end, at)
-	}
-	if o.MaxBytes > 0 && end > o.MaxBytes {
-		end = o.MaxBytes
-		for end > 0 && !utf8.RuneStart(s[end]) {
-			end--
+		if at < len(s) && (o.MaxBytes == 0 || at <= o.MaxBytes) {
+			rest := s[at:]
+			lines := strings.Count(rest, "\n")
+			if !strings.HasSuffix(rest, "\n") {
+				lines++
+			}
+			return s[:at], lines, "line"
 		}
+	}
+	shown, rest := o.cutBytes(s)
+	return shown, rest, "byte"
+}
+
+// cutBytes returns as much of s as MaxBytes shows, and how many bytes of it
+// it does not.
+func (o Options) cutBytes(s string) (string, int) {
+	if o.MaxBytes == 0 || len(s) <= o.MaxBytes {
+		return s, 0
+	}
+	end := o.MaxBytes
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
 	}
 	return s[:end], len(s) - end
 }
@@ -246,16 +315,24 @@ func isEmpty(v any) bool {
 }
 
 // scalarText writes a value that is neither a string, a map nor a list.
-// A float is written without an exponent, as JSON numbers decoded as floats
-// are counts and codes more often than not.
+// A float is written as JSON writes it, without an exponent unless it is
+// very large or very small, as JSON numbers decoded as floats are counts and
+// codes more often than not.
 func scalarText(v any) string {
 	switch n := v.(type) {
 	case float64:
-		return strconv.FormatFloat(n, 'f', -1, 64)
+		return floatText(n, 64)
 	case float32:
-		return strconv.FormatFloat(float64(n), 'f', -1, 32)
+		return floatText(float64(n), 32)
 	}
 	return escapeControls(fmt.Sprint(v))
+}
+
+func floatText(f float64, bits int) string {
+	if a := math.Abs(f); a != 0 && (a < 1e-6 || a >= 1e21) {
+		return strconv.FormatFloat(f, 'g', -1, bits)
+	}
+	return strconv.FormatFloat(f, 'f', -1, bits)
 }
 
 // escapeControls writes the control characters of s, a tab aside, as Go
@@ -285,7 +362,14 @@ func binaryText(n int) string {
 	return fmt.Sprintf("(binary, %d bytes)", n)
 }
 
-// moreText is the marker of what was cut: … (12 more bytes).
-func moreText(n int, unit string) string {
-	return fmt.Sprintf("… (%d more %s)", n, unit)
+// moreText is the marker of what was cut, after sep: … (12 more bytes). It
+// is empty when nothing was.
+func moreText(n int, unit, sep string) string {
+	if n == 0 {
+		return ""
+	}
+	if n != 1 {
+		unit += "s"
+	}
+	return fmt.Sprintf("%s… (%d more %s)", sep, n, unit)
 }

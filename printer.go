@@ -275,12 +275,20 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 }
 
 // testEnv is what PrintTestResult shows of the context a test was evaluated
-// in. Of a step's, the request and the response are left out, as the step
-// has just shown them, under Request and Response.
+// in, by the names the test reads it by. Of a step's, the request and the
+// response are left out, as the step has just shown them, under Request and
+// Response.
 func testEnv(context any) map[string]any {
 	switch c := context.(type) {
 	case StepContext:
-		return map[string]any{"vars": c.Vars, "outputs": c.Outputs, "status": c.Status}
+		return map[string]any{
+			"vars":         c.Vars,
+			"outputs":      c.Outputs,
+			"status":       c.Status,
+			"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
+			"report":       c.Report,
+			"repeat_index": c.RepeatIndex,
+		}
 	case map[string]any:
 		return c
 	default:

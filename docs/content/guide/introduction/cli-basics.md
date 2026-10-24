@@ -65,18 +65,37 @@ Verbose mode shows:
 - Variable resolution details
 - Log records from actions
 
-**Example verbose output:**
+**Example verbose output** (`…` marks what is left out here):
 ```
-[DEBUG] Starting workflow: My Health Check
-[DEBUG] --- Step 1: Check Homepage
+[DEBUG] --- Step 0: Check Homepage
 [DEBUG] Request:
+[DEBUG]   body: ""
+[DEBUG]   headers:
+[DEBUG]     Accept: */*
+[DEBUG]     User-Agent: probe-http/1.0.0
 [DEBUG]   method: GET
-[DEBUG]   url: https://example.com
+[DEBUG]   timeout: 30s
+[DEBUG]   url: https://example.com/
 [DEBUG] Response:
-[DEBUG]   body: <!DOCTYPE html>...
+[DEBUG]   body: <!doctype html><html lang=en>…
 [DEBUG]   code: 200
+[DEBUG]   cookies: {}
+[DEBUG]   filepath: ""
+[DEBUG]   headers:
+[DEBUG]     Content-Type: text/html; charset=utf-8
+[DEBUG]     …
 [DEBUG]   status: 200 OK
 [DEBUG] RT: 245ms
+[DEBUG] Test: Success (input: res.code == 200)
+[DEBUG] Env:
+[DEBUG]   outputs: {}
+[DEBUG]   repeat_index: 0
+[DEBUG]   report: ""
+[DEBUG]   rt:
+[DEBUG]     duration: 245ms
+[DEBUG]     sec: 0.245
+[DEBUG]   status: 0
+[DEBUG]   vars: {}
 ```
 
 ### Timing Display

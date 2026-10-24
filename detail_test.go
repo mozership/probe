@@ -122,12 +122,21 @@ func TestExchangeDetail(t *testing.T) {
 			expected: "       request:\n         cmd: seq 100\n" +
 				"       response:\n         stdout: |\n" +
 				strings.Repeat("           line\n", 20) +
-				"           … (50 more bytes)\n",
+				"           … (10 more lines)\n",
 		},
 		{
 			name:     "a long body is cut",
 			res:      map[string]any{"body": strings.Repeat("x", 600)},
-			expected: "       response:\n         body: " + strings.Repeat("x", 512) + "… (88 more bytes)\n",
+			expected: "       response:\n         body: " + strings.Repeat("x", 512) + " … (88 more bytes)\n",
+		},
+		{
+			name: "only the fields of the request and the response are left out when empty",
+			res: map[string]any{
+				"body":    map[string]any{"id": "1", "name": "", "items": []any{}, "err": nil},
+				"cookies": map[string]any{},
+			},
+			expected: "       response:\n         body:\n           err: null\n           id: \"1\"\n" +
+				"           items: []\n           name: \"\"\n",
 		},
 		{
 			name:     "a decoded body is not shown again as rawbody",

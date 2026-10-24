@@ -891,11 +891,14 @@ func TestPrinter_PrintTestResult(t *testing.T) {
 				Vars:   map[string]any{"host": "example.com"},
 				Req:    map[string]any{"url": "http://example.com"},
 				Res:    map[string]any{"code": 404},
+				RT:     ResponseTime{Duration: "1.5ms", Sec: 0.0015},
 				Status: 0,
 			},
 			verbose: true,
 			expected: "[DEBUG] Test: Failure (input: res.code == 200)\n[DEBUG] Env:\n" +
-				"[DEBUG]   outputs: {}\n[DEBUG]   status: 0\n[DEBUG]   vars:\n[DEBUG]     host: example.com\n",
+				"[DEBUG]   outputs: {}\n[DEBUG]   repeat_index: 0\n[DEBUG]   report: \"\"\n" +
+				"[DEBUG]   rt:\n[DEBUG]     duration: 1.5ms\n[DEBUG]     sec: 0.0015\n" +
+				"[DEBUG]   status: 0\n[DEBUG]   vars:\n[DEBUG]     host: example.com\n",
 		},
 		{
 			name:     "test in non-verbose mode",
