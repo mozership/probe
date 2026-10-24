@@ -419,8 +419,8 @@ func TestMasker_LearnActionCredentials(t *testing.T) {
 
 	// A URL without a password has nothing to hide.
 	m = New(nil, nil)
-	m.Learn(map[string]any{"url": "https://api.example.com/users?token=visible"})
-	if got := m.String("https://api.example.com/users?token=visible"); got != "https://api.example.com/users?token=visible" {
+	m.Learn(map[string]any{"url": "https://api.example.com/users?page=2&q=visible"})
+	if got := m.String("https://api.example.com/users?page=2&q=visible"); got != "https://api.example.com/users?page=2&q=visible" {
 		t.Errorf("String() = %q, want the URL as it is", got)
 	}
 }
@@ -708,6 +708,7 @@ func BenchmarkString(b *testing.B) {
 		"plain line":    "00:16:02.765 [check] ▸ GET /users returned 200 in 12ms",
 		"line with url": `level=info msg="connecting" url=https://api.example.com/v1/users?page=2`,
 		"url password":  `level=error msg="dial failed" dsn=postgres://app:pw@db:5432/main err="connection refused"`,
+		"query token":   `level=info msg="GET" url=https://api.example.com/v1/users?page=2&token=t0k-abc`,
 		"large body":    body,
 	}
 	m := benchMasker()
@@ -816,5 +817,58 @@ func TestMasker_WriterRedactsURLPasswords(t *testing.T) {
 	_, _ = io.WriteString(w, "[ERROR] connect redis://app:pw@cache:6379/0: refused\n")
 	if got, want := buf.String(), "[ERROR] connect redis://app:<redacted>@cache:6379/0: refused\n"; got != want {
 		t.Errorf("wrote %q, want %q", got, want)
+	}
+}
+
+// TestMasker_StringRedactsQueryCredentials covers the value of a query
+// parameter that holds a credential in a URL in free text, which is hidden
+// whatever its length, while the other parameters stay visible.
+func TestMasker_StringRedactsQueryCredentials(t *testing.T) {
+	m := New(nil, nil)
+	tests := []struct {
+		name, in, want string
+	}{
+		{"jdbc", `jdbc:postgresql://db/app?user=a&password=b`, `jdbc:postgresql://db/app?user=a&password=<redacted>`},
+		{"each key", `https://h/?pass=1&passwd=2&pwd=3&token=4&access_token=5&secret=6&api_key=7&apikey=8&session_token=9`,
+			`https://h/?pass=<redacted>&passwd=<redacted>&pwd=<redacted>&token=<redacted>&access_token=<redacted>&secret=<redacted>&api_key=<redacted>&apikey=<redacted>&session_token=<redacted>`},
+		{"case-insensitive", `https://h/x?Token=abc&API_KEY=def`, `https://h/x?Token=<redacted>&API_KEY=<redacted>`},
+		{"other params", `GET https://api.example.com/users?page=2&q=token&sort=pass`, `GET https://api.example.com/users?page=2&q=token&sort=pass`},
+		{"fragment", `https://h/?token=abc#token=frag`, `https://h/?token=<redacted>#token=frag`},
+		{"in quotes", `open "mongodb://h/db?authSource=admin&password=p%40ss%26w": refused`, `open "mongodb://h/db?authSource=admin&password=<redacted>": refused`},
+		{"key=value", `level=error url=https://h/?token=t0k&x=1 err=refused`, `level=error url=https://h/?token=<redacted>&x=1 err=refused`},
+		{"empty value", `https://h/?token=&page=1`, `https://h/?token=&page=1`},
+		{"no value", `https://h/?token&page=1`, `https://h/?token&page=1`},
+		{"not a url", `see /users?token=abc and why? token=abc`, `see /users?token=abc and why? token=abc`},
+		{"with user info", `postgres://app:pw@db/main?sslmode=disable&password=pw`, `postgres://app:<redacted>@db/main?sslmode=disable&password=<redacted>`},
+		{"several urls", `https://a/?token=1 then https://b/?apikey=2`, `https://a/?token=<redacted> then https://b/?apikey=<redacted>`},
+		{"question in text after a url", `is https://h/x up? token=abc`, `is https://h/x up? token=abc`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.String(tt.in); got != tt.want {
+				t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			if got := m.String(m.String(tt.in)); got != tt.want {
+				t.Errorf("String twice = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMasker_MapRedactsQueryCredentials covers a dsn or url value with a
+// credential in its query, which Map hides as String does, along with the
+// password of its user info.
+func TestMasker_MapRedactsQueryCredentials(t *testing.T) {
+	m := New(nil, nil)
+	got := m.Map(map[string]any{
+		"dsn":  "postgres://app:pw@db/main?sslmode=disable&password=pw",
+		"conn": map[string]string{"url": "https://h/?token=t&page=1"},
+	})
+	want := map[string]any{
+		"dsn":  "postgres://app:<redacted>@db/main?sslmode=disable&password=<redacted>",
+		"conn": map[string]any{"url": "https://h/?token=<redacted>&page=1"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Map() = %#v, want %#v", got, want)
 	}
 }

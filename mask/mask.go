@@ -449,18 +449,129 @@ var urlAuthorityEnd = func() (set [256]bool) {
 	return set
 }()
 
-// redactURLPasswords returns s with the password of every URL in it, such
-// as postgres://app:pw@db/main in a driver's error or a remote quoted in a
-// response body, replaced by <redacted>, whatever its length and whether or
-// not it was ever learned. As Userinfo does, the user info is taken to end
-// at the last @ of the authority, so that a password holding an unescaped @
-// is hidden whole, and the user name to end at its first colon.
+// urlQueryEnd holds the bytes that end the query of a URL found in text:
+// the start of its fragment, and what stands around a URL in a message or a
+// log line, as for urlAuthorityEnd.
+var urlQueryEnd = func() (set [256]bool) {
+	for _, c := range []byte("#\"'`<> \t\r\n") {
+		set[c] = true
+	}
+	return set
+}()
+
+// urlTextEnd holds the bytes that stand around a URL in a message or a log
+// line, and so end it.
+var urlTextEnd = func() (set [256]bool) {
+	for _, c := range []byte("\"'`<> \t\r\n") {
+		set[c] = true
+	}
+	return set
+}()
+
+// queryCredentialKeys are names of query parameters whose values are
+// credentials: those of sensitiveKeys and a few more that are usual in a
+// query.
+var queryCredentialKeys = func() []string {
+	keys := []string{"passwd", "pass", "pwd", "token", "access_token", "secret", "api_key", "apikey"}
+	for k := range sensitiveKeys {
+		keys = append(keys, k)
+	}
+	return keys
+}()
+
+// isQueryCredential reports whether the query parameter named key holds a
+// credential. It is called for every parameter of every URL in the output,
+// so it compares lengths before letters and does not allocate.
+func isQueryCredential(key string) bool {
+	for _, k := range queryCredentialKeys {
+		if len(k) == len(key) && strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	return false
+}
+
+// redactURLPasswords returns s with the credentials of every URL in it
+// replaced by <redacted>, whatever their length and whether or not they were
+// ever learned: the password of its user info, as in postgres://app:pw@db in
+// a driver's error or a remote quoted in a response body, and the values of
+// its query parameters that hold credentials, as in ?user=a&password=b.
+// Plain output, which holds no @ or ? or no "://", is returned after quick
+// scans.
+func redactURLPasswords(s string) string {
+	if strings.IndexByte(s, '@') < 0 && strings.IndexByte(s, '?') < 0 || !strings.Contains(s, "://") {
+		return s
+	}
+	// The query goes first: the user info is scanned back from an @ to the
+	// "://" before it, and a <redacted> put in the user info would stop the
+	// scan of the query back to it.
+	return redactUserinfoPasswords(redactQueryCredentials(s))
+}
+
+// redactQueryCredentials returns s with the value of every query parameter
+// of a URL in it that holds a credential, such as password or token,
+// replaced by <redacted>. A value ends at the next &, at the fragment, or
+// at what stands around the URL.
+func redactQueryCredentials(s string) string {
+	if strings.IndexByte(s, '?') < 0 {
+		return s
+	}
+	var b strings.Builder
+	done := 0
+	for i := 0; i < len(s); {
+		k := strings.IndexByte(s[i:], '?')
+		if k < 0 {
+			break
+		}
+		q := i + k
+		// The URL the ? stands in runs back to the text around it, and
+		// its query on to the fragment or the end of the URL.
+		start := q
+		for start > i && !urlTextEnd[s[start-1]] {
+			start--
+		}
+		end := q + 1
+		for end < len(s) && !urlQueryEnd[s[end]] {
+			end++
+		}
+		i = end
+		if !strings.Contains(s[start:q], "://") {
+			continue
+		}
+		for p := q + 1; p < end; {
+			stop := end
+			if amp := strings.IndexByte(s[p:end], '&'); amp >= 0 {
+				stop = p + amp
+			}
+			param := s[p:stop]
+			if eq := strings.IndexByte(param, '='); eq > 0 && eq+1 < len(param) && isQueryCredential(param[:eq]) {
+				if done == 0 {
+					b.Grow(len(s))
+				}
+				b.WriteString(s[done : p+eq+1])
+				b.WriteString(redactedValue)
+				done = stop
+			}
+			p = stop + 1
+		}
+	}
+	if done == 0 {
+		return s
+	}
+	b.WriteString(s[done:])
+	return b.String()
+}
+
+// redactUserinfoPasswords returns s with the password of every URL in it
+// replaced by <redacted>. As Userinfo does, the user info is taken to end at
+// the last @ of the authority, so that a password holding an unescaped @ is
+// hidden whole, and the user name to end at its first colon.
 //
 // It runs on everything Probe writes, so it looks at each @, which is rare
 // in most output, rather than at each URL: a URL with user info has an @
 // right after "://" and the characters of a host name or an address.
-func redactURLPasswords(s string) string {
-	if strings.IndexByte(s, '@') < 0 || !strings.Contains(s, "://") {
+func redactUserinfoPasswords(s string) string {
+	if strings.IndexByte(s, '@') < 0 {
 		return s
 	}
 	var b strings.Builder
@@ -578,7 +689,7 @@ func (m *Masker) Map(data map[string]any) map[string]any {
 			continue
 		}
 		if s, ok := v.(string); ok && holdsURL(k) {
-			out[k] = m.leaf(redactURLPassword(s))
+			out[k] = m.leaf(redactURLPassword(redactQueryCredentials(s)))
 			continue
 		}
 		out[k] = m.value(v)
@@ -629,7 +740,7 @@ func (m *Masker) value(v any) any {
 				continue
 			}
 			if holdsURL(k) {
-				s = redactURLPassword(s)
+				s = redactURLPassword(redactQueryCredentials(s))
 			}
 			out[k] = m.leaf(s)
 		}
