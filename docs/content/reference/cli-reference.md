@@ -126,6 +126,16 @@ probe --timing workflow.yml
 **Default:** `auto`  
 **Description:** Select how the report is rendered. `auto` picks `spinner` on an interactive terminal and `stream` otherwise. `spinner` redraws progress in place, while `stream` writes each result as it completes, which suits CI logs and pipes.
 
+While jobs run, `stream` also writes a line to stderr as each step starts and ends. Jobs run at once, so each line is labelled with the name of its job, with its templates evaluated and the secrets in it masked, or with its `id` when it has no name. A name longer than 24 columns is cut short, jobs with the same name have their `id` added, and the labels are padded to one width so that the steps line up:
+
+```
+15:54:13.658 [Unit tests (job_0)] ▸ go test ./api
+15:54:13.658 [Unit tests (job_1)] ▸ go test ./web
+15:54:13.659 [Deploy staging]     ▸ upload
+15:54:13.690 [Unit tests (job_1)] ✓ go test ./web (31ms)
+15:54:13.702 [Unit tests (job_0)] ✗ go test ./api
+```
+
 The value can also come from the `PROBE_OUTPUT` environment variable. The flag wins over the environment variable, which in turn wins over auto detection.
 
 **Example:**

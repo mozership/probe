@@ -167,11 +167,16 @@ func (w *Workflow) Start(c Config) error {
 		return &maskedError{err: err, masker: w.printer.Masker()}
 	}
 
+	// A job is named with the vars, as the report names it, where the run
+	// says which job is which.
+	namer := w.jobNamer(vars)
+	if l, ok := reporter.(jobLabeler); ok {
+		l.labelJobs(namer)
+	}
 	if w.selection != nil {
 		// Said apart from the report, which is that of the jobs that run,
-		// so that a run of some jobs is not taken for one of them all. A
-		// name is given the vars, as the report gives it.
-		w.printer.Fprintln(w.printer.errWriter, colorDim().Sprint(w.selection.describe(w.jobNamer(vars))))
+		// so that a run of some jobs is not taken for one of them all.
+		w.printer.Fprintln(w.printer.errWriter, colorDim().Sprint(w.selection.describe(namer)))
 	}
 
 	// The job files the steps embed are read with the vars the run has, so
