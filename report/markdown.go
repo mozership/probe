@@ -44,6 +44,9 @@ func (r *Report) markdownWithCuts(payloads bool) (string, []int) {
 	fmt.Fprintf(&b, "**%s** in %.2fs. Jobs: %s. Steps: %s.\n\n",
 		markdownStatus(r.Status), msToSec(r.DurationMs),
 		countPhrase(r.Summary.Jobs), countPhrase(r.Summary.Steps))
+	if p := r.Partial(); p != "" {
+		fmt.Fprintf(&b, "%s.\n\n", markdownCell(p))
+	}
 
 	cuts = append(cuts, b.Len())
 	b.WriteString("| Job | Status | Steps | Duration |\n")

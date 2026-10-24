@@ -354,7 +354,7 @@ func (c *Cmd) printOptions() {
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
 		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
 		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
-		{"", "--job", "Run only these jobs, by id or name, as job,..., and the jobs they need; can be repeated"},
+		{"", "--job", "Run only these jobs, by id or name, as job,..., with the jobs they need and the always jobs after them; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -394,6 +394,7 @@ func (c *Cmd) start(args []string) int {
 
 	case len(c.Jobs) > 0 && c.SubCommand != "" && c.SubCommand != "dag":
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --job can only be used to run a workflow or with the dag subcommand\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe --job <job> <workflow-file>...\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 
 	case c.SubCommand != "":
@@ -736,6 +737,11 @@ func (c *Cmd) runCoverage() int {
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
+	}
+	// The steps of the jobs a run narrowed with --job left out are not in
+	// the report, so the coverage is less than that of the workflow.
+	if p := r.Partial(); p != "" {
+		_, _ = fmt.Fprintln(c.errWriter, color.New(color.FgYellow).Sprintf("[WARN] %s; the steps of the others are not counted", p))
 	}
 	// A .proto file is the contract of the grpc action, and any other the
 	// OpenAPI document of the http action.

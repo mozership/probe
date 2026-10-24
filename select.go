@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/mozership/probe/report"
 )
 
 // Why a job runs in a run narrowed to some of the jobs of a workflow.
@@ -21,22 +23,30 @@ const (
 type jobSelection struct {
 	// total is how many jobs the workflow has.
 	total int
-	// jobs are the jobs that run, each by its name, selected, needed or
-	// always.
+	// selected, needed and always are the jobs that run, each by its id,
+	// by why they run.
 	selected, needed, always []string
 }
 
-// String says which jobs a run narrowed to some of them runs, and why each
-// that was not selected runs too.
-func (s *jobSelection) String() string {
-	names := slices.Clone(s.selected)
-	for _, n := range s.needed {
-		names = append(names, n+" (needed)")
+// describe says which jobs a run narrowed to some of them runs, each by the
+// name name gives its id, and why each that was not selected runs too.
+func (s *jobSelection) describe(name func(id string) string) string {
+	var names []string
+	for _, id := range s.selected {
+		names = append(names, name(id))
 	}
-	for _, n := range s.always {
-		names = append(names, n+" (always)")
+	for _, id := range s.needed {
+		names = append(names, name(id)+" (needed)")
+	}
+	for _, id := range s.always {
+		names = append(names, name(id)+" (always)")
 	}
 	return fmt.Sprintf("Running %d of %d jobs: %s", len(names), s.total, strings.Join(names, ", "))
+}
+
+// report returns the selection as the report of the run records it.
+func (s *jobSelection) report() *report.Selection {
+	return &report.Selection{Jobs: slices.Clone(s.selected), Total: s.total}
 }
 
 // selectJobs returns the jobs of jobs a run selecting those names names
@@ -107,11 +117,11 @@ func selectJobs(jobs []Job, names []string) ([]Job, *jobSelection, error) {
 		case 0:
 			continue
 		case selectedJob:
-			sel.selected = append(sel.selected, j.Name)
+			sel.selected = append(sel.selected, j.ID)
 		case neededJob:
-			sel.needed = append(sel.needed, j.Name)
+			sel.needed = append(sel.needed, j.ID)
 		case alwaysJob:
-			sel.always = append(sel.always, j.Name)
+			sel.always = append(sel.always, j.ID)
 			// It waits for the jobs it needs that run. One that is not in
 			// the workflow is kept, for the run to be refused for it.
 			j.Needs = slices.DeleteFunc(slices.Clone(j.Needs), func(dep string) bool {
@@ -147,6 +157,9 @@ func findJob(jobs []Job, byID map[string]int, name string) (int, error) {
 		msg := fmt.Sprintf("no job has the id or name %q", name)
 		if s := suggest(name, known); s != "" {
 			msg += fmt.Sprintf("; did you mean %q?", s)
+		} else if slices.ContainsFunc(jobs, func(j Job) bool { return strings.Contains(j.Name, "{{") }) {
+			// The vars are not evaluated yet, and a name may read more.
+			msg += "; a job whose name has a template is selected by its id"
 		}
 		return 0, errors.New(msg)
 	default:

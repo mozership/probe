@@ -99,7 +99,7 @@ func (p *Probe) ExitStatus() int {
 
 // DagAscii returns the ASCII art representation of the workflow job dependencies with steps
 func (p *Probe) DagAscii() (string, error) {
-	if err := p.loadSelected(); err != nil {
+	if err := p.loadGraph(); err != nil {
 		return "", err
 	}
 	return dag.ASCII{}.Render(p.workflow.Graph()), nil
@@ -107,16 +107,21 @@ func (p *Probe) DagAscii() (string, error) {
 
 // DagMermaid returns the Mermaid format representation of the workflow job dependencies
 func (p *Probe) DagMermaid() (string, error) {
-	if err := p.loadSelected(); err != nil {
+	if err := p.loadGraph(); err != nil {
 		return "", err
 	}
 	return dag.Mermaid{}.Render(p.workflow.Graph()), nil
 }
 
-// loadSelected loads the workflow with only the jobs Config.Jobs selects,
-// as a run would run them.
-func (p *Probe) loadSelected() error {
+// loadGraph loads the workflow for dag to draw, with only the jobs
+// Config.Jobs selects, as a run would run them. Needs in a cycle, which a
+// run refuses, are refused, as there is no order to draw them in; a need
+// that is no job is drawn as it is written.
+func (p *Probe) loadGraph() error {
 	if err := p.Load(); err != nil {
+		return err
+	}
+	if err := p.workflow.checkCycle(); err != nil {
 		return err
 	}
 	if len(p.Config.Jobs) == 0 {

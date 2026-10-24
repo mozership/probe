@@ -283,7 +283,7 @@ A variable whose value must not be shown is named under [`secrets`](/reference/y
 
 **Type:** String, can be repeated  
 **Values:** a comma separated list of job ids or names  
-**Description:** Run only these jobs of the workflow, with the jobs they need. A job is named by its `id`, or by its `name` as written when no job has that `id`. A job without an `id` has the one its place gives it, such as `job_2` for the third job.
+**Description:** Run only these jobs of the workflow, with the jobs they need. A job is named by its `id`, or by its `name` as written when no job has that `id`. A job without an `id` has the one its place gives it, such as `job_2` for the third job. A `name` is matched as it is written, before its templates are evaluated, so a job whose `name` has a template, such as `Setup {{vars.env}}`, is selected by its `id`.
 
 ```bash
 probe --job tests workflow.yml
@@ -295,9 +295,9 @@ Running 3 of 5 jobs: Tests, Setup (needed), Cleanup (always)
 ```
 
 - The jobs in the [`needs`](/reference/yaml-configuration#needs) of a selected job run before it, and those they need, however far down, since a job may read what they publish.
-- A job with [`always`](/reference/yaml-configuration#always) runs when a job it needs runs, as the job that removes what that job made has to. It waits for those of its `needs` that run, and does not bring the others.
-- The other jobs are not run, and are not in the terminal report, the report files or their counts: the run is that of a workflow of the jobs that run. The exit status is theirs. The line above, on the standard error, says which jobs run and why, so that the run is not taken for one of the whole workflow.
-- The external actions and the job files of an [`embedded`](/reference/actions/embedded) step are fetched and read for the jobs that run alone. The whole workflow is still read and checked as it is for a run of it.
+- A job with [`always`](/reference/yaml-configuration#always) runs when a job it needs runs, as the job that removes what that job made has to. It waits for those of its `needs` that run, and does not bring the others, so it runs without what they would have published, as it does after one of them failed.
+- The other jobs are not run, and are not in the terminal report, the report files or their counts: the run is that of a workflow of the jobs that run. The exit status is theirs. The line above, on the standard error, says which jobs run and why, so that the run is not taken for one of the whole workflow. `json` records the jobs selected, by id, and how many jobs the workflow has, as `selection`, as `"selection": {"jobs": ["tests"], "total": 5}`; `markdown` and `github-summary` say so under the summary line, and [`probe coverage`](#coverage) warns that the steps of the other jobs are not counted.
+- The external actions and the job files of an [`embedded`](/reference/actions/embedded) step are fetched and read for the jobs that run alone. The whole workflow is still read and checked as it is for a run of it: a need that is no job, needs in a cycle, or a `uses` that names no action, in any job, stops Probe with exit status 2.
 - A value that is no job's `id` or `name`, or a `name` that several jobs have, stops Probe before any job runs, with exit status 2. A name close to one of a job is suggested; a name several jobs have is told by their ids.
 - A name that has a comma in it is split at the comma: select its job by its `id`.
 
@@ -342,6 +342,8 @@ probe dag --job <job> <workflow-file>...
 |--------|-------------|
 | `--mermaid` | Output in Mermaid flowchart format instead of ASCII art |
 | `--job` | Draw only the jobs a run with the same [`--job`](#--job) runs |
+
+Jobs whose `needs` are in a cycle, which a run refuses, have no order to be drawn in, and stop it with exit status 2.
 
 **ASCII Output Example:**
 ```
@@ -539,6 +541,8 @@ Responses:  2 of 4 checked (50.0%)
 ```
 
 Each operation the document declares is listed with the responses it declares, such as `200`, `2XX` or `default`, marked `✓` when a step's response was matched to it and `-` when none was. A step whose status code the operation does not declare counts for the operation alone. Steps count for the document given when they name it by the same path, written in another way such as `./openapi.yml` too; a report whose steps name none of them is an error that lists those they name. A file ending in `.proto` is taken for the grpc action's contract. It is read on its own, without its imports, and each method of each service it declares is listed, such as `users.v1.UserService/GetUser`. A `.proto` file declares no statuses its methods end with, so its coverage is told by methods alone, without the line for responses. Name the file as `proto.files` does.
+
+A report of a run narrowed with [`--job`](#--job) has the steps of the jobs that ran alone; coverage warns of it on the standard error, as `[WARN] 3 of the 5 jobs of the workflow ran, selected with --job: tests; the steps of the others are not counted`.
 
 It exits with status 0 whatever the coverage, and with 2 when the document or the report cannot be read.
 

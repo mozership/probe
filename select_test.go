@@ -97,8 +97,16 @@ func TestSelectJobs(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("selectJobs(%q) runs %q, want %q", tt.names, got, tt.want)
 			}
-			if tt.line != "" && sel.String() != tt.line {
-				t.Errorf("String() = %q, want %q", sel, tt.line)
+			name := func(id string) string {
+				for _, j := range all {
+					if j.ID == id {
+						return j.Name
+					}
+				}
+				return id
+			}
+			if got := sel.describe(name); tt.line != "" && got != tt.line {
+				t.Errorf("describe() = %q, want %q", got, tt.line)
 			}
 			// The jobs of the workflow are left as they are written.
 			if !reflect.DeepEqual(all, selectionJobs()) {
@@ -118,10 +126,15 @@ func TestSelectJobs_Errors(t *testing.T) {
 		{"a name too far from any", []string{"deploy"}, `no job has the id or name "deploy"`},
 		{"a name of another case", []string{"setup", "notify", "TESTS"}, `no job has the id or name "TESTS"; did you mean "tests"?`},
 		{"a name several jobs have", []string{"Tests"}, `2 jobs are named "Tests"; select one by its id: tests, job_7`},
+		{"a name a template makes", []string{"Lint staging"}, `no job has the id or name "Lint staging"; a job whose name has a template is selected by its id`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := selectJobs(selectionJobs(), tt.names)
+			jobs := selectionJobs()
+			if strings.Contains(tt.name, "template") {
+				jobs[3].Name = "Lint {{vars.env}}"
+			}
+			_, _, err := selectJobs(jobs, tt.names)
 			if err == nil || err.Error() != tt.want {
 				t.Errorf("selectJobs(%q) = %v, want %q", tt.names, err, tt.want)
 			}
@@ -139,11 +152,14 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 	cleanup := NewMockActionRunner()
 	other := NewMockActionRunner()
 
-	path := filepath.Join(t.TempDir(), "report.json")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.json")
+	md := filepath.Join(dir, "report.md")
 	w := &Workflow{
 		Name: "Selected",
+		Vars: map[string]any{"env": "stg"},
 		Jobs: []Job{
-			{ID: "setup", Name: "Setup", Steps: []*Step{{Name: "Prepares", Uses: "hello", actionRunner: setup}}},
+			{ID: "setup", Name: "Setup {{vars.env}}", Steps: []*Step{{Name: "Prepares", Uses: "hello", actionRunner: setup}}},
 			{ID: "tests", Name: "Tests", Needs: []string{"setup"}, Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
 			{Name: "Other", Steps: []*Step{{Name: "Not run", Uses: "hello", actionRunner: other}}},
 			{Name: "Cleanup", Needs: []string{"setup", "tests"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
@@ -152,7 +168,7 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 	out := startCapturingWith(t, w, Config{
 		Output:  OutputModeSpinner,
 		Jobs:    []string{"Tests"},
-		Reports: []report.Target{{Format: report.JSON, Path: path}},
+		Reports: []report.Target{{Format: report.JSON, Path: path}, {Format: report.Markdown, Path: md}},
 	})
 
 	if len(setup.Calls["hello"]) != 1 || len(cleanup.Calls["hello"]) != 1 {
@@ -165,7 +181,8 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 		t.Errorf("exit status = %d, want %d of the failed job selected", w.exitStatus, ExitActionError)
 	}
 	errOut := w.printer.errWriter.(interface{ String() string }).String()
-	if want := "Running 3 of 4 jobs: Tests, Setup (needed), Cleanup (always)"; !strings.Contains(errOut, want) {
+	// A name is said as the report says it, with the vars.
+	if want := "Running 3 of 4 jobs: Tests, Setup stg (needed), Cleanup (always)"; !strings.Contains(errOut, want) {
 		t.Errorf("error output should contain %q, got: %s", want, errOut)
 	}
 
@@ -187,6 +204,33 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 	}
 	if r.Summary.Jobs.Total != 3 || r.Summary.Jobs.Failed != 1 || r.Summary.Jobs.Skipped != 0 {
 		t.Errorf("the report counts %+v, want 3 jobs, 1 failed and none skipped", r.Summary.Jobs)
+	}
+	if want := (&report.Selection{Jobs: []string{"tests"}, Total: 4}); !reflect.DeepEqual(r.Selection, want) {
+		t.Errorf("the report records the selection %+v, want %+v", r.Selection, want)
+	}
+	page, err := os.ReadFile(md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "3 of the 4 jobs of the workflow ran, selected with --job: tests.\n"; !strings.Contains(string(page), want) {
+		t.Errorf("the markdown report should say %q, got:\n%s", want, page)
+	}
+}
+
+// A run of every job records no selection.
+func TestWorkflow_Start_NoSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	w := &Workflow{Name: "All", Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: NewMockActionRunner()}}}}}
+	startCapturingWith(t, w, Config{Output: OutputModeSpinner, Reports: []report.Target{{Format: report.JSON, Path: path}}})
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "selection") {
+		t.Errorf("the report of a run of every job records a selection:\n%s", data)
+	}
+	if errOut := w.printer.errWriter.(interface{ String() string }).String(); strings.Contains(errOut, "Running") {
+		t.Errorf("a run of every job says which run: %s", errOut)
 	}
 }
 
