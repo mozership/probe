@@ -475,7 +475,7 @@ It reports as an **error**:
 It reports as a **warning**:
 
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
-- a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
+- a step that nothing checks: it has no `test`, it is not a step of the hello action, which does nothing that could fail, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
 - a var read as `vars.<name>` that neither the workflow's `vars`, nor the step's `vars`, nor the entries of an `iteration` written in the step define, which reads nil unless [`--var`](#--var) gives it. A step's own `vars` read only those of the workflow, so one that reads another var of the step, or a key of its `iteration`, is reported too. A var read by a key known only when it runs, such as `vars[k]`, and, in a step whose `iteration` is a template, the vars its other fields read, are not checked. Files read together are checked as one workflow, so give `probe check` the files the run reads

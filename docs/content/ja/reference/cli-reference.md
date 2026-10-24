@@ -475,7 +475,7 @@ workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_ur
 **警告**として報告するもの:
 
 - 読む側のジョブが直接にも間接にも`needs`で指定していないジョブの出力の参照。まだ公開されていないかもしれません
-- 何も検証していないステップ。`test`がなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
+- 何も検証していないステップ。`test`がなく、何も失敗しないhelloアクションのステップでもなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
 - `1 == 1`のように何も読まない`test`。ステップの実行結果によらず、テストの結果が変わりません
 - `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
 - `vars.<name>`として読むvarのうち、ワークフローの`vars`、ステップの`vars`、ステップに書いた`iteration`の項目のどれも定義していないもの。[`--var`](#--var)で与えない限りnilになります。ステップの`vars`が読めるのはワークフローのvarだけなので、ステップの他のvarや`iteration`のキーを読むものも報告します。`vars[k]`のように実行時に決まるキーで読むvarと、`iteration`がテンプレートのステップで、そのステップの`vars`と`iteration`以外のフィールドが読むvarは確かめません。読み合わせるファイルは1つのワークフローとして確かめるので、実行時に読むファイルを`probe check`にも渡します

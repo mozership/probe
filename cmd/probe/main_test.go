@@ -407,7 +407,7 @@ func TestCmd_check(t *testing.T) {
 		return path
 	}
 	clean := write("clean.yml", "name: clean\njobs:\n- name: J\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
-	weak := write("weak.yml", "name: weak\njobs:\n- name: J\n  steps:\n  - uses: hello\n")
+	weak := write("weak.yml", "name: weak\njobs:\n- name: J\n  steps:\n  - uses: shell\n    with:\n      cmd: echo\n")
 	broken := write("broken.yml", "name: broken\njobs:\n- name: J\n  steps:\n  - uses: htp\n    test: res.code == 0\n")
 	// A workflow split into three files, which only read together have
 	// what a workflow needs.
