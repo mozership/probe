@@ -416,18 +416,295 @@ func Userinfo(rawURL string) string {
 
 // redactURLPassword returns rawURL with the password in its user info
 // replaced by <redacted>, whatever its length, or rawURL itself when it has
-// none.
+// none or it is a label already.
 func redactURLPassword(rawURL string) string {
 	scheme, rest, ok := strings.Cut(rawURL, "://")
 	if !ok {
 		return rawURL
 	}
 	userinfo := Userinfo(rawURL)
-	user, password, ok := strings.Cut(userinfo, ":")
-	if !ok || password == "" {
+	colon := userinfoColon(userinfo)
+	if colon < 0 || colon+1 == len(userinfo) || isLabel(userinfo[colon+1:]) {
 		return rawURL
 	}
-	return scheme + "://" + user + ":" + redactedValue + rest[len(userinfo):]
+	return scheme + "://" + userinfo[:colon+1] + redactedValue + rest[len(userinfo):]
+}
+
+// isLabel reports whether v is a label a value was replaced with, such as
+// <redacted> or <secret:NAME>, which a URL cannot hold as it is.
+func isLabel(v string) bool {
+	return v != "" && labelAt(v) == len(v)
+}
+
+// labelAt returns the length of the label t starts with, <redacted> or
+// <secret:NAME>, or 0 when it starts with none.
+func labelAt(t string) int {
+	if strings.HasPrefix(t, redactedValue) {
+		return len(redactedValue)
+	}
+	if strings.HasPrefix(t, "<secret:") {
+		if j := strings.IndexByte(t, '>'); j > 0 {
+			return j + 1
+		}
+	}
+	return 0
+}
+
+// paramEnd returns where a parameter of a URL in text ends when the URL
+// ends inside it, or len(param) when it does not. A URL cannot hold a < as
+// it is, so one ends it, as the </ of a closing tag or the < of the next
+// element in XML or HTML does, unless it starts a label the replacer put
+// there, which is taken as a part of the value. A URL written in angle
+// brackets, as <https://...>, also ends at a >.
+func paramEnd(param string, angled bool) int {
+	for i := 0; i < len(param); i++ {
+		switch param[i] {
+		case '<':
+			n := labelAt(param[i:])
+			if n == 0 {
+				return i
+			}
+			i += n - 1
+		case '>':
+			if angled {
+				return i
+			}
+		}
+	}
+	return len(param)
+}
+
+// userinfoColon returns where the user name of userinfo ends, at its first
+// colon outside a label such as <secret:NAME> the user name was replaced
+// with, or -1 when it has no password.
+func userinfoColon(userinfo string) int {
+	for i := 0; i < len(userinfo); i++ {
+		switch userinfo[i] {
+		case '<':
+			if j := strings.IndexByte(userinfo[i:], '>'); j > 0 {
+				i += j
+			}
+		case ':':
+			return i
+		}
+	}
+	return -1
+}
+
+// urlAuthorityEnd holds the bytes that end the authority of a URL found in
+// text: the start of its path, query or fragment, and what stands around a
+// URL in a message or a log line. A label such as <secret:NAME> that the
+// replacer put in a URL does not end it, so that the rest of the URL is
+// still scanned.
+var urlAuthorityEnd = func() (set [256]bool) {
+	for _, c := range []byte("/?#\"'` \t\r\n") {
+		set[c] = true
+	}
+	return set
+}()
+
+// urlTextEnd holds the bytes that stand around a URL in a message or a log
+// line, and so end it.
+var urlTextEnd = func() (set [256]bool) {
+	for _, c := range []byte("\"'` \t\r\n") {
+		set[c] = true
+	}
+	return set
+}()
+
+// queryCredentialKeys are names of query parameters whose values are
+// credentials, matched whatever their case: those of sensitiveKeys, and
+// those that carry a password, a token or a signature in a URL, as OAuth,
+// presigned S3 and GCS URLs, and Azure shared access signatures do. A
+// generic key is left out: it more often names something else.
+var queryCredentialKeys = func() []string {
+	keys := []string{
+		"passwd", "pass", "pwd", "secret", "client_secret",
+		"token", "access_token", "refresh_token", "id_token",
+		"api_key", "apikey",
+		"x-amz-security-token", "x-amz-signature", "x-goog-signature", "sig",
+	}
+	for k := range sensitiveKeys {
+		keys = append(keys, k)
+	}
+	return keys
+}()
+
+// isQueryCredential reports whether the query parameter named key holds a
+// credential. It is called for every parameter of every URL in the output,
+// so it compares lengths before letters and does not allocate.
+func isQueryCredential(key string) bool {
+	for _, k := range queryCredentialKeys {
+		if len(k) == len(key) && strings.EqualFold(k, key) {
+			return true
+		}
+	}
+	return false
+}
+
+// redactURLPasswords returns s with the credentials of every URL in it
+// replaced by <redacted>, whatever their length and whether or not they were
+// ever learned: the password of its user info, as in postgres://app:pw@db in
+// a driver's error or a remote quoted in a response body, and the values of
+// its query and fragment parameters that hold credentials, as in
+// ?user=a&password=b or #access_token=t. Plain output, which holds none of
+// @, ? and #, or no "://", is returned after quick scans.
+func redactURLPasswords(s string) string {
+	if strings.IndexByte(s, '@') < 0 && strings.IndexByte(s, '?') < 0 && strings.IndexByte(s, '#') < 0 ||
+		!strings.Contains(s, "://") {
+		return s
+	}
+	return redactUserinfoPasswords(redactQueryCredentials(s))
+}
+
+// jsonAmpersand is how Go's encoding/json writes an &, so that a URL in a
+// JSON body or in a value Probe writes as JSON separates its parameters so.
+const jsonAmpersand = `\u0026`
+
+// nextParam returns where the parameter at the start of t ends, and how
+// many bytes the separator after it takes: an &, as written or as JSON
+// writes it, or the # that starts the fragment.
+func nextParam(t string) (stop, sep int) {
+	for i := 0; i < len(t); i++ {
+		switch t[i] {
+		case '&', '#':
+			return i, 1
+		case '\\':
+			if strings.HasPrefix(t[i:], jsonAmpersand) {
+				return i, len(jsonAmpersand)
+			}
+		}
+	}
+	return len(t), 0
+}
+
+// redactQueryCredentials returns s with the value of every parameter of the
+// query or the fragment of a URL in it that holds a credential, such as
+// password or access_token, replaced by <redacted>. Parameters are separated
+// by &, also as JSON writes it, \u0026, or as HTML does, &amp;. A value ends
+// at the next of them, at the fragment, or at what stands around the URL. A
+// value that is a label already, such as <secret:NAME>, is left as it is,
+// and any other is replaced whole, also one a label stands in, so that no
+// part of it around the label is shown.
+func redactQueryCredentials(s string) string {
+	if strings.IndexByte(s, '?') < 0 && strings.IndexByte(s, '#') < 0 {
+		return s
+	}
+	var b strings.Builder
+	done := 0
+	for i := 0; i < len(s); {
+		k := strings.IndexAny(s[i:], "?#")
+		if k < 0 {
+			break
+		}
+		q := i + k
+		// The URL the ? or # stands in runs back to the text around it,
+		// and its parameters on to the end of the URL.
+		start := q
+		for start > i && !urlTextEnd[s[start-1]] {
+			start--
+		}
+		end := q + 1
+		for end < len(s) && !urlTextEnd[s[end]] {
+			end++
+		}
+		i = end
+		if !strings.Contains(s[start:q], "://") {
+			continue
+		}
+		// A URL that comes right after a <, with no > before its query,
+		// is written in angle brackets.
+		angled := s[start] == '<' && strings.IndexByte(s[start:q], '>') < 0
+		for p := q + 1; p < end; {
+			stop, sep := nextParam(s[p:end])
+			stop += p
+			param := s[p:stop]
+			ended := false
+			if n := paramEnd(param, angled); n < len(param) {
+				param, ended = param[:n], true
+			}
+			if eq := strings.IndexByte(param, '='); eq > 0 && isQueryCredential(strings.TrimPrefix(param[:eq], "amp;")) {
+				value := param[eq+1:]
+				if value != "" && !isLabel(value) {
+					if done == 0 {
+						b.Grow(len(s))
+					}
+					b.WriteString(s[done : p+eq+1])
+					b.WriteString(redactedValue)
+					done = p + eq + 1 + len(value)
+				}
+			}
+			if ended {
+				// What follows, such as the next element of an XML
+				// body, may hold another URL.
+				i = p + len(param)
+				break
+			}
+			if sep == 0 {
+				break
+			}
+			p = stop + sep
+		}
+	}
+	if done == 0 {
+		return s
+	}
+	b.WriteString(s[done:])
+	return b.String()
+}
+
+// redactUserinfoPasswords returns s with the password of every URL in it
+// replaced by <redacted>. As Userinfo does, the user info is taken to end at
+// the last @ of the authority, so that a password holding an unescaped @ is
+// hidden whole, and the user name to end at its first colon outside a
+// label. A password that is a label already is left as it is.
+//
+// It runs on everything Probe writes, so it looks at each @, which is rare
+// in most output, rather than at each URL: a URL with user info has an @
+// right after "://" and the characters of a host name or an address.
+func redactUserinfoPasswords(s string) string {
+	if strings.IndexByte(s, '@') < 0 {
+		return s
+	}
+	var b strings.Builder
+	done := 0
+	for i := 0; i < len(s); {
+		k := strings.IndexByte(s[i:], '@')
+		if k < 0 {
+			break
+		}
+		// The authority the @ stands in runs back to the "://" before
+		// it and on to where its path, or the text around it, begins.
+		start := i + k
+		for start > i && !urlAuthorityEnd[s[start-1]] {
+			start--
+		}
+		end := i + k + 1
+		for end < len(s) && !urlAuthorityEnd[s[end]] {
+			end++
+		}
+		i = end
+		if !strings.HasSuffix(s[:start], "://") {
+			continue
+		}
+		authority := s[start:end]
+		at := strings.LastIndexByte(authority, '@')
+		colon := userinfoColon(authority[:at])
+		if colon < 0 || colon+1 == at || isLabel(authority[colon+1:at]) {
+			continue
+		}
+		if done == 0 {
+			b.Grow(len(s))
+		}
+		b.WriteString(s[done : start+colon+1])
+		b.WriteString(redactedValue)
+		done = start + at
+	}
+	if done == 0 {
+		return s
+	}
+	b.WriteString(s[done:])
+	return b.String()
 }
 
 // dsnPassword returns the password in a URL-style DSN, both as written and
@@ -474,7 +751,10 @@ func collectStrings(v any, found *[]string) {
 	}
 }
 
-// String hides every secret value in s.
+// String hides every secret value in s, and the credentials of every URL in
+// it. The values go first, so that a secret is replaced whole with its label
+// and its name is kept, also when it stands in a URL: a scan of the URL
+// could otherwise cut it at a quote it holds and leave the rest visible.
 func (m *Masker) String(s string) string {
 	if m == nil {
 		return s
@@ -482,10 +762,10 @@ func (m *Masker) String(s string) string {
 	m.mu.RLock()
 	r := m.replacer
 	m.mu.RUnlock()
-	if r == nil {
-		return s
+	if r != nil {
+		s = r.Replace(s)
 	}
-	return r.Replace(s)
+	return redactURLPasswords(s)
 }
 
 // Map returns a copy of a request or response with secret values hidden in
@@ -503,7 +783,7 @@ func (m *Masker) Map(data map[string]any) map[string]any {
 			continue
 		}
 		if s, ok := v.(string); ok && holdsURL(k) {
-			out[k] = m.leaf(redactURLPassword(s))
+			out[k] = redactURLPassword(m.leaf(s))
 			continue
 		}
 		out[k] = m.value(v)
@@ -554,7 +834,8 @@ func (m *Masker) value(v any) any {
 				continue
 			}
 			if holdsURL(k) {
-				s = redactURLPassword(s)
+				out[k] = redactURLPassword(m.leaf(s))
+				continue
 			}
 			out[k] = m.leaf(s)
 		}
