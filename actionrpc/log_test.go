@@ -2,6 +2,7 @@ package actionrpc
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestLogHidesCredentialsBeforeTruncating(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug})
+	log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Trace})
 	LogParams(log, "params", with)
 	LogOutcome(log, "request", map[string]any{"req": with, "status": 0}, nil)
 
@@ -38,5 +39,18 @@ func TestLogHidesCredentialsBeforeTruncating(t *testing.T) {
 	}
 	if with["password"] != password {
 		t.Error("logging changed the action's parameters")
+	}
+}
+
+// LogParams and LogOutcome record at trace level, an error as well: a
+// verbose run shows the request, the response and the error itself.
+func TestLogParamsAndOutcomeAreTrace(t *testing.T) {
+	var buf bytes.Buffer
+	log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug})
+	LogParams(log, "params", map[string]any{"url": "u"})
+	LogOutcome(log, "request", map[string]any{"status": 0}, nil)
+	LogOutcome(log, "request", nil, errors.New("refused"))
+	if buf.Len() != 0 {
+		t.Errorf("the records should be at trace level, got:\n%s", buf.String())
 	}
 }

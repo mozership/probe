@@ -90,7 +90,7 @@ func TestExchangeDetail(t *testing.T) {
 			result:   false,
 			req:      map[string]any{"method": "GET", "url": "http://example.com"},
 			res:      map[string]any{"status": 404, "body": "Not Found"},
-			expected: "       request: map[string]interface {}{\"method\":\"GET\", \"url\":\"http://example.com\"}\n       response: map[string]interface {}{\"body\":\"Not Found\", \"status\":404}\n",
+			expected: "       request:\n         method: GET\n         url: http://example.com\n       response:\n         body: Not Found\n         status: 404\n",
 		},
 		{
 			name:     "empty maps",
@@ -98,7 +98,7 @@ func TestExchangeDetail(t *testing.T) {
 			result:   false,
 			req:      map[string]any{},
 			res:      map[string]any{},
-			expected: "       request: map[string]interface {}{}\n       response: map[string]interface {}{}\n",
+			expected: "       request: {}\n       response: {}\n",
 		},
 		{
 			name:     "nil maps",
@@ -106,7 +106,48 @@ func TestExchangeDetail(t *testing.T) {
 			result:   false,
 			req:      nil,
 			res:      nil,
-			expected: "       request: map[string]interface {}(nil)\n       response: map[string]interface {}(nil)\n",
+			expected: "",
+		},
+		{
+			name: "empty fields are left out",
+			req:  map[string]any{"body": "", "headers": map[string]any{}, "method": "GET"},
+			res:  map[string]any{"code": 0, "cookies": map[string]any{}, "filepath": "", "ok": false},
+			expected: "       request:\n         method: GET\n" +
+				"       response:\n         code: 0\n         ok: false\n",
+		},
+		{
+			name: "a multi-line body is a block, cut",
+			req:  map[string]any{"cmd": "seq 100"},
+			res:  map[string]any{"stdout": strings.Repeat("line\n", 30)},
+			expected: "       request:\n         cmd: seq 100\n" +
+				"       response:\n         stdout: |\n" +
+				strings.Repeat("           line\n", 20) +
+				"           … (10 more lines)\n",
+		},
+		{
+			name:     "a long body is cut",
+			res:      map[string]any{"body": strings.Repeat("x", 600)},
+			expected: "       response:\n         body: " + strings.Repeat("x", 512) + " … (88 more bytes)\n",
+		},
+		{
+			name: "only the fields of the request and the response are left out when empty",
+			res: map[string]any{
+				"body":    map[string]any{"id": "1", "name": "", "items": []any{}, "err": nil},
+				"cookies": map[string]any{},
+			},
+			expected: "       response:\n         body:\n           err: null\n           id: \"1\"\n" +
+				"           items: []\n           name: \"\"\n",
+		},
+		{
+			name:     "a decoded body is not shown again as rawbody",
+			res:      map[string]any{"body": map[string]any{"id": 1}, "rawbody": `{"id":1}`},
+			expected: "       response:\n         body:\n           id: 1\n",
+		},
+		{
+			name:     "dump false",
+			req:      map[string]any{"method": "GET"},
+			res:      map[string]any{"dump": false, "body": "secret"},
+			expected: "",
 		},
 	}
 

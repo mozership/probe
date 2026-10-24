@@ -154,7 +154,7 @@ jobs:
         "query": "query GetUser($id: ID!) { user(id: $id) { name email active } }",
         "variables": { "id": "{{vars.test_user_id}}" }
       }
-  test: res.code == 200 && res.body.data.user != null
+  test: res.code == 200 && res.body.data.user != nil
   outputs:
     user_name: res.body.data.user.name
     user_email: res.body.data.user.email
@@ -293,7 +293,7 @@ shellアクションは複数のセキュリティレイヤーを実装します
 **Helloアクション レスポンス:** このアクション固有のパラメータはありません。`with`に渡したキーはそのまま`res`に返り、`status`は常に`0`です。
 
 ```yaml
-test: status == 0 && res.message != null
+test: status == 0 && res.message != nil
 ```
 
 ### SMTPアクション
@@ -887,7 +887,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
   test: |
     res.code == 200 &&
     res.headers["Content-Type"] contains "application/json" &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
     (rt.sec * 1000) < 1000
   outputs:
@@ -1142,6 +1142,19 @@ func main() {
     })
 }
 ```
+
+`Run`が返すエラーは、ステップの結果と`--report`が書くファイルにそのまま表示されます。ステップが失敗した理由を読む人に向けた文言にしてください。返す前にパニックしたり終了したりしたアクションのステップは、プロセスの終了状態と、パニックならそのメッセージとともに失敗します。
+
+Probeは、アクションが記録したログをレベルに応じて表示します。
+
+- 警告：どの実行でも表示します。ステップの結果にかかわらず利用者に見せる必要があることは、このレベルで記録してください。
+- エラー：`-v`を付けたときだけ表示します。アクションが返すエラーが同じことをすでに伝えるためです。
+- デバッグと情報：`-v`を付けたときに、Probe自身が表示するステップのリクエストとレスポンスと並べて表示します。リトライのように、結果からはわからないアクションの動作をこれらのレベルで記録してください。
+- トレース：`-vv`を付けたときだけ、Probeがアクションのプロセスを起動し、呼び出し、停止する過程とあわせて表示します。受け取ったパラメーターのように、アクション自体のデバッグに役立つことをこのレベルで記録してください。`actionrpc.LogParams`と`actionrpc.LogOutcome`は、パラメーターと、結果またはエラーをこのレベルで記録します。
+
+各ログは`[LEVEL] <アクション>: <メッセージ>`の形で表示し、その下にフィールドをYAMLに似た行で並べます。マップやリストも展開して表示します。
+
+アクションは現在のProbeの`actionrpc`でビルドしてください。Probeは、現在の`actionrpc`がエラーに付ける印で、アクションが返したエラーと接続の切断とを区別します。印のないエラーのgRPCコードが`Unavailable`だと、Probeはプロセスが終了したかどうかを確かめるために少し待ちます。
 
 対応するプラットフォームごとにビルドして実行ファイルを公開し、そのURLとダイジェストを書いた`action.yml`をコミットします。利用者はその`action.yml`を含むコミットを指定します。[mozership/probe-graphql](https://github.com/mozership/probe-graphql)では、GoReleaserと、リリースのたびにダイジェストをコミットするワークフローでこれを行っています。
 

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 // newTestStreamPrinter builds a printer writing into buffers, together with a
@@ -274,6 +276,38 @@ func TestStreamReporter_ProgressGoesToStderr(t *testing.T) {
 	}
 	if lines := strings.Count(progress, "\n"); lines != 5 {
 		t.Errorf("progress log lines = %d, want 5:\n%s", lines, progress)
+	}
+}
+
+// TestStreamReporter_ProgressIsLabelledByJobName covers jobs running at
+// once, whose lines are told apart by the names of their jobs and line up.
+func TestStreamReporter_ProgressIsLabelledByJobName(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	_, _, errOut, r := newTestStreamPrinter([]string{"job_0", "job_1", "e2e"})
+	names := map[string]string{"job_0": "Unit", "job_1": "Unit", "e2e": "結合テスト"}
+	r.labelJobs(func(id string) string { return names[id] })
+
+	r.StepStart("job_0", "go test")
+	r.StepStart("e2e", "probe")
+	r.StepStart("job_1", "go vet")
+
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
+	want := []string{
+		"[Unit (job_0)] ▸ go test",
+		"[結合テスト]   ▸ probe",
+		"[Unit (job_1)] ▸ go vet",
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("progress log lines = %d, want %d:\n%s", len(lines), len(want), errOut.String())
+	}
+	for i, line := range lines {
+		// The line starts with the time, which is left out.
+		_, rest, _ := strings.Cut(line, " ")
+		if rest != want[i] {
+			t.Errorf("line %d = %q, want %q", i, rest, want[i])
+		}
 	}
 }
 

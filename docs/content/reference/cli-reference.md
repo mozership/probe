@@ -7,13 +7,13 @@ This page provides complete documentation for the Probe command-line interface, 
 Probe is invoked in one of two forms: a workflow file to run, or a subcommand acting on one.
 
 ```bash
-probe [options] <workflow-file>
+probe [options] <workflow-file>...
 probe <subcommand> [options] <file>
 ```
 
 ## Command Syntax
 
-Every invocation names one or more workflow files. Options come before them, and a subcommand takes their place when you want something other than a run.
+Every invocation names one or more workflow files. Options may come before, after or between them, and every argument after `--` is a file, even one that starts with `-`. A subcommand comes first when you want something other than a run.
 
 ### Basic Command
 
@@ -28,19 +28,20 @@ probe workflow.yml
 Execute workflows with configuration merging:
 
 ```bash
+probe base.yml environment.yml overrides.yml
 probe base.yml,environment.yml,overrides.yml
 ```
 
-The files are concatenated from left to right into a single YAML document. A top-level key defined in more than one file takes the value from the last file, and the whole key is replaced rather than merged entry by entry.
+The files are given as separate arguments or as one comma-separated argument, and the two forms can be mixed. The files are concatenated from left to right into a single YAML document. A top-level key defined in more than one file takes the value from the last file, and the whole key is replaced rather than merged entry by entry.
 
 ### Positional Arguments
 
-The workflow path is the only positional argument, and it is required.
+The workflow paths are the only positional arguments, and at least one is required.
 
 #### `workflow-path`
 
-**Type:** String (required)  
-**Description:** Path to the workflow YAML file, or comma-separated list of files for merging
+**Type:** String, one or more (required)  
+**Description:** Path to the workflow YAML file, a directory or a glob. Several paths, as separate arguments or as a comma-separated list, are merged in their order. A file named directly must end in `.yml` or `.yaml`; from a directory or a glob, only those files are read
 
 **Examples:**
 ```bash
@@ -48,6 +49,7 @@ The workflow path is the only positional argument, and it is required.
 probe workflow.yml
 
 # Multiple files (merging)
+probe base.yml production.yml
 probe base.yml,production.yml
 
 # Relative paths
@@ -65,20 +67,39 @@ The options change how a run reports itself rather than what it does: how much d
 
 **Type:** Boolean flag  
 **Default:** `false`  
-**Description:** Enable verbose output showing detailed execution information
+**Description:** Show what each step did: the request its action was given, the response it returned, and how its test went. Give it twice, as `-vv`, to show how each action is run as well
 
 **Example:**
 ```bash
 probe -v workflow.yml
 probe --verbose workflow.yml
+probe -vv workflow.yml
 ```
 
 **Verbose Output Includes:**
-- Step-by-step execution details
-- HTTP request/response information
-- Template evaluation results
-- Timing information
-- Debug messages
+- The request and the response of each step, and its response time. For a step whose action failed before it returned a request, the parameters the step gave the action, its templates evaluated, in their place
+- The result of the test and the values it read (`Env`)
+- The records actions log at debug, info and error level, which a run without `-v` leaves out
+
+The verbose output goes to standard error, and the report to standard output as it does without `-v`. Each record an action logs is shown as the rest of the verbose output is, its level and the action first, then its fields:
+
+```
+[DEBUG] ./my-action: retrying the request
+[DEBUG]   attempt: 2
+```
+
+**`-vv`**, or `-v` given twice, also shows what helps to debug an action rather than a workflow: how Probe starts the action's process, calls it and stops it, and the records actions log at trace level, such as the parameters they received and the result they returned. These are left out of `-v`, as the request and the response already show what they would.
+
+```
+[TRACE] http: starting plugin
+[TRACE]   args:
+[TRACE]     - probe
+[TRACE]     - builtin-actions
+[TRACE]     - http
+[TRACE]   path: /usr/local/bin/probe
+…
+[TRACE] http: plugin exited
+```
 
 ### `-h, --help`
 
@@ -123,6 +144,16 @@ probe --timing workflow.yml
 **Values:** `auto`, `spinner`, `stream`  
 **Default:** `auto`  
 **Description:** Select how the report is rendered. `auto` picks `spinner` on an interactive terminal and `stream` otherwise. `spinner` redraws progress in place, while `stream` writes each result as it completes, which suits CI logs and pipes.
+
+While jobs run, `stream` also writes a line to stderr as each step starts and ends. Jobs run at once, so each line is labelled with the name of its job, with its templates evaluated and the secrets in it masked, or with its `id` when it has no name. A name longer than 24 columns is cut short, jobs with the same name have their `id` added, and the labels are padded to one width so that the steps line up:
+
+```
+15:54:13.658 [Unit tests (job_0)] ▸ go test ./api
+15:54:13.658 [Unit tests (job_1)] ▸ go test ./web
+15:54:13.659 [Deploy staging]     ▸ upload
+15:54:13.690 [Unit tests (job_1)] ✓ go test ./web (31ms)
+15:54:13.702 [Unit tests (job_0)] ✗ go test ./api
+```
 
 The value can also come from the `PROBE_OUTPUT` environment variable. The flag wins over the environment variable, which in turn wins over auto detection.
 
@@ -277,6 +308,32 @@ PRIVATE_KEY='taken as it is, $ and \ included'
 
 A variable whose value must not be shown is named under [`secrets`](/reference/yaml-configuration#secrets) as usual; where the value comes from makes no difference.
 
+### `--job`
+
+**Type:** String, can be repeated  
+**Values:** a comma separated list of job ids or names  
+**Description:** Run only these jobs of the workflow, with the jobs they need. A job is named by its `id`, or by its `name` as written when no job has that `id`. A job without an `id` has the one its place gives it, such as `job_2` for the third job. A `name` is matched as it is written, before its templates are evaluated, so a job whose `name` has a template, such as `Setup {{vars.env}}`, is selected by its `id`.
+
+```bash
+probe --job tests workflow.yml
+probe --job "User API" --job tests,lint workflow.yml
+```
+
+```
+Running 3 of 5 jobs: Tests, Setup (needed), Cleanup (always)
+```
+
+- The jobs in the [`needs`](/reference/yaml-configuration#needs) of a selected job run before it, and those they need, however far down, since a job may read what they publish.
+- A job with [`always`](/reference/yaml-configuration#always) runs when a job it needs runs, as the job that removes what that job made has to. It waits for those of its `needs` that run, and does not bring the others, so it runs without what they would have published, as it does after one of them failed.
+- The other jobs are not run, and are not in the terminal report, the report files or their counts: the run is that of a workflow of the jobs that run. The exit status is theirs. The line above, on the standard error, says which jobs run and why, so that the run is not taken for one of the whole workflow. `json` records the jobs selected, by id, and how many jobs the workflow has, as `selection`, as `"selection": {"jobs": ["tests"], "total": 5}`; `markdown` and `github-summary` say so under the summary line, and [`probe coverage`](#coverage) warns that the steps of the other jobs are not counted.
+- The external actions and the job files of an [`embedded`](/reference/actions/embedded) step are fetched and read for the jobs that run alone. The whole workflow is still read and checked as it is for a run of it: a need that is no job, needs in a cycle, or a `uses` that names no action, in any job, stops Probe with exit status 2.
+- A value that is no job's `id` or `name`, or a `name` that several jobs have, stops Probe before any job runs, with exit status 2. A name close to one of a job is suggested; a name several jobs have is told by their ids.
+- A name that has a comma in it is split at the comma: select its job by its `id`.
+
+There is no environment variable for it, as there is for `--report`: a run set to some of the jobs from the environment would look like a run of them all.
+
+[`probe dag --job`](#dag) draws the jobs a run with the same `--job` runs.
+
 ## Subcommands
 
 A subcommand replaces the run with something else: `gen` writes a starting workflow, `dag` prints the dependency graph a workflow describes, `check` finds what is wrong or weak in a workflow without running it, `coverage` tells how much of an OpenAPI document a run checked, `guide` prints this documentation, `skill` sets up a coding agent to use Probe, and `manifest` writes the `action.yml` of a release of an external action.
@@ -299,10 +356,13 @@ probe gen petstore.yml
 
 Display job dependency graph without executing the workflow. By default, outputs ASCII art. Use `--mermaid` to output in Mermaid flowchart format.
 
+Several files are merged as a run merges them.
+
 **Usage:**
 ```bash
-probe dag <workflow-file>
-probe dag --mermaid <workflow-file>
+probe dag <workflow-file>...
+probe dag --mermaid <workflow-file>...
+probe dag --job <job> <workflow-file>...
 ```
 
 **Options:**
@@ -310,6 +370,9 @@ probe dag --mermaid <workflow-file>
 | Option | Description |
 |--------|-------------|
 | `--mermaid` | Output in Mermaid flowchart format instead of ASCII art |
+| `--job` | Draw only the jobs a run with the same [`--job`](#--job) runs |
+
+Jobs whose `needs` are in a cycle, which a run refuses, have no order to be drawn in, and stop it with exit status 2.
 
 **ASCII Output Example:**
 ```
@@ -374,12 +437,12 @@ This is useful for:
 
 ### `check`
 
-Find what is wrong or weak in a workflow without running it, so that a workflow written by hand or by a coding agent can be checked before it reaches the systems it tests. Several files read together, as a run reads them, are given as one comma-separated argument.
+Find what is wrong or weak in a workflow without running it, so that a workflow written by hand or by a coding agent can be checked before it reaches the systems it tests. Several files read together, as a run reads them, are given as separate arguments or as one comma-separated argument.
 
 **Usage:**
 ```bash
 probe check workflow.yml
-probe check base.yml,staging.yml
+probe check base.yml staging.yml
 ```
 
 **Output Example:**
@@ -387,9 +450,11 @@ probe check base.yml,staging.yml
 workflow.yml:10: error: job 0 "Users", step 0 "Log in": unknown key "tset"; did you mean "test"?
 workflow.yml:14: error: job 0 "Users", step 1 "Read": unknown action "htp"; did you mean "http"?
 workflow.yml:18: error: job 0 "Users", step 1 "Read": with: outputs.login.tokn is not published: step "login" publishes token
+workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
 workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.login.token may not be published yet: job "Other" does not need job "Users", whose step publishes it
+workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_url is not defined by the workflow, so it is nil unless --var gives it; did you mean "API_URL"?
 
-3 errors, 1 warning
+4 errors, 2 warnings
 ```
 
 It reports as an **error**:
@@ -405,6 +470,7 @@ It reports as an **error**:
 - a `repeat.test` that reads `baseline`, which only `repeat.baseline_test` can
 - a `repeat.baseline_test` that reads a step or a field under `baseline.steps` by a key known only when it runs, such as `baseline.steps[vars.id]`
 - an output read that no step publishes, that its step does not publish, or that is read before its step publishes it, such as by an earlier step of the job
+- a name an expression or a template reads that is not there to read, which fails where it is read: in a step's `name`, `with`, `vars`, `iteration`, `test` or `echo` the step fails, and a `skipif`, a `wait` or an output that reads it is reported and left out, so the step runs as if it were not written. A step reads `vars`, `outputs`, `res`, `req`, `rt`, `status`, `report` and `repeat_index`, so `steps.login.code` in a step's `test`, `null` for `nil`, or `{{API_TOKEN}}` in a step's `with`, as the environment is read only by the workflow's `vars`, is reported. The tests of a repeated job read `vars`, `steps` and `baseline`. The templates of a job's `name` and of the workflow's `vars` are not checked for this
 
 It reports as a **warning**:
 
@@ -412,6 +478,7 @@ It reports as a **warning**:
 - a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
+- a var read as `vars.<name>` that neither the workflow's `vars`, nor the step's `vars`, nor the entries of an `iteration` written in the step define, which reads nil unless [`--var`](#--var) gives it. A step's own `vars` read only those of the workflow, so one that reads another var of the step, or a key of its `iteration`, is reported too. A var read by a key known only when it runs, such as `vars[k]`, and, in a step whose `iteration` is a template, the vars its other fields read, are not checked. Files read together are checked as one workflow, so give `probe check` the files the run reads
 
 It exits with status 2 when it finds an error, and with 0 when it finds only warnings or nothing.
 
@@ -503,6 +570,8 @@ Responses:  2 of 4 checked (50.0%)
 ```
 
 Each operation the document declares is listed with the responses it declares, such as `200`, `2XX` or `default`, marked `✓` when a step's response was matched to it and `-` when none was. A step whose status code the operation does not declare counts for the operation alone. Steps count for the document given when they name it by the same path, written in another way such as `./openapi.yml` too; a report whose steps name none of them is an error that lists those they name. A file ending in `.proto` is taken for the grpc action's contract. It is read on its own, without its imports, and each method of each service it declares is listed, such as `users.v1.UserService/GetUser`. A `.proto` file declares no statuses its methods end with, so its coverage is told by methods alone, without the line for responses. Name the file as `proto.files` does.
+
+A report of a run narrowed with [`--job`](#--job) has the steps of the jobs that ran alone; coverage warns of it on the standard error, as `[WARN] 3 of the 5 jobs of the workflow ran, selected with --job: tests; the steps of the others are not counted`.
 
 It exits with status 0 whatever the coverage, and with 2 when the document or the report cannot be read.
 
@@ -691,7 +760,7 @@ probe -v health-check.yml
 
 ### Environment-Specific Execution
 
-Listing a second file after a comma merges it over the first, which is how one workflow targets different environments.
+Listing a second file after the first, as another argument or after a comma, merges it over the first, which is how one workflow targets different environments.
 
 ```bash
 # Development environment

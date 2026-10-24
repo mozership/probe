@@ -51,10 +51,10 @@ func (a *Action) run(with map[string]any, guard actionrpc.Guard) (map[string]any
 	// Execute database query with logger callbacks
 	result, err := ExecuteQuery(with,
 		WithBefore(func(query string, params []any) {
-			a.log.Debug("executing database query", "query", query, "params", params)
+			a.log.Trace("executing database query", "query", query, "params", params)
 		}),
 		WithAfter(func(result *Result) {
-			a.log.Debug("database query completed", "rows_affected", result.Res.RowsAffected, "duration", result.RT)
+			a.log.Trace("database query completed", "rows_affected", result.Res.RowsAffected, "duration", result.RT)
 		}),
 		WithGuard(guard),
 	)

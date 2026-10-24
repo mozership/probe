@@ -518,7 +518,7 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 			Printer:    printer,
 			Result:     result,
 			background: procgroup.NewTracker(),
-			cleanups:   newCleanups(runID, printer),
+			cleanups:   newCleanups(runID, printer, false),
 			baseDir:    baseDir,
 			runID:      runID,
 			actions:    cfg.actions,

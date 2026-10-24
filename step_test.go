@@ -837,42 +837,51 @@ func TestStep_processActionResult(t *testing.T) {
 }
 
 func TestStep_handleActionError(t *testing.T) {
-	step := &stepRun{
-		Step: &Step{
-			Uses: "mock-action-for-error-test",
-		},
-		expr: &expr.Expr{},
+	tests := []struct {
+		name    string
+		verbose bool
+		err     error
+		wantOut string
+	}{
+		{name: "an action error", err: fmt.Errorf("test error")},
+		{name: "an action error in a verbose run", verbose: true, err: fmt.Errorf("test error"), wantOut: "Error: Action execution failed: test error\n"},
+		{name: "a refusal", err: actionrpc.Refuse("POST may write")},
+		{name: "a refusal in a verbose run", verbose: true, err: actionrpc.Refuse("POST may write"), wantOut: "Error: refused: POST may write\n"},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &stepRun{
+				Step: &Step{
+					Uses: "mock-action-for-error-test",
+				},
+				expr: &expr.Expr{},
+			}
+			printer := newBufferPrinter()
+			printer.verbose = tt.verbose
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Config:  Config{Verbose: tt.verbose},
+					Printer: printer,
+				},
+			}
 
-	jCtx := &JobContext{
-		runEnv: &runEnv{
-			Printer: newBufferPrinter(),
-		},
-	}
+			step.handleActionError(tt.err, "test-step", jCtx)
 
-	originalErr := fmt.Errorf("test error")
-	step.handleActionError(originalErr, "test-step", jCtx)
-
-	// Check that error was set
-	if step.err == nil {
-		t.Errorf("handleActionError() should set step.err")
-	}
-
-	// Check that job was marked as failed
-	if !jCtx.Failed {
-		t.Errorf("handleActionError() should mark job as failed")
-	}
-
-	// Check error details
-	if probeErr, ok := step.err.(*ProbeError); ok {
-		if probeErr.Context["step_name"] != "test-step" {
-			t.Errorf("handleActionError() should set step_name context")
-		}
-		if probeErr.Context["action_type"] != "mock-action-for-error-test" {
-			t.Errorf("handleActionError() should set action_type context")
-		}
-	} else {
-		t.Errorf("handleActionError() should create ProbeError")
+			// The error is kept as it is, for the step's result to tell
+			// what the action said and nothing about where it was caught.
+			if step.err != tt.err {
+				t.Errorf("step.err = %v, want %v", step.err, tt.err)
+			}
+			if !jCtx.Failed {
+				t.Errorf("handleActionError() should mark job as failed")
+			}
+			// The step's result tells the error, so it is told as it
+			// happens only in a verbose run, before the exchange.
+			got := printer.errWriter.(*bytes.Buffer).String()
+			if tt.wantOut == "" && got != "" || !strings.HasPrefix(got, tt.wantOut) {
+				t.Errorf("printed %q, want it to start with %q", got, tt.wantOut)
+			}
+		})
 	}
 }
 
@@ -1975,6 +1984,31 @@ func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
 	}
 }
 
+// TestStep_executeSingleAction_Trace passes -vv on to the action, whose log
+// then shows how its process is run as well.
+func TestStep_executeSingleAction_Trace(t *testing.T) {
+	mock := &OptionsRecordingActionRunner{}
+	step := &stepRun{Step: &Step{Uses: "test-action"}, expr: &expr.Expr{}}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Config:  Config{Verbose: true, Trace: true},
+			Printer: newBufferPrinter(),
+		},
+	}
+
+	if _, err := step.executeSingleAction(mock, map[string]any{}, jCtx, false); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	recorded := mock.recorded()
+	if len(recorded) != 1 {
+		t.Fatalf("attempts = %d, want 1", len(recorded))
+	}
+	if !recorded[0].Trace || recorded[0].logLevel() != hclog.Trace {
+		t.Errorf("Trace = %v, logLevel = %v, want true, trace", recorded[0].Trace, recorded[0].logLevel())
+	}
+}
+
 func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	// A later step publishing a name already taken gets a warning, not an
 	// error-labelled message.
@@ -2846,5 +2880,61 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped (SKIPPED)" {
 			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
 		}
+	}
+}
+
+// A verbose run shows, for a step whose action failed without returning the
+// request it made, what the step gave the action, its templates evaluated
+// and its credentials hidden, so that it still tells what was asked for.
+func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	mock := NewMockActionRunner()
+	mock.SetError("http", errors.New("connection refused"))
+	st := &stepRun{
+		Step: &Step{
+			Uses:         "http",
+			With:         map[string]any{"url": "http://{{vars.host}}", "password": "hunter2"},
+			actionRunner: mock,
+		},
+		expr: &expr.Expr{},
+		ctx:  StepContext{Vars: map[string]any{"host": "127.0.0.1:1"}},
+	}
+	printer := newBufferPrinter()
+	printer.verbose = true
+	printer.SetMasker(mask.New(nil, nil))
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+
+	_, err := st.executeAction("h", jCtx)
+	if err == nil {
+		t.Fatal("expected the action to fail")
+	}
+	st.handleActionError(err, "h", jCtx)
+
+	out := printer.errWriter.(*bytes.Buffer).String()
+	want := "[DEBUG] Request (as the step gave it; the action returned none):\n[DEBUG]   password: <redacted>\n[DEBUG]   url: http://127.0.0.1:1\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("output does not have\n%s\ngot:\n%s", want, out)
+	}
+	if strings.Contains(out, "hunter2") || strings.Contains(out, "Response:") {
+		t.Errorf("output should hide the password and show no empty response:\n%s", out)
+	}
+}
+
+// A step whose action returned the request it made shows that, not what the
+// step gave it.
+func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
+	printer := newBufferPrinter()
+	printer.verbose = true
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+	st := &stepRun{Step: &Step{Uses: "http"}, expr: &expr.Expr{}, given: map[string]any{"url": "given"}}
+	st.ctx.Req = map[string]any{"url": "made"}
+
+	st.handleActionError(errors.New("failed"), "h", jCtx)
+
+	out := printer.errWriter.(*bytes.Buffer).String()
+	if !strings.Contains(out, "[DEBUG] Request:\n[DEBUG]   url: made\n") || strings.Contains(out, "given") {
+		t.Errorf("output should show the request the action made:\n%s", out)
 	}
 }

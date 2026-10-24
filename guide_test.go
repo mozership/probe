@@ -80,7 +80,12 @@ func TestGuide_Aliases(t *testing.T) {
 
 func TestGuide_Unknown(t *testing.T) {
 	_, err := Guide("nope")
-	if err == nil || !strings.Contains(err.Error(), "unknown guide topic: nope") {
+	if err == nil || err.Error() != "unknown guide topic: nope (run probe guide to list the topics)" {
+		t.Errorf("error = %v", err)
+	}
+
+	_, err = Guide("htpp")
+	if err == nil || err.Error() != `unknown guide topic: htpp; did you mean "http"?` {
 		t.Errorf("error = %v", err)
 	}
 }

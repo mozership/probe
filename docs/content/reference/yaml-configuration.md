@@ -747,9 +747,10 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 
 ## File Merging
 
-Several files can be combined by passing them comma-separated. They are concatenated in order, and a top-level key defined more than once takes the value from the last file:
+Several files can be combined by passing them as separate arguments or comma-separated. They are concatenated in order, and a top-level key defined more than once takes the value from the last file:
 
 ```bash
+probe base.yml production.yml
 probe base.yml,production.yml
 ```
 

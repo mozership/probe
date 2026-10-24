@@ -425,7 +425,7 @@ X-Probe-Trace: run=7f3a9c21e4b05d68; job=login; step=auth; repeat=0; attempt=1
     with:
       url: "{{vars.api_url}}/users/does-not-exist"
       method: GET
-    test: res.code == 404 && res.body.error != null
+    test: res.code == 404 && res.body.error != nil
 ```
 
 ### 不安定なエンドポイントのリトライ

@@ -261,6 +261,8 @@ jobs:
     uses: hello
     wait: "{{ vars. }}"
     test: res.code == 0
+vars:
+  wait: 1s
 `,
 			want: []want{
 				{SeverityError, 7, "wait: invalid wait format: soon"},
@@ -530,6 +532,9 @@ jobs:
     uses: http
     with:
       get: /b
+vars:
+  k: steps
+  p: p95
 `,
 			want: []want{
 				{SeverityError, 6, "repeat.test: baseline is read only by repeat.baseline_test"},
@@ -625,6 +630,255 @@ func TestCheck_FilesReadTogether(t *testing.T) {
 	}
 }
 
+// TestCheck_JobsReplaced warns of a file whose jobs replace those of an
+// earlier file, which a run of them does not run, and not of other keys.
+func TestCheck_JobsReplaced(t *testing.T) {
+	dir := t.TempDir()
+	first := writeWorkflow(t, dir, "first.yml", "name: first\njobs:\n- name: A\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
+	vars := writeWorkflow(t, dir, "vars.yml", "vars:\n  who: x\n")
+	second := writeWorkflow(t, dir, "second.yml", "vars:\n  who: y\njobs:\n- name: B\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
+
+	findings, err := Check(first+","+vars+","+second, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 3, "jobs replaces the jobs of " + first + ":2, which do not run"},
+	})
+	if findings[0].File != second {
+		t.Errorf("File = %q, want %q", findings[0].File, second)
+	}
+}
+
+// TestCheck_Names checks the names the expressions and templates read: a
+// name nothing is evaluated with is an error, and a var nothing defines a
+// warning, as --var may give it.
+func TestCheck_Names(t *testing.T) {
+	tests := []struct {
+		name     string
+		workflow string
+		want     []want
+	}{
+		{
+			name: "a var nothing defines and steps which a step does not read",
+			workflow: `name: names
+vars:
+  base: http://localhost
+jobs:
+- name: C
+  steps:
+  - name: h
+    uses: http
+    with:
+      url: "{{ vars.base }}"
+      get: /
+    test: res.status == 200 && vars.nope == 1
+  - name: h2
+    uses: hello
+    with: {name: x}
+    test: steps.missing.code == 1 && res.cod == 0
+`,
+			want: []want{
+				{SeverityWarning, 12, "test: vars.nope is not defined by the workflow, so it is nil unless --var gives it"},
+				{SeverityError, 16, "test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs"},
+			},
+		},
+		{
+			name: "names misspelled or written as another language writes them",
+			workflow: `name: names
+vars:
+  base: http://localhost
+  url: "{{ vars.bsae }}/api"
+jobs:
+- name: C
+  skipif: var.skip
+  steps:
+  - name: h
+    id: h
+    uses: hello
+    with:
+      url: "{{ vars.bse }}/{{ API_TOKEN }}"
+    test: res.code != null
+    outputs:
+      region: us-east
+    echo: "{{ output.h.region }}"
+`,
+			want: []want{
+				{SeverityWarning, 4, `vars: vars.bsae is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
+				{SeverityError, 7, `skipif: var is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "vars"?`},
+				{SeverityWarning, 13, `with: vars.bse is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
+				{SeverityError, 13, `with: API_TOKEN is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; the environment is read only by the workflow's vars, as api_token: "{{API_TOKEN}}", which a step reads as vars.api_token`},
+				{SeverityError, 14, "test: null is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
+				{SeverityError, 16, "outputs.region: us is not defined"},
+				{SeverityError, 16, "outputs.region: east is not defined"},
+				{SeverityError, 17, `echo: output is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "outputs"?`},
+			},
+		},
+		{
+			name: "methods and operators written as another language writes them",
+			workflow: `name: methods
+vars:
+  host: "{{ HOST.toLowerCase() }}"
+jobs:
+- name: M
+  skipif: vars.host.startsWith("prod")
+  repeat:
+    count: 2
+    test: string(steps.a.runs).trim() != ""
+  steps:
+  - name: A
+    id: a
+    uses: hello
+    with:
+      name: "{{ vars.host.split('.') }}"
+    test: res.body.contains("ok") && res.code == None
+  - name: Written as expressions write it
+    uses: hello
+    test: res.body contains "ok" && res.body.contains == "x" && res.body.length > 0 && lower(res.body) != "" && len(res.items) > 0
+  - name: Operators
+    uses: hello
+    test: res.code === 200
+  - name: An operator called as a function
+    uses: hello
+    test: startsWith(res.body, "ok")
+`,
+			want: []want{
+				{SeverityError, 3, "vars: expressions have no toLowerCase() method: write lower(HOST)"},
+				{SeverityError, 6, `skipif: expressions have no startsWith() method: write vars.host startsWith "prod"`},
+				{SeverityError, 9, `repeat.test: expressions have no trim() method: write trim(string(steps.a.runs))`},
+				{SeverityError, 15, `with: expressions have no split() method: write split(vars.host, ".")`},
+				{SeverityError, 16, `test: None is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?`},
+				{SeverityError, 16, `test: expressions have no contains() method: write res.body contains "ok" for a string, or "ok" in res.body for a list`},
+				{SeverityError, 22, `test: unexpected token Operator("=") (1:12); expressions have no ===: write ==`},
+				{SeverityError, 25, `test: unexpected token Operator("startsWith") (1:1); startsWith is an operator: write res.body startsWith "ok", or hasPrefix(res.body, "ok")`},
+			},
+		},
+		{
+			name: "the fields of a step and what each reads",
+			workflow: `name: fields
+vars:
+  base: http://localhost
+jobs:
+- name: C
+  steps:
+  - name: "Step {{ vars.nme }} {{ undefined }}"
+    uses: hello
+    vars:
+      a: 1
+      b: "{{ vars.a }}"
+      c: "{{ vars.id }} {{ vars.base }}"
+    iteration:
+    - {id: 7}
+    wait: "{{ vars.delay }}"
+    with: {b: "{{ vars.b }}", c: "{{ vars.c }}", id: "{{ vars.id }}"}
+    test: res.b == "1"
+  - name: Iteration a template gives
+    uses: hello
+    vars:
+      s: 3
+    iteration: "{{ [{'x': vars.s, 'y': vars.t}] }}"
+    with: {x: "{{ vars.x }}"}
+    test: res.x == 3
+`,
+			want: []want{
+				{SeverityWarning, 7, "name: vars.nme is not defined by the workflow"},
+				{SeverityError, 7, "name: undefined is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
+				{SeverityWarning, 11, "vars: vars.a is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it"},
+				{SeverityWarning, 12, "vars: vars.id is not defined yet: a step's vars read only those of the workflow"},
+				{SeverityWarning, 15, "wait: vars.delay is not defined by the workflow"},
+				{SeverityWarning, 22, "iteration: vars.t is not defined by the workflow"},
+			},
+		},
+		{
+			name: "the tests of a repeated job",
+			workflow: `name: repeated
+jobs:
+- name: R
+  repeat:
+    count: 2
+    test: steps.a.success_rate == 1 && res.code == 200 && vars.limit > 0
+    baseline_test: steps.a.rt.p95 < baseline.steps.a.rt.p95 * vars.factor && outputs.a.x == nil
+  steps:
+  - name: A
+    id: a
+    uses: hello
+    with: {name: x}
+`,
+			want: []want{
+				{SeverityError, 6, "repeat.test: res is not defined; it can read baseline, steps and vars"},
+				{SeverityWarning, 6, "repeat.test: vars.limit is not defined by the workflow"},
+				{SeverityError, 7, "repeat.baseline_test: outputs is not defined; it can read baseline, steps and vars"},
+				{SeverityWarning, 7, "repeat.baseline_test: vars.factor is not defined by the workflow"},
+			},
+		},
+		{
+			name: "what defines a name and what reads one in a way check cannot follow",
+			workflow: `name: defined
+vars:
+  base: "{{ API_URL }}"
+  all: "{{ vars }}"
+jobs:
+- name: "Job {{ vars.base }} {{ CurrentJobID }}"
+  skipif: vars.base == ""
+  steps:
+  - name: Step vars
+    uses: hello
+    vars:
+      user: alice
+    with:
+      name: "{{ vars.user }} {{ vars.base }}"
+    test: res.name != nil && vars[res.name] == nil && $env.vars.base != ""
+  - name: Written iteration
+    uses: hello
+    iteration:
+    - {id: 1, label: one}
+    - {id: 2}
+    with:
+      name: "{{ vars.id }} {{ vars.label }}"
+    test: 'let n = len(res.name); n > 0 && all([res.name], # != "") && now() != nil'
+  - name: Iteration a template gives
+    uses: hello
+    iteration: "{{ parse_json(file('cases.json')) }}"
+    with:
+      name: "{{ vars.anything }}"
+    test: res.name == vars.anything
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeWorkflow(t, t.TempDir(), "workflow.yml", tt.workflow)
+			findings, err := Check(path, checkActions)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			checkFindings(t, findings, tt.want)
+		})
+	}
+}
+
+// TestCheck_NamesOfFilesReadTogether reads the vars that one file defines
+// and another reads, and the templates of defaults as the steps they apply
+// to read them.
+func TestCheck_NamesOfFilesReadTogether(t *testing.T) {
+	dir := t.TempDir()
+	base := writeWorkflow(t, dir, "base.yml", "name: merged\nvars:\n  url: http://localhost\ndefaults:\n  http:\n    headers:\n      x-user: \"{{ vars.usr }}\"\n")
+	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: http\n    vars:\n      user: bob\n    with:\n      get: \"{{ vars.url }}/\"\n    test: res.code == 200\n")
+
+	findings, err := Check(base+","+jobs, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A key of with the defaults give is told on the line of the with it
+	// is given to.
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 7, `with: vars.usr is not defined by the workflow, so it is nil unless --var gives it; did you mean "user"?`},
+	})
+	if findings[0].File != jobs {
+		t.Errorf("File = %q, want %q", findings[0].File, jobs)
+	}
+}
+
 func TestCheck_Unreadable(t *testing.T) {
 	if _, err := Check(filepath.Join(t.TempDir(), "none.yml"), checkActions); err == nil {
 		t.Error("Check of a file that does not exist should fail")
@@ -643,23 +897,6 @@ func TestFinding_String(t *testing.T) {
 	for _, tt := range tests {
 		if got := tt.f.String(); got != tt.want {
 			t.Errorf("String() = %q, want %q", got, tt.want)
-		}
-	}
-}
-
-func TestDistance(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"test", "test", 0},
-		{"tset", "test", 2},
-		{"need", "needs", 1},
-		{"", "abc", 3},
-	}
-	for _, tt := range tests {
-		if got := distance(tt.a, tt.b); got != tt.want {
-			t.Errorf("distance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
 	}
 }
@@ -706,6 +943,8 @@ jobs:
       get: /x
       "{{ vars.key }}": templated
     test: res.code == 200
+vars:
+  key: x-key
 `,
 		},
 		{

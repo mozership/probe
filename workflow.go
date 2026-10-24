@@ -14,7 +14,9 @@ import (
 	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
@@ -53,6 +55,9 @@ type Workflow struct {
 	printer *Printer
 	// runID names this run, for actions to tell where a request comes from
 	runID string
+	// selection is what the run was narrowed to with Config.Jobs; nil
+	// when every job runs.
+	selection *jobSelection
 	// given are the vars the person running the workflow gave, by name,
 	// each in place of what the workflow writes for it
 	given map[string]string
@@ -87,6 +92,21 @@ func (w *Workflow) Start(c Config) error {
 	// code is refused here, before any job starts.
 	if found := w.problems(); len(found) > 0 {
 		return problemsError(found)
+	}
+	// A run narrowed to some jobs is the run of a workflow of those jobs
+	// alone: the others are not run, reported or counted, and the actions
+	// and files only they use are not fetched or read.
+	// What a run of every job is refused for, a run of some is refused
+	// for too, before the others are left out.
+	if len(c.Jobs) > 0 {
+		if err := w.checkAllJobs(c.Actions); err != nil {
+			return err
+		}
+		jobs, sel, err := selectJobs(w.Jobs, c.Jobs)
+		if err != nil {
+			return err
+		}
+		w.Jobs, w.selection = jobs, sel
 	}
 	scheduler, err := w.initJobScheduler()
 	if err != nil {
@@ -147,6 +167,18 @@ func (w *Workflow) Start(c Config) error {
 		return &maskedError{err: err, masker: w.printer.Masker()}
 	}
 
+	// A job is named with the vars, as the report names it, where the run
+	// says which job is which.
+	namer := w.jobNamer(vars)
+	if l, ok := reporter.(jobLabeler); ok {
+		l.labelJobs(namer)
+	}
+	if w.selection != nil {
+		// Said apart from the report, which is that of the jobs that run,
+		// so that a run of some jobs is not taken for one of them all.
+		w.printer.Fprintln(w.printer.errWriter, colorDim().Sprint(w.selection.describe(namer)))
+	}
+
 	// The job files the steps embed are read with the vars the run has, so
 	// that the file checked is the one a step runs. The error names the
 	// file, whose path a var may have made from a declared secret.
@@ -186,6 +218,9 @@ func (w *Workflow) writeReports(targets []report.Target, baseline *report.Report
 
 	r := BuildReport(w.Name, w.Description, rs, order, startedAt, finishedAt)
 	r.RunID = w.runID
+	if w.selection != nil {
+		r.Selection = w.selection.report()
+	}
 	r.Compare(baseline)
 	r.Mask(w.printer.Masker())
 
@@ -237,6 +272,63 @@ func (w *Workflow) assignJobIDs() error {
 		taken[id] = i
 	}
 	return nil
+}
+
+// checkAllJobs refuses the jobs for what a run of them all would refuse
+// them for before any runs, and a run of some of them would not see in the
+// jobs it leaves out: a need that is no job, needs in a cycle, and a uses
+// that names no action of Probe or external one. The external actions are
+// not fetched, which a run does for the jobs that run alone.
+func (w *Workflow) checkAllJobs(builtin []string) error {
+	if _, err := w.initJobScheduler(); err != nil {
+		return err
+	}
+	for i := range w.Jobs {
+		if err := checkBuiltinUses(&w.Jobs[i], builtin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does.
+func (w *Workflow) checkCycle() error {
+	byID := make(map[string]*Job, len(w.Jobs))
+	ids := make([]string, len(w.Jobs))
+	for i := range w.Jobs {
+		byID[w.Jobs[i].ID] = &w.Jobs[i]
+		ids[i] = w.Jobs[i].ID
+	}
+	cycle := dag.DetectCycleFn(ids, func(id string) []string {
+		if j, ok := byID[id]; ok {
+			return j.Needs
+		}
+		return nil
+	})
+	if cycle != nil {
+		return fmt.Errorf("circular dependency detected: %s", strings.Join(cycle, " -> "))
+	}
+	return nil
+}
+
+// jobNamer returns the name of the job of each id, with the templates in it
+// evaluated with vars where they can be: a name that reads more than the
+// vars, such as repeat_index, is as written.
+func (w *Workflow) jobNamer(vars map[string]any) func(id string) string {
+	ev := &expr.Expr{}
+	env := map[string]any{"vars": vars}
+	return func(id string) string {
+		for _, j := range w.Jobs {
+			if j.ID != id {
+				continue
+			}
+			if name, err := ev.EvalTemplate(j.Name, env); err == nil {
+				return name
+			}
+			return j.Name
+		}
+		return id
+	}
 }
 
 // initJobScheduler creates and sets up the job scheduler with dependencies
@@ -685,7 +777,7 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 			Result:       rs,
 			JobScheduler: scheduler,
 			background:   procgroup.NewTracker(),
-			cleanups:     newCleanups(w.runID, w.printer),
+			cleanups:     newCleanups(w.runID, w.printer, c.Trace),
 			baseDir:      w.basePath,
 			runID:        w.runID,
 			actions:      w.named,
@@ -718,14 +810,11 @@ func (w *Workflow) resolveExternalActions(guard actionrpc.Guard, builtin []strin
 // start. When builtin is empty, that is not checked.
 func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, builtin []string) (actionrpc.Guard, error) {
 	for _, job := range jobs {
-		for i, st := range job.Steps {
+		if err := checkBuiltinUses(job, builtin); err != nil {
+			return guard, err
+		}
+		for _, st := range job.Steps {
 			if !actionref.IsExternal(st.Uses) {
-				if len(builtin) > 0 && !slices.Contains(builtin, st.Uses) {
-					return guard, NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin))).
-						WithContext("uses", st.Uses).
-						WithContext("job", job.Name).
-						WithContext("step", i)
-				}
 				continue
 			}
 			m, err := actionref.ReadManifest(st.Uses, baseDir)
@@ -750,12 +839,31 @@ func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, 
 	return guard, nil
 }
 
+// checkBuiltinUses refuses a step of job whose uses is not an external
+// action and not one of builtin, the names of the actions of Probe. When
+// builtin is empty, nothing is refused.
+func checkBuiltinUses(job *Job, builtin []string) error {
+	if len(builtin) == 0 {
+		return nil
+	}
+	for i, st := range job.Steps {
+		if actionref.IsExternal(st.Uses) || slices.Contains(builtin, st.Uses) {
+			continue
+		}
+		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin))).
+			WithContext("uses", st.Uses).
+			WithContext("job", job.Name).
+			WithContext("step", i)
+	}
+	return nil
+}
+
 // unknownAction is the error of a uses that names no action: it is not one
 // of builtin, the actions of Probe, not an external action, and not a name
 // the workflow gives one under actions, which would have been replaced.
 func unknownAction(uses string, builtin []string) error {
 	msg := fmt.Sprintf("unknown action %q: it is not an action of Probe, an external action, or a name given under actions", uses)
-	if s := suggest(uses, builtin); s != "" {
+	if s := suggest.Closest(uses, builtin); s != "" {
 		msg += fmt.Sprintf("; did you mean %q?", s)
 	}
 	return errors.New(msg)

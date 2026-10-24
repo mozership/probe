@@ -422,11 +422,12 @@ func (e *Expr) Eval(input string, env any) (any, error) {
 
 	program, err := ex.Compile(input, e.Options(env)...)
 	if err != nil {
-		return false, err
+		return false, withHints(input, err)
 	}
 
 	// Security: Execute with timeout to prevent infinite loops
-	return e.executeWithTimeout(program, env)
+	output, err := e.executeWithTimeout(program, env)
+	return output, withHints(input, err)
 }
 
 // Security: Execute expression with timeout protection
@@ -523,13 +524,13 @@ func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 		// Evaluate the expression using expr
 		program, err := ex.Compile(expression, e.Options(env)...)
 		if err != nil {
-			return "", &TemplateError{Template: input[span.start:span.end], Err: err}
+			return "", &TemplateError{Template: input[span.start:span.end], Err: withHints(expression, err)}
 		}
 
 		// Security: Execute with timeout protection
 		output, err := e.executeWithTimeout(program, env)
 		if err != nil {
-			return "", &TemplateError{Template: input[span.start:span.end], Err: err}
+			return "", &TemplateError{Template: input[span.start:span.end], Err: withHints(expression, err)}
 		}
 
 		// Convert the output to string with size limit

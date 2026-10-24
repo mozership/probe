@@ -190,10 +190,8 @@ func fromStatus(err error) error {
 	if !ok || s.Code() != codes.PermissionDenied {
 		return err
 	}
-	for _, d := range s.Details() {
-		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetDomain() == refusedInfo.Domain && info.GetReason() == refusedInfo.Reason {
-			return &Refused{Reason: s.Message()}
-		}
+	if hasInfo(s, refusedInfo) {
+		return &Refused{Reason: s.Message()}
 	}
 	return err
 }

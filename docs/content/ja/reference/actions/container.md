@@ -12,6 +12,8 @@ Containerアクションは、後続のステップのためにコンテナを�
 name: Orders
 actions:
   container: github.com/mozership/probe-container@cd5c071a029cc1c6d4afe31750bf33ec6d9aa5b8 # v0.1.0
+vars:
+  pg_password: "{{PG_PASSWORD}}"
 jobs:
   - name: orders
     steps:

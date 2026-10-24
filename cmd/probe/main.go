@@ -16,6 +16,7 @@ import (
 	"github.com/mozership/probe/actions"
 	"github.com/mozership/probe/actions/grpc"
 	"github.com/mozership/probe/envfile"
+	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/oas"
 	"github.com/mozership/probe/report"
 )
@@ -50,13 +51,22 @@ type Cmd struct {
 	ReadOnly       bool
 	AllowHosts     string
 	AllowActions   string
+	// Trace is -v given twice, as -vv: it also shows how each action's
+	// process is started, called and stopped.
+	Trace bool
 	// Vars are the --var flags given, each as name=value, in their order.
 	Vars []string
 	// EnvFiles are the files the --env-file flags name, in their order.
 	EnvFiles []string
+	// Jobs are the ids or names of the jobs the --job flags select, in
+	// their order.
+	Jobs []string
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
+	// firstFile is the first workflow file given before any --, checked
+	// as a possibly mistyped subcommand.
+	firstFile  string
 	validFlags []string
 	ver        string
 	rev        string
@@ -70,7 +80,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"},
 		ver:        ver,
 		rev:        rev,
 		inReader:   os.Stdin,
@@ -91,6 +101,9 @@ func newBufferCmd() *Cmd {
 // parseArgs parses command line arguments manually to allow options after arguments
 func (c *Cmd) parseArgs(args []string) error {
 	var nonFlagArgs []string
+	// operands are how many of nonFlagArgs came before a --, after which
+	// every argument is a file, a subcommand's name included.
+	operands := -1
 	skipNext := false
 
 	for i := range args {
@@ -100,6 +113,12 @@ func (c *Cmd) parseArgs(args []string) error {
 		}
 
 		arg := args[i]
+
+		if arg == "--" {
+			operands = len(nonFlagArgs)
+			nonFlagArgs = append(nonFlagArgs, args[i+1:]...)
+			break
+		}
 
 		// A - alone is the standard input, for fmt.
 		if strings.HasPrefix(arg, "-") && arg != "-" {
@@ -128,7 +147,16 @@ func (c *Cmd) parseArgs(args []string) error {
 			case "timing":
 				c.Timing = true
 			case "verbose", "v":
+				// A second one, as -v -v, is -vv.
+				c.Trace = c.Verbose
 				c.Verbose = true
+			case "vv":
+				// Only as -vv, without a value: it is -v given twice.
+				if arg != "-vv" {
+					return fmt.Errorf("unknown flag: %s", arg)
+				}
+				c.Verbose = true
+				c.Trace = true
 			case "mermaid":
 				c.DagMermaid = true
 			case "check":
@@ -172,8 +200,8 @@ func (c *Cmd) parseArgs(args []string) error {
 					c.AllowActions = flagValue
 				}
 				c.markGuardFlag(flagName)
-			case "var", "env-file":
-				// Both can be given more than once.
+			case "var", "env-file", "job":
+				// Each can be given more than once.
 				if !hasValue {
 					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
 						return fmt.Errorf("flag needs an argument: %s", arg)
@@ -181,12 +209,16 @@ func (c *Cmd) parseArgs(args []string) error {
 					flagValue = args[i+1]
 					skipNext = true
 				}
-				if flagName == "env-file" {
-					files := splitList(flagValue)
-					if len(files) == 0 {
+				if flagName == "env-file" || flagName == "job" {
+					items := splitList(flagValue)
+					if len(items) == 0 {
 						return fmt.Errorf("flag needs an argument: %s", arg)
 					}
-					c.EnvFiles = append(c.EnvFiles, files...)
+					if flagName == "job" {
+						c.Jobs = append(c.Jobs, items...)
+					} else {
+						c.EnvFiles = append(c.EnvFiles, items...)
+					}
 					break
 				}
 				if _, _, err := parseVar(flagValue); err != nil {
@@ -223,11 +255,15 @@ func (c *Cmd) parseArgs(args []string) error {
 	}
 
 	// Check if first non-flag argument is a subcommand
-	if len(nonFlagArgs) > 0 && isSubCommand(nonFlagArgs[0]) {
+	if len(nonFlagArgs) > 0 && operands != 0 && isSubCommand(nonFlagArgs[0]) {
 		c.SubCommand = nonFlagArgs[0]
 		c.SubCommandArgs = nonFlagArgs[1:]
 	} else if len(nonFlagArgs) > 0 {
-		c.WorkflowPath = nonFlagArgs[0]
+		// Files given apart are merged as those given with commas are.
+		c.WorkflowPath = strings.Join(nonFlagArgs, ",")
+		if operands != 0 {
+			c.firstFile = nonFlagArgs[0]
+		}
 	}
 
 	return nil
@@ -237,6 +273,23 @@ var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "s
 
 func isSubCommand(name string) bool {
 	return slices.Contains(subCommands, name)
+}
+
+// mistypedSubCommand returns the subcommand that name, given as a workflow
+// file, likely meant, when it looks like neither a path nor a YAML file,
+// is close to a subcommand's name, and no file has it.
+func mistypedSubCommand(name string) string {
+	if name == "" || strings.ContainsAny(name, `./\*?[`) {
+		return ""
+	}
+	s := suggest.Closest(name, subCommands)
+	if s == "" {
+		return ""
+	}
+	if _, err := os.Stat(name); !os.IsNotExist(err) {
+		return ""
+	}
+	return s
 }
 
 func (c *Cmd) isValidFlag(flagName string) bool {
@@ -266,10 +319,10 @@ https://github.com/mozership/probe (ver: %s, rev: %s)
 `
 
 	head := `
-Usage: probe [options] <workflow-file>
+Usage: probe [options] <workflow-file>...
        probe gen <openapi-file>
-       probe dag [--mermaid] <workflow-file>
-       probe check <workflow-file>
+       probe dag [--mermaid] [--job <job>] <workflow-file>...
+       probe check <workflow-file>...
        probe fmt [--check] <workflow-file>...
        probe coverage <openapi-file|proto-file> <report-file>
        probe guide [topic]
@@ -278,15 +331,17 @@ Usage: probe [options] <workflow-file>
        probe manifest <tag> <checksums-file> [action-file]
 
 Arguments:
-  workflow-file    Path to YAML workflow file(s). Multiple files can be
-                   specified with comma-separated paths (e.g., "base.yml,override.yml")
-                   to merge configurations.
+  workflow-file    Path to a YAML workflow file, a directory or a glob.
+                   Several are merged in their order into one workflow,
+                   given apart or with commas: "base.yml override.yml" or
+                   "base.yml,override.yml".
 
 Subcommands:
   gen <file>       Generate probe workflow YAML from OpenAPI specification
-  dag <file>       Show job dependency graph as ASCII art (default)
-                   Use --mermaid to output in Mermaid format
-  check <file>     Find what is wrong or weak in a workflow without running it
+  dag <file>...    Show job dependency graph as ASCII art (default)
+                   Use --mermaid to output in Mermaid format, and --job to
+                   show only the jobs a run with it runs
+  check <file>...  Find what is wrong or weak in a workflow without running it
   fmt <file>...    Format workflow files in place, and print those it changed
                    A directory is every YAML file under it, and - is the
                    standard input, formatted to the standard output
@@ -326,7 +381,7 @@ func (c *Cmd) printOptions() {
 		{"-h", "--help", "Show command usage"},
 		{"", "--version", "Show version information"},
 		{"", "--timing", "Show timing (start time, response time)"},
-		{"-v", "--verbose", "Show verbose log"},
+		{"-v", "--verbose", "Show each step's request, response and test; -vv also how actions are run"},
 		{"", "--output", "Report output: auto, spinner or stream (env: PROBE_OUTPUT)"},
 		{"", "--report", "Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)"},
 		{"", "--baseline", "Compare the response times to those of a --report json file (env: PROBE_BASELINE)"},
@@ -335,6 +390,7 @@ func (c *Cmd) printOptions() {
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
 		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
 		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
+		{"", "--job", "Run only these jobs, by id or name, as job,..., with the jobs they need and the always jobs after them; can be repeated"},
 	}
 
 	for _, opt := range options {
@@ -358,6 +414,9 @@ func (c *Cmd) start(args []string) int {
 		return probe.ExitConfigError
 	}
 
+	// firstFile is set only when no subcommand is given.
+	mistyped := mistypedSubCommand(c.firstFile)
+
 	switch {
 	case c.Help:
 		c.usage()
@@ -367,9 +426,19 @@ func (c *Cmd) start(args []string) int {
 		c.printVersion()
 		return 0
 
+	case mistyped != "":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown command %q; did you mean %q?\n", c.firstFile, mistyped)
+		_, _ = fmt.Fprintf(c.errWriter, "try --help to know more\n")
+		return probe.ExitConfigError
+
 	case c.FmtCheck && c.SubCommand != "fmt":
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
 		_, _ = fmt.Fprint(c.errWriter, fmtUsage)
+		return probe.ExitConfigError
+
+	case len(c.Jobs) > 0 && c.SubCommand != "" && c.SubCommand != "dag":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --job can only be used to run a workflow or with the dag subcommand\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe --job <job> <workflow-file>...\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 
 	case c.SubCommand != "":
@@ -377,7 +446,7 @@ func (c *Cmd) start(args []string) int {
 
 	case c.DagMermaid:
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --mermaid can only be used with the dag subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 
 	case c.WorkflowPath == "":
@@ -422,6 +491,11 @@ func (c *Cmd) runGen() int {
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
 		return probe.ExitConfigError
 	}
+	if len(c.SubCommandArgs) > 1 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] gen takes one OpenAPI spec file, not %d\n", len(c.SubCommandArgs))
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
+		return probe.ExitConfigError
+	}
 
 	output, err := oas.Generate(c.SubCommandArgs[0])
 	if err != nil {
@@ -435,7 +509,9 @@ func (c *Cmd) runGen() int {
 
 func (c *Cmd) runProbe() int {
 	p := probe.New(c.WorkflowPath, c.Verbose)
+	p.Config.Trace = c.Trace
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
 	if c.Timing {
 		p.Config.Timing = true
 	}
@@ -500,6 +576,7 @@ func (c *Cmd) runProbe() int {
 	}
 	p.Config.Env = env
 	p.Config.Vars = c.vars()
+	p.Config.Jobs = c.Jobs
 
 	if err := p.Do(); err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
@@ -511,7 +588,7 @@ func (c *Cmd) runProbe() int {
 func (c *Cmd) runDag() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
 		return probe.ExitConfigError
 	}
 
@@ -519,8 +596,10 @@ func (c *Cmd) runDag() int {
 		return 0
 	}
 
-	p := probe.New(c.SubCommandArgs[0], c.Verbose)
+	p := probe.New(strings.Join(c.SubCommandArgs, ","), c.Verbose)
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
+	p.Config.Jobs = c.Jobs
 	var graph string
 	var err error
 	if c.DagMermaid {
@@ -650,13 +729,13 @@ func splitList(s string) []string {
 // It exits with 2 when it finds an error, and with 0 when it finds only
 // warnings or nothing.
 func (c *Cmd) runCheck() int {
-	if len(c.SubCommandArgs) != 1 {
+	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe check <workflow-file>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe check <workflow-file>...\n")
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(c.SubCommandArgs[0], probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Manifest: actionref.ReadManifest})
+	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), Manifest: actionref.ReadManifest})
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
@@ -704,6 +783,11 @@ func (c *Cmd) runCoverage() int {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
 	}
+	// The steps of the jobs a run narrowed with --job left out are not in
+	// the report, so the coverage is less than that of the workflow.
+	if p := r.Partial(); p != "" {
+		_, _ = fmt.Fprintln(c.errWriter, color.New(color.FgYellow).Sprintf("[WARN] %s; the steps of the others are not counted", p))
+	}
 	// A .proto file is the contract of the grpc action, and any other the
 	// OpenAPI document of the http action.
 	newCoverage := oas.NewCoverage
@@ -727,6 +811,11 @@ func (c *Cmd) runGuide() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprint(c.outWriter, probe.GuideIndex())
 		return 0
+	}
+	if len(c.SubCommandArgs) > 1 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] guide takes one topic, not %d\n", len(c.SubCommandArgs))
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe guide [topic]\n")
+		return probe.ExitConfigError
 	}
 
 	page, err := probe.Guide(c.SubCommandArgs[0])
@@ -761,10 +850,24 @@ func (c *Cmd) runSkill() int {
 		_, _ = fmt.Fprintf(c.outWriter, "Wrote %s\n", path)
 		return 0
 	default:
+		if s := suggest.Closest(args[0], []string{"install"}); s != "" && s != args[0] {
+			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill argument %q; did you mean %q?\n", args[0], s)
+			_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
+			return probe.ExitConfigError
+		}
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill arguments: %s\n", strings.Join(args, " "))
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
 		return probe.ExitConfigError
 	}
+}
+
+// fileExists reports whether the first of args names a file that exists.
+func fileExists(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	_, err := os.Stat(args[0])
+	return err == nil
 }
 
 // runManifest prints the action.yml of a release of an external action,
@@ -773,6 +876,15 @@ func (c *Cmd) runSkill() int {
 // from.
 func (c *Cmd) runManifest() int {
 	args := c.SubCommandArgs
+	// A word close to init, such as ini, may yet be a tag: lint is one.
+	// After a tag comes a checksums file, and after init a repository, so
+	// init is suggested only when the next argument names no file.
+	if len(args) > 0 && args[0] != "init" && suggest.Closest(args[0], []string{"init"}) != "" && !fileExists(args[1:]) {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown manifest argument %q; did you mean %q?\n", args[0], "init")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
+		_, _ = fmt.Fprintf(c.errWriter, "       probe manifest <tag> <checksums-file> [action-file]\n")
+		return probe.ExitConfigError
+	}
 	if len(args) > 0 && args[0] == "init" {
 		if len(args) != 2 {
 			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] a repository is required\n")

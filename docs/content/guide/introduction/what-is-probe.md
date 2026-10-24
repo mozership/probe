@@ -109,7 +109,7 @@ jobs:
     uses: http
     with:
       get: /json
-    test: res.code == 200 && res.body != null
+    test: res.code == 200 && res.body != nil
 ```
 
 As you can see, Probe enables you to create and execute workflows in a **simple**, **quick**, and **enjoyable** way.

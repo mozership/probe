@@ -222,7 +222,7 @@ Test expressions are boolean conditions used in `test` and `skipif`.
   test: |
     res.code == 200 &&
     res.body.success == true &&
-    res.body.data != null &&
+    res.body.data != nil &&
     (rt.sec * 1000) < 1000
 ```
 
@@ -251,7 +251,7 @@ test: res.headers["X-Rate-Limit-Remaining"] > "10"
 # JSON response testing
 test: res.body.status == "success"
 test: len(res.body.data.users) > 0
-test: res.body.error == null
+test: res.body.error == nil
 
 # Text response testing
 test: res.body contains "Success"
@@ -288,7 +288,7 @@ test: 'any(res.body.items, #.price > 100)'
 
 # Object property testing
 test: '"id" in res.body.user && "email" in res.body.user'
-test: res.body.config.database.host != null
+test: res.body.config.database.host != nil
 ```
 
 #### Complex Logical Conditions
@@ -304,7 +304,7 @@ test: |
 # Nested condition validation
 test: |
   res.code == 200 &&
-  res.body.data != null &&
+  res.body.data != nil &&
   (
     (res.body.data.type == "user" && res.body.data.user.active == true) ||
     (res.body.data.type == "system" && res.body.data.system.healthy == true)
@@ -745,13 +745,30 @@ probe -v workflow.yml
     Headers: {{res.headers}}
 ```
 
+#### Coming from JavaScript or Python
+
+Expressions are [expr-lang](https://expr-lang.org), in which values have no methods: what JavaScript or Python calls on a value is an operator or a function here. A method call fails when the step runs with an error such as `invalid operation: int(string)`, which a hint follows with the form below; `probe check` reports it before the workflow runs.
+
+| Instead of | Write |
+|------------|-------|
+| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`, or for a list `"x" in list` |
+| `res.body.startsWith("x")`, `startsWith(res.body, "x")` | `res.body startsWith "x"`, or `hasPrefix(res.body, "x")` |
+| `res.body.endsWith("x")` | `res.body endsWith "x"`, or `hasSuffix(res.body, "x")` |
+| `res.body.matches("^a")` | `res.body matches "^a"` |
+| `res.body.length`, `items.size()` | `len(res.body)`, `len(items)` |
+| `s.toLowerCase()`, `s.toUpperCase()`, `s.trim()` | `lower(s)`, `upper(s)`, `trim(s)` |
+| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")`, which replaces every match, not only the first as JavaScript does |
+| `n.toString()`, `obj.keys()` | `string(n)`, `keys(obj)` |
+| `===`, `!==` | `==`, `!=` |
+| `null`, `undefined`, `None` | `nil` |
+
 #### Null Value Handling
 
 A missing field is null, and comparing it directly gives a result that says nothing. Check for its presence first.
 
 ```yaml
-# Good: Handle potential null values
-test: res.body.user != null && res.body.user.active == true
+# Good: Handle potential nil values
+test: res.body.user != nil && res.body.user.active == true
 
 # Good: Use default values
 echo: "User count: {{outputs.api.user_count || 0}}"
@@ -801,8 +818,8 @@ Check that each level exists before reading through it, so a missing field fails
 # Good: Defensive programming
 test: |
   res.code == 200 &&
-  res.body != null &&
-  res.body.users != null &&
+  res.body != nil &&
+  res.body.users != nil &&
   len(res.body.users) > 0
 
 # Good: Provide defaults
@@ -827,8 +844,8 @@ When a condition encodes a rule, a comment stating the rule saves the next reade
   test: |
     res.code == 200 &&
     (rt.sec * 1000) < 2000 &&
-    res.body.users != null &&
-    res.body.revenue != null &&
+    res.body.users != nil &&
+    res.body.revenue != nil &&
     len(filter(res.body.users, #.active == true)) > 0 &&
     res.body.revenue > 1000
 ```

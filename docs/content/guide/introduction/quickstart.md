@@ -41,7 +41,7 @@ jobs:
       with:
         url: https://httpbin.org/json
         method: GET
-      test: res.code == 200 && res.body.slideshow != null
+      test: res.code == 200 && res.body.slideshow != nil
         
     - name: Success Message
       uses: hello

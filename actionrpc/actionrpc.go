@@ -18,6 +18,7 @@ import (
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/pb"
 	"github.com/mozership/probe/truncate"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -253,7 +254,7 @@ type Plugin struct {
 
 func (p *Plugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
 	log := hclog.New(&hclog.LoggerOptions{
-		Level:      hclog.Debug,
+		Level:      hclog.Trace,
 		Output:     os.Stderr,
 		JSONFormat: true,
 	})
@@ -304,7 +305,7 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 			call.Cleanups.Add(d.GetCleanups()...)
 			call.Processes.Add(processesFromPB(d.GetProcesses())...)
 		}
-		return nil, nil, fromStatus(err)
+		return nil, nil, fromRPC(err)
 	}
 	call.Cleanups.Add(runRes.GetCleanups()...)
 	call.Processes.Add(processesFromPB(runRes.GetProcesses())...)
@@ -329,6 +330,81 @@ func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any,
 // steps left behind. It gives up once ctx is done.
 func (m *Client) Cleanup(ctx context.Context, call CleanupCall) error {
 	_, err := m.client.Cleanup(ctx, &pb.CleanupRequest{RunId: call.RunID})
+	if err != nil {
+		return fromRPC(err)
+	}
+	return nil
+}
+
+// actionError is an error of an action as the runner receives it: in the
+// gRPC status it was sent in. It reads as what the action said, without the
+// code and the wording gRPC puts around it, which tell a person nothing of
+// why the step failed. The status is kept, so that status.Code and
+// status.FromError still read it.
+type actionError struct{ s *status.Status }
+
+func (e *actionError) Error() string {
+	if msg := e.s.Message(); msg != "" {
+		return msg
+	}
+	return "the action failed with " + e.s.Code().String()
+}
+
+// GRPCStatus returns the status the error was sent in.
+func (e *actionError) GRPCStatus() *status.Status {
+	return e.s
+}
+
+// actionErrorInfo marks the gRPC status an action's error is carried in, as
+// one the action returned rather than one of the connection to it, which
+// gRPC gives a code an action can return as well.
+var actionErrorInfo = &errdetails.ErrorInfo{Domain: "probe", Reason: "ACTION_ERROR"}
+
+// sentByAction returns err in the gRPC status it is sent in, marked as the
+// action's error. A refusal of the guard has a mark of its own.
+func sentByAction(err error) error {
+	s, ok := status.FromError(err)
+	if !ok {
+		s = status.New(codes.Unknown, err.Error())
+	}
+	if hasInfo(s, refusedInfo) {
+		return err
+	}
+	if d, detailErr := s.WithDetails(actionErrorInfo); detailErr == nil {
+		return d.Err()
+	}
+	return err
+}
+
+// fromAction reports whether err is an error the action returned, as
+// sentByAction marked it. An action built against an earlier version of
+// this package does not mark its errors.
+func fromAction(err error) bool {
+	s, ok := status.FromError(err)
+	return ok && hasInfo(s, actionErrorInfo)
+}
+
+// hasInfo reports whether s carries info among its details.
+func hasInfo(s *status.Status, info *errdetails.ErrorInfo) bool {
+	for _, d := range s.Details() {
+		if i, ok := d.(*errdetails.ErrorInfo); ok && i.GetDomain() == info.GetDomain() && i.GetReason() == info.GetReason() {
+			return true
+		}
+	}
+	return false
+}
+
+// fromRPC returns err, the error of a call of an action, as the action's
+// own error: a refusal of the guard as one, and any other status as an
+// actionError. An error that is not a status is left as it is.
+func fromRPC(err error) error {
+	err = fromStatus(err)
+	if IsRefused(err) {
+		return err
+	}
+	if s, ok := status.FromError(err); ok {
+		return &actionError{s: s}
+	}
 	return err
 }
 
@@ -375,7 +451,9 @@ func structToMap(s *structpb.Struct) map[string]any {
 	return m
 }
 
-// Server answers the runner's calls with an Action.
+// Server answers the runner's calls with an Action. It logs at trace level
+// alone: its records tell how a call went through it, and what it returns,
+// an error as well, the runner tells itself.
 type Server struct {
 	Impl Action
 	log  hclog.Logger
@@ -393,14 +471,14 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	// also when it is its result that cannot be sent.
 	defer func() {
 		if err != nil {
-			err = withLeftBehind(err, cleanups.List(), processes.List())
+			err = sentByAction(withLeftBehind(err, cleanups.List(), processes.List()))
 		}
 	}()
 
 	// The state is left out: it may hold credentials, such as cookies, that
 	// the runner has not learned to hide.
 	if m.log != nil {
-		m.log.Debug("ActionsServer.Run called", "request", req.GetWith())
+		m.log.Trace("ActionsServer.Run called", "request", req.GetWith())
 	}
 
 	// Convert protobuf.Struct to map[string]any
@@ -422,7 +500,7 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	}
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("Action execution failed", "error", err)
+			m.log.Trace("Action execution failed", "error", err)
 		}
 		return &pb.RunResponse{}, toStatus(err)
 	}
@@ -431,21 +509,21 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	// runner learns those in a result only once it has the result, after
 	// these records have gone out.
 	if m.log != nil {
-		m.log.Debug("ActionsServer received from action", "result", forLog(v))
+		m.log.Trace("ActionsServer received from action", "result", forLog(v))
 	}
 
 	// Convert map[string]any to protobuf.Struct
 	convertedResult, err := convertForProtobuf(v)
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("ActionsServer cannot send the action's result", "error", err)
+			m.log.Trace("ActionsServer cannot send the action's result", "error", err)
 		}
 		return &pb.RunResponse{}, fmt.Errorf("cannot send the action's result: %w", err)
 	}
 	resultMap, ok := convertedResult.(map[string]any)
 	if !ok {
 		if m.log != nil {
-			m.log.Error("ActionsServer convertForProtobuf did not return map[string]any", "type", fmt.Sprintf("%T", convertedResult))
+			m.log.Trace("ActionsServer convertForProtobuf did not return map[string]any", "type", fmt.Sprintf("%T", convertedResult))
 		}
 		return &pb.RunResponse{}, fmt.Errorf("convertForProtobuf returned invalid type: expected map[string]any, got %T", convertedResult)
 	}
@@ -453,14 +531,11 @@ func (m *Server) Run(ctx context.Context, req *pb.RunRequest) (_ *pb.RunResponse
 	resultStruct, err := structpb.NewStruct(resultMap)
 	if err != nil {
 		if m.log != nil {
-			m.log.Error("ActionsServer failed to convert result to protobuf struct", "error", err)
+			m.log.Trace("ActionsServer failed to convert result to protobuf struct", "error", err)
 		}
 		return &pb.RunResponse{}, fmt.Errorf("failed to convert result to protobuf struct: %v", err)
 	}
 
-	if m.log != nil {
-		m.log.Debug("ActionsServer final result struct", "result", forLog(resultMap))
-	}
 	res := &pb.RunResponse{Result: resultStruct, Cleanups: cleanups.List(), Processes: processesToPB(processes.List()), Contract: contractToPB(contract.Check())}
 	if newState != nil {
 		convertedState, err := convertForProtobuf(newState)
@@ -485,11 +560,11 @@ func (m *Server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.Clean
 		return &pb.CleanupResponse{}, status.Error(codes.Unimplemented, "the action does not clean up: it has no Cleanup")
 	}
 	if m.log != nil {
-		m.log.Debug("ActionsServer.Cleanup called", "run_id", req.GetRunId())
+		m.log.Trace("ActionsServer.Cleanup called", "run_id", req.GetRunId())
 	}
 	if err := c.Cleanup(CleanupCall{RunID: req.GetRunId()}); err != nil {
 		if m.log != nil {
-			m.log.Error("Action cleanup failed", "error", err)
+			m.log.Trace("Action cleanup failed", "error", err)
 		}
 		return &pb.CleanupResponse{}, err
 	}
@@ -682,27 +757,34 @@ func convertFloatToInt(value any) any {
 // LogParams records the parameters an action received, truncating long
 // values so that a large request body does not flood the log. Actions are
 // separate processes, so their log records reach the workflow runner as JSON
-// on stderr and are re-filtered there by the runner's own level.
+// on stderr and are re-filtered there by the runner's own level. The record
+// is at trace level, shown only with -vv: a verbose run shows the step's
+// request and response, which the parameters would only say again.
 func LogParams(log hclog.Logger, msg string, with map[string]any) {
-	log.Debug(msg, "params", forLog(with))
+	log.Trace(msg, "params", forLog(with))
 }
 
 // LogOutcome records how an action finished. subject names what was
 // attempted, for example "http request", and is used to build the message.
+// It is recorded at trace level, as LogParams records the parameters: a
+// verbose run shows the step's response, and the error the action returns,
+// which the runner prints itself.
 func LogOutcome(log hclog.Logger, subject string, ret map[string]any, err error) {
 	if err != nil {
-		log.Error(subject+" failed", "error", err)
+		log.Trace(subject+" failed", "error", err)
 		return
 	}
-	log.Debug(subject+" completed successfully", "result", forLog(ret))
+	log.Trace(subject+" completed successfully", "result", forLog(ret))
 }
 
 // forLog returns a copy of data fit to log: credentials hidden, then long
-// values truncated. The runner hides credentials in the log as well, but
-// only where it finds them whole, and a truncated value is no longer whole,
-// so they are hidden here first.
+// strings truncated, with its maps and lists kept as such, for the runner to
+// lay them out. The runner hides credentials in the log as well, but only
+// where it finds them whole, and a truncated value is no longer whole, so
+// they are hidden here first.
 func forLog(data map[string]any) map[string]any {
 	m := mask.New(nil, nil)
 	m.Learn(data)
-	return truncate.Map(m.Map(data), truncate.MaxLogLength)
+	out, _ := truncate.Value(m.Map(data), truncate.MaxLogLength).(map[string]any)
+	return out
 }

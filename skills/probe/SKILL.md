@@ -73,6 +73,7 @@ jobs:
 - `jobs` and `steps` are lists. `needs` lists job `id`s, so a job others depend on needs an `id`.
 - Environment variables are read only in the top-level `vars`, by bare name: `"{{API_URL}}"`, with a fallback as `"{{API_URL ?? 'default'}}"`. Expressions in steps see `vars`, `res`, `req`, `rt`, `status`, `outputs` and `repeat_index`, and nothing else; there is no `env`.
 - `test` and `outputs` values are expressions, written without braces. `with` values, `echo`, step and job names, and `vars` are templates with `{{ }}`.
+- Expressions are expr-lang, not JavaScript or Python: values have no methods. Write `res.body contains "x"`, `res.body startsWith "x"`, `"x" in list`, `len(res.body)`, `lower(s)`, `==` and `nil`, not `res.body.contains("x")`, `.startsWith("x")`, `.includes("x")`, `.length`, `.toLowerCase()`, `===` or `null`.
 - `test` must evaluate to a boolean. A number or string fails the step with `test_type`.
 - `outputs` are read by name, as `outputs.<name>`, and through the step's `id` when it has one, as `outputs.<step-id>.<name>`; give the step an `id` when another step publishes the same name. An id with a hyphen needs brackets: `outputs['create-user'].user_id`.
 - Templates are evaluated in keys as well as values, at any depth of `with` and of a map under `vars`: `"{{vars.header}}": x` sends the key it comes to. Two keys that come to the same key fail the step. The name of a var itself is not evaluated: `vars: {"{{vars.name}}": x}` defines a var named as written.
@@ -89,9 +90,10 @@ jobs:
 
 ```bash
 probe workflow.yml                    # run; the report goes to stdout
-probe base.yml,staging.yml            # merge files, later ones override
+probe base.yml staging.yml            # merge files, later ones override; base.yml,staging.yml too
 probe --env-file .env workflow.yml    # variables for vars to read, where the environment has none
 probe --var url=http://localhost:8080 workflow.yml  # give a var in place of the one written
+probe --job tests workflow.yml        # run one job, with the jobs it needs
 probe check workflow.yml              # find what is wrong or weak without running
 probe fmt workflow.yml                # lay the file out the one way, in place
 probe dag workflow.yml                # check the job graph without running
@@ -100,7 +102,7 @@ probe --report json=probe.json,markdown=probe.md workflow.yml
 probe coverage openapi.yml probe.json # what of the OpenAPI document, or a .proto file, no step checked
 ```
 
-After writing or changing a workflow, run `probe fmt` on it, which lays it out the one way every workflow is: it changes blank lines, indentation and comments, never a value. Then run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`.
+After writing or changing a workflow, run `probe fmt` on it, which lays it out the one way every workflow is: it changes blank lines, indentation and comments, never a value. Then run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`; a name it calls not defined is one an expression cannot read, such as `steps.login` for `outputs.login`, or `null` for `nil`; a method it says expressions do not have, such as `res.body.contains("x")`, is written as it says. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`. A var it calls not defined reads nil: define it under `vars`, reading the environment there as `api_url: "{{API_URL}}"`, unless it is meant to be given with `--var`.
 
 The exit code says what to look at:
 
@@ -124,5 +126,5 @@ When the http steps give `openapi`, or the grpc steps `proto`, run `probe covera
    - `refused`: the guard the run was started with, `--read-only` or `--allow-host`, does not allow what the step asks for. The guard is the person's to set: do not drop it, widen it or add `--allow-action` yourself, and do not write or pick an external action whose `action.yml` declares a `guard` it does not keep to. Change the step to keep to it, such as reading rather than writing, or tell the person what the step needs.
    - `contract_request`: the step sent what the OpenAPI document given in `openapi`, or the `.proto` files given in `proto`, does not allow. Fix the step to send what the document or the files ask for. Only when the step means to send it, to see it rejected, add `request: false` under `openapi` or `proto`.
    - `contract_response`: the response broke the OpenAPI document given in `openapi`, or the `.proto` files given in `proto`. Each violation names what is wrong, and the field when there is one. The document or the files say what is right, so fix the server, or them when they are the ones out of date; do not drop `openapi` or `proto` to make the step pass. A property or a field reported as not declared under `strict: true` is one the server returns but the document or the files do not promise, which may be a leak such as `password_hash`: remove it from the server, or declare it when it is meant to be there.
-3. For more detail, run with `-v`, which prints every request and response. Declared secrets and credential headers are masked there too.
+3. For more detail, run with `-v`, which prints every request and response. For a step whose action failed before it returned a request, it prints the parameters the step gave the action, its templates evaluated, in its place. Declared secrets and credential headers are masked there too. `-vv` also prints how each action's process is started, called and stopped, which helps only to debug an action itself.
 4. After a fix, run the workflow again and confirm the exit code is `0` before calling it done.

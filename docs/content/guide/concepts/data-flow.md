@@ -483,17 +483,17 @@ Ensure data quality in outputs:
     url: "{{vars.API_URL}}/user-data"
   test: |
     res.code == 200 &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
-    all(res.body.users, #.id != null && #.email != null)
+    all(res.body.users, #.id != nil && #.email != nil)
   outputs:
     # Validated outputs
     user_count: len(res.body.users)
-    valid_users: 'filter(res.body.users, #.id != null && #.email != null)'
+    valid_users: 'filter(res.body.users, #.id != nil && #.email != nil)'
     admin_users: 'filter(res.body.users, #.role == "admin")'
     
     # Data quality metrics
-    data_completeness: 'len(filter(res.body.users, #.id != null && #.email != null)) / len(res.body.users)'
+    data_completeness: 'len(filter(res.body.users, #.id != nil && #.email != nil)) / len(res.body.users)'
     has_admin_users: 'any(res.body.users, #.role == "admin")'
     
     # Response metadata
@@ -641,12 +641,12 @@ Handle potential null/undefined values:
 ```yaml
 # Good: Safe data access
 outputs:
-  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : null'
+  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : nil'
   email_verified: res.body.user && res.body.user.email_verified == true
   profile_complete: res.body.user && res.body.user.profile && res.body.user.profile.complete == true
 
 # Good: Using safe navigation
-test: res.body.user?.id != null && res.body.user?.email != null
+test: res.body.user?.id != nil && res.body.user?.email != nil
 ```
 
 ### 4. Document Data Dependencies
