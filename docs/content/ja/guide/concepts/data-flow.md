@@ -483,17 +483,17 @@ jobs:
     url: "{{vars.API_URL}}/user-data"
   test: |
     res.code == 200 &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
-    all(res.body.users, #.id != null && #.email != null)
+    all(res.body.users, #.id != nil && #.email != nil)
   outputs:
     # 検証済み出力
     user_count: len(res.body.users)
-    valid_users: 'filter(res.body.users, #.id != null && #.email != null)'
+    valid_users: 'filter(res.body.users, #.id != nil && #.email != nil)'
     admin_users: 'filter(res.body.users, #.role == "admin")'
     
     # データ品質メトリクス
-    data_completeness: 'len(filter(res.body.users, #.id != null && #.email != null)) / len(res.body.users)'
+    data_completeness: 'len(filter(res.body.users, #.id != nil && #.email != nil)) / len(res.body.users)'
     has_admin_users: 'any(res.body.users, #.role == "admin")'
     
     # レスポンスメタデータ
@@ -641,12 +641,12 @@ outputs:
 ```yaml
 # 良い例: 安全なデータアクセス
 outputs:
-  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : null'
+  user_id: 'res.body.user && res.body.user.id ? res.body.user.id : nil'
   email_verified: res.body.user && res.body.user.email_verified == true
   profile_complete: res.body.user && res.body.user.profile && res.body.user.profile.complete == true
 
 # 良い例: 安全なナビゲーションを使用
-test: res.body.user?.id != null && res.body.user?.email != null
+test: res.body.user?.id != nil && res.body.user?.email != nil
 ```
 
 ### 4. データ依存関係の文書化

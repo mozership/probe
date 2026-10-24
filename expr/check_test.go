@@ -88,3 +88,25 @@ func TestReadsNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestNames(t *testing.T) {
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{`res.code == 200 && vars.id == outputs.login.id`, []string{"res", "vars", "outputs"}},
+		{`steps.login.code == 1`, []string{"steps"}},
+		{`len(res.body) > 0 && now() != nil`, []string{"res"}},
+		{`all(res.body.items, #.active) && any(res.body.items, .id == vars.id)`, []string{"res", "vars"}},
+		{`let n = len(res.body); n > 0 && n < limit`, []string{"res", "limit"}},
+		{`{a: res.code}.a == 200`, []string{"res"}},
+		{`$env.res.code == 200`, nil},
+		{`1 == 1`, nil},
+		{`res.code ==`, nil},
+	}
+	for _, tt := range tests {
+		if got := Names(tt.input); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("Names(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

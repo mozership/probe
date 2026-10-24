@@ -143,9 +143,9 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.user != null &&
+        res.body.user != nil &&
         res.body.user.email == vars.TEST_USER_EMAIL &&
-        res.body.token != null
+        res.body.token != nil
       outputs:
         user_id: res.body.user.id
         auth_token: res.body.token
@@ -163,8 +163,8 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.token != null &&
-        res.body.user != null &&
+        res.body.token != nil &&
+        res.body.user != nil &&
         res.body.token | len > 20
       outputs:
         auth_token: res.body.token
@@ -183,7 +183,7 @@ jobs:
           }
       test: |
         res.code == 401 &&
-        res.body.error != null
+        res.body.error != nil
 
     - name: "Test Token Validation"
       id: token-validation
@@ -207,7 +207,7 @@ jobs:
           Authorization: "Bearer invalid-token-12345"
       test: |
         res.code == 401 &&
-        res.body.error != null
+        res.body.error != nil
 
     - name: "Test Token Refresh"
       id: refresh
@@ -219,7 +219,7 @@ jobs:
           Authorization: "Bearer {{outputs.login.auth_token}}"
       test: |
         res.code == 200 &&
-        res.body.token != null &&
+        res.body.token != nil &&
         res.body.token != outputs.login.auth_token
       outputs:
         new_token: res.body.token
@@ -243,7 +243,7 @@ jobs:
           Authorization: "Bearer {{outputs.refresh.new_token}}"
       test: |
         res.code == 401 &&
-        res.body.error != null
+        res.body.error != nil
 ```
 
 ## ステップ3: CRUD操作テスト
@@ -293,7 +293,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.id != null &&
+        res.body.id != nil &&
         res.body.price == 29.99 &&
         res.body.stock == 100
       outputs:
@@ -595,16 +595,16 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
       test: |
         res.code == 200 &&
-        res.body.products != null &&
+        res.body.products != nil &&
         res.body.products | len > 0 &&
-        res.body.products[0].id != null &&
-        res.body.products[0].name != null &&
-        res.body.products[0].price != null &&
-        res.body.products[0].category != null &&
-        res.body.pagination != null &&
-        res.body.pagination.total != null &&
-        res.body.pagination.page != null &&
-        res.body.pagination.limit != null
+        res.body.products[0].id != nil &&
+        res.body.products[0].name != nil &&
+        res.body.products[0].price != nil &&
+        res.body.products[0].category != nil &&
+        res.body.pagination != nil &&
+        res.body.pagination.total != nil &&
+        res.body.pagination.page != nil &&
+        res.body.pagination.limit != nil
 
     - name: "Validate User Profile Schema"
       uses: http
@@ -618,13 +618,13 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.user != null &&
-        res.body.user.id != null &&
-        res.body.user.email != null &&
-        res.body.user.firstName != null &&
-        res.body.user.lastName != null &&
-        res.body.user.createdAt != null &&
-        res.body.token != null &&
+        res.body.user != nil &&
+        res.body.user.id != nil &&
+        res.body.user.email != nil &&
+        res.body.user.firstName != nil &&
+        res.body.user.lastName != nil &&
+        res.body.user.createdAt != nil &&
+        res.body.token != nil &&
         res.body.token | len > 20
 
     - name: "Validate Error Response Schema"
@@ -634,10 +634,10 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products/nonexistent-id"
       test: |
         res.code == 404 &&
-        res.body.error != null &&
-        res.body.message != null &&
+        res.body.error != nil &&
+        res.body.message != nil &&
         res.body.statusCode == 404 &&
-        res.body.timestamp != null
+        res.body.timestamp != nil
 
 - name: "Data Integrity Validation"
   steps:
@@ -656,7 +656,7 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != null
+        res.body.error != nil
 
     - name: "Test Required Field Validation"
       uses: http
@@ -671,7 +671,7 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != null
+        res.body.error != nil
 
     - name: "Test Email Format Validation"
       uses: http
@@ -685,7 +685,7 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != null
+        res.body.error != nil
 
     - name: "Test Numeric Range Validation"
       uses: http
@@ -702,7 +702,7 @@ jobs:
           }
       test: |
         res.code == 400 &&
-        res.body.error != null
+        res.body.error != nil
 ```
 
 ## ステップ6: 統合テスト
@@ -829,7 +829,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.order.id != null &&
+        res.body.order.id != nil &&
         res.body.order.status == "pending" &&
         res.body.order.total == outputs['update-cart'].new_cart_total
       outputs:
@@ -1068,7 +1068,7 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
       test: |
         res.code == 200 &&
-        res.body.products != null
+        res.body.products != nil
 ```
 
 ### セキュリティテスト
@@ -1090,9 +1090,9 @@ jobs:
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
       test: |
         res.code == 200 &&
-        res.headers["X-Content-Type-Options"] != null &&
-        res.headers["X-Frame-Options"] != null &&
-        res.headers["X-Xss-Protection"] != null
+        res.headers["X-Content-Type-Options"] != nil &&
+        res.headers["X-Frame-Options"] != nil &&
+        res.headers["X-Xss-Protection"] != nil
 
 - name: "Authentication Security Tests"
   steps:
@@ -1107,7 +1107,7 @@ jobs:
           }
       test: |
         res.code == 400 ||
-        (res.code == 200 && res.body.error == null)
+        (res.code == 200 && res.body.error == nil)
 ```
 
 ## トラブルシューティング

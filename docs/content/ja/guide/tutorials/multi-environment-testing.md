@@ -424,7 +424,7 @@ jobs:
         url: "{{vars.API_BASE_URL}}/features"
       test: |
         res.code == 200 &&
-        res.body.features != null
+        res.body.features != nil
       outputs:
         active_features: res.body.features
         feature_count: len(res.body.features)
@@ -438,7 +438,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.environment == vars.ENVIRONMENT &&
-        res.body.configVersion != null
+        res.body.configVersion != nil
       outputs:
         config_environment: res.body.environment
         config_version: res.body.configVersion
@@ -460,7 +460,7 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.token != null &&
+        res.body.token != nil &&
         (rt.sec * 1000) < vars.RESPONSE_TIME_THRESHOLD
       outputs:
         auth_token: res.body.token
@@ -476,7 +476,7 @@ jobs:
           Authorization: "Bearer {{outputs['auth-test'].auth_token}}"
       test: |
         res.code == 200 &&
-        res.body.products != null &&
+        res.body.products != nil &&
         len(res.body.products) > 0 &&
         (rt.sec * 1000) < vars.RESPONSE_TIME_THRESHOLD
       outputs:
@@ -499,7 +499,7 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.id != null &&
+        res.body.id != nil &&
         (rt.sec * 1000) < vars.RESPONSE_TIME_THRESHOLD
       outputs:
         created_product_id: res.body.id

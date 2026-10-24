@@ -252,7 +252,7 @@ jobs:
         url: "{{vars.service_url}}/health"
       outputs:
         service_healthy: res.code == 200
-        error_body: 'res.code != 200 ? res.body : null'
+        error_body: 'res.code != 200 ? res.body : nil'
 
 - id: recovery-procedures
   name: Recovery Procedures
@@ -466,9 +466,9 @@ Capture detailed error context for debugging:
     status_code: res.status
     response_time: (rt.sec * 1000)
     response_size: res.body_size
-    error_message: 'res.code != 200 ? res.body : null'
+    error_message: 'res.code != 200 ? res.body : nil'
     response_headers: res.headers
-    partial_response: 'res.code != 200 ? res.body[0:500] : null'
+    partial_response: 'res.code != 200 ? res.body[0:500] : nil'
 
 - name: Error Analysis and Reporting
   echo: |
@@ -528,7 +528,7 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
         trace_id: res.headers["X-Trace-Id"]
 
     - name: Service B Test
@@ -542,7 +542,7 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
         trace_id: res.headers["X-Trace-Id"]
 
     - name: Service C Test
@@ -556,7 +556,7 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
         trace_id: res.headers["X-Trace-Id"]
 
     - name: Error Correlation Report
@@ -727,7 +727,7 @@ jobs:
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/api/users"
-      test: res.code == 200 && res.body.users != null
+      test: res.code == 200 && res.body.users != nil
       outputs:
         standard_test_passed: res.code == 200
 
@@ -841,11 +841,11 @@ outputs:
   error_details: |
     {{res.code != 200 ? 
       "HTTP " + res.status + ": " + res.body[0:200] : 
-      null}}
+      nil}}
   debug_info: |
     {{res.code != 200 ? 
       "URL: " + vars.API_URL + ", Time: " + (rt.sec * 1000) + "ms" : 
-      null}}
+      nil}}
 ```
 
 ### 3. Graduated Response

@@ -55,7 +55,7 @@ jobs:
       test: res.code == 200
       outputs:
         analytics_available: res.code == 200
-        analytics_error: 'res.code != 200 ? res.status : null'
+        analytics_error: 'res.code != 200 ? res.status : nil'
 
     # This step always runs regardless of previous step
     - name: Optional Notification Service
@@ -220,7 +220,7 @@ jobs:
         success: res.code == 200
         attempt_number: 1
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
 
     # Second attempt (2-second delay)
     - name: Retry Attempt 1 (2s delay)
@@ -235,7 +235,7 @@ jobs:
         success: res.code == 200
         attempt_number: 2
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
 
     # Third attempt (4-second delay)
     - name: Retry Attempt 2 (4s delay)
@@ -250,7 +250,7 @@ jobs:
         success: res.code == 200
         attempt_number: 3
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
 
     # Final attempt (8-second delay)
     - name: Final Attempt (8s delay)
@@ -265,7 +265,7 @@ jobs:
         success: res.code == 200
         attempt_number: 4
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
 
     - name: Retry Summary
       uses: hello
@@ -354,7 +354,7 @@ jobs:
       outputs:
         test_successful: res.code == 200
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : null'
+        error_code: 'res.code != 200 ? res.status : nil'
 
     # Probe test when circuit is open but recovery time has passed
     - name: Circuit Recovery Probe
@@ -385,7 +385,7 @@ jobs:
             }},
             "response_time": {{
               outputs['normal-test'] ? outputs['normal-test'].response_time :
-              outputs['probe-test'] ? outputs['probe-test'].response_time : null
+              outputs['probe-test'] ? outputs['probe-test'].response_time : nil
             }},
             "timestamp": {{unixtime()}}
           }
@@ -450,7 +450,7 @@ jobs:
         healthy: res.code == 200
         status_code: res.status
         response_time: (rt.sec * 1000)
-        error_details: 'res.code != 200 ? res.body : null'
+        error_details: 'res.code != 200 ? res.body : nil'
 
     # Step 2: Detailed diagnostics if unhealthy
     - name: Service Diagnostics
@@ -698,19 +698,19 @@ jobs:
         content_type: res.headers["Content-Type"]
           
         # Error context (only populated on failure)
-        error_message: 'res.code != 200 ? res.body.error.message : null'
-        error_code: 'res.code != 200 ? res.body.error.code : null'
-        error_details: 'res.code != 200 ? res.body.error.details : null'
+        error_message: 'res.code != 200 ? res.body.error.message : nil'
+        error_code: 'res.code != 200 ? res.body.error.code : nil'
+        error_details: 'res.code != 200 ? res.body.error.details : nil'
         trace_id: res.headers["X-Trace-Id"]
         request_id: res.headers["X-Request-Id"]
           
         # Performance context
         server_response_time: res.headers["X-Response-Time"]
-        database_time: 'res.body.debug ? res.body.debug.database_time_ms : null'
-        cache_hit: 'res.body.debug ? res.body.debug.cache_hit : null'
+        database_time: 'res.body.debug ? res.body.debug.database_time_ms : nil'
+        cache_hit: 'res.body.debug ? res.body.debug.cache_hit : nil'
           
         # Business context
-        affected_user: 'res.body.error ? res.body.error.affected_user : null'
+        affected_user: 'res.body.error ? res.body.error.affected_user : nil'
         operation_id: res.body.operation_id
         retry_after: res.headers["Retry-After"]
 

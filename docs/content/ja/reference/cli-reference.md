@@ -391,9 +391,11 @@ probe check base.yml staging.yml
 workflow.yml:10: error: job 0 "Users", step 0 "Log in": unknown key "tset"; did you mean "test"?
 workflow.yml:14: error: job 0 "Users", step 1 "Read": unknown action "htp"; did you mean "http"?
 workflow.yml:18: error: job 0 "Users", step 1 "Read": with: outputs.login.tokn is not published: step "login" publishes token
+workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
 workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.login.token may not be published yet: job "Other" does not need job "Users", whose step publishes it
+workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_url is not defined by the workflow, so it is nil unless --var gives it; did you mean "API_URL"?
 
-3 errors, 1 warning
+4 errors, 2 warnings
 ```
 
 **エラー**として報告するもの:
@@ -409,6 +411,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - `baseline`を読む`repeat.test`。`baseline`を読めるのは`repeat.baseline_test`だけ
 - `baseline.steps`の下のステップやフィールドを、`baseline.steps[vars.id]`のように実行時に決まるキーで読む`repeat.baseline_test`
 - どのステップも公開していない出力、そのステップが公開していない出力、そのステップが公開する前に読む出力（同じジョブの前のステップから読む場合など）の参照
+- 式やテンプレートが読む名前のうち、読める場所にないもの。読んだところで失敗します。ステップの`name`、`with`、`vars`、`iteration`、`test`、`echo`ではステップが失敗し、`skipif`、`wait`、出力ではエラーを表示してそれを無視するので、ステップは書いていないかのように実行されます。ステップが読めるのは`vars`、`outputs`、`res`、`req`、`rt`、`status`、`report`、`repeat_index`なので、ステップの`test`の`steps.login.code`、`nil`のつもりの`null`、ステップの`with`の`{{API_TOKEN}}`を報告します。環境変数を読めるのはワークフローの`vars`だけです。繰り返すジョブのテストが読めるのは`vars`、`steps`、`baseline`です。ジョブの`name`とワークフローの`vars`のテンプレートは、この確認の対象外です
 
 **警告**として報告するもの:
 
@@ -416,6 +419,7 @@ workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.log
 - 何も検証していないステップ。`test`がなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
 - `1 == 1`のように何も読まない`test`。ステップの実行結果によらず、テストの結果が変わりません
 - `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
+- `vars.<name>`として読むvarのうち、ワークフローの`vars`、ステップの`vars`、ステップに書いた`iteration`の項目のどれも定義していないもの。[`--var`](#--var)で与えない限りnilになります。ステップの`vars`が読めるのはワークフローのvarだけなので、ステップの他のvarや`iteration`のキーを読むものも報告します。`vars[k]`のように実行時に決まるキーで読むvarと、`iteration`がテンプレートのステップで、そのステップの`vars`と`iteration`以外のフィールドが読むvarは確かめません。読み合わせるファイルは1つのワークフローとして確かめるので、実行時に読むファイルを`probe check`にも渡します
 
 エラーが見つかれば終了ステータスは2、警告だけか何も見つからなければ0です。
 

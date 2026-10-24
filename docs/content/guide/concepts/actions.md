@@ -154,7 +154,7 @@ jobs:
         "query": "query GetUser($id: ID!) { user(id: $id) { name email active } }",
         "variables": { "id": "{{vars.test_user_id}}" }
       }
-  test: res.code == 200 && res.body.data.user != null
+  test: res.code == 200 && res.body.data.user != nil
   outputs:
     user_name: res.body.data.user.name
     user_email: res.body.data.user.email
@@ -293,7 +293,7 @@ The `hello` action is primarily used for testing and demonstrations. It provides
 **Hello Action Response:** the action takes no parameters of its own. Every key given in `with` comes back on `res`, and `status` is always `0`.
 
 ```yaml
-test: status == 0 && res.message != null
+test: status == 0 && res.message != nil
 ```
 
 ### SMTP Action
@@ -673,7 +673,7 @@ Validate action responses thoroughly:
   test: |
     res.code == 200 &&
     res.headers["Content-Type"] contains "application/json" &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
     (rt.sec * 1000) < 1000
   outputs:

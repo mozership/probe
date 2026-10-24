@@ -391,9 +391,11 @@ probe check base.yml staging.yml
 workflow.yml:10: error: job 0 "Users", step 0 "Log in": unknown key "tset"; did you mean "test"?
 workflow.yml:14: error: job 0 "Users", step 1 "Read": unknown action "htp"; did you mean "http"?
 workflow.yml:18: error: job 0 "Users", step 1 "Read": with: outputs.login.tokn is not published: step "login" publishes token
+workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
 workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.login.token may not be published yet: job "Other" does not need job "Users", whose step publishes it
+workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_url is not defined by the workflow, so it is nil unless --var gives it; did you mean "API_URL"?
 
-3 errors, 1 warning
+4 errors, 2 warnings
 ```
 
 It reports as an **error**:
@@ -409,6 +411,7 @@ It reports as an **error**:
 - a `repeat.test` that reads `baseline`, which only `repeat.baseline_test` can
 - a `repeat.baseline_test` that reads a step or a field under `baseline.steps` by a key known only when it runs, such as `baseline.steps[vars.id]`
 - an output read that no step publishes, that its step does not publish, or that is read before its step publishes it, such as by an earlier step of the job
+- a name an expression or a template reads that is not there to read, which fails where it is read: in a step's `name`, `with`, `vars`, `iteration`, `test` or `echo` the step fails, and a `skipif`, a `wait` or an output that reads it is reported and left out, so the step runs as if it were not written. A step reads `vars`, `outputs`, `res`, `req`, `rt`, `status`, `report` and `repeat_index`, so `steps.login.code` in a step's `test`, `null` for `nil`, or `{{API_TOKEN}}` in a step's `with`, as the environment is read only by the workflow's `vars`, is reported. The tests of a repeated job read `vars`, `steps` and `baseline`. The templates of a job's `name` and of the workflow's `vars` are not checked for this
 
 It reports as a **warning**:
 
@@ -416,6 +419,7 @@ It reports as a **warning**:
 - a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
+- a var read as `vars.<name>` that neither the workflow's `vars`, nor the step's `vars`, nor the entries of an `iteration` written in the step define, which reads nil unless [`--var`](#--var) gives it. A step's own `vars` read only those of the workflow, so one that reads another var of the step, or a key of its `iteration`, is reported too. A var read by a key known only when it runs, such as `vars[k]`, and, in a step whose `iteration` is a template, the vars its other fields read, are not checked. Files read together are checked as one workflow, so give `probe check` the files the run reads
 
 It exits with status 2 when it finds an error, and with 0 when it finds only warnings or nothing.
 

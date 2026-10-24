@@ -171,9 +171,9 @@ Once the body is parsed, a test walks into it by field name.
 # JSON structure validation
 test: |
   res.code == 200 &&
-  res.body != null &&
+  res.body != nil &&
   res.body.status == "success" &&
-  res.body.data != null
+  res.body.data != nil
 
 # Required fields presence
 test: |
@@ -210,14 +210,14 @@ test: |
 ```yaml
 # Array validation
 test: |
-  res.body.users != null &&
+  res.body.users != nil &&
   len(res.body.users) > 0 &&
   len(res.body.users) <= 100
 
 # Array content validation
 test: |
-  all(res.body.users, #.id != null && 
-    #.email != null)
+  all(res.body.users, #.id != nil &&
+    #.email != nil)
 
 # Specific element checks
 test: |
@@ -236,16 +236,16 @@ Reaching a nested field means every level above it has to exist, so each one is 
 ```yaml
 # Deep object validation
 test: |
-  res.body.user != null &&
-  res.body.user.profile != null &&
-  res.body.user.profile.preferences != null &&
+  res.body.user != nil &&
+  res.body.user.profile != nil &&
+  res.body.user.profile.preferences != nil &&
   res.body.user.profile.preferences.notifications == true
 
 # Complex nested structures
 test: |
-  all(res.body.data.orders, #.id != null &&
+  all(res.body.data.orders, #.id != nil &&
     len(#.items) > 0 &&
-    #all(.items, #.product_id != null && 
+    #all(.items, #.product_id != nil &&
       #.quantity > 0 && 
       #.price > 0) &&
     #.total == sum(map(#.items, #.quantity * #.price)))
@@ -334,8 +334,8 @@ test: |
 test: |
   res.code == 200 &&
   (res.body.features.beta_enabled == true ?
-    res.body.beta_data != null :    # Beta features should have data
-    res.body.beta_data == null      # Beta features should be absent
+    res.body.beta_data != nil :    # Beta features should have data
+    res.body.beta_data == nil      # Beta features should be absent
   )
 ```
 
@@ -393,7 +393,7 @@ Some rules hold between fields rather than in any one of them, such as a total t
     url: "{{vars.API_URL}}/orders/{{vars.TEST_ORDER_ID}}"
   test: |
     res.code == 200 &&
-    res.body.order != null &&
+    res.body.order != nil &&
     
     # Order total equals sum of line items
     res.body.order.total == 
@@ -457,7 +457,7 @@ Here the failing response is the expected one, so the test asserts on the error 
   test: |
     res.code == 400 &&
     res.body.error contains "json" &&
-    res.body.details != null
+    res.body.details != nil
 ```
 
 ### Boundary Testing
@@ -479,8 +479,8 @@ Input at the edge of what is allowed is where validation tends to break, so it i
   test: |
     res.status in [201, 400] &&  # Either created or validation error
     (res.code == 400 ? 
-      res.body.validation_errors != null :
-      res.body.user.id != null
+      res.body.validation_errors != nil :
+      res.body.user.id != nil
     )
 ```
 
@@ -515,8 +515,8 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: |
         res.code == 200 &&
-        res.body.users != null &&
-        res.body.pagination != null
+        res.body.users != nil &&
+        res.body.pagination != nil
 
 - id: integration-tests
   name: Integration Tests
@@ -556,8 +556,8 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.access_token != null &&
-        res.body.refresh_token != null &&
+        res.body.access_token != nil &&
+        res.body.refresh_token != nil &&
         res.body.expires_in > 0
       outputs:
         access_token: res.body.access_token
@@ -593,9 +593,9 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.user.id != null &&
-        res.body.user.name != null &&
-        res.body.user.email != null
+        res.body.user.id != nil &&
+        res.body.user.name != nil &&
+        res.body.user.email != nil
       outputs:
         user_id: res.body.user.id
         user_email: res.body.user.email
@@ -777,7 +777,7 @@ Hostile input should be rejected or neutralised, and either outcome is acceptabl
     res.status in [201, 400] &&
     (res.code == 201 ? 
       !res.body.comment.content contains "<script>" :  # Should be sanitized
-      res.body.validation_errors != null               # Or rejected
+      res.body.validation_errors != nil               # Or rejected
     )
 ```
 
@@ -804,10 +804,10 @@ The step name and the assertions together should say what the case was, so a fai
   # Comprehensive test with clear validation points
   test: |
     res.code == 201 &&                                    # 1. Successful creation
-    res.body.user.id != null &&                            # 2. User ID assigned
-    res.body.user.email != null &&                         # 3. Email stored
-    res.body.user.password == null &&                      # 4. Password not returned
-    res.body.user.created_at != null &&                    # 5. Timestamp recorded
+    res.body.user.id != nil &&                            # 2. User ID assigned
+    res.body.user.email != nil &&                         # 3. Email stored
+    res.body.user.password == nil &&                      # 4. Password not returned
+    res.body.user.created_at != nil &&                    # 5. Timestamp recorded
     res.body.user.email_verified == false &&               # 6. Email unverified initially
     res.body.verification_email_sent == true &&            # 7. Verification triggered
     "Location" in res.headers &&                         # 8. Location header present
@@ -860,7 +860,7 @@ A test should say what it expects. Asserting only that something is non-null pas
 test: |
   res.code == 200 &&
   len(res.body.users) >= 1 &&
-  res.body.users[0].id != null
+  res.body.users[0].id != nil
 
 # Avoid: Vague or incomplete tests
 test: res.code == 200  # What about response content?
@@ -876,7 +876,7 @@ Every case worth testing has a failing counterpart, and both belong in the suite
   test: res.code == 200 && res.body.success == true
 
 - name: Invalid Request Test  
-  test: res.code == 400 && res.body.error != null
+  test: res.code == 400 && res.body.error != nil
 ```
 
 ### 3. Performance-Aware Testing
@@ -888,7 +888,7 @@ Adding a time bound to an existing test costs nothing and catches a regression t
 test: |
   res.code == 200 &&
   (rt.sec * 1000) < 1000 &&
-  res.body.data != null
+  res.body.data != nil
 
 # Good: Environment-specific performance thresholds
 test: |
@@ -904,12 +904,12 @@ A long condition is easier to read split across lines, one assertion per line.
 # Good: Readable, well-structured tests
 test: |
   res.code == 200 &&
-  res.body.user != null &&
+  res.body.user != nil &&
   res.body.user.id > 0 &&
   res.body.user.email contains "@"
 
 # Avoid: Complex, hard-to-read tests
-test: res.code == 200 && res.body.user != null && res.body.user.id > 0 && res.body.user.email contains "@" && res.body.user.active == true && (rt.sec * 1000) < 1000
+test: res.code == 200 && res.body.user != nil && res.body.user.id > 0 && res.body.user.email contains "@" && res.body.user.active == true && (rt.sec * 1000) < 1000
 ```
 
 ## What's Next?

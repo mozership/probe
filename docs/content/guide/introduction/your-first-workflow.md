@@ -98,7 +98,7 @@ Add a separate job for API monitoring:
               "username": "healthcheck",
               "password": "{{vars.HEALTH_CHECK_PASSWORD}}"
             }
-        test: res.code == 200 && res.body.token != null
+        test: res.code == 200 && res.body.token != nil
         outputs:
           auth_token: res.body.token
 
@@ -261,7 +261,7 @@ jobs:
             "username": "healthcheck",
             "password": "{{vars.HEALTH_CHECK_PASSWORD}}"
           }
-      test: res.code == 200 && res.body.token != null
+      test: res.code == 200 && res.body.token != nil
       outputs:
         auth_token: res.body.token
 

@@ -24,6 +24,8 @@ actions:
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
+vars:
+  test_password: "{{TEST_PASSWORD}}"
 jobs:
 - name: sign-up
   steps:
@@ -38,7 +40,7 @@ jobs:
         The account is created, and the dashboard greets the user.
       secrets:
         EMAIL: "qa+{{random_str(8)}}@example.com"
-        PASSWORD: "{{TEST_PASSWORD}}"
+        PASSWORD: "{{vars.test_password}}"
     timeout: 5m
     test: res.verdict == "pass"
 ```
@@ -56,7 +58,7 @@ A persona test takes `persona` and `goal` in place of `task` and `expect`:
       goal: Create an account, and write a first note that says "Buy milk".
       secrets:
         EMAIL: "qa+{{random_str(8)}}@example.com"
-        PASSWORD: "{{TEST_PASSWORD}}"
+        PASSWORD: "{{vars.test_password}}"
     timeout: 5m
     test: len(filter(res.findings, .severity == "high" && .verified)) == 0
 ```

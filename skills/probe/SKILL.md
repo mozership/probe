@@ -100,7 +100,7 @@ probe --report json=probe.json,markdown=probe.md workflow.yml
 probe coverage openapi.yml probe.json # what of the OpenAPI document, or a .proto file, no step checked
 ```
 
-After writing or changing a workflow, run `probe fmt` on it, which lays it out the one way every workflow is: it changes blank lines, indentation and comments, never a value. Then run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`.
+After writing or changing a workflow, run `probe fmt` on it, which lays it out the one way every workflow is: it changes blank lines, indentation and comments, never a value. Then run `probe check` before running it, and fix every error it reports: a key it calls unknown is one a run ignores without a word, such as a misspelled `test`, or `bdoy` for an action's `body`; a name it calls not defined is one an expression cannot read, such as `steps.login` for `outputs.login`, or `null` for `nil`. Each warning is a step that checks less than it seems to: give a step that nothing checks a `test`, and replace a `test` that reads nothing with one that reads `res`. A var it calls not defined reads nil: define it under `vars`, reading the environment there as `api_url: "{{API_URL}}"`, unless it is meant to be given with `--var`.
 
 The exit code says what to look at:
 

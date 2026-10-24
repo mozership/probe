@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/expr-lang/expr/ast"
@@ -144,6 +145,8 @@ type identFinder struct {
 	callees map[ast.Node]bool
 	idents  []ast.Node
 	pointer bool
+	// declared are the names let declares.
+	declared map[string]bool
 }
 
 func (f *identFinder) Visit(node *ast.Node) {
@@ -155,5 +158,35 @@ func (f *identFinder) Visit(node *ast.Node) {
 	case *ast.PointerNode:
 		// # in a predicate reads the element the predicate is given.
 		f.pointer = true
+	case *ast.VariableDeclaratorNode:
+		if f.declared == nil {
+			f.declared = map[string]bool{}
+		}
+		f.declared[n.Name] = true
 	}
+}
+
+// Names returns the names that input, an expression, reads from what it is
+// evaluated against, in the order they first come: vars and outputs in
+// vars.id == outputs.login.id. A function it calls, a name let declares and
+// $env, which is what it is evaluated against as a whole, are not among
+// them. An expression that does not parse reads nothing here.
+func Names(input string) []string {
+	tree, err := parser.Parse(input)
+	if err != nil {
+		return nil
+	}
+	f := &identFinder{callees: map[ast.Node]bool{}}
+	ast.Walk(&tree.Node, f)
+	// Walk visits the callee of a call before the call, so which
+	// identifiers are callees is known only once it is done.
+	var names []string
+	for _, n := range f.idents {
+		id := n.(*ast.IdentifierNode)
+		if f.callees[n] || f.declared[id.Value] || id.Value == "$env" || slices.Contains(names, id.Value) {
+			continue
+		}
+		names = append(names, id.Value)
+	}
+	return names
 }
