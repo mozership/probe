@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { CopyCommand } from './copy-command'
 import { Flowchart } from './flowchart'
 import { PluginChart } from './plugin-chart'
+import { ProviderMark } from './provider-icons'
 import { SourcePanel } from './source-panel'
 import { StructureChart } from './structure-chart'
 import {
@@ -171,9 +172,22 @@ export function Home({ locale }: { locale: Locale }) {
       </section>
 
       <section className="lp-section">
-        <div className="lp-section__head">
-          <h2 className="lp-section__heading">{t.browser.heading}</h2>
-          <p className="lp-section__body">{t.browser.body}</p>
+        <div className="lp-section__intro">
+          <div className="lp-section__head">
+            <h2 className="lp-section__heading">{t.browser.heading}</h2>
+            <p className="lp-section__body">{t.browser.body}</p>
+          </div>
+          <div className="lp-providers">
+            <p className="lp-providers__label">{t.browser.providers.label}</p>
+            <ul className="lp-providers__list">
+              {t.browser.providers.items.map(p => (
+                <li key={p.id} className="lp-providers__item">
+                  <ProviderMark id={p.id} />
+                  {p.name}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         {/* The workflow is the longer, so it scrolls to the height of the report. */}
         <div className="lp-pair">

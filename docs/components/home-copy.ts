@@ -54,6 +54,7 @@ export type HomeCopy = {
     workflowLabel: string
     reportLabel: string
     note: string
+    providers: { label: string; items: { id: string; name: string }[] }
     link: { label: string; href: string }
   }
   agents: {
@@ -151,10 +152,14 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     },
     browser: {
       heading: 'What deterministic tests leave out',
-      body: 'The steps above check what can be stated exactly, and they are what should gate a merge. Whether a first-time user gets through, or whether the application still holds up once data and settings pile up on staging, cannot be written as an expression. The agent action takes it in natural language, as a persona and a goal: a model plays the persona in a real Chrome, and another call of the model reviews the run, keeping only what the pages and the requests bear out. Run it with repeat against staging, and it keeps using the application as people do. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine.',
+      body: 'The steps above check what can be stated exactly, and they are what should gate a merge. Whether a first-time user gets through, or whether the application still holds up once data and settings pile up on staging, cannot be written as an expression. The agent action takes it in natural language, as a persona and a goal: a model plays the persona in a real Chrome, and another call of the model reviews the run, keeping only what the pages and the requests bear out. Run it with repeat against staging, and it keeps using the application as people do.',
       workflowLabel: 'first-note.yml',
       reportLabel: '$ probe first-note.yml',
       note: 'The first finding is a server error, which an http step would have caught had someone written one. The second is in no test: after signing up, nothing tells Carol she is signed in, nor how to get to her notes. The test of the step asks only that the review ran; the verdict and the findings are the result to read.',
+      providers: {
+        label: 'Works with',
+        items: [{ id: 'claude', name: 'Claude' }, { id: 'openai', name: 'OpenAI' }, { id: 'gemini', name: 'Gemini' }, { id: 'xai', name: 'xAI' }, { id: 'sakura', name: 'Sakura AI Engine' }],
+      },
       link: { label: 'Read the agent action reference', href: '/reference/actions/agent' },
     },
     agents: {
@@ -293,10 +298,14 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     },
     browser: {
       heading: '決定論的なテストでは書けない品質を',
-      body: 'ここまでのStepは厳密に書ける正しさを確かめるもので、マージの関門になるべきものです。一方で、初めての人が最後までたどり着けるか、データや設定が積み重なったステージングでもアプリケーションが持ちこたえるかは、式では書けません。agentアクションでは、それをペルソナと目標として自然言語で書きます。モデルが実際のChromeでペルソナを演じ、別に呼び出したモデルが、ページとリクエストの記録に裏付けられた指摘だけを残します。repeatを付けてステージングで回せば、人と同じようにアプリケーションを使い続けます。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます。',
+      body: 'ここまでのStepは厳密に書ける正しさを確かめるもので、マージの関門になるべきものです。一方で、初めての人が最後までたどり着けるか、データや設定が積み重なったステージングでもアプリケーションが持ちこたえるかは、式では書けません。agentアクションでは、それをペルソナと目標として自然言語で書きます。モデルが実際のChromeでペルソナを演じ、別に呼び出したモデルが、ページとリクエストの記録に裏付けられた指摘だけを残します。repeatを付けてステージングで回せば、人と同じようにアプリケーションを使い続けます。',
       workflowLabel: 'first-note.yml',
       reportLabel: '$ probe first-note.yml',
       note: '1つ目の指摘はサーバーのエラーで、誰かがhttpのStepを書いていれば見つけられたものです。2つ目はどのテストにも書かれていません。登録したあと、ログインしていることも、メモへたどり着く道も、Carolには示されていません。このStepのtestはレビューが実行できたことだけを確かめ、判定と指摘は読むための結果として返ります。',
+      providers: {
+        label: '使えるモデル',
+        items: [{ id: 'claude', name: 'Claude' }, { id: 'openai', name: 'OpenAI' }, { id: 'gemini', name: 'Gemini' }, { id: 'xai', name: 'xAI' }, { id: 'sakura', name: 'さくらのAI Engine' }],
+      },
       link: { label: 'agentアクションのリファレンスを読む', href: '/ja/reference/actions/agent' },
     },
     agents: {
