@@ -105,6 +105,7 @@ export function Home({ locale }: { locale: Locale }) {
       <div className="lp-duo">
         <section className="lp-section lp-duo__item">
           <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.graph.kicker}</p>
             <h2 className="lp-section__heading">{t.graph.heading}</h2>
             <p className="lp-section__body">{t.graph.body}</p>
           </div>
@@ -120,6 +121,7 @@ export function Home({ locale }: { locale: Locale }) {
 
         <section className="lp-section lp-duo__item">
           <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.channels.kicker}</p>
             <h2 className="lp-section__heading">{t.channels.heading}</h2>
             <p className="lp-section__body">{t.channels.body}</p>
           </div>
@@ -136,6 +138,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.shared.kicker}</p>
           <h2 className="lp-section__heading">{t.shared.heading}</h2>
           <p className="lp-section__body">{t.shared.body}</p>
         </div>
@@ -157,6 +160,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.parts.kicker}</p>
           <h2 className="lp-section__heading">{t.parts.heading}</h2>
           <p className="lp-section__body">{t.parts.body}</p>
         </div>
@@ -174,6 +178,7 @@ export function Home({ locale }: { locale: Locale }) {
       <section className="lp-section">
         <div className="lp-section__intro">
           <div className="lp-section__head">
+            <p className="lp-section__kicker">{t.browser.kicker}</p>
             <h2 className="lp-section__heading">{t.browser.heading}</h2>
             <p className="lp-section__body">{t.browser.body}</p>
           </div>
@@ -210,6 +215,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.agents.kicker}</p>
           <h2 className="lp-section__heading">{t.agents.heading}</h2>
           <p className="lp-section__body">{t.agents.body}</p>
         </div>
@@ -243,6 +249,7 @@ export function Home({ locale }: { locale: Locale }) {
 
       <section className="lp-section lp-section--install">
         <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.install.kicker}</p>
           <h2 className="lp-section__heading">{t.install.heading}</h2>
           <p className="lp-section__body">{t.install.body}</p>
         </div>

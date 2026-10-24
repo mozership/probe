@@ -468,6 +468,17 @@
   max-width: var(--lp-measure);
 }
 
+/* What a section is about, in a word or two, above its heading. */
+.lp-section__kicker {
+  margin: 0 0 0.6rem;
+  color: var(--lp-blue);
+  font-family: var(--lp-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .lp-section__heading {
   margin: 0;
   font-size: clamp(1.55rem, 3.2vw, 2.25rem);
