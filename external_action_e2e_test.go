@@ -337,9 +337,11 @@ jobs:
 		t.Errorf("the action's warning is not shown:\n%s", stderr)
 	}
 
-	// A verbose run shows the action's own records as well.
+	// A verbose run shows the action's own records as well, and, for the
+	// refused request, which returned none, what the step gave the action.
 	_, stderr = run("-v", "--output", "stream")
-	for _, want := range []string{"[ERROR]", "widget failed", "panic: the widget exploded"} {
+	given := fmt.Sprintf("[DEBUG] Request (as the step gave it; the action returned none):\n[DEBUG]   get: /x\n[DEBUG]   url: http://%s\n", addr)
+	for _, want := range []string{"[ERROR]", "widget failed", "panic: the widget exploded", given} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("the verbose output does not have %q:\n%s", want, stderr)
 		}

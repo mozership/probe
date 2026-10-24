@@ -233,3 +233,19 @@ func TestCleanupsPassOnAfterRun(t *testing.T) {
 		t.Errorf("called %v, want %v", got, want)
 	}
 }
+
+// The log records of an action's cleanup are named after the action as the
+// step's uses writes it, as those of the step are, and one no step of the
+// run wrote, as one an embedded job ran, by its name in full.
+func TestCleanupsNameOf(t *testing.T) {
+	c := (&recorder{}).cleanups()
+	c.writtenAs("/work/actions/greet", "./actions/greet")
+	if got := c.nameOf("/work/actions/greet"); got != "./actions/greet" {
+		t.Errorf("nameOf = %q, want ./actions/greet", got)
+	}
+	if got := c.nameOf("/work/other"); got != "/work/other" {
+		t.Errorf("nameOf = %q, want /work/other", got)
+	}
+	var none *cleanups
+	none.writtenAs("/a", "./a")
+}

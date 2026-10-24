@@ -42,6 +42,9 @@ type cleanups struct {
 	// the run this one is part of, which calls them when it is over. One
 	// that comes to be owed after that is passed on as well.
 	passedOn *actionrpc.Cleanups
+	// written are the actions as a step's uses writes them, by their names
+	// in full, for their log records to be named as the step's are.
+	written map[string]string
 }
 
 // newCleanups returns the cleanups of the run runID, whose actions log and
@@ -56,7 +59,7 @@ func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 		if err != nil {
 			return err
 		}
-		log := newActionLog(uses, os.Stderr, printer.Masker(), actionLogLevel(printer.verbose, trace), printer.verbose)
+		log := newActionLog(c.nameOf(uses), os.Stderr, printer.Masker(), actionLogLevel(printer.verbose, trace), printer.verbose)
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		return actionrpc.CleanupExecutable(ctx, exe.Path, exe.SHA256, actionrpc.CleanupCall{RunID: runID}, log)
@@ -160,6 +163,31 @@ func (c *cleanups) run() {
 	for _, uses := range slices.Backward(owed) {
 		c.call(uses)
 	}
+}
+
+// writtenAs records that a step's uses writes the action named uses in full
+// as written.
+func (c *cleanups) writtenAs(uses, written string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.written == nil {
+		c.written = make(map[string]string)
+	}
+	c.written[uses] = written
+}
+
+// nameOf returns the action named uses in full as a step's uses writes it,
+// or as it is when no step of this run wrote it, as one an embedded job ran.
+func (c *cleanups) nameOf(uses string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if w, ok := c.written[uses]; ok {
+		return w
+	}
+	return uses
 }
 
 func (c *cleanups) runningCount() int {

@@ -39,6 +39,8 @@ func MapString(params map[string]string, maxLen int) map[string]string {
 }
 
 // Map truncates long values in map[string]any for logging
+//
+// Deprecated: use Value, which keeps the maps and lists in the values.
 func Map(params map[string]any, maxLen int) map[string]any {
 	truncated := make(map[string]any)
 	for key, value := range params {

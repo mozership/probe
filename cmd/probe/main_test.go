@@ -131,6 +131,13 @@ func TestCmd_verboseLevels(t *testing.T) {
 			t.Errorf("start(%v): Verbose, Trace = %v, %v, want %v, %v", tt.args, c.Verbose, c.Trace, tt.verbose, tt.trace)
 		}
 	}
+	// -vv is -v given twice, not a long flag of its own.
+	for _, arg := range []string{"--vv", "--vv=false", "-vv=true"} {
+		c := newBufferCmd()
+		if err := c.parseArgs([]string{arg, "test.yml"}); err == nil || !strings.Contains(err.Error(), "unknown flag: "+arg) {
+			t.Errorf("parseArgs(%s) = %v, want an unknown flag", arg, err)
+		}
+	}
 }
 
 func TestCmd_start(t *testing.T) {

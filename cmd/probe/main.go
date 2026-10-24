@@ -151,6 +151,10 @@ func (c *Cmd) parseArgs(args []string) error {
 				c.Trace = c.Verbose
 				c.Verbose = true
 			case "vv":
+				// Only as -vv, without a value: it is -v given twice.
+				if arg != "-vv" {
+					return fmt.Errorf("unknown flag: %s", arg)
+				}
 				c.Verbose = true
 				c.Trace = true
 			case "mermaid":

@@ -319,6 +319,15 @@ func (p *Printer) PrintRequestResponse(stepIdx int, stepName string, req, res ma
 	p.LogDebug("RT: %s", colorInfo().Sprintf("%s", rt))
 }
 
+// PrintGivenRequest prints, for a step whose action failed without
+// returning the request it made, the parameters the step gave the action,
+// its templates evaluated, in place of the request and the response.
+func (p *Printer) PrintGivenRequest(stepIdx int, stepName string, with map[string]any) {
+	p.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	p.LogDebug("Request (as the step gave it; the action returned none):")
+	p.PrintMapData(p.masker.Map(with))
+}
+
 // PrintMapData prints map data in verbose mode as YAML-like lines, its keys
 // sorted, and all of it, as it is: nothing is cut or left out.
 func (p *Printer) PrintMapData(data map[string]any) {

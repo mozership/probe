@@ -26,7 +26,7 @@ import (
 //   - Trace is shown only with -vv, along with how the runner started,
 //     called and stopped the action's process. It is for what helps to
 //     debug the action, such as the parameters it received and the result
-//     it returned, which LogParams and LogOutcome log.
+//     it returned, or the error, which LogParams and LogOutcome log.
 //
 // The runner marks the errors it sends as the action's own, apart from a
 // lost connection. Of an action built against a version of this package

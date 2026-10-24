@@ -2882,3 +2882,59 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		}
 	}
 }
+
+// A verbose run shows, for a step whose action failed without returning the
+// request it made, what the step gave the action, its templates evaluated
+// and its credentials hidden, so that it still tells what was asked for.
+func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	mock := NewMockActionRunner()
+	mock.SetError("http", errors.New("connection refused"))
+	st := &stepRun{
+		Step: &Step{
+			Uses:         "http",
+			With:         map[string]any{"url": "http://{{vars.host}}", "password": "hunter2"},
+			actionRunner: mock,
+		},
+		expr: &expr.Expr{},
+		ctx:  StepContext{Vars: map[string]any{"host": "127.0.0.1:1"}},
+	}
+	printer := newBufferPrinter()
+	printer.verbose = true
+	printer.SetMasker(mask.New(nil, nil))
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+
+	_, err := st.executeAction("h", jCtx)
+	if err == nil {
+		t.Fatal("expected the action to fail")
+	}
+	st.handleActionError(err, "h", jCtx)
+
+	out := printer.errWriter.(*bytes.Buffer).String()
+	want := "[DEBUG] Request (as the step gave it; the action returned none):\n[DEBUG]   password: <redacted>\n[DEBUG]   url: http://127.0.0.1:1\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("output does not have\n%s\ngot:\n%s", want, out)
+	}
+	if strings.Contains(out, "hunter2") || strings.Contains(out, "Response:") {
+		t.Errorf("output should hide the password and show no empty response:\n%s", out)
+	}
+}
+
+// A step whose action returned the request it made shows that, not what the
+// step gave it.
+func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
+	printer := newBufferPrinter()
+	printer.verbose = true
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+	st := &stepRun{Step: &Step{Uses: "http"}, expr: &expr.Expr{}, given: map[string]any{"url": "given"}}
+	st.ctx.Req = map[string]any{"url": "made"}
+
+	st.handleActionError(errors.New("failed"), "h", jCtx)
+
+	out := printer.errWriter.(*bytes.Buffer).String()
+	if !strings.Contains(out, "[DEBUG] Request:\n[DEBUG]   url: made\n") || strings.Contains(out, "given") {
+		t.Errorf("output should show the request the action made:\n%s", out)
+	}
+}

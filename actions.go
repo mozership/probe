@@ -104,6 +104,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		if err != nil {
 			return nil, nil, err
 		}
+		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
 	return actionrpc.RunExecutableStepContext(opts.context(), exe.Path, exe.SHA256, call, log)

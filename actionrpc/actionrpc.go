@@ -766,11 +766,12 @@ func LogParams(log hclog.Logger, msg string, with map[string]any) {
 
 // LogOutcome records how an action finished. subject names what was
 // attempted, for example "http request", and is used to build the message.
-// An error is recorded at error level; a result at trace level, as LogParams
-// records the parameters, since a verbose run shows the step's response.
+// It is recorded at trace level, as LogParams records the parameters: a
+// verbose run shows the step's response, and the error the action returns,
+// which the runner prints itself.
 func LogOutcome(log hclog.Logger, subject string, ret map[string]any, err error) {
 	if err != nil {
-		log.Error(subject+" failed", "error", err)
+		log.Trace(subject+" failed", "error", err)
 		return
 	}
 	log.Trace(subject+" completed successfully", "result", forLog(ret))

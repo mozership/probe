@@ -77,7 +77,7 @@ probe -vv workflow.yml
 ```
 
 **Verbose Output Includes:**
-- The request and the response of each step, and its response time
+- The request and the response of each step, and its response time. For a step whose action failed before it returned a request, the parameters the step gave the action, its templates evaluated, in their place
 - The result of the test and the values it read (`Env`)
 - The records actions log at debug, info and error level, which a run without `-v` leaves out
 

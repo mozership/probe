@@ -936,7 +936,7 @@ Probe shows the records the action logs by their levels:
 - Warning: in every run. Log at this level what the user must see whatever the step's result says.
 - Error: only with `-v`, since the error the action returns already says what they would.
 - Debug and info: with `-v`, alongside the request and the response of the step, which Probe shows itself. Log at these levels what the action did that its result does not tell, such as a retry.
-- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `actionrpc.LogParams` and `actionrpc.LogOutcome` log the parameters and the result at this level.
+- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `actionrpc.LogParams` and `actionrpc.LogOutcome` log the parameters, and the result or the error, at this level.
 
 Each record is shown as `[LEVEL] <action>: <message>`, its fields under it as YAML-like lines, maps and lists laid out.
 
