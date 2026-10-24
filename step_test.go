@@ -1984,6 +1984,31 @@ func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
 	}
 }
 
+// TestStep_executeSingleAction_Trace passes -vv on to the action, whose log
+// then shows how its process is run as well.
+func TestStep_executeSingleAction_Trace(t *testing.T) {
+	mock := &OptionsRecordingActionRunner{}
+	step := &stepRun{Step: &Step{Uses: "test-action"}, expr: &expr.Expr{}}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Config:  Config{Verbose: true, Trace: true},
+			Printer: newBufferPrinter(),
+		},
+	}
+
+	if _, err := step.executeSingleAction(mock, map[string]any{}, jCtx, false); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	recorded := mock.recorded()
+	if len(recorded) != 1 {
+		t.Fatalf("attempts = %d, want 1", len(recorded))
+	}
+	if !recorded[0].Trace || recorded[0].logLevel() != hclog.Trace {
+		t.Errorf("Trace = %v, logLevel = %v, want true, trace", recorded[0].Trace, recorded[0].logLevel())
+	}
+}
+
 func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	// A later step publishing a name already taken gets a warning, not an
 	// error-labelled message.

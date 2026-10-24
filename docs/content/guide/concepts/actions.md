@@ -931,7 +931,14 @@ func main() {
 
 The error `Run` returns is what the step's result and the files `--report` writes show, as it is, so word it for the person who reads why the step failed. An action that panics or exits before it returns fails its step with how its process exited and, for a panic, the panic message.
 
-Records the action logs at error level are shown only with `--verbose`, since the error it returns already says what they would. Log at warning level what the user must see whatever the step's result says, and at debug level what helps to find a fault.
+Probe shows the records the action logs by their levels:
+
+- Warning: in every run. Log at this level what the user must see whatever the step's result says.
+- Error: only with `-v`, since the error the action returns already says what they would.
+- Debug and info: with `-v`, alongside the request and the response of the step, which Probe shows itself. Log at these levels what the action did that its result does not tell, such as a retry.
+- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `actionrpc.LogParams` and `actionrpc.LogOutcome` log the parameters and the result at this level.
+
+Each record is shown as `[LEVEL] <action>: <message>`, its fields under it as YAML-like lines, maps and lists laid out.
 
 Build the action against the `actionrpc` of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `actionrpc` puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.
 

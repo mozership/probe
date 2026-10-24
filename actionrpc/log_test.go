@@ -23,7 +23,7 @@ func TestLogHidesCredentialsBeforeTruncating(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Debug})
+	log := hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Trace})
 	LogParams(log, "params", with)
 	LogOutcome(log, "request", map[string]any{"req": with, "status": 0}, nil)
 

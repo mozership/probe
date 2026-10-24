@@ -63,7 +63,7 @@ Verbose mode shows:
 - Detailed HTTP request/response information
 - Step execution timing
 - Variable resolution details
-- Log records from actions
+- Log records from actions at debug level and above
 
 **Example verbose output** (`…` marks what is left out here):
 ```
@@ -98,6 +98,8 @@ Verbose mode shows:
 [DEBUG]   status: 0
 [DEBUG]   vars: {}
 ```
+
+To debug an action rather than a workflow, give `-vv`. It also shows how Probe starts, calls and stops each action's process, and what actions log at trace level, such as the parameters they received, as `[TRACE]` lines.
 
 ### Timing Display
 

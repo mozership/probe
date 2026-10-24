@@ -218,7 +218,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	// takes a while, in the background while the next one changes the step.
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
-	opts := RunOptions{Verbose: jCtx.Verbose, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
+	opts := RunOptions{Verbose: jCtx.Verbose, Trace: jCtx.Trace, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
 	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}, Contract: &actionrpc.Contract{}}
 	go func() {
 		defer done()

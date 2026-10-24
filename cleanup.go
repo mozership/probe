@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/procgroup"
@@ -46,8 +45,9 @@ type cleanups struct {
 }
 
 // newCleanups returns the cleanups of the run runID, whose actions log and
-// warn through printer.
-func newCleanups(runID string, printer *Printer) *cleanups {
+// warn through printer. trace shows how the actions' processes are run as
+// well, in a verbose run.
+func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 	c := &cleanups{runID: runID, warn: printer.LogWarn}
 	c.clean = func(uses string) error {
 		// The action was resolved when its step ran, so this fetches
@@ -56,16 +56,7 @@ func newCleanups(runID string, printer *Printer) *cleanups {
 		if err != nil {
 			return err
 		}
-		level := hclog.Warn
-		if printer.verbose {
-			level = hclog.Debug
-		}
-		log := hclog.New(&hclog.LoggerOptions{
-			Name:    "actions",
-			Output:  printer.Masker().Writer(os.Stderr),
-			Level:   level,
-			Exclude: excludeErrors(printer.verbose),
-		})
+		log := newActionLog(uses, os.Stderr, printer.Masker(), actionLogLevel(printer.verbose, trace), printer.verbose)
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		return actionrpc.CleanupExecutable(ctx, exe.Path, exe.SHA256, actionrpc.CleanupCall{RunID: runID}, log)

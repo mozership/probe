@@ -21,10 +21,10 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	actionrpc.LogParams(a.log, "received smtp request parameters", with)
 
 	before := WithBefore(func(from string, to string, subject string) {
-		a.log.Debug("email prepared", "from", from, "to", to, "subject", subject)
+		a.log.Trace("email prepared", "from", from, "to", to, "subject", subject)
 	})
 	after := WithAfter(func(result *Result) {
-		a.log.Debug("email delivery completed", "result", result)
+		a.log.Trace("email delivery completed", "result", result)
 	})
 	ret, err := Send(with, before, after)
 

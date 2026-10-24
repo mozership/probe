@@ -35,7 +35,11 @@ type Config struct {
 	// keep it from running, is written; nil for nowhere.
 	Warn    io.Writer
 	Verbose bool
-	Timing  bool
+	// Trace, with Verbose, also shows how each action's process is
+	// started, called and stopped, and the records an action logs at trace
+	// level, for debugging an action.
+	Trace  bool
+	Timing bool
 	// Output selects how the report is delivered while jobs run.
 	Output OutputMode
 	// Reports lists the report files written once the run has finished.
