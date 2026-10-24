@@ -625,6 +625,26 @@ func TestCheck_FilesReadTogether(t *testing.T) {
 	}
 }
 
+// TestCheck_JobsReplaced warns of a file whose jobs replace those of an
+// earlier file, which a run of them does not run, and not of other keys.
+func TestCheck_JobsReplaced(t *testing.T) {
+	dir := t.TempDir()
+	first := writeWorkflow(t, dir, "first.yml", "name: first\njobs:\n- name: A\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
+	vars := writeWorkflow(t, dir, "vars.yml", "vars:\n  who: x\n")
+	second := writeWorkflow(t, dir, "second.yml", "vars:\n  who: y\njobs:\n- name: B\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
+
+	findings, err := Check(first+","+vars+","+second, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 3, "jobs replaces the jobs of " + first + ":2, which do not run"},
+	})
+	if findings[0].File != second {
+		t.Errorf("File = %q, want %q", findings[0].File, second)
+	}
+}
+
 func TestCheck_Unreadable(t *testing.T) {
 	if _, err := Check(filepath.Join(t.TempDir(), "none.yml"), checkActions); err == nil {
 		t.Error("Check of a file that does not exist should fail")

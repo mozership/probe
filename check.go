@@ -88,6 +88,8 @@ type CheckOptions struct {
 // as a file that does not exist.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
 	p := New(path, false)
+	// What a run warns of is told as a finding here.
+	p.Config.Warn = nil
 	files, err := p.yamlFiles()
 	if err != nil {
 		return nil, err
@@ -109,6 +111,18 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	}
 	if err := c.mapFiles(files); err != nil {
 		return nil, err
+	}
+	redefs, err := redefinedJobs(files)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range redefs {
+		c.findings = append(c.findings, Finding{
+			Severity: SeverityWarning,
+			File:     r.File,
+			Line:     r.Line,
+			Message:  r.message(),
+		})
 	}
 
 	// A key may be written more than once, as a run reads the workflow,

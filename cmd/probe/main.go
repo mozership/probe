@@ -91,6 +91,9 @@ func newBufferCmd() *Cmd {
 // parseArgs parses command line arguments manually to allow options after arguments
 func (c *Cmd) parseArgs(args []string) error {
 	var nonFlagArgs []string
+	// operands are how many of nonFlagArgs came before a --, after which
+	// every argument is a file, a subcommand's name included.
+	operands := -1
 	skipNext := false
 
 	for i := range args {
@@ -100,6 +103,12 @@ func (c *Cmd) parseArgs(args []string) error {
 		}
 
 		arg := args[i]
+
+		if arg == "--" {
+			operands = len(nonFlagArgs)
+			nonFlagArgs = append(nonFlagArgs, args[i+1:]...)
+			break
+		}
 
 		// A - alone is the standard input, for fmt.
 		if strings.HasPrefix(arg, "-") && arg != "-" {
@@ -223,7 +232,7 @@ func (c *Cmd) parseArgs(args []string) error {
 	}
 
 	// Check if first non-flag argument is a subcommand
-	if len(nonFlagArgs) > 0 && isSubCommand(nonFlagArgs[0]) {
+	if len(nonFlagArgs) > 0 && operands != 0 && isSubCommand(nonFlagArgs[0]) {
 		c.SubCommand = nonFlagArgs[0]
 		c.SubCommandArgs = nonFlagArgs[1:]
 	} else if len(nonFlagArgs) > 0 {
@@ -419,12 +428,13 @@ func (c *Cmd) runSubCommand() int {
 }
 
 func (c *Cmd) runGen() int {
-	if len(c.SubCommandArgs) != 1 {
-		if len(c.SubCommandArgs) == 0 {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] OpenAPI spec file is required\n")
-		} else {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] gen takes one OpenAPI spec file, not %d\n", len(c.SubCommandArgs))
-		}
+	if len(c.SubCommandArgs) == 0 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] OpenAPI spec file is required\n")
+		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
+		return probe.ExitConfigError
+	}
+	if len(c.SubCommandArgs) > 1 {
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] gen takes one OpenAPI spec file, not %d\n", len(c.SubCommandArgs))
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
 		return probe.ExitConfigError
 	}
@@ -442,6 +452,7 @@ func (c *Cmd) runGen() int {
 func (c *Cmd) runProbe() int {
 	p := probe.New(c.WorkflowPath, c.Verbose)
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
 	if c.Timing {
 		p.Config.Timing = true
 	}
@@ -527,6 +538,7 @@ func (c *Cmd) runDag() int {
 
 	p := probe.New(strings.Join(c.SubCommandArgs, ","), c.Verbose)
 	p.Config.Actions = actions.Names()
+	p.Config.Warn = c.errWriter
 	var graph string
 	var err error
 	if c.DagMermaid {

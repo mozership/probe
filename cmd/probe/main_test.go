@@ -381,6 +381,7 @@ func TestCmd_check(t *testing.T) {
 	head := write("head.yml", "name: split\n")
 	vars := write("vars.yml", "vars:\n  who: x\n")
 	jobs := write("jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: hello\n    with:\n      name: \"{{vars.who}}\"\n    test: res.code == 0\n")
+	notes := write("notes.txt", "name: notes\n")
 
 	tests := []struct {
 		name       string
@@ -395,7 +396,9 @@ func TestCmd_check(t *testing.T) {
 		{"no workflow", []string{"probe", "check"}, probe.ExitConfigError, "", "workflow file is required"},
 		{"files given apart", []string{"probe", "check", head, vars, jobs}, 0, "No problems found", ""},
 		{"files given apart and with commas", []string{"probe", "check", head + "," + vars, jobs}, 0, "No problems found", ""},
-		{"one of the files alone", []string{"probe", "check", head}, probe.ExitConfigError, "", ""},
+		{"one of the files alone", []string{"probe", "check", head}, probe.ExitConfigError, head + ": error: configuration error in decode_yaml", ""},
+		{"files that both have jobs", []string{"probe", "check", weak, clean}, 0, clean + ":2: warning: jobs replaces the jobs of " + weak + ":2, which do not run", ""},
+		{"a file named that is not YAML", []string{"probe", "check", clean, notes}, probe.ExitConfigError, "", "notes.txt: not a YAML file"},
 		{"a second file that does not exist", []string{"probe", "check", clean, filepath.Join(dir, "none.yml")}, probe.ExitConfigError, "", "none.yml: no such file"},
 		{"a workflow that does not exist", []string{"probe", "check", filepath.Join(dir, "none.yml")}, probe.ExitConfigError, "", "no such file"},
 	}
@@ -608,6 +611,9 @@ func TestCmd_parseArgs_workflowFiles(t *testing.T) {
 		{"files apart", []string{"a.yml", "b.yml"}, "a.yml,b.yml"},
 		{"files apart and with commas", []string{"a.yml,b.yml", "c.yml", "d.yml,e.yml"}, "a.yml,b.yml,c.yml,d.yml,e.yml"},
 		{"flags between the files", []string{"a.yml", "-v", "b.yml", "--var", "x=y", "c.yml"}, "a.yml,b.yml,c.yml"},
+		{"files after --", []string{"-v", "--", "-a.yml", "--b.yml"}, "-a.yml,--b.yml"},
+		{"a subcommand's name after --", []string{"--", "check", "a.yml"}, "check,a.yml"},
+		{"a file before --", []string{"a.yml", "--", "check"}, "a.yml,check"},
 	}
 
 	for _, tt := range tests {
@@ -647,6 +653,7 @@ func TestCmd_dagOfFilesGivenApart(t *testing.T) {
 	}{
 		{"apart", []string{"probe", "dag", head, jobs, more}},
 		{"apart and with commas", []string{"probe", "dag", head + "," + jobs, more}},
+		{"mermaid between the files", []string{"probe", "dag", head, "--mermaid", jobs, more}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -661,7 +668,107 @@ func TestCmd_dagOfFilesGivenApart(t *testing.T) {
 					t.Errorf("output should contain %q, got: %s", want, out)
 				}
 			}
+			if mermaid := strings.HasPrefix(out, "flowchart"); mermaid != c.DagMermaid {
+				t.Errorf("output in Mermaid = %v, want %v: %s", mermaid, c.DagMermaid, out)
+			}
+			if errOut := fmt.Sprintf("%s", c.errWriter); errOut != "" {
+				t.Errorf("error output should be empty, got: %s", errOut)
+			}
 		})
+	}
+
+	t.Run("files that both have jobs", func(t *testing.T) {
+		other := write("other.yml", "jobs:\n- name: Other job\n  steps:\n  - uses: hello\n")
+		c := newBufferCmd()
+		c.mocking = false
+		if code := c.start([]string{"probe", "dag", head, jobs, other}); code != 0 {
+			t.Fatalf("start() = %d, want 0; stderr: %s", code, c.errWriter)
+		}
+		want := "[WARN] " + other + ":1: jobs replaces the jobs of " + jobs + ":1, which do not run"
+		if errOut := fmt.Sprintf("%s", c.errWriter); !strings.Contains(errOut, want) {
+			t.Errorf("error output should contain %q, got: %s", want, errOut)
+		}
+		if out := fmt.Sprintf("%s", c.outWriter); strings.Contains(out, "First job") || !strings.Contains(out, "Other job") {
+			t.Errorf("output should have the jobs of other.yml alone, got: %s", out)
+		}
+	})
+}
+
+// TestCmd_runProbe_filesGivenApart runs a workflow split into files given
+// apart, each of which has a part of what the run reads.
+func TestCmd_runProbe_filesGivenApart(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	write := func(name, content string) {
+		if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The steps are skipped, so that no action is started.
+	write("head.yml", "name: Split\n")
+	write("vars.yml", "vars:\n  who: merged\n")
+	write("jobs.yml", "jobs:\n- name: \"Job of {{vars.who}}\"\n  steps:\n  - uses: hello\n    skipif: \"true\"\n")
+	write("other.yml", "jobs:\n- name: Other job\n  steps:\n  - uses: hello\n    skipif: \"true\"\n")
+
+	tests := []struct {
+		name     string
+		args     []string
+		contains []string
+		absent   string
+		warn     string
+	}{
+		{
+			name:     "each file has a part",
+			args:     []string{"head.yml", "vars.yml", "--report", "json=r.json", "jobs.yml"},
+			contains: []string{`"name": "Split"`, `"name": "Job of merged"`},
+		},
+		{
+			name:     "files that both have jobs",
+			args:     []string{"head.yml,vars.yml", "jobs.yml", "other.yml", "--report", "json=r.json"},
+			contains: []string{`"name": "Other job"`},
+			absent:   "Job of merged",
+			warn:     "[WARN] other.yml:1: jobs replaces the jobs of jobs.yml:1, which do not run",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newBufferCmd()
+			if err := c.parseArgs(tt.args); err != nil {
+				t.Fatal(err)
+			}
+			if code := c.runProbe(); code != 0 {
+				t.Fatalf("runProbe() = %d, want 0; stderr: %s", code, c.errWriter)
+			}
+			data, err := os.ReadFile("r.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.contains {
+				if !strings.Contains(string(data), want) {
+					t.Errorf("report should contain %q, got: %s", want, data)
+				}
+			}
+			if tt.absent != "" && strings.Contains(string(data), tt.absent) {
+				t.Errorf("report should not contain %q, got: %s", tt.absent, data)
+			}
+			errOut := fmt.Sprintf("%s", c.errWriter)
+			if tt.warn == "" && errOut != "" {
+				t.Errorf("error output should be empty, got: %s", errOut)
+			}
+			if !strings.Contains(errOut, tt.warn) {
+				t.Errorf("error output should contain %q, got: %s", tt.warn, errOut)
+			}
+		})
+	}
+}
+
+func TestCmd_parseArgs_subcommandBeforeEndOfOptions(t *testing.T) {
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"check", "--", "-w.yml"}); err != nil {
+		t.Fatalf("parseArgs() unexpected error: %v", err)
+	}
+	if c.SubCommand != "check" || len(c.SubCommandArgs) != 1 || c.SubCommandArgs[0] != "-w.yml" {
+		t.Errorf("SubCommand = %q, SubCommandArgs = %v, want check [-w.yml]", c.SubCommand, c.SubCommandArgs)
 	}
 }
 

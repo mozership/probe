@@ -13,7 +13,7 @@ probe <subcommand> [options] <file>
 
 ## Command Syntax
 
-Every invocation names one or more workflow files. Options come before them, and a subcommand takes their place when you want something other than a run.
+Every invocation names one or more workflow files. Options may come before, after or between them, and every argument after `--` is a file, even one that starts with `-`. A subcommand comes first when you want something other than a run.
 
 ### Basic Command
 
@@ -40,8 +40,8 @@ The workflow paths are the only positional arguments, and at least one is requir
 
 #### `workflow-path`
 
-**Type:** String (required)  
-**Description:** Path to the workflow YAML file, a directory or a glob. Several paths, as separate arguments or as a comma-separated list, are merged in their order
+**Type:** String, one or more (required)  
+**Description:** Path to the workflow YAML file, a directory or a glob. Several paths, as separate arguments or as a comma-separated list, are merged in their order. A file named directly must end in `.yml` or `.yaml`; from a directory or a glob, only those files are read
 
 **Examples:**
 ```bash

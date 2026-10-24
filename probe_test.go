@@ -150,6 +150,65 @@ func TestYamlFiles(t *testing.T) {
 	}
 }
 
+// TestYamlFiles_NotYAML refuses a file named on its own that is not YAML,
+// and leaves out one that a directory or a glob finds.
+func TestYamlFiles_NotYAML(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"w.yml", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("name: w\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	yml, txt := filepath.Join(dir, "w.yml"), filepath.Join(dir, "notes.txt")
+
+	p := &Probe{FilePath: yml + "," + txt}
+	if _, err := p.yamlFiles(); err == nil || !strings.Contains(err.Error(), "notes.txt: not a YAML file") {
+		t.Errorf("yamlFiles() error = %v, want one naming notes.txt", err)
+	}
+	for _, path := range []string{dir, filepath.Join(dir, "*")} {
+		p := &Probe{FilePath: path}
+		files, err := p.yamlFiles()
+		if err != nil {
+			t.Fatalf("yamlFiles(%s) unexpected error: %v", path, err)
+		}
+		if len(files) != 1 || files[0] != yml {
+			t.Errorf("yamlFiles(%s) = %v, want [%s]", path, files, yml)
+		}
+	}
+}
+
+func TestRedefinedJobs(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	a := write("a.yml", "name: a\njobs:\n- name: A\n")
+	b := write("b.yml", "vars:\n  jobs: 1\n# jobs:\n\"jobs\" :\r\n- name: B\n")
+	vars := write("vars.yml", "vars:\n  who: x\n")
+	c := write("c.yml", "jobs: []\n")
+
+	got, err := redefinedJobs([]string{a, vars, b, vars, c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []jobsRedefinition{
+		{File: b, Line: 4, Prev: a, PrevLine: 2},
+		{File: c, Line: 1, Prev: b, PrevLine: 4},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("redefinedJobs() = %v, want %v", got, want)
+	}
+
+	got, err = redefinedJobs([]string{a, vars})
+	if err != nil || len(got) != 0 {
+		t.Errorf("redefinedJobs() of one file with jobs = %v, %v, want none", got, err)
+	}
+}
+
 func TestReadYamlFiles(t *testing.T) {
 	p := &Probe{}
 
