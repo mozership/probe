@@ -1561,6 +1561,49 @@ func TestWorkflow_Start_StreamLabelsJobsByName(t *testing.T) {
 	}
 }
 
+// TestWorkflow_Start_StreamLabelMasksSecrets covers a job whose name has a
+// secret long enough to be cut short in its label. The name is masked
+// before it is cut, or the prefix left would be one the masker no longer
+// finds; and the labels are padded to the width of what is shown.
+func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	w := newOrderTestWorkflow(false)
+	w.Secrets = []string{"TOKEN"}
+	w.env = map[string]string{"TOKEN": "abcdefghijklmnopqrstuvwxyz0123"}
+	w.Vars = map[string]any{"tok": "{{TOKEN}}"}
+	w.Jobs = w.Jobs[:2]
+	w.Jobs[0].Name = "Deploy {{ vars.tok }}"
+	p := NewPrinter(false)
+	p.spinner = nil
+	errOut := new(bytes.Buffer)
+	p.errWriter = errOut
+	w.printer = p
+
+	startCapturing(t, w, OutputModeStream)
+
+	progress := errOut.String()
+	if strings.Contains(progress, "abcd") {
+		t.Errorf("progress log should not show any of the secret, got:\n%s", progress)
+	}
+	if !strings.Contains(progress, "[Deploy ") {
+		t.Errorf("progress log should label the job by its masked name, got:\n%s", progress)
+	}
+	column := -1
+	for line := range strings.Lines(progress) {
+		// The step's icon comes after the label and its padding.
+		end := strings.Index(line, "]") + 1
+		pad := len(line[end:]) - len(strings.TrimLeft(line[end:], " "))
+		at := displayWidth(line[:end+pad])
+		if column >= 0 && at != column {
+			t.Errorf("steps should line up, got:\n%s", progress)
+			break
+		}
+		column = at
+	}
+}
+
 // TestWorkflow_Start_StreamAndSpinnerAgree pins the guarantee that streaming
 // changes when the report is written, not what it says.
 func TestWorkflow_Start_StreamAndSpinnerAgree(t *testing.T) {

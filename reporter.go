@@ -165,7 +165,13 @@ func newStreamReporter(p *Printer, render *reportRenderer) *StreamReporter {
 // gives for its id. The names are known once the vars they are evaluated
 // with are, which is after Start. Until then a line is labelled by its id.
 func (r *StreamReporter) labelJobs(name func(id string) string) {
-	labels := jobLabels(r.order, name)
+	// A name is masked before it is cut short: the line is masked again
+	// as it is written, but a secret cut short is no longer one the masker
+	// finds, and the padding is for the label as it is shown.
+	masker := r.printer.Masker()
+	labels := jobLabels(r.order, func(id string) string {
+		return masker.String(name(id))
+	})
 	w := 0
 	for _, l := range labels {
 		w = max(w, displayWidth(l))

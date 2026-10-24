@@ -50,8 +50,16 @@ func jobLabels(order []string, name func(id string) string) map[string]string {
 }
 
 // oneLine returns s with each run of white space and control characters
-// made one space, so that a name keeps to the line it labels.
+// made one space, so that a name keeps to the line it labels, and without
+// format characters, such as one that turns the text after it right to
+// left, which would change how the rest of the line reads.
 func oneLine(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s)
 	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsControl(r)
 	}), " ")

@@ -50,6 +50,12 @@ func TestJobLabels(t *testing.T) {
 			want:  map[string]string{"job_0": "Check [api]"},
 		},
 		{
+			name:  "a name keeps no format characters",
+			order: []string{"job_0"},
+			names: map[string]string{"job_0": "Check\u202e ipa\u200b"},
+			want:  map[string]string{"job_0": "Check ipa"},
+		},
+		{
 			name:  "a wide name is cut by the columns it takes",
 			order: []string{"job_0"},
 			names: map[string]string{"job_0": strings.Repeat("結合", 10)},
