@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+// evalHints returns the hints of input as it fails against hintEnv, or as
+// it would if it failed somewhere other than where .length is read.
+func evalHints(input string) []string {
+	_, err := (&Expr{}).Eval(input, hintEnv())
+	if err == nil {
+		err = errors.New("failed")
+	}
+	return Hints(input, err)
+}
+
 func hintEnv() map[string]any {
 	return map[string]any{
 		"res": map[string]any{
@@ -47,14 +57,19 @@ func TestHints(t *testing.T) {
 		{`res.code.toString()`, `expressions have no toString() method: write string(res.code)`, `string(res.code)`, "200"},
 		{`res.body.split(" ")`, `expressions have no split() method: write split(res.body, " ")`, `split(res.body, " ")`, []string{"Hello", "World"}},
 		{`res.items.join(",")`, `expressions have no join() method: write join(res.items, ",")`, `join(res.items, ",")`, "a,b"},
+		{`",".join(res.items)`, `expressions have no join() method: write join(res.items, ",")`, `join(res.items, ",")`, "a,b"},
 		{`res.body.indexOf("o")`, `expressions have no indexOf() method: write indexOf(res.body, "o")`, `indexOf(res.body, "o")`, 4},
 		{`res.body.lastIndexOf("o")`, `expressions have no lastIndexOf() method: write lastIndexOf(res.body, "o")`, `lastIndexOf(res.body, "o")`, 7},
+		{`res.body.replace("o", "0")`, `expressions have no replace() method: write replace(res.body, "o", "0"), which replaces every match`, `replace(res.body, "o", "0")`, "Hell0 W0rld"},
 		{`res.body.replaceAll("o", "0")`, `expressions have no replaceAll() method: write replace(res.body, "o", "0")`, `replace(res.body, "o", "0")`, "Hell0 W0rld"},
 		{`res.json.keys()`, `expressions have no keys() method: write keys(res.json)`, `len(keys(res.json))`, 2},
 		{`(res.body + "!").endsWith("!")`, `expressions have no endsWith() method: write (res.body + "!") endsWith "!"`, `(res.body + "!") endsWith "!"`, true},
 		{`res?.body?.contains("World")`, `expressions have no contains() method: write res?.body contains "World" for a string`, `res?.body contains "World"`, true},
 		{`all(res.items, #.trim() != "")`, `expressions have no trim() method: write trim(#)`, `all(res.items, trim(#) != "")`, true},
 		{`res.code === 200`, `expressions have no ===: write ==`, `res.code == 200`, true},
+		{`res.body.contains("World") === true`, `expressions have no ===: write ==`, `res.body contains "World" == true`, true},
+		{`res?.body?.startsWith("Hello") === true`, `expressions have no ===: write ==`, `res?.body startsWith "Hello" == true`, true},
+		{`res.body.trim().length > 0`, `expressions have no trim() method: write trim(res.body)`, `len(trim(res.body)) > 0`, true},
 		{`res.code !== 404`, `expressions have no !==: write !=`, `res.code != 404`, true},
 		{`startsWith(res.body, "Hello")`, `startsWith is an operator: write res.body startsWith "Hello", or hasPrefix(res.body, "Hello")`, `hasPrefix(res.body, "Hello")`, true},
 		{`res.code > 0 && endsWith(res.body, "World")`, `endsWith is an operator: write res.body endsWith "World", or hasSuffix(res.body, "World")`, `hasSuffix(res.body, "World")`, true},
@@ -68,7 +83,7 @@ func TestHints(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			hints := Hints(tt.input)
+			hints := evalHints(tt.input)
 			if len(hints) != 1 || !strings.HasPrefix(hints[0], tt.hint) {
 				t.Errorf("Hints(%q) = %q, want one starting %q", tt.input, hints, tt.hint)
 			}
@@ -95,10 +110,12 @@ func TestHints_None(t *testing.T) {
 		`res.code == nil || res.code == 200`,
 		`"null" in res.items`,
 		`res.body.trim("x", "y")`,
+		// It fails comparing 3 with "a", not reading .length.
+		`res.json.length > "a"`,
 		`res.code == 200 &&`,
 		`res.code = 200`,
 	} {
-		if hints := Hints(input); len(hints) > 0 {
+		if hints := evalHints(input); len(hints) > 0 {
 			t.Errorf("Hints(%q) = %q, want none", input, hints)
 		}
 	}

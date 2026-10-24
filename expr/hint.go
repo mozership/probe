@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -38,29 +39,34 @@ func withHints(input string, err error) error {
 	if err == nil {
 		return nil
 	}
-	if hints := Hints(input); len(hints) > 0 {
+	if hints := Hints(input, err); len(hints) > 0 {
 		return &HintError{Err: err, Hints: hints}
 	}
 	return err
 }
 
-// Hints returns how input, an expression that fails, is likely meant to be
-// written where it is written as another language would write it: a method
-// expressions do not have, such as res.body.contains("x") for
+// Hints returns how input, an expression that fails with err, is likely
+// meant to be written where it is written as another language would write
+// it: a method expressions do not have, such as res.body.contains("x") for
 // res.body contains "x", .length for len(), === for ==, or null for nil.
 // Some of these, such as .length or null, are not wrong in themselves, a
 // map may have a key named length, so they are told only of an expression
-// that fails.
-func Hints(input string) []string {
-	tree, err := parser.Parse(input)
-	if err != nil {
+// that fails, and .length only where err says it fails.
+func Hints(input string, err error) []string {
+	tree, perr := parser.Parse(input)
+	if perr != nil {
 		return operatorHints(input)
 	}
 	f := &mistakeFinder{callees: map[ast.Node]bool{}}
 	ast.Walk(&tree.Node, f)
 	hints := f.calls
+	// The error of reading .length is where .length is read: one of
+	// something else, such as res.json.length > "a" where res.json has a
+	// key named length, or of the method .length is read from the result
+	// of, is not told of len().
+	at, located := errors.AsType[*file.Error](err)
 	for _, m := range f.lengths {
-		if !f.callees[m] {
+		if located && at.From == m.Location().From && !f.callees[m] {
 			hints = appendNew(hints, fmt.Sprintf("expressions take a length with len(): write len(%s)", m.Node))
 		}
 	}
@@ -159,9 +165,17 @@ func methodHint(name string, recv ast.Node, args []ast.Node) string {
 		return write("trim(%s)", r)
 	case name == "toString" && len(a) == 0:
 		return write("string(%s)", r)
-	case (name == "split" || name == "join" || name == "indexOf" || name == "lastIndexOf") && len(a) == 1:
+	case name == "join" && len(a) == 1:
+		// Python joins with the string it calls join on: ",".join(items).
+		if _, sep := recv.(*ast.StringNode); sep {
+			return write("join(%s, %s)", a[0], r)
+		}
+		return write("join(%s, %s)", r, a[0])
+	case (name == "split" || name == "indexOf" || name == "lastIndexOf") && len(a) == 1:
 		return write("%s(%s, %s)", name, r, a[0])
-	case (name == "replace" || name == "replaceAll") && len(a) == 2:
+	case name == "replace" && len(a) == 2:
+		return write("replace(%s, %s, %s), which replaces every match", r, a[0], a[1])
+	case name == "replaceAll" && len(a) == 2:
 		return write("replace(%s, %s, %s)", r, a[0], a[1])
 	case (name == "keys" || name == "values") && len(a) == 0:
 		return write("%s(%s)", name, r)
@@ -219,9 +233,14 @@ func operatorCallHint(input string, tokens []lexer.Token, i int) string {
 	if !ok || i+1 >= len(tokens) || !tokens[i+1].Is(lexer.Bracket, "(") {
 		return ""
 	}
-	// Written as an operator, it follows its left operand.
+	// Written as an operator, it follows its left operand. Called as a
+	// function, it follows an operator, but not . or ?., which make it a
+	// method called as res.body.contains(x) is.
 	if i > 0 {
 		prev := tokens[i-1]
+		if prev.Is(lexer.Operator, ".") || prev.Is(lexer.Operator, "?.") {
+			return ""
+		}
 		if prev.Kind != lexer.Operator && !prev.Is(lexer.Bracket, "(") && !prev.Is(lexer.Bracket, "[") {
 			return ""
 		}

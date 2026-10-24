@@ -751,13 +751,13 @@ Expressions are [expr-lang](https://expr-lang.org), in which values have no meth
 
 | Instead of | Write |
 |------------|-------|
-| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`, or `"x" in res.body.items` for a list |
+| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`, or for a list `"x" in list` |
 | `res.body.startsWith("x")`, `startsWith(res.body, "x")` | `res.body startsWith "x"`, or `hasPrefix(res.body, "x")` |
 | `res.body.endsWith("x")` | `res.body endsWith "x"`, or `hasSuffix(res.body, "x")` |
 | `res.body.matches("^a")` | `res.body matches "^a"` |
 | `res.body.length`, `items.size()` | `len(res.body)`, `len(items)` |
 | `s.toLowerCase()`, `s.toUpperCase()`, `s.trim()` | `lower(s)`, `upper(s)`, `trim(s)` |
-| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")` |
+| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")`, which replaces every match, not only the first as JavaScript does |
 | `n.toString()`, `obj.keys()` | `string(n)`, `keys(obj)` |
 | `===`, `!==` | `==`, `!=` |
 | `null`, `undefined`, `None` | `nil` |
