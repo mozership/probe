@@ -36,11 +36,25 @@ test: |
   ⎿ 0. ✗  API Health Check
            failed: res.body.status == "healthy"
              res.body.status = "degraded"
-           request: ...
-           response: ...
+           request:
+             headers:
+               Accept: */*
+               User-Agent: probe-http/1.0.0
+             method: GET
+             timeout: 30s
+             url: https://api.example.com/health
+           response:
+             body:
+               status: degraded
+             code: 200
+             headers:
+               Content-Type: application/json
+             status: 200 OK
 ```
 
 条件はProbeが読み取った形で表示されるため、空白や引用符がワークフローの記述と異なることがあります。値が表示されるのは、`==`、`<`、`in`、`contains`などの比較と、`!`が否定する対象です。`"healthy"`のようにテスト自体に書かれた値は繰り返しません。`||`でつないだ条件は1つの条件として、まとめて表示されます。`let`で始まるテストは宣言の後ろを分解し、各条件から宣言した値を参照できます。`random_int`、`random_str`、`unixtime`、`now`のように呼び出すたびに値が変わる関数を使うテストは、評価し直すと別の条件を指しかねないため分解せず、リクエストとレスポンスだけを表示します。同じ内容は`--report`が書き出すファイルの失敗メッセージにも、`test evaluated to false: res.body.status == "healthy" (res.body.status = "degraded")`の形で入ります。
+
+リクエストとレスポンスは、`--verbose`と同じく、名前の順に1項目ずつ表示されます。`GET`が送らなかったボディのような空の項目は省きます。0や`false`は省きません。値は512バイトか20行、マップやリストは30項目で切り、`… (1234 more bytes)`のように切った量を示します。大きなボディに失敗の理由が埋もれないようにするためで、`--verbose`は切らずに表示します。コマンドの出力のような複数行のテキストは、名前の下に1行ずつ表示します。バイナリデータはサイズだけを表示します。シークレットは、ほかの出力と同じく、どちらでも隠されます。レスポンスの`dump`を`false`にするアクションでは、どちらも表示しません。
 
 ### テスト式のコンテキスト
 

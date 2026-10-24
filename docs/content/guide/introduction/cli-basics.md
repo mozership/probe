@@ -70,11 +70,12 @@ Verbose mode shows:
 [DEBUG] Starting workflow: My Health Check
 [DEBUG] --- Step 1: Check Homepage
 [DEBUG] Request:
-[DEBUG]   method: "GET"
-[DEBUG]   url: "https://example.com"
+[DEBUG]   method: GET
+[DEBUG]   url: https://example.com
 [DEBUG] Response:
-[DEBUG]   status: 200
-[DEBUG]   body: "<!DOCTYPE html>..."
+[DEBUG]   body: <!DOCTYPE html>...
+[DEBUG]   code: 200
+[DEBUG]   status: 200 OK
 [DEBUG] RT: 245ms
 ```
 
@@ -356,8 +357,12 @@ Monitoring application health
   ⎿ 0. ✘  Check Homepage (1.23s)
               failed: res.code == 200
                 res.code = 500
-              request: map[string]interface {}{"method":"GET", "url":"https://example.com"}
-              response: map[string]interface {}{"code":500, "body":"Internal Server Error"}
+              request:
+                method: GET
+                url: https://example.com
+              response:
+                body: Internal Server Error
+                code: 500
      1. ⏭  Check API Health (skipped)
 
 Total workflow time: 1.23s ✘ 1 job(s) failed
