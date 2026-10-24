@@ -138,10 +138,10 @@ with:
 
 A server that does not answer in time is cut off, and the step fails with an action error, which exits the run with status `3`, such as `IMAP session timed out after 30s while running commands`. That is unlike a command the server refuses, which sets `res.code` to `1`. A value that is not a duration, not a number, or not above zero is rejected.
 
-### `commands` (required)
+### `commands` (optional)
 
 **Type:** Array of command objects  
-**Description:** IMAP commands to execute sequentially
+**Description:** IMAP commands to execute sequentially. Without them, the step connects, logs in and logs out, which checks the login alone
 
 The commands run in order in one session. The first command that fails stops the rest: `res.code` becomes `1`, `res.error` names the command, and `res.data` keeps what the commands before it returned.
 

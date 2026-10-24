@@ -463,6 +463,9 @@ workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_ur
 - `name`がない、IDが重複しているなど、実行時に読み込みを拒否されるもの
 - 組み込みでも外部でもないアクション、解析できない外部アクションの指定
 - ステップの`with`やジョブの`defaults`にある、組み込みアクションが受け付けないキー。アクションはそれを無視します（`body`のつもりの`bdoy`など）。また、どのアクションの名前でもない`defaults`。どのステップにも効きません。確かめるのは直下のキーだけで、`headers`のようなマップの中のキーは確かめません。テンプレートを含むキー、外部アクション、どんなキーも受け付ける`hello`は対象外です
+- `defaults`をまとめた`with`に、組み込みアクションが実行に必要なキーがないステップ。dbアクションの`dsn`や、httpアクションのメソッド（`method`か、`get`などの省略形で指定）などです。テンプレートを含むキーが`with`にあるステップは対象外です
+- ステップの`test`、`echo`、`outputs`が読む`res`や`req`のフィールドのうち、組み込みアクションが返さないもの。nilになります。httpアクションの`res.status_code`などです（ステータスコードは`res.code`）。本文のあるアクションにランナーが加える`res.rawbody`と、`stdout`のあるアクションに加える`res.json`もフィールドに含みます。helloアクションのステップの`res`は、その`with`のキーと`status`、`dump`です。`req`は`with`のキーです。確かめるのは最上位だけです。`res.body`のようなフィールドの中はデータだからです。`res[k]`のように実行時に決まるキーで読むフィールドは確かめません
+- ステップの`name`、`with`、`vars`、`iteration`、`wait`、`skipif`で読む`res`や`req`。これらはステップの実行前に評価されるので、空のまま読みます
 - どのジョブも指していない`needs`、循環する`needs`
 - 実行時に拒否されるステップID
 - 解析できない式（`test`、`skipif`、`outputs`、`repeat.test`、`repeat.baseline_test`）とテンプレート（`name`、`with`、`vars`、`echo`）
@@ -477,6 +480,7 @@ workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_ur
 - 読む側のジョブが直接にも間接にも`needs`で指定していないジョブの出力の参照。まだ公開されていないかもしれません
 - 意図どおりに読めない出力。ほかのステップも公開している名前をidのないステップが公開した場合は、その値を読めません。複数のステップが公開する名前を`outputs.<name>`のように名前だけで読む場合は、最初に公開したステップの値になります。値を公開するステップのidと同じ名前の出力では、`outputs.<name>`はそのステップの出力と値のうち先に公開されたほうになります。同じ名前でも、`outputs.<id>.<name>`のようにステップのidを通して読む場合は警告しません
 - 何も検証していないステップ。`test`がなく、何も失敗しないhelloアクションのステップでもなく、httpアクションの`openapi`やgrpcアクションの`proto`のように契約との照合をアクションに求めてもおらず、ジョブの`repeat.test`と`repeat.baseline_test`のどちらも読んでいないもの
+- 外部アクションのステップが読む`res`のフィールドのうち、その`action.yml`の`res`が宣言していないもの。`res`を宣言していない`action.yml`のアクションは対象外です
 - `1 == 1`のように何も読まない`test`。ステップの実行結果によらず、テストの結果が変わりません
 - `baseline`の下を何も読まない`repeat.baseline_test`。`repeat.test`に書けます
 - `vars.<name>`として読むvarのうち、ワークフローの`vars`、ステップの`vars`、ステップに書いた`iteration`の項目のどれも定義していないもの。[`--var`](#--var)で与えない限りnilになります。ステップの`vars`が読めるのはワークフローのvarだけなので、ステップの他のvarや`iteration`のキーを読むものも報告します。`vars[k]`のように実行時に決まるキーで読むvarと、`iteration`がテンプレートのステップで、そのステップの`vars`と`iteration`以外のフィールドが読むvarは確かめません。読み合わせるファイルは1つのワークフローとして確かめるので、実行時に読むファイルを`probe check`にも渡します
@@ -631,7 +635,7 @@ probe manifest <tag> <checksums-file> [action-file]
 probe manifest init mozership/probe-greet > action.yml
 ```
 
-アクションの名前はリポジトリ名から先頭の`probe-`を除いたもので、`runs.url`は各プラットフォームの実行ファイルを`<repo>_{os}_{arch}`という名前で指します。これはGoReleaserがアーカイブせずに公開する実行ファイルの名前です。`runs.url`のタグは仮のもので、チェックサムもないため、このコミットのアクションは使えません。どちらも最初のリリースで入ります。説明と`guard`、`params`、`cleanup`は書き入れる箇所として残してあり、それぞれ何のためのものかをコメントで示しています。
+アクションの名前はリポジトリ名から先頭の`probe-`を除いたもので、`runs.url`は各プラットフォームの実行ファイルを`<repo>_{os}_{arch}`という名前で指します。これはGoReleaserがアーカイブせずに公開する実行ファイルの名前です。`runs.url`のタグは仮のもので、チェックサムもないため、このコミットのアクションは使えません。どちらも最初のリリースで入ります。説明と`guard`、`params`、`res`、`cleanup`は書き入れる箇所として残してあり、それぞれ何のためのものかをコメントで示しています。
 
 #### `manifest <tag>`
 
@@ -648,7 +652,7 @@ probe manifest init mozership/probe-greet > action.yml
 - `runs.url`のタグを`tag`に置き換えます。`runs.url`はGitHubのリリースアセットのアドレス`https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`でなければならず、`<asset>`には`{os}`と`{arch}`が1つずつ必要で、その間に`_`など、英小文字でも数字でもない文字が要ります。
 - `runs.checksums`を`checksums-file`のダイジェストに置き換えます。ファイル名が、`<asset>`の`{os}`と`{arch}`をプラットフォームに置き換えたものである行を採り、それ以外の行は無視します。`action-file`にあったチェックサムは残しません。
 
-`name`、`description`、`guard`、`params`、`cleanup`は読んだまま出力します。出力はつねに同じ書式で、チェックサムはプラットフォーム順に並びます。`action-file`の先頭にあるコメント行は残し、それ以外のコメントは残しません。
+`name`、`description`、`guard`、`params`、`res`、`cleanup`は読んだまま出力します。出力はつねに同じ書式で、チェックサムはプラットフォーム順に並びます。`action-file`の先頭にあるコメント行は残し、それ以外のコメントは残しません。
 
 **例:**
 ```bash

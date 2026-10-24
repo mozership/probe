@@ -202,7 +202,7 @@ jobs:
       BUILD_VERSION: "{{vars.version}}"
   test: res.code == 0 && res.stdout contains "Deploy successful"
   outputs:
-    deploy_time: res.rt
+    deploy_time: rt.duration
     deploy_log: res.stdout
 ```
 
@@ -1085,6 +1085,7 @@ runs:
 | `runs.checksums` | `<os>_<arch>`ごとの実行ファイルのSHA-256ダイジェスト（小文字の16進数） |
 | `guard` | アクションが従うガードの種類。`read-only`、`allow-host`、またはその両方。Probeはこの宣言を検証せずに、その種類のガードの下でアクションを実行します。書かなければ、`--allow-action`で指定しない限り、どのガードの下でも拒否されます。[ガード](/ja/guide/concepts/guard)を参照してください |
 | `params` | アクションが`with`で受け取るキー。`probe check`が、受け取らないキーを報告するのに使います。書かなければ`with`は検査しません。`[]`はキーを受け取らないことを示します |
+| `res` | アクションが返す`res`の最上位のフィールド。`[code, body]`のように書きます。`probe check`が、それ以外を読むステップを警告するのに使います。書かなければ、ステップが`res`から読むものは検査しません。`[]`はフィールドを宣言しないので、読むものはすべて警告します |
 | `cleanup` | ワークフローが終わったときにProbeに呼ばせ、Stepが残したものを消すアクションでは`true`。書かなければ呼ばれません。[実行の後始末](#実行の後始末)を参照してください |
 
 `runs`には`url`と`path`のどちらか一方だけを書きます。`url`の場合は実行中のプラットフォームのチェックサムが必須で、ダイジェストが一致しないダウンロードは拒否します。ダイジェストは実行ファイルを起動するたびにも確かめます。`uses`のコミットが`action.yml`を固定し、`action.yml`がダイジェストを固定するので、実行されるファイルはコミットで一意に決まります。
@@ -1153,9 +1154,9 @@ probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
 
-名前、説明、`guard`、`params`、`cleanup`は`action.yml`にあるまま残るので、これらを書く場所は`action.yml`だけになります。
+名前、説明、`guard`、`params`、`res`、`cleanup`は`action.yml`にあるまま残るので、これらを書く場所は`action.yml`だけになります。
 
-新しいアクションでは、`probe manifest init`が雛形の`action.yml`を出力します。アクションを公開するGitHubリポジトリを指定して実行し、説明と`guard`、`params`、`cleanup`を書き入れてコミットします。最初のリリースで、そのタグとダイジェストが入ります：
+新しいアクションでは、`probe manifest init`が雛形の`action.yml`を出力します。アクションを公開するGitHubリポジトリを指定して実行し、説明と`guard`、`params`、`res`、`cleanup`を書き入れてコミットします。最初のリリースで、そのタグとダイジェストが入ります：
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml

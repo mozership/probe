@@ -2,6 +2,7 @@ package probe
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/mozership/probe/jsonutil"
@@ -50,6 +51,23 @@ func readActionResult(m map[string]any) actionResult {
 		}
 	}
 	return r
+}
+
+// addedResFields returns res, the fields of res an action declares it
+// returns, with those readActionResult adds to them: rawbody to one with a
+// body, which a JSON body is kept as, and json to one with stdout, which
+// stdout of JSON is read as. A field is added only to a res that has the
+// field it comes from, so these are all a res can have.
+func addedResFields(res []string) []string {
+	out := slices.Clone(res)
+	if slices.Contains(res, "body") {
+		out = append(out, "rawbody")
+	}
+	if slices.Contains(res, "stdout") {
+		out = append(out, "json")
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // parseExitStatus reads the status an action returned: a number, as it is

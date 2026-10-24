@@ -173,6 +173,7 @@ req:
   env:                      # Environment variables
     NODE_ENV: "production"
   background: false         # Background setting
+  ready: {}                 # Ready setting
 ```
 
 With `background: true`, the command is still running when the result is made:

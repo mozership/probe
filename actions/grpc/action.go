@@ -67,3 +67,23 @@ func Contracts() []string {
 func Params() []string {
 	return append(mapping.FieldTags(Req{}), "proto")
 }
+
+// ReqFields returns the fields of the req the grpc action returns: those of
+// Req. ResFields returns those of its res: those of Res, and those it adds:
+// violations and contract, for a call checked against .proto files, and
+// messages and complete, for one whose responses stream.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the grpc action returns; see
+// ReqFields.
+func ResFields() []string {
+	return append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations")
+}
+
+// Required returns the keys of with the grpc action cannot run without:
+// addr, service and method.
+func Required() [][]string {
+	return [][]string{{"addr"}, {"service"}, {"method"}}
+}

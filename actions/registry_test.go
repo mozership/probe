@@ -143,3 +143,38 @@ func TestParamsCoverTheDocs(t *testing.T) {
 		}
 	}
 }
+
+// Each built-in action declares the fields of what it returns, and the keys
+// of with it needs are keys it takes. That the fields are those it returns
+// is tested in each action's package, by running it.
+func TestFieldsAndRequired(t *testing.T) {
+	req, res := AllReqFields(), AllResFields()
+	required := AllRequired()
+	for _, name := range Names() {
+		if _, ok := req[name]; !ok || len(res[name]) == 0 {
+			t.Errorf("%s declares no fields of req or of res: %v, %v", name, req[name], res[name])
+		}
+		params, takesAny := Params(name)
+		if name == "hello" {
+			if _, ok := required[name]; ok || takesAny {
+				t.Errorf("hello needs no key of with, want none required")
+			}
+			continue
+		}
+		if len(required[name]) == 0 {
+			t.Errorf("%s declares no key of with it needs", name)
+		}
+		for _, group := range required[name] {
+			for _, key := range group {
+				if !slices.Contains(params, key) {
+					t.Errorf("%s needs %q, which is not a key it takes", name, key)
+				}
+			}
+		}
+	}
+	for name := range res {
+		if !slices.Contains(Names(), name) {
+			t.Errorf("%s declares fields but is not a built-in action", name)
+		}
+	}
+}
