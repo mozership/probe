@@ -59,7 +59,7 @@ deployment-tests/
 name: "Multi-Environment Deployment Testing"
 description: "Comprehensive testing across development, staging, and production environments"
 
-vars:
+vars: &base_vars
   # Common Configuration
   API_VERSION: "v2"
   USER_AGENT: "Probe Multi-Env Tester v1.0"
@@ -86,7 +86,7 @@ shared:
     Accept: "application/json"
 ```
 
-`defaults` is a job key, so the shared headers are defined here as a YAML anchor and pulled into each job's `defaults`:
+The shared headers are defined here as a YAML anchor, and each job pulls them into its `defaults`:
 
 ```yaml
 jobs:
@@ -99,9 +99,13 @@ jobs:
     # ...
 ```
 
+When files are merged, a top-level key in a later file replaces the same key of an earlier file as a whole, so an environment file that wrote only its own `vars` would drop those of `base.yml`. The files are joined into one YAML document before they are read, so each environment file pulls the base vars in with the YAML merge key `<<: *base_vars`. It is anchored in turn as `env_vars`, for a workflow file that adds vars of its own.
+
 **config/environments/development.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # Environment Identification
   ENVIRONMENT: "development"
   ENVIRONMENT_COLOR: "🟡"
@@ -133,7 +137,9 @@ vars:
 
 **config/environments/staging.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # Environment Identification
   ENVIRONMENT: "staging"
   ENVIRONMENT_COLOR: "🟠"
@@ -166,7 +172,9 @@ vars:
 
 **config/environments/production.yml:**
 ```yaml
-vars:
+vars: &env_vars
+  <<: *base_vars
+
   # Environment Identification
   ENVIRONMENT: "production"
   ENVIRONMENT_COLOR: "🔴"
@@ -206,9 +214,9 @@ vars:
 Create comprehensive health validation:
 
 **workflows/health-check.yml:**
-```yaml
-name: "{{vars.ENVIRONMENT | upper}} Environment Health Check"
-description: "Comprehensive health validation for {{vars.ENVIRONMENT}} environment"
+```yaml fragment
+name: "Environment Health Check"
+description: "Comprehensive health validation for the environment given by the merged config"
 
 jobs:
 - id: infrastructure-health
@@ -318,25 +326,25 @@ jobs:
     - name: "Generate Health Report"
       uses: hello
       echo: |
-        {{vars.ENVIRONMENT_COLOR}} === {{vars.ENVIRONMENT | upper}} ENVIRONMENT HEALTH REPORT ===
+        {{vars.ENVIRONMENT_COLOR}} === {{upper(vars.ENVIRONMENT)}} ENVIRONMENT HEALTH REPORT ===
           
         Infrastructure Status:
-        • API Server: {{outputs['api-health'].api_status | upper}} ({{outputs['api-health'].api_response_time}}ms)
+        • API Server: {{upper(outputs['api-health'].api_status)}} ({{outputs['api-health'].api_response_time}}ms)
           Version: {{outputs['api-health'].api_version}}
           Uptime: {{outputs['api-health'].api_uptime}}
           
-        • Web Application: {{outputs['web-health'].web_status | upper}} ({{outputs['web-health'].web_response_time}}ms)
+        • Web Application: {{upper(outputs['web-health'].web_status)}} ({{outputs['web-health'].web_response_time}}ms)
           
-        • Database: {{outputs['db-health'].db_status | upper}} ({{outputs['db-health'].db_response_time}}ms)
+        • Database: {{upper(outputs['db-health'].db_status)}} ({{outputs['db-health'].db_response_time}}ms)
           Pool Size: {{outputs['db-health'].db_pool_size}}
           
-        • Cache: {{outputs['cache-health'].cache_status | upper}}
+        • Cache: {{upper(outputs['cache-health'].cache_status)}}
           Hit Rate: {{outputs['cache-health'].cache_hit_rate}}%
           
         External Services:
-        • Payment Service: {{outputs['payment-health'].payment_status | upper}}
-        • Email Service: {{outputs['email-health'].email_status | upper}}
-        • Search Service: {{outputs['search-health'].search_status | upper}}
+        • Payment Service: {{upper(outputs['payment-health'].payment_status)}}
+        • Email Service: {{upper(outputs['email-health'].email_status)}}
+        • Search Service: {{upper(outputs['search-health'].search_status)}}
           
         Overall Status: {{
           outputs['api-health'].api_status == "healthy" &&
@@ -348,6 +356,7 @@ jobs:
         Environment: {{vars.ENVIRONMENT}}
 
     - name: "Health Check Validation"
+      uses: hello
       test: |
         outputs['api-health'].api_status == "healthy" &&
         outputs['db-health'].db_status == "connected"
@@ -358,15 +367,17 @@ jobs:
 Create comprehensive deployment verification:
 
 **workflows/deployment-validation.yml:**
-```yaml
-name: "{{vars.ENVIRONMENT | upper}} Deployment Validation"
-description: "Validate deployment success in {{vars.ENVIRONMENT}} environment"
+```yaml fragment
+name: "Deployment Validation"
+description: "Validate deployment success in the environment given by the merged config"
 
 vars:
+  <<: *env_vars
+
   # Deployment metadata (passed from CI/CD)
-  DEPLOYMENT_ID: "{{vars.DEPLOYMENT_ID || unixtime()}}"
-  BUILD_VERSION: "{{vars.BUILD_VERSION || 'unknown'}}"
-  DEPLOYMENT_TIMESTAMP: "{{vars.DEPLOYMENT_TIMESTAMP || now().Format('2006-01-02T15:04:05Z07:00')}}"
+  DEPLOYMENT_ID: "{{DEPLOYMENT_ID ?? unixtime()}}"
+  BUILD_VERSION: "{{BUILD_VERSION ?? 'unknown'}}"
+  DEPLOYMENT_TIMESTAMP: "{{DEPLOYMENT_TIMESTAMP ?? now().Format('2006-01-02T15:04:05Z07:00')}}"
 
 jobs:
 - id: pre-deployment-validation
@@ -521,6 +532,7 @@ jobs:
 - id: performance-validation
   name: "Performance Validation"
   needs: [functional-validation]
+  skipif: vars.SKIP_PERFORMANCE_TESTS
   steps:
     - name: "Response Time Validation"
       id: perf-test
@@ -534,9 +546,9 @@ jobs:
       outputs:
         response_time: (rt.sec * 1000)
         performance_grade: |
-          {{(rt.sec * 1000) < 500 ? "A" :
-            (rt.sec * 1000) < 1000 ? "B" :
-            (rt.sec * 1000) < 2000 ? "C" : "D"}}
+          (rt.sec * 1000) < 500 ? "A" :
+          (rt.sec * 1000) < 1000 ? "B" :
+          (rt.sec * 1000) < 2000 ? "C" : "D"
 
     - name: "Load Test Simulation"
       uses: http
@@ -553,7 +565,7 @@ jobs:
     - name: "Generate Deployment Report"
       uses: hello
       echo: |
-        {{vars.ENVIRONMENT_COLOR}} === {{vars.ENVIRONMENT | upper}} DEPLOYMENT VALIDATION REPORT ===
+        {{vars.ENVIRONMENT_COLOR}} === {{upper(vars.ENVIRONMENT)}} DEPLOYMENT VALIDATION REPORT ===
           
         Deployment Information:
         • Deployment ID: {{vars.DEPLOYMENT_ID}}
@@ -571,7 +583,7 @@ jobs:
         Deployment Verification:
         • Version Match: {{outputs['version-check'].deployed_version == vars.BUILD_VERSION ? "✅ Correct" : "❌ Mismatch"}}
         • Configuration: {{outputs['config-validation'].config_valid ? "✅ Valid" : "❌ Invalid"}}
-        • Feature Flags: {{vars.ENABLE_NEW_FEATURES == "true" ? outputs['feature-flags'].feature_count + " features active" : "Default features"}}
+        • Feature Flags: {{vars.ENABLE_NEW_FEATURES ? string(outputs['feature-flags'].feature_count) + " features active" : "Default features"}}
           
         Functional Tests:
         • Authentication: {{outputs['auth-test'].auth_response_time}}ms {{outputs['auth-test'].auth_response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅" : "⚠️"}}
@@ -579,12 +591,8 @@ jobs:
         • Data Mutation: {{outputs['mutation-test'].mutation_response_time}}ms {{outputs['mutation-test'].mutation_response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅" : "⚠️"}}
           
         Performance Validation:
-        {{if vars.SKIP_PERFORMANCE_TESTS != "true"}}
-        • Response Time: {{outputs['perf-test'].response_time}}ms (Grade: {{outputs['perf-test'].performance_grade}})
-        • Performance Status: {{outputs['perf-test'].response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅ Acceptable" : "⚠️ Slow"}}
-        {{else}}
-        • Performance Tests: ⏭️ Skipped
-        {{end}}
+        • Response Time: {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️ Skipped" : string(outputs['perf-test'].response_time) + "ms (Grade: " + outputs['perf-test'].performance_grade + ")"}}
+        • Performance Status: {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️ Skipped" : outputs['perf-test'].response_time < vars.RESPONSE_TIME_THRESHOLD ? "✅ Acceptable" : "⚠️ Slow"}}
           
         Overall Deployment Status: {{
           outputs['version-check'].deployed_version == vars.BUILD_VERSION &&
@@ -598,6 +606,7 @@ jobs:
         Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 
     - name: "Validate Deployment Success"
+      uses: hello
       test: |
         outputs['version-check'].deployed_version == vars.BUILD_VERSION &&
         outputs['config-validation'].config_valid &&
@@ -616,8 +625,8 @@ description: "Validate consistency between environments"
 
 vars:
   # Define environments to compare
-  PRIMARY_ENVIRONMENT: "{{vars.PRIMARY_ENV || 'production'}}"
-  COMPARISON_ENVIRONMENTS: "{{vars.COMPARISON_ENVS || 'staging,development'}}"
+  PRIMARY_ENVIRONMENT: "{{PRIMARY_ENV ?? 'production'}}"
+  COMPARISON_ENVIRONMENTS: "{{COMPARISON_ENVS ?? 'staging,development'}}"
 
 jobs:
 - id: version-consistency
@@ -628,8 +637,8 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.PRIMARY_ENV == 'production' ? 'https://api.example.com' : 
-                vars.PRIMARY_ENV == 'staging' ? 'https://api-staging.example.com' :
+        url: "{{vars.PRIMARY_ENVIRONMENT == 'production' ? 'https://api.example.com' :
+                vars.PRIMARY_ENVIRONMENT == 'staging' ? 'https://api-staging.example.com' :
                 'https://api-dev.example.com'}}/version"
       test: res.code == 200
       outputs:
@@ -783,8 +792,8 @@ jobs:
           
         Environment Versions:
         • Production: {{outputs['primary-version'].primary_version}} (config: {{outputs['primary-version'].primary_config_version}})
-        • Staging: {{outputs['staging-version'].staging_version || "N/A"}} (config: {{outputs['staging-version'].staging_config_version || "N/A"}})
-        • Development: {{outputs['dev-version'].dev_version || "N/A"}} (config: {{outputs['dev-version'].dev_config_version || "N/A"}})
+        • Staging: {{outputs['staging-version'].staging_version ?? "N/A"}} (config: {{outputs['staging-version'].staging_config_version ?? "N/A"}})
+        • Development: {{outputs['dev-version'].dev_version ?? "N/A"}} (config: {{outputs['dev-version'].dev_config_version ?? "N/A"}})
           
         Consistency Checks:
         • Version Alignment: {{outputs['primary-version'].primary_version == outputs['staging-version'].staging_version ? "✅ Aligned" : "⚠️ Misaligned"}}
@@ -793,15 +802,9 @@ jobs:
         • API Endpoints: {{outputs['prod-endpoints'].prod_endpoint_count == outputs['staging-endpoints'].staging_endpoint_count ? "✅ Consistent" : "⚠️ Drift"}}
           
         Recommendations:
-        {{if outputs['primary-version'].primary_version != outputs['staging-version'].staging_version}}
-        ⚠️ Version mismatch detected - consider updating staging environment
-        {{end}}
-        {{if outputs['schema-consistency'].prod_schema_version != outputs['staging-schema'].staging_schema_version}}
-        ⚠️ Schema version mismatch - verify migration deployment
-        {{end}}
-        {{if outputs['prod-staging-features'].prod_feature_count != outputs['staging-features'].staging_feature_count}}
-        ⚠️ Feature flag drift - review feature flag synchronization
-        {{end}}
+        {{outputs['primary-version'].primary_version != outputs['staging-version'].staging_version ? "⚠️ Version mismatch detected - consider updating staging environment" : ""}}
+        {{outputs['schema-consistency'].prod_schema_version != outputs['staging-schema'].staging_schema_version ? "⚠️ Schema version mismatch - verify migration deployment" : ""}}
+        {{outputs['prod-staging-features'].prod_feature_count != outputs['staging-features'].staging_feature_count ? "⚠️ Feature flag drift - review feature flag synchronization" : ""}}
           
         Overall Status: {{
           outputs['primary-version'].primary_version == outputs['staging-version'].staging_version &&
@@ -1114,6 +1117,10 @@ Create tests for blue-green deployments:
 # workflows/blue-green-validation.yml
 name: "Blue-Green Deployment Validation"
 
+vars:
+  BLUE_URL: "{{BLUE_URL}}"
+  GREEN_URL: "{{GREEN_URL}}"
+
 jobs:
 - id: blue-green-test
   name: blue-green-test
@@ -1125,6 +1132,8 @@ jobs:
         method: GET
         url: "{{vars.BLUE_URL}}/health"
       test: res.code == 200
+      outputs:
+        time: rt.sec * 1000
         
     - name: "Test Green Environment"
       id: green-test
@@ -1133,6 +1142,8 @@ jobs:
         method: GET
         url: "{{vars.GREEN_URL}}/health"
       test: res.code == 200
+      outputs:
+        time: rt.sec * 1000
         
     - name: "Compare Environment Performance"
       uses: hello
@@ -1149,6 +1160,11 @@ Monitor canary deployments:
 ```yaml
 # workflows/canary-validation.yml
 name: "Canary Deployment Validation"
+
+vars:
+  API_BASE_URL: "{{API_BASE_URL}}"
+  MAX_CANARY_TRAFFIC: 10
+  MAX_CANARY_ERROR_RATE: 0.01
 
 jobs:
 - id: canary-monitoring

@@ -79,11 +79,11 @@ Save this workflow to a file and run it:
 $ probe hello-world.yml
 Hello World Workflow
 
-⏺ My First Job (Completed in 1.04s)
-  ⎿  0. ▲  1s → Say Hello
+⏺ My First Job (Completed in 1.07s)
+  ⎿  0. ✓  🕐︎1s → Say Hello
            Hello, World!
 
-Total workflow time: 1.07s ✔︎ All jobs succeeded
+Total workflow time: 1.07s ✓ All jobs succeeded
 ```
 
 ### More Practical Example: API Monitoring

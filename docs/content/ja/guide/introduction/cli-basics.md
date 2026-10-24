@@ -167,33 +167,32 @@ $ probe base.yml,overrides.yml
 **1. 環境固有の設定:**
 
 **base-workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 jobs:
-- name: API
-  defaults:
-    http:
-      url: *endpoint
+- id: health-check
+  name: health-check
   steps:
-  - name: Check API
-    uses: http
-    with:
-      get: /foo/bar
-    test: res.code == 200
+    - name: Check API
+      uses: http
+      with:
+        url: "{{vars.API_URL}}"
+        method: GET
+      test: res.code == 200
 ```
 
 **production.yml:**
 ```yaml
 # 本番環境固有の設定
-x_alias:
-  x_endpoint: &endpoint "https://api.production.example.com"
+vars:
+  API_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
 ```yaml
 # ステージング環境固有の設定
-x_alias:
-  x_endpoint: &endpoint "https://api.staging.example.com"
+vars:
+  API_URL: https://api.staging.example.com
 ```
 
 異なる環境で実行：
@@ -216,7 +215,7 @@ shared:
 ```
 
 **api-check.yml:**
-```yaml
+```yaml fragment
 name: API Monitoring
 jobs:
 - name: API checks
@@ -242,7 +241,7 @@ $ probe workflow.yml,local-overrides.yml
 
 ## 環境変数の使用
 
-Probeはworkflow wideの`vars`オブジェクトを使用して環境変数を変数に設定することができます：
+ステップは環境変数を直接読めません。読めるのはワークフローの`vars`のテンプレートなので、ステップが使う環境変数ごとに変数を定義します。ここでは、設定されていないときの既定値も与えています：
 
 ```yaml
 name: Database Test
@@ -267,8 +266,8 @@ jobs:
 実行前に環境変数を設定：
 
 ```bash
-export DB_HOST="https://db.example.com"
-export DB_PASS="****************"
+export DB_HOST="db.example.com"
+export DB_PASS="your-secret-password"
 $ probe workflow.yml
 ```
 

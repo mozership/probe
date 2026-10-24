@@ -283,7 +283,7 @@ vars:
   # コア機能（常に有効）
   feature_user_management: true
   feature_basic_api: true
-  # 環境固有の機能
+  # 環境固有の機能（テンプレートの値は文字列の "true" か "false" になる）
   feature_beta_api: "{{vars.environment != 'production'}}"
   feature_admin_tools: "{{vars.environment == 'development'}}"
   feature_performance_testing: "{{vars.environment != 'development'}}"
@@ -313,6 +313,7 @@ jobs:
 
 - id: beta-feature-tests
   name: Beta Feature Tests
+  skipif: vars.feature_beta_api != "true"
   steps:
     - name: Beta API Test
       id: beta-feature-tests
@@ -326,6 +327,7 @@ jobs:
 
 - id: admin-feature-tests
   name: Admin Feature Tests
+  skipif: vars.feature_admin_tools != "true"
   steps:
     - name: Admin Tools Test
       id: admin-feature-tests
@@ -341,6 +343,7 @@ jobs:
 
 - id: performance-tests
   name: Performance Tests
+  skipif: vars.feature_performance_testing != "true"
   steps:
     - name: Load Test
       id: performance-tests
@@ -359,6 +362,7 @@ jobs:
 
 - id: security-tests
   name: Security Tests
+  skipif: vars.feature_security_scanning != "true"
   steps:
     - name: Security Scan
       id: security-tests
@@ -385,25 +389,25 @@ jobs:
         {{vars.feature_basic_api == true ? "Basic API: " + (outputs.basic_api_working ? "✅ Working" : "❌ Failed") : "Basic API: ⏸️ Disabled"}}
 
         BETA FEATURES:
-        {{vars.feature_beta_api == true ? "Beta API: " + (outputs['beta-feature-tests'].beta_api_working ? "✅ Working" : "❌ Failed") : "Beta API: ⏸️ Disabled"}}
+        {{vars.feature_beta_api == "true" ? "Beta API: " + (outputs['beta-feature-tests'].beta_api_working ? "✅ Working" : "❌ Failed") : "Beta API: ⏸️ Disabled"}}
 
         ADMIN FEATURES:
-        {{vars.feature_admin_tools == true ? "Admin Tools: " + (outputs['admin-feature-tests'].admin_tools_working ? "✅ Working" : "❌ Failed") : "Admin Tools: ⏸️ Disabled"}}
+        {{vars.feature_admin_tools == "true" ? "Admin Tools: " + (outputs['admin-feature-tests'].admin_tools_working ? "✅ Working" : "❌ Failed") : "Admin Tools: ⏸️ Disabled"}}
 
         PERFORMANCE TESTING:
-        {{vars.feature_performance_testing == true ? "Load Testing: " + (outputs['performance-tests'].load_test_passed ? "✅ Passed" : "❌ Failed") : "Performance Testing: ⏸️ Disabled"}}
+        {{vars.feature_performance_testing == "true" ? "Load Testing: " + (outputs['performance-tests'].load_test_passed ? "✅ Passed" : "❌ Failed") : "Performance Testing: ⏸️ Disabled"}}
 
         SECURITY TESTING:
-        {{vars.feature_security_scanning == true ? "Security Scan: " + (outputs['security-tests'].security_scan_clean ? "✅ Clean" : "❌ Vulnerabilities Found") : "Security Testing: ⏸️ Disabled"}}
+        {{vars.feature_security_scanning == "true" ? "Security Scan: " + (outputs['security-tests'].security_scan_clean ? "✅ Clean" : "❌ Vulnerabilities Found") : "Security Testing: ⏸️ Disabled"}}
 
         Environment Configuration:
         Features enabled: {{
           (vars.feature_user_management == true ? 1 : 0) +
           (vars.feature_basic_api == true ? 1 : 0) +
-          (vars.feature_beta_api == true ? 1 : 0) +
-          (vars.feature_admin_tools == true ? 1 : 0) +
-          (vars.feature_performance_testing == true ? 1 : 0) +
-          (vars.feature_security_scanning == true ? 1 : 0)
+          (vars.feature_beta_api == "true" ? 1 : 0) +
+          (vars.feature_admin_tools == "true" ? 1 : 0) +
+          (vars.feature_performance_testing == "true" ? 1 : 0) +
+          (vars.feature_security_scanning == "true" ? 1 : 0)
         }} / 6
 ```
 
@@ -444,14 +448,15 @@ name: Environment Validation
 description: Validate environment configuration and prerequisites
 
 vars:
-  environment: "{{ENVIRONMENT}}"
-  api_base_url: "{{API_BASE_URL}}"
-  api_token: "{{API_TOKEN}}"
-  log_level: "{{LOG_LEVEL}}"
-  default_timeout: "{{DEFAULT_TIMEOUT}}"
+  environment: "{{ENVIRONMENT ?? ''}}"
+  api_base_url: "{{API_BASE_URL ?? ''}}"
+  api_token: "{{API_TOKEN ?? ''}}"
+  log_level: "{{LOG_LEVEL ?? ''}}"
+  default_timeout: "{{DEFAULT_TIMEOUT ?? ''}}"
 
 jobs:
-- name: Environment Configuration Validation
+- id: environment-validation
+  name: Environment Configuration Validation
   steps:
     - name: Required Environment Variables Check
       uses: hello
@@ -459,16 +464,16 @@ jobs:
         🔍 Environment Variables Validation:
 
         Required Variables:
-        ENVIRONMENT: {{vars.environment ? "✅ Set (" + vars.environment + ")" : "❌ Missing"}}
-        API_BASE_URL: {{vars.api_base_url ? "✅ Set (" + vars.api_base_url + ")" : "❌ Missing"}}
-        API_TOKEN: {{vars.api_token ? "✅ Set (***)" : "❌ Missing"}}
+        ENVIRONMENT: {{vars.environment != "" ? "✅ Set (" + vars.environment + ")" : "❌ Missing"}}
+        API_BASE_URL: {{vars.api_base_url != "" ? "✅ Set (" + vars.api_base_url + ")" : "❌ Missing"}}
+        API_TOKEN: {{vars.api_token != "" ? "✅ Set (***)" : "❌ Missing"}}
 
         Optional Variables:
-        LOG_LEVEL: {{vars.log_level ? "✅ Set (" + vars.log_level + ")" : "⚠️ Using default"}}
-        DEFAULT_TIMEOUT: {{vars.default_timeout ? "✅ Set (" + vars.default_timeout + ")" : "⚠️ Using default"}}
+        LOG_LEVEL: {{vars.log_level != "" ? "✅ Set (" + vars.log_level + ")" : "⚠️ Using default"}}
+        DEFAULT_TIMEOUT: {{vars.default_timeout != "" ? "✅ Set (" + vars.default_timeout + ")" : "⚠️ Using default"}}
 
         Validation Status: {{
-          vars.environment && vars.api_base_url && vars.api_token ? "✅ Valid" : "❌ Invalid"
+          vars.environment != "" && vars.api_base_url != "" && vars.api_token != "" ? "✅ Valid" : "❌ Invalid"
         }}
 
     - name: Environment-Specific Validation
@@ -524,7 +529,7 @@ jobs:
         API Version: {{outputs.api_version}}
         Environment Match: {{outputs.environment_confirmed == vars.environment ? "✅ Confirmed" : "⚠️ Mismatch"}}
         Authentication: {{outputs.auth_valid ? "✅ Valid" : "❌ Invalid"}}
-        {{outputs.auth_valid ? "Token Expires In: " + outputs.token_expires_in + " seconds" : ""}}
+        {{outputs.auth_valid ? "Token Expires In: " + string(outputs.token_expires_in) + " seconds" : ""}}
 
         Environment Ready: {{
           outputs.connectivity_ok && 
@@ -634,9 +639,11 @@ vars:
   api_base_url: "{{API_BASE_URL}}"
 
 jobs:
-- name: Critical Endpoints Check
+- id: critical-endpoints
+  name: Critical Endpoints Check
   steps:
     - name: Health Check
+      id: api
       uses: http
       with:
         method: GET
@@ -646,6 +653,7 @@ jobs:
         api_healthy: res.code == 200
 
     - name: Authentication Check
+      id: auth
       uses: http
       with:
         method: GET
@@ -655,6 +663,7 @@ jobs:
         auth_healthy: res.code == 200
 
     - name: Database Check
+      id: database
       uses: http
       with:
         method: GET
@@ -663,8 +672,9 @@ jobs:
       outputs:
         db_healthy: res.code == 200
 
-- name: Smoke Test Summary
-  needs: [critical-endpoints-check]
+- id: smoke-test-summary
+  name: Smoke Test Summary
+  needs: [critical-endpoints]
   steps:
     - name: Production Health Summary
       uses: hello
@@ -672,14 +682,14 @@ jobs:
         🏭 Production Smoke Test Results:
 
         Critical Systems:
-        API: {{outputs['critical-endpoints-check'].api_healthy ? "✅ Healthy" : "🚨 DOWN"}}
-        Authentication: {{outputs['critical-endpoints-check'].auth_healthy ? "✅ Healthy" : "🚨 DOWN"}}
-        Database: {{outputs['critical-endpoints-check'].db_healthy ? "✅ Healthy" : "🚨 DOWN"}}
+        API: {{outputs.api.api_healthy ? "✅ Healthy" : "🚨 DOWN"}}
+        Authentication: {{outputs.auth.auth_healthy ? "✅ Healthy" : "🚨 DOWN"}}
+        Database: {{outputs.database.db_healthy ? "✅ Healthy" : "🚨 DOWN"}}
 
         Overall Status: {{
-          outputs['critical-endpoints-check'].api_healthy &&
-          outputs['critical-endpoints-check'].auth_healthy &&
-          outputs['critical-endpoints-check'].db_healthy
+          outputs.api.api_healthy &&
+          outputs.auth.auth_healthy &&
+          outputs.database.db_healthy
           ? "🟢 ALL SYSTEMS OPERATIONAL" : "🔴 CRITICAL ISSUES DETECTED"
         }}
 ```
@@ -693,7 +703,8 @@ vars:
   api_base_url: "{{API_BASE_URL}}"
 
 jobs:
-- name: API Test Suite
+- id: api-tests
+  name: API Test Suite
   steps:
     - name: User Management API
       uses: http
@@ -716,8 +727,9 @@ jobs:
         url: "{{vars.api_base_url}}/products"
       test: res.code == 200
 
-- name: Integration Tests
-  needs: [api-test-suite]
+- id: integration-tests
+  name: Integration Tests
+  needs: [api-tests]
   steps:
     - name: User-Order Integration
       uses: http
@@ -733,7 +745,8 @@ jobs:
         url: "{{vars.api_base_url}}/test/payment-flow"
       test: res.code == 200 && res.body.test_passed == true
 
-- name: Performance Validation
+- id: performance-tests
+  name: Performance Validation
   needs: [integration-tests]
   steps:
     - name: Load Test
@@ -766,13 +779,11 @@ vars:
   api_base_url: "{{API_BASE_URL}}"
   environment: "{{ENVIRONMENT}}"
   smtp_host: "{{SMTP_HOST}}"
-  smtp_username: "{{SMTP_USERNAME}}"
-  smtp_password: "{{SMTP_PASSWORD}}"
   monitoring_interval: "{{MONITORING_INTERVAL ?? '300'}}"  # 5分
-  alert_threshold: "{{ALERT_THRESHOLD ?? '2'}}"        # 連続2回失敗後にアラート
 
 jobs:
-- name: Environment Health Check
+- id: environment-health-check
+  name: Environment Health Check
   steps:
     - name: System Resources Check
       id: resources
@@ -809,17 +820,21 @@ jobs:
         unhealthy_services: res.body.unhealthy_services
 
     - name: Environment-Specific Checks
+      id: env-checks
       uses: hello
       echo: |
         Environment-specific validation for {{vars.environment}}
       outputs:
         env_specific_checks: |
-          {{vars.environment == "production" ? "SSL, Security, Performance" :
-            vars.environment == "staging" ? "Integration, Load Testing" :
-            "Development Tools, Debug Features"}}
+          vars.environment == "production" ? "SSL, Security, Performance" :
+          vars.environment == "staging" ? "Integration, Load Testing" :
+          "Development Tools, Debug Features"
 
-- name: Environment Alerting
+- id: alerting
+  name: Environment Alerting
   needs: [environment-health-check]
+  always: true
+  skipif: outputs.resources?.resources_healthy == true && outputs.dependencies?.dependencies_healthy == true
   steps:
     - name: Environment Alert
       uses: smtp
@@ -831,6 +846,7 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0
       echo: |
         ENVIRONMENT HEALTH ALERT
         ========================
@@ -839,18 +855,19 @@ jobs:
         Time: {{unixtime()}}
 
         RESOURCE STATUS:
-        {{outputs['environment-health-check'].resources_healthy ? "✅ Resources Healthy" : "❌ Resource Issues"}}
-        {{!outputs['environment-health-check'].resources_healthy ? "CPU Usage: " + outputs['environment-health-check'].cpu_usage + "%" : ""}}
-        {{!outputs['environment-health-check'].resources_healthy ? "Memory Usage: " + outputs['environment-health-check'].memory_usage + "%" : ""}}
-        {{!outputs['environment-health-check'].resources_healthy ? "Disk Usage: " + outputs['environment-health-check'].disk_usage + "%" : ""}}
+        {{outputs.resources?.resources_healthy == true ? "✅ Resources Healthy" : "❌ Resource Issues"}}
+        CPU Usage: {{outputs.resources?.cpu_usage ?? "unknown"}}%
+        Memory Usage: {{outputs.resources?.memory_usage ?? "unknown"}}%
+        Disk Usage: {{outputs.resources?.disk_usage ?? "unknown"}}%
 
         DEPENDENCIES STATUS:
-        {{outputs['environment-health-check'].dependencies_healthy ? "✅ All Dependencies Healthy" : "❌ Dependency Issues"}}
-        {{!outputs['environment-health-check'].dependencies_healthy ? "Unhealthy Services: " + outputs['environment-health-check'].unhealthy_services : ""}}
+        {{outputs.dependencies?.dependencies_healthy == true ? "✅ All Dependencies Healthy" : "❌ Dependency Issues"}}
+        Unhealthy Services: {{join(outputs.dependencies?.unhealthy_services ?? [], ", ")}}
 
         ACTION REQUIRED: Investigate {{vars.environment}} environment immediately
 
-- name: Health Summary
+- id: health-summary
+  name: Health Summary
   needs: [environment-health-check]
   steps:
     - name: All Systems Healthy
@@ -859,7 +876,7 @@ jobs:
         ✅ {{vars.environment}} Environment Health Check
 
         All systems operational:
-        • Resources: CPU {{outputs['environment-health-check'].cpu_usage}}%, Memory {{outputs['environment-health-check'].memory_usage}}%, Disk {{outputs['environment-health-check'].disk_usage}}%
+        • Resources: CPU {{outputs.resources.cpu_usage}}%, Memory {{outputs.resources.memory_usage}}%, Disk {{outputs.resources.disk_usage}}%
         • Dependencies: All healthy
         • Environment: {{vars.environment}}
 
@@ -904,17 +921,18 @@ Production → Smoke Tests + Monitoring
 ```yaml
 # 良い例: テスト実行前の検証
 vars:
-  environment: "{{ENVIRONMENT}}"
-  api_base_url: "{{API_BASE_URL}}"
-  api_token: "{{API_TOKEN}}"
+  environment: "{{ENVIRONMENT ?? ''}}"
+  api_base_url: "{{API_BASE_URL ?? ''}}"
+  api_token: "{{API_TOKEN ?? ''}}"
 ```
 
 ```yaml
 - name: Pre-Test Validation
+  uses: hello
   echo: |
-    Environment: {{vars.environment ? "✅" : "❌"}}
-    API URL: {{vars.api_base_url ? "✅" : "❌"}}
-    Credentials: {{vars.api_token ? "✅" : "❌"}}
+    Environment: {{vars.environment != "" ? "✅" : "❌"}}
+    API URL: {{vars.api_base_url != "" ? "✅" : "❌"}}
+    Credentials: {{vars.api_token != "" ? "✅" : "❌"}}
 ```
 
 ### 4. セキュアなシークレット管理

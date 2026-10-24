@@ -177,7 +177,7 @@ probe base.yml,overrides.yml
 **1. Environment-specific configuration:**
 
 **base-workflow.yml:**
-```yaml
+```yaml fragment
 name: API Health Check
 jobs:
 - id: health-check
@@ -225,7 +225,7 @@ shared:
 ```
 
 **api-check.yml:**
-```yaml
+```yaml fragment
 name: API Monitoring
 jobs:
 - name: API checks
@@ -251,24 +251,33 @@ The merge order matters - later files override values from earlier files.
 
 ## Working with Environment Variables
 
-Probe can access environment variables in your workflows using the `env` object:
+A step cannot read the environment itself. The templates of the workflow's `vars` can, so each environment variable a step needs is given a var, here with a default for when it is not set:
 
 ```yaml
-steps:
-  - name: Connect to Database
-    uses: http
+name: Database Test
+
+vars:
+  db_host: "{{DB_HOST ?? 'localhost'}}"
+  db_pass: "{{DB_PASS ?? 'secret!!!'}}"
+
+jobs:
+- name: DB Operations
+  defaults:
+    db:
+      dsn: mysql://foobar:{{vars.db_pass}}@{{vars.db_host}}:3306/probetest
+  steps:
+  - name: Test MySQL Connection
+    uses: db
     with:
-      method: GET
-      url: "{{vars.DATABASE_URL}}"
-      headers:
-        Authorization: "Bearer {{vars.API_TOKEN}}"
+      query: SELECT 1 as connection_test, NOW() as server_time
+    test: res.code == 0
 ```
 
 Set environment variables before running:
 
 ```bash
-export DATABASE_URL="https://db.example.com"
-export API_TOKEN="your-secret-token"
+export DB_HOST="db.example.com"
+export DB_PASS="your-secret-password"
 probe workflow.yml
 ```
 

@@ -21,7 +21,7 @@ We'll create a workflow that monitors a complete web application stack:
 
 Let's start with the basic workflow structure:
 
-```yaml
+```yaml fragment
 name: Web Application Health Check
 description: Comprehensive monitoring for our web application stack
 
@@ -70,170 +70,8 @@ jobs:
 Add a separate job for API monitoring:
 
 ```yaml
-  api-check:
-    name: API Health Check
-    steps:
-      - name: Check API Health Endpoint
-        id: health-check
-        uses: http
-        with:
-          url: https://api.myapp.example.com/health
-          method: GET
-          headers:
-            Accept: "application/json"
-        test: res.code == 200 && res.body.status == "healthy"
-        outputs:
-          api_version: res.body.version
-          database_status: res.body.database
-
-      - name: Test User Authentication
-        uses: http
-        with:
-          url: https://api.myapp.example.com/auth/login
-          method: POST
-          headers:
-            Content-Type: "application/json"
-          body: |
-            {
-              "username": "healthcheck",
-              "password": "{{vars.HEALTH_CHECK_PASSWORD}}"
-            }
-        test: res.code == 200 && res.body.token != nil
-        outputs:
-          auth_token: res.body.token
-
-      - name: Test Authenticated Endpoint
-        uses: http
-        with:
-          url: https://api.myapp.example.com/user/profile
-          method: GET
-          headers:
-            Authorization: "Bearer {{outputs.auth_token}}"
-        test: res.code == 200
-
-      - name: Report API Status
-        uses: hello
-        echo: "✅ API v{{outputs.api_version}} is healthy"
-```
-
-## Step 4: Adding Dependencies
-
-Make the API check depend on successful frontend check:
-
-```yaml
-  api-check:
-    name: API Health Check
-    needs: [frontend-check]  # Wait for frontend to be healthy
-    steps:
-      # ... existing steps
-```
-
-## Step 5: External Service Checks
-
-Add checks for external services:
-
-```yaml
-  external-services:
-    name: External Services Check
-    steps:
-      - name: Check Email Service
-        uses: http
-        with:
-          url: https://api.sendgrid.com/v3/mail/send
-          method: POST
-          headers:
-            Authorization: "Bearer {{vars.SENDGRID_API_KEY}}"
-            Content-Type: "application/json"
-          body: |
-            {
-              "from": {"email": "health@myapp.example.com"},
-              "subject": "Health Check Test",
-              "content": [{"type": "text/plain", "value": "Test"}],
-              "personalizations": [{"to": [{"email": "test@myapp.example.com"}]}]
-            }
-        test: res.code == 202
-
-      - name: Check Payment Gateway
-        uses: http
-        with:
-          url: https://api.stripe.com/v1/charges
-          method: GET
-          headers:
-            Authorization: "Bearer {{vars.STRIPE_SECRET_KEY}}"
-        test: res.code == 200
-
-      - name: Report External Services
-        uses: hello
-        echo: "✅ All external services are responding"
-```
-
-## Step 6: Error Handling and Notifications
-
-Add error handling and notification logic:
-
-```yaml
-  notification:
-    name: Send Notifications
-    needs: [frontend-check, api-check, external-services]
-    steps:
-      - name: Success Notification
-        uses: hello
-        echo: |
-          🎉 All systems are healthy!
-          
-          Frontend: ✅ ({{outputs['frontend-check'].homepage_response_time}}ms)
-          API: ✅ v{{outputs['api-check'].api_version}}
-          External Services: ✅
-          
-          Monitoring completed at {{unixtime()}}
-
-      - name: Failure Notification
-        uses: hello
-        echo: |
-          🚨 ALERT: System health check failed!
-          
-          
-          Please investigate immediately.
-```
-
-## Complete Workflow
-
-Here's the complete workflow file (`health-check.yml`):
-
-```yaml
-name: Web Application Health Check
-description: Comprehensive monitoring for our web application stack
-
-jobs:
-- id: frontend-check
-  name: Frontend Application Check
-  steps:
-    - name: Check Homepage
-      id: frontend-check
-      uses: http
-      with:
-        url: https://myapp.example.com
-        method: GET
-        headers:
-          User-Agent: "Probe Health Check"
-      test: res.code == 200 && (rt.sec * 1000) < 3000
-      outputs:
-        homepage_response_time: (rt.sec * 1000)
-
-    - name: Check Critical Page
-      uses: http
-      with:
-        url: https://myapp.example.com/dashboard
-        method: GET
-      test: res.code == 200 || res.code == 302
-
-    - name: Report Frontend Status
-      uses: hello
-      echo: "✅ Frontend is healthy ({{outputs.homepage_response_time}}ms)"
-
 - id: api-check
   name: API Health Check
-  needs: [frontend-check]
   steps:
     - name: Check API Health Endpoint
       id: health-check
@@ -249,7 +87,6 @@ jobs:
         database_status: res.body.database
 
     - name: Test User Authentication
-      id: api-check
       uses: http
       with:
         url: https://api.myapp.example.com/auth/login
@@ -269,6 +106,172 @@ jobs:
       uses: http
       with:
         url: https://api.myapp.example.com/user/profile
+        method: GET
+        headers:
+          Authorization: "Bearer {{outputs.auth_token}}"
+      test: res.code == 200
+
+    - name: Report API Status
+      uses: hello
+      echo: "✅ API v{{outputs.api_version}} is healthy"
+```
+
+## Step 4: Adding Dependencies
+
+Make the API check depend on successful frontend check:
+
+```yaml
+- id: api-check
+  name: API Health Check
+  needs: [frontend-check]  # Wait for frontend to be healthy
+  steps:
+    # ... existing steps
+```
+
+## Step 5: External Service Checks
+
+Add checks for external services:
+
+```yaml
+- id: external-services
+  name: External Services Check
+  steps:
+    - name: Check Email Service
+      uses: http
+      with:
+        url: https://api.sendgrid.com/v3/mail/send
+        method: POST
+        headers:
+          Authorization: "Bearer {{vars.SENDGRID_API_KEY}}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "from": {"email": "health@myapp.example.com"},
+            "subject": "Health Check Test",
+            "content": [{"type": "text/plain", "value": "Test"}],
+            "personalizations": [{"to": [{"email": "test@myapp.example.com"}]}]
+          }
+      test: res.code == 202
+
+    - name: Check Payment Gateway
+      uses: http
+      with:
+        url: https://api.stripe.com/v1/charges
+        method: GET
+        headers:
+          Authorization: "Bearer {{vars.STRIPE_SECRET_KEY}}"
+      test: res.code == 200
+
+    - name: Report External Services
+      uses: hello
+      echo: "✅ All external services are responding"
+```
+
+## Step 6: Notifications
+
+Add a job that reports once every check has passed. It needs the other jobs, so it is skipped when any of them fails, and the run then exits with a non-zero status for cron or CI to act on:
+
+```yaml
+- id: notification
+  name: Send Notifications
+  needs: [frontend-check, api-check, external-services]
+  steps:
+    - name: Success Notification
+      uses: hello
+      echo: |
+        🎉 All systems are healthy!
+
+        Frontend: ✅ ({{outputs['frontend-check'].homepage_response_time}}ms)
+        API: ✅ v{{outputs['health-check'].api_version}}
+        External Services: ✅
+
+        Monitoring completed at {{unixtime()}}
+```
+
+## Complete Workflow
+
+Here's the complete workflow file (`health-check.yml`):
+
+```yaml
+name: Web Application Health Check
+description: Comprehensive monitoring for our web application stack
+
+secrets:
+  - HEALTH_CHECK_PASSWORD
+  - SENDGRID_API_KEY
+  - STRIPE_SECRET_KEY
+
+vars:
+  frontend_url: https://myapp.example.com
+  api_url: https://api.myapp.example.com
+  HEALTH_CHECK_PASSWORD: "{{HEALTH_CHECK_PASSWORD}}"
+  SENDGRID_API_KEY: "{{SENDGRID_API_KEY}}"
+  STRIPE_SECRET_KEY: "{{STRIPE_SECRET_KEY}}"
+
+jobs:
+- id: frontend-check
+  name: Frontend Application Check
+  steps:
+    - name: Check Homepage
+      id: frontend-check
+      uses: http
+      with:
+        url: "{{vars.frontend_url}}"
+        method: GET
+        headers:
+          User-Agent: "Probe Health Check"
+      test: res.code == 200 && (rt.sec * 1000) < 3000
+      outputs:
+        homepage_response_time: (rt.sec * 1000)
+
+    - name: Check Critical Page
+      uses: http
+      with:
+        url: "{{vars.frontend_url}}/dashboard"
+        method: GET
+      test: res.code == 200 || res.code == 302
+
+    - name: Report Frontend Status
+      uses: hello
+      echo: "✅ Frontend is healthy ({{outputs.homepage_response_time}}ms)"
+
+- id: api-check
+  name: API Health Check
+  needs: [frontend-check]
+  steps:
+    - name: Check API Health Endpoint
+      id: health-check
+      uses: http
+      with:
+        url: "{{vars.api_url}}/health"
+        method: GET
+        headers:
+          Accept: "application/json"
+      test: res.code == 200 && res.body.status == "healthy"
+      outputs:
+        api_version: res.body.version
+        database_status: res.body.database
+
+    - name: Test User Authentication
+      uses: http
+      with:
+        url: "{{vars.api_url}}/auth/login"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+        body: |
+          {
+            "username": "healthcheck",
+            "password": "{{vars.HEALTH_CHECK_PASSWORD}}"
+          }
+      test: res.code == 200 && res.body.token != nil
+      outputs:
+        auth_token: res.body.token
+
+    - name: Test Authenticated Endpoint
+      uses: http
+      with:
+        url: "{{vars.api_url}}/user/profile"
         method: GET
         headers:
           Authorization: "Bearer {{outputs.auth_token}}"
@@ -319,20 +322,12 @@ jobs:
       uses: hello
       echo: |
         🎉 All systems are healthy!
-          
-        Frontend: ✅ ({{outputs['frontend-check'].homepage_response_time}}ms)
-        API: ✅ v{{outputs['api-check'].api_version}}
-        External Services: ✅
-          
-        Monitoring completed at {{unixtime()}}
 
-    - name: Failure Notification
-      uses: hello
-      echo: |
-        🚨 ALERT: System health check failed!
-          
-          
-        Please investigate immediately.
+        Frontend: ✅ ({{outputs['frontend-check'].homepage_response_time}}ms)
+        API: ✅ v{{outputs['health-check'].api_version}}
+        External Services: ✅
+
+        Monitoring completed at {{unixtime()}}
 ```
 
 ## Running the Workflow
@@ -376,7 +371,7 @@ Create environment-specific config files:
 **production.yml:**
 ```yaml
 # Override URLs for production
-variables:
+vars:
   frontend_url: https://app.mycompany.com
   api_url: https://api.mycompany.com
 ```
@@ -384,7 +379,7 @@ variables:
 **staging.yml:**
 ```yaml
 # Override URLs for staging
-variables:
+vars:
   frontend_url: https://staging.mycompany.com
   api_url: https://api-staging.mycompany.com
 ```
@@ -404,9 +399,10 @@ A check that runs unattended should tolerate a single transient failure.
   with:
     url: https://critical-service.example.com
     method: GET
-    retry_count: 3
-    retry_delay: 5s
   test: res.code == 200
+  retry:
+    max_attempts: 3
+    interval: 5s
 ```
 
 ### 3. Set up Monitoring Schedule
@@ -427,7 +423,7 @@ In this guide, you've learned how to:
 - ✅ Handle authentication in API calls
 - Implement conditional logic with `skipif`
 - ✅ Use environment variables for configuration
-- ✅ Create comprehensive error handling
+- ✅ Report the results once every check has passed
 - ✅ Merge configuration files for different environments
 
 ## Next Steps

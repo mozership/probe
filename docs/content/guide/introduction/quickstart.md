@@ -28,6 +28,8 @@ description: Check if my website is responding correctly
 jobs:
 - id: health-check
   name: Website Health Check
+  # Skip the steps after one that fails
+  fail_fast: true
   steps:
     - name: Check Homepage
       uses: http
@@ -35,14 +37,14 @@ jobs:
         url: https://httpbin.org/status/200
         method: GET
       test: res.code == 200
-        
+
     - name: Check API Endpoint
       uses: http
       with:
         url: https://httpbin.org/json
         method: GET
       test: res.code == 200 && res.body.slideshow != nil
-        
+
     - name: Success Message
       uses: hello
       echo: "✅ All checks passed! Website is healthy."
@@ -62,13 +64,13 @@ You should see output similar to:
 My First Website Check
 Check if my website is responding correctly
 
-⏺ Website Health Check (Completed in 1.23s)
-  ⎿ 0. ✔︎  Check Homepage (245ms)
-     1. ✔︎  Check API Endpoint (189ms)
-     2. ✔︎  Success Message
-       ✅ All checks passed! Website is healthy.
+⏺ Website Health Check (Completed in 1.73s)
+  ⎿ 0. ✓  Check Homepage
+     1. ✓  Check API Endpoint
+     2. ✓  Success Message
+           ✅ All checks passed! Website is healthy.
 
-Total workflow time: 1.23s ✔︎ All jobs succeeded
+Total workflow time: 1.73s ✓ All jobs succeeded
 ```
 
 ### 3. Understanding What Happened
@@ -79,7 +81,8 @@ Let's break down what this workflow does:
 2. **Job Definition**: The `health-check` job contains the steps to execute
 3. **HTTP Actions**: Two steps make HTTP requests to test endpoints
 4. **Test Assertions**: Each HTTP step includes a `test` that validates the response
-5. **Echo Step**: Displays a success message when all checks pass
+5. **Fail Fast**: `fail_fast: true` skips the steps after one that fails, so the success message is shown only when both checks pass
+6. **Echo Step**: The `hello` action does nothing but succeed, and its `echo` shows the message
 
 ## Adding Verbose Output
 
@@ -135,17 +138,22 @@ jobs:
 
 ### Add Error Handling
 
-Include steps that handle failures gracefully:
+Check a fallback only when the primary service fails. The run still fails, so the failure is not hidden, but it also tells whether the fallback is up:
 
 ```yaml
 - name: Check Service
+  id: primary
   uses: http
   with:
     url: https://api.example.com/status
     method: GET
   test: res.code == 200
-  
+  outputs:
+    code: res.code
+
 - name: Fallback Check
+  # Run only when the primary service did not answer 200
+  skipif: outputs.primary?.code == 200
   uses: http
   with:
     url: https://backup-api.example.com/status

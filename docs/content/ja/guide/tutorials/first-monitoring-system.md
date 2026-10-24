@@ -17,7 +17,7 @@
 
 - Probeがインストール済み（[インストールガイド](/ja/guide/introduction/installation)）
 - HTTP APIの基本的な理解
-- 通知用のメールアカウント（Gmail、Office 365、またはSMTPサーバー）
+- 通知用のSMTPサーバー。Probeを実行するマシンからのメールを、ログインなしで受け付けるもの（社内のメールリレーなど）
 - 監視対象のWebアプリケーションまたはAPI（なければ例を提供します）
 
 ## ステップ1: 監視戦略の計画
@@ -67,7 +67,8 @@ vars:
   API_TOKEN: "{{API_AUTH_TOKEN}}"
 
 jobs:
-- name: "Basic Health Check"
+- id: health-check
+  name: "Basic Health Check"
   defaults:
     http:
       headers:
@@ -104,10 +105,11 @@ probe monitoring.yml
 すべての重要なエンドポイントを監視するように拡張しましょう：
 
 ```yaml
-# monitoring.ymlファイルのhealth-checkジョブの後に追加
+# monitoring.ymlのjobsリストで、health-checkジョブの後にこのジョブを追加
 
-- name: "API Endpoint Monitoring"
-  needs: [basic-health-check]
+- id: endpoint-monitoring
+  name: "API Endpoint Monitoring"
+  needs: [health-check]
   steps:
     - name: "Test Product Catalog"
       id: products
@@ -189,74 +191,81 @@ probe monitoring.yml
 全体的なパフォーマンスを分析するジョブを追加しましょう：
 
 ```yaml
-# monitoring.ymlファイルにこのジョブを追加
+# monitoring.ymlのjobsリストにこのジョブを追加
 
-- name: "Performance Analysis"
-  needs: [api-endpoint-monitoring]
+- id: performance-analysis
+  name: "Performance Analysis"
+  needs: [health-check, endpoint-monitoring]
+  always: true  # チェックが失敗したときもレポートする
   steps:
     - name: "Calculate Performance Metrics"
-      uses: hello
       id: metrics
-      echo: "Analyzing performance metrics"
-      outputs:
-        # 全エンドポイントの平均レスポンス時間を計算
-        avg_response_time: |
-          {{(outputs.health.response_time +
-             outputs.products.response_time +
-             outputs.auth.response_time +
-             outputs.orders.response_time +
-             outputs.search.response_time) / 5}}
-        
+      uses: hello
+      with:
+        # 応答したエンドポイントの平均レスポンス時間
+        avg_response_time: >-
+          {{ mean(filter([
+            outputs.health?.response_time,
+            outputs.products?.response_time,
+            outputs.auth?.response_time,
+            outputs.orders?.response_time,
+            outputs.search?.response_time
+          ], # != nil)) }}
         # 成功したエンドポイント数をカウント
-        successful_endpoints: |
-          {{(outputs.health.healthy ? 1 : 0) +
-            (outputs.products.available ? 1 : 0) +
-            (outputs.auth.authenticated ? 1 : 0) +
-            (outputs.orders.available ? 1 : 0) +
-            (outputs.search.available ? 1 : 0)}}
-        
+        successful_endpoints: >-
+          {{ count([
+            outputs.health?.healthy,
+            outputs.products?.available,
+            outputs.auth?.authenticated,
+            outputs.orders?.available,
+            outputs.search?.available
+          ], # == true) }}
+      outputs:
+        avg_response_time: res.avg_response_time
+        successful_endpoints: res.successful_endpoints
         # 成功率パーセンテージを計算
-        success_rate: |
-          {{(outputs.metrics.successful_endpoints / 5) * 100}}
-        
+        success_rate: res.successful_endpoints * 100 / 5
         # 全体的なヘルス状態を決定
         overall_status: |
-          {{outputs.metrics.success_rate == 100 ? "healthy" :
-            outputs.metrics.success_rate >= 80 ? "degraded" : "critical"}}
+          res.successful_endpoints == 5 ? "healthy" :
+          res.successful_endpoints >= 4 ? "degraded" : "critical"
 
     - name: "Performance Report"
       uses: hello
       echo: |
         === MONITORING REPORT ===
-        
-        Overall Status: {{outputs.metrics.overall_status | upper}}
+
+        Overall Status: {{upper(outputs.metrics.overall_status)}}
         Success Rate: {{outputs.metrics.success_rate}}%
         Average Response Time: {{outputs.metrics.avg_response_time}}ms
-        
+
         Endpoint Details:
-        ✓ Health Check: {{outputs.health.healthy ? "✅ UP" : "❌ DOWN"}} ({{outputs.health.response_time}}ms)
-        ✓ Products API: {{outputs.products.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.products.response_time}}ms)
-        ✓ Authentication: {{outputs.auth.authenticated ? "✅ UP" : "❌ DOWN"}} ({{outputs.auth.response_time}}ms)
-        ✓ Orders API: {{outputs.orders.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders.response_time}}ms)
-        ✓ Search API: {{outputs.search.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.search.response_time}}ms)
-        
+        ✓ Health Check: {{outputs.health?.healthy == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.health?.response_time ?? "-"}}ms)
+        ✓ Products API: {{outputs.products?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.products?.response_time ?? "-"}}ms)
+        ✓ Authentication: {{outputs.auth?.authenticated == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.auth?.response_time ?? "-"}}ms)
+        ✓ Orders API: {{outputs.orders?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders?.response_time ?? "-"}}ms)
+        ✓ Search API: {{outputs.search?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.search?.response_time ?? "-"}}ms)
+
         Data Summary:
-        - Products Available: {{outputs.products.product_count}}
-        - Recent Orders: {{outputs.orders.order_count}}
-        - Search Results: {{outputs.search.result_count}}
-        
-        Generated: {{unixtime()}}
+        - Products Available: {{outputs.products?.product_count ?? 0}}
+        - Recent Orders: {{outputs.orders?.order_count ?? 0}}
+        - Search Results: {{outputs.search?.result_count ?? 0}}
+
+        Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 ```
+
+`always: true`を付けると、依存するジョブが失敗したときもこのジョブが実行されます。レポートが必要になるのは、まさにそのときです。失敗したジョブやスキップされたジョブが公開しなかった出力はnilになるため、このジョブは各出力を`?.`で読みます。1つのステップの`outputs`どうしは互いを読めないため、件数は`with`で計算します。`hello`は`with`に渡された値を`res`で返すので、`outputs`はその値から組み立てます。
 
 ## ステップ5: エラーハンドリングとリトライの追加
 
 エラーハンドリングで監視をより堅牢にしましょう：
 
 ```yaml
-# api-endpoint-monitoringジョブをこの拡張版で置き換える
+# endpoint-monitoringジョブをこの拡張版で置き換える
 
-- name: "API Endpoint Monitoring"
-  needs: [basic-health-check]
+- id: endpoint-monitoring
+  name: "API Endpoint Monitoring"
+  needs: [health-check]
   steps:
     - name: "Test Product Catalog"
       id: products
@@ -269,23 +278,14 @@ probe monitoring.yml
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
         res.body.products != nil &&
         len(res.body.products) > 0
+      retry:
+        max_attempts: 3  # 失敗とする前に最大3回試す
+        interval: 2s
       outputs:
-        product_count: 'res.body.products ? len(res.body.products) : 0'
+        product_count: len(res.body.products ?? [])
         response_time: (rt.sec * 1000)
         available: res.code == 200
         status_code: res.code
-
-    - name: "Retry Product Catalog (if failed)"
-      id: products-retry
-      uses: http
-      timeout: "30s"  # リトライ用の長いタイムアウト
-      with:
-        method: GET
-        url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
-      test: res.code == 200
-      outputs:
-        retry_successful: res.code == 200
-        retry_time: (rt.sec * 1000)
 
     - name: "Test User Authentication"
       id: auth
@@ -300,80 +300,95 @@ probe monitoring.yml
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
         res.body.user != nil &&
         res.body.user.id != nil
+      retry:
+        max_attempts: 3
+        interval: 2s
       outputs:
         authenticated: res.code == 200
-        user_id: 'res.body.user ? res.body.user.id : "unknown"'
+        user_id: res.body.user?.id ?? "unknown"
         response_time: (rt.sec * 1000)
         status_code: res.code
 
-    # 他のエンドポイントも同様のパターンで続ける...
+    # ordersとsearchのステップも同様のパターンで続ける...
 ```
+
+`retry`はテストが通るまでステップを再実行するため、1回だけ遅れたり失われたりした応答ではチェックは失敗しません。`??`はレスポンスにフィールドがないときの値を与えるため、APIがエラーを返したときも出力が公開されます。
 
 ## ステップ6: メール通知の追加
 
-問題が検出されたときのメールアラートを追加しましょう：
+問題が検出されたときのメールアラートを追加しましょう。アラートのジョブはメールの設定を環境変数から読むため、`monitoring.yml`の`vars`に以下を追加します：
+
+```yaml
+vars:
+  # メール設定
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
+```
+
+続いてジョブを追加します：
 
 ```yaml
 # 監視で問題が検出されたときにアラートを送信するジョブを追加
 
-- name: "Alert Notifications"
+- id: alerting
+  name: "Alert Notifications"
   needs: [performance-analysis]
+  skipif: outputs.metrics.overall_status == "healthy"
   steps:
-    - name: "Send Critical Alert Email"
+    - name: "Send Alert Email"
       uses: smtp
       with:
-        addr: "{{SMTP_HOST ?? 'smtp.gmail.com'}}:{{SMTP_PORT ?? 587}}"
-        from: "{{ALERT_FROM_EMAIL}}"
-        to: "{{ALERT_TO_EMAIL}}"
-        subject: "🚨 CRITICAL: API Monitoring Alert - {{outputs.metrics.overall_status | upper}}"
+        addr: "{{vars.SMTP_HOST}}:{{vars.SMTP_PORT}}"
+        from: "{{vars.ALERT_FROM_EMAIL}}"
+        to: "{{vars.ALERT_TO_EMAIL}}"
+        subject: "🚨 API Monitoring Alert - {{upper(outputs.metrics.overall_status)}}"
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
-        CRITICAL API MONITORING ALERT
-        ========================
-          
+        API MONITORING ALERT
+        ====================
+
         Alert Summary:
-        Overall Status: {{outputs.metrics.overall_status | upper}}
+        Overall Status: {{upper(outputs.metrics.overall_status)}}
         Success Rate: {{outputs.metrics.success_rate}}%
         Average Response Time: {{outputs.metrics.avg_response_time}}ms
-        Time: {{unixtime()}}
-          
+        Time: {{now().Format('2006-01-02T15:04:05Z07:00')}}
+
         Endpoint Status:
-        Health Check: {{outputs.health.healthy ? "✅ UP" : "❌ DOWN"}} ({{outputs.health.response_time}}ms)
-        Products API: {{outputs.products.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.products.response_time}}ms)
-        Authentication: {{outputs.auth.authenticated ? "✅ UP" : "❌ DOWN"}} ({{outputs.auth.response_time}}ms)
-        Orders API: {{outputs.orders.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders.response_time}}ms)
-        Search API: {{outputs.search.available ? "✅ UP" : "❌ DOWN"}} ({{outputs.search.response_time}}ms)
-          
-        Data Summary:
-        - Products Available: {{outputs.products.product_count}}
-        - Recent Orders: {{outputs.orders.order_count}}
-        - Search Results: {{outputs.search.result_count}}
-          
+        Health Check: {{outputs.health?.healthy == true ? "✅ UP" : "❌ DOWN"}} (status: {{outputs.health?.status ?? "-"}})
+        Products API: {{outputs.products?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.products?.product_count ?? 0}} products)
+        Authentication: {{outputs.auth?.authenticated == true ? "✅ UP" : "❌ DOWN"}} (user ID: {{outputs.auth?.user_id ?? "-"}})
+        Orders API: {{outputs.orders?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.orders?.order_count ?? 0}} recent orders)
+        Search API: {{outputs.search?.available == true ? "✅ UP" : "❌ DOWN"}} ({{outputs.search?.result_count ?? 0}} search results)
+
         Recommended Actions:
-        {{!outputs.health.healthy ? "• Check API server health and connectivity" : ""}}
-        {{!outputs.products.available ? "• Investigate product catalog service" : ""}}
-        {{!outputs.auth.authenticated ? "• Verify authentication service and token validity" : ""}}
-        {{!outputs.orders.available ? "• Check order processing system" : ""}}
-        {{!outputs.search.available ? "• Investigate search service functionality" : ""}}
-        {{outputs.metrics.avg_response_time > 3000 ? "• Performance issue detected - investigate slow responses" : ""}}
-          
+        {{outputs.health?.healthy != true ? "- Check API server health and connectivity" : ""}}
+        {{outputs.products?.available != true ? "- Investigate product catalog service" : ""}}
+        {{outputs.auth?.authenticated != true ? "- Verify authentication service and token validity" : ""}}
+        {{outputs.orders?.available != true ? "- Check order processing system" : ""}}
+        {{outputs.search?.available != true ? "- Investigate search service functionality" : ""}}
+        {{outputs.metrics.avg_response_time > 3000 ? "- Performance issue detected - investigate slow responses" : ""}}
+
         This alert was generated by Probe Monitoring System.
-        Generated: {{unixtime()}}
 
     - name: "Log Alert Sent"
       uses: hello
       echo: |
-        🚨 CRITICAL ALERT SENT
+        🚨 ALERT SENT
         Status: {{outputs.metrics.overall_status}}
         Success Rate: {{outputs.metrics.success_rate}}%
-        Alert sent to: {{ALERT_TO_EMAIL}}
+        Alert sent to: {{vars.ALERT_TO_EMAIL}}
 ```
+
+すべてのエンドポイントが正常な間は、`skipif`によってこのジョブはスキップされます。`smtp`アクションは、上の件名を付けて自動生成のメッセージを送ります。本文を指定するパラメータも、サーバーにログインするためのパラメータもないため、このホストからのメールを認証なしで受け付けるサーバー（社内のメールリレーなど）を使ってください。レポートはステップの`echo`に書き、Probeの出力に表示されます。
 
 ## ステップ7: 環境設定
 
-環境固有の設定ファイルを作成します：
+環境固有の設定ファイルを作成します。Probeは渡されたファイルを1つのドキュメントにつなげるため、後のファイルの`vars`は`monitoring.yml`の`vars`を項目ごとではなく丸ごと置き換えます。そのため、各ファイルには環境変数を読むものも含めてすべての変数を書きます：
 
 **development.yml:**
 ```yaml
@@ -382,11 +397,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 5000  # 開発環境では緩い上限
   CRITICAL_RESPONSE_TIME: 10000
-
-jobs:
-- name: "Basic Health Check"
-  defaults:
-    http:
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 **staging.yml:**
@@ -396,11 +411,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 3000
   CRITICAL_RESPONSE_TIME: 7000
-
-jobs:
-- name: "Basic Health Check"
-  defaults:
-    http:
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 **production.yml:**
@@ -410,11 +425,11 @@ vars:
   API_VERSION: "v1"
   MAX_RESPONSE_TIME: 2000
   CRITICAL_RESPONSE_TIME: 5000
-
-jobs:
-- name: "Basic Health Check"
-  defaults:
-    http:
+  API_TOKEN: "{{API_AUTH_TOKEN}}"
+  SMTP_HOST: "{{SMTP_HOST ?? 'localhost'}}"
+  SMTP_PORT: "{{SMTP_PORT ?? '25'}}"
+  ALERT_FROM_EMAIL: "{{ALERT_FROM_EMAIL}}"
+  ALERT_TO_EMAIL: "{{ALERT_TO_EMAIL}}"
 ```
 
 ## ステップ8: 環境変数の設定
@@ -429,10 +444,8 @@ jobs:
 export API_AUTH_TOKEN="your-api-token-here"
 
 # メール設定
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT=587
-export SMTP_USERNAME="your-email@gmail.com"
-export SMTP_PASSWORD="your-app-password"
+export SMTP_HOST="mail.yourcompany.com"
+export SMTP_PORT=25
 export ALERT_FROM_EMAIL="alerts@yourcompany.com"
 export ALERT_TO_EMAIL="admin@yourcompany.com"
 
@@ -473,14 +486,17 @@ cronで自動監視を設定します：
 crontab -e
 
 # 定期監視のエントリを追加
+# setup-monitoring.shは環境変数をexportするため、bashでsourceする
+SHELL=/bin/bash
+
 # 営業時間中は5分毎に実行
-*/5 9-17 * * 1-5 /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+*/5 9-17 * * 1-5 source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 
 # 営業時間外は15分毎に実行
-*/15 0-8,18-23 * * * /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+*/15 0-8,18-23 * * * source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 
 # 週末は1時間毎に実行
-0 * * * 0,6 /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
+0 * * * 0,6 source /path/to/setup-monitoring.sh production && probe /path/to/monitoring.yml,/path/to/production.yml >> /var/log/probe-monitoring.log 2>&1
 ```
 
 ## テストと検証
@@ -492,11 +508,11 @@ crontab -e
 ジョブを1つずつ実行して各部分を確認してから、ワークフロー全体を無人で動かします。
 
 ```bash
-# ヘルスチェックのみテスト
-probe -v monitoring.yml --jobs=basic-health-check
+# ヘルスチェックをテスト（alwaysジョブのパフォーマンスレポートも後に実行される）
+probe -v --job health-check monitoring.yml
 
-# メールアラートなしでテスト
-probe monitoring.yml,production.yml --skip-jobs=alert-notifications
+# メールアラートなしでテスト（分析に必要なジョブを実行し、アラートは実行しない）
+probe --job performance-analysis monitoring.yml,production.yml
 
 # 偽の失敗でテスト（存在しないエンドポイントにURLを変更）
 probe monitoring.yml,development.yml
@@ -504,10 +520,10 @@ probe monitoring.yml,development.yml
 
 ### メールアラートの検証
 
-1. 成功しきい値を一時的に非常に高く設定してアラートを発生させる
-2. 監視を実行してメール配信を確認
-3. メールの書式と内容をチェック
-4. 通常のしきい値を復元
+1. 何も応答しないアドレスにチェックを向けて、すべてのチェックを失敗させる：`probe --var API_BASE_URL=http://localhost:1 monitoring.yml`
+2. メールが配信されたことを確認
+3. メールの件名と、Probeの出力のレポートをチェック
+4. `--var`なしで再度実行し、アラートのジョブがスキップされることを確認
 
 ## トラブルシューティング
 
@@ -527,10 +543,10 @@ echo $API_AUTH_TOKEN | base64 -d  # JWTトークンの場合
 **メール配信の問題:**
 ```bash
 # SMTP接続をテスト
-telnet smtp.gmail.com 587
+telnet "$SMTP_HOST" "$SMTP_PORT"
 
-# アプリパスワードをチェック（Gmailの場合）
-# Googleアカウント設定で新しいアプリパスワードを生成
+# Probeはサーバーにログインしないため、サーバーはこのホストからの
+# メールを認証なしで受け付ける必要がある
 ```
 
 **パフォーマンスの問題:**

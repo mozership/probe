@@ -182,7 +182,7 @@ A format without a path is written to its default file in the current directory.
 
 `github-summary` appends rather than overwrites, since earlier steps and other tools write to the same summary. Outside GitHub Actions, where `GITHUB_STEP_SUMMARY` is not set and no path is given, it prints a warning and is skipped without changing the exit code, so one command line serves CI and a local run. GitHub accepts at most 1 MiB of summary per step: when the page would go over, the requests and responses are left out, and if it is still too large the page is cut short at a failed step, with a note saying so. If earlier steps have left no room at all, nothing is written and a warning says so, so that the summary they wrote is not lost. Parent directories of an explicit path are created as for the other formats. An explicit path is kept inside the current directory in the same way, refusing any symlink that leads out, since the summary is appended to rather than replaced; the path in `GITHUB_STEP_SUMMARY` is used as given.
 
-A step's status is `passed`, `failed`, `skipped`, or `untested` when it ran without a `test` and nothing else checked it, such as an OpenAPI document. A failed step records one of these reasons:
+A step's status is `passed`, `failed`, `skipped`, or `untested` when it ran without a `test` and nothing else checked it, such as an OpenAPI document. A step of the hello action, which does nothing that could fail, passes without a `test`. A failed step records one of these reasons:
 
 | Kind | Meaning | JUnit element |
 |---|---|---|
@@ -475,7 +475,7 @@ It reports as an **error**:
 It reports as a **warning**:
 
 - an output read from a job that is not needed, directly or through others, by the job that reads it, so that it may not be published yet
-- a step that nothing checks: it has no `test`, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
+- a step that nothing checks: it has no `test`, it is not a step of the hello action, which does nothing that could fail, the action is not asked to check it against a contract, as `openapi` asks the http action and `proto` the grpc action, and neither the `repeat.test` nor the `repeat.baseline_test` of its job reads it
 - a `test` that reads nothing, such as `1 == 1`, which gives the same result whatever the step does
 - a `repeat.baseline_test` that reads nothing under `baseline`, which can go in `repeat.test`
 - a var read as `vars.<name>` that neither the workflow's `vars`, nor the step's `vars`, nor the entries of an `iteration` written in the step define, which reads nil unless [`--var`](#--var) gives it. A step's own `vars` read only those of the workflow, so one that reads another var of the step, or a key of its `iteration`, is reported too. A var read by a key known only when it runs, such as `vars[k]`, and, in a step whose `iteration` is a template, the vars its other fields read, are not checked. Files read together are checked as one workflow, so give `probe check` the files the run reads

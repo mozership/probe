@@ -448,6 +448,9 @@ jobs:
   - name: Function only
     uses: hello
     test: len("abc") == 3
+  - name: Only an echo
+    uses: hello
+    echo: done
 `,
 			want: []want{
 				{SeverityWarning, 5, "nothing checks this step: it has no test"},
@@ -613,7 +616,7 @@ func TestCheck_WithoutActions(t *testing.T) {
 func TestCheck_FilesReadTogether(t *testing.T) {
 	dir := t.TempDir()
 	base := writeWorkflow(t, dir, "base.yml", "name: merged\nvars:\n  url: http://localhost") // no newline at the end
-	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: hello\n    tset: res.code == 0\n")
+	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: shell\n    tset: res.code == 0\n")
 
 	findings, err := Check(base+","+jobs, checkActions)
 	if err != nil {

@@ -6,7 +6,7 @@ This page documents every key Probe reads from a workflow file, the expression c
 
 The skeleton below shows every property a workflow file can carry and where each one belongs.
 
-```yaml
+```yaml fragment
 name: string                  # Required: workflow name
 description: string           # Optional: what the workflow does
 vars:                         # Optional: workflow variables

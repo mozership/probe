@@ -52,34 +52,36 @@ api-tests/
 └── main-test-suite.yml
 ```
 
+Probe concatenates the files it is given into one YAML document, so a top-level key such as `vars` defined in two files takes the value of the last one. The values every environment shares are therefore defined in `base.yml` as YAML anchors under `shared`, a key Probe ignores, and each environment file pulls them into its own `vars`.
+
 **config/base.yml:**
 ```yaml
-name: "API Testing Pipeline"
-description: "Comprehensive API testing suite for e-commerce platform"
-
-vars:
-  # Test Data
-  TEST_USER_EMAIL: "test@example.com"
-  TEST_USER_PASSWORD: "TestPassword123!"
-  TEST_PRODUCT_NAME: "Test Product"
-  TEST_ORDER_AMOUNT: 99.99
-  
-  # Performance Thresholds
-  FAST_RESPONSE_TIME: 200      # 200ms
-  ACCEPTABLE_RESPONSE_TIME: 1000  # 1 second
-  SLOW_RESPONSE_TIME: 3000     # 3 seconds
-  
-  # Test Configuration
-  RETRY_COUNT: 3
-  PARALLEL_REQUESTS: 5
-
 shared:
+  base_vars: &base_vars
+    # Test Data
+    TEST_USER_EMAIL: "test@example.com"
+    TEST_USER_PASSWORD: "TestPassword123!"
+    TEST_PRODUCT_NAME: "Test Product"
+    TEST_ORDER_AMOUNT: 99.99
+
+    # Performance Thresholds
+    FAST_RESPONSE_TIME: 200      # 200ms
+    ACCEPTABLE_RESPONSE_TIME: 1000  # 1 second
+    SLOW_RESPONSE_TIME: 3000     # 3 seconds
+
+    # Test Configuration
+    RETRY_COUNT: 3
+    PARALLEL_REQUESTS: 5
+
+    # Token for the endpoints that need one, from the environment
+    API_TOKEN: "{{API_TOKEN}}"
+
   common_headers: &common_headers
     Content-Type: "application/json"
     User-Agent: "Probe API Test Suite v1.0"
 ```
 
-`defaults` is a job key, so the shared headers are defined here as a YAML anchor and pulled into each job's `defaults`:
+The shared headers are pulled into a job's `defaults` the same way:
 
 ```yaml
 jobs:
@@ -95,16 +97,19 @@ jobs:
 **config/development.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "development"
   API_BASE_URL: "http://localhost:3000"
   API_VERSION: "v1"
   SKIP_PERFORMANCE_TESTS: true
   SKIP_LOAD_TESTS: true
-
 ```
 
 **config/staging.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "staging"
   API_BASE_URL: "https://api-staging.example.com"
   API_VERSION: "v1"
   SKIP_PERFORMANCE_TESTS: false
@@ -114,6 +119,8 @@ vars:
 **config/production.yml:**
 ```yaml
 vars:
+  <<: *base_vars
+  ENVIRONMENT: "production"
   API_BASE_URL: "https://api.example.com"
   API_VERSION: "v1" 
   SKIP_PERFORMANCE_TESTS: false
@@ -124,10 +131,10 @@ vars:
 
 ## Step 2: Authentication Testing
 
-Create comprehensive authentication tests:
+Create comprehensive authentication tests. Like every test file in this tutorial, it reads its settings from `vars`, which come from the configuration files it is run with (see [Step 8](#step-8-running-your-test-suite)):
 
 **tests/auth-tests.yml:**
-```yaml
+```yaml fragment
 name: "Authentication Tests"
 description: "Test user authentication, authorization, and session management"
 
@@ -260,7 +267,7 @@ jobs:
 Create comprehensive CRUD tests for products:
 
 **tests/product-tests.yml:**
-```yaml
+```yaml fragment
 name: "Product API Tests"
 description: "Test product CRUD operations, search, and data validation"
 
@@ -510,7 +517,7 @@ jobs:
 Add performance validation to your tests:
 
 **tests/performance-tests.yml:**
-```yaml
+```yaml fragment
 name: "API Performance Tests"
 description: "Validate API response times and performance characteristics"
 
@@ -579,6 +586,8 @@ jobs:
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < (vars.ACCEPTABLE_RESPONSE_TIME * 2)
+      outputs:
+        time: (rt.sec * 1000)
       # Note: This would be repeated with different parallel execution
       # In a real scenario, you'd use a load testing tool or script
 
@@ -598,7 +607,7 @@ jobs:
 Create robust data validation tests:
 
 **tests/data-validation-tests.yml:**
-```yaml
+```yaml fragment
 name: "Data Validation Tests"
 description: "Validate API response schemas and data integrity"
 
@@ -734,7 +743,7 @@ jobs:
 Create end-to-end user journey tests:
 
 **tests/integration-tests.yml:**
-```yaml
+```yaml fragment
 name: "Integration Tests"
 description: "End-to-end user journey validation"
 
@@ -760,6 +769,7 @@ jobs:
         user_id: res.body.user.id
         auth_token: res.body.token
         user_email: res.body.user.email
+        timestamp: unixtime()
 
     - name: "Browse Products"
       id: browse
@@ -912,7 +922,7 @@ jobs:
 Create the main test suite that orchestrates all tests:
 
 **main-test-suite.yml:**
-```yaml
+```yaml fragment
 name: "Complete API Test Suite"
 description: "Comprehensive API testing pipeline"
 
@@ -937,7 +947,7 @@ jobs:
       uses: hello
       echo: |
         === API TEST SUITE STARTING ===
-        Environment: {{vars.ENVIRONMENT || 'default'}}
+        Environment: {{vars.ENVIRONMENT ?? 'default'}}
         API Base URL: {{vars.API_BASE_URL}}
         API Version: {{vars.API_VERSION}}
         Skip Performance Tests: {{vars.SKIP_PERFORMANCE_TESTS}}
@@ -1001,9 +1011,12 @@ jobs:
         === API TEST SUITE COMPLETE ===
           
         Test Results Summary:
-          
-        Overall Status: {{
-        }}
+        ✅ Authentication Tests: Completed
+        ✅ Functional Tests: Completed
+        {{vars.SKIP_PERFORMANCE_TESTS ? "⏭️  Performance Tests: Skipped" : "✅ Performance Tests: Completed"}}
+        ✅ Integration Tests: Completed
+
+        Overall Status: ✅ ALL TESTS PASSED
           
         Generated: {{now().Format('2006-01-02T15:04:05Z07:00')}}
 ```
@@ -1057,7 +1070,7 @@ jobs:
       
       - name: Run API Tests
         env:
-          API_AUTH_TOKEN: ${{ secrets.API_TOKEN }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ENVIRONMENT: ${{ matrix.environment }}
@@ -1081,7 +1094,7 @@ Two kinds of check go beyond whether an endpoint works: whether it still matches
 
 Add API contract validation:
 
-```yaml
+```yaml fragment
 # tests/contract-tests.yml
 name: "API Contract Tests"
 description: "Validate API specification compliance"
@@ -1096,18 +1109,18 @@ jobs:
       with:
         method: GET
         url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+      # Custom validation logic for OpenAPI compliance;
+      # add further schema checks to the expression
       test: |
-        # Custom validation logic for OpenAPI compliance
         res.code == 200 &&
-        res.body.products != nil &&
-        # Additional schema validation...
+        res.body.products != nil
 ```
 
 ### Security Testing
 
 Add basic security validation:
 
-```yaml
+```yaml fragment
 # tests/security-tests.yml
 name: "API Security Tests"
 description: "Basic security validation tests"
@@ -1141,7 +1154,7 @@ jobs:
           }
       test: |
         res.code == 400 ||
-        (res.code == 200 && !res.body.error)
+        (res.code == 200 && res.body.error == nil)
 ```
 
 ## Troubleshooting
@@ -1156,15 +1169,17 @@ If the test suite does not run as described, the causes below are the ones to ch
 - name: "Refresh Token If Needed"
   uses: http
   with:
-    method: GET
+    method: POST
     url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/auth/refresh"
+    headers:
+      Authorization: "Bearer {{outputs.login.auth_token}}"
   # ... token refresh logic
 ```
 
 **Test Data Cleanup:**
 ```yaml
 # Add cleanup job
-cleanup:
+- id: cleanup
   name: "Test Data Cleanup"
   steps:
     - name: "Delete Test Products"
@@ -1173,11 +1188,14 @@ cleanup:
 
 **Rate Limiting:**
 ```yaml
-# Add delays between requests
-- name: "Rate Limit Delay"
-  uses: hello
+# Wait before a request with the step's wait
+- name: "List Products After a Pause"
+  wait: 1s
+  uses: http
   with:
-    delay: "1s"
+    method: GET
+    url: "{{vars.API_BASE_URL}}/api/{{vars.API_VERSION}}/products"
+  test: res.code == 200
 ```
 
 ## Next Steps
