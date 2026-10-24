@@ -13,10 +13,6 @@ import (
 	"github.com/mozership/probe/actions"
 )
 
-// workflowBlock matches a fenced yaml code block in a page, capturing the
-// words after the language and the body.
-var workflowBlock = regexp.MustCompile("(?s)```ya?ml([^\n]*)\n(.*?)```")
-
 // topName and topJobs match the keys at the top level of a block that a
 // workflow cannot load without, so that a block with both is a workflow
 // rather than a piece of one. topOn matches the key that makes it a GitHub
@@ -64,7 +60,7 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, m := range workflowBlock.FindAllSubmatchIndex(data, -1) {
+		for _, m := range probe.DocsYAMLBlock.FindAllSubmatchIndex(data, -1) {
 			meta := strings.Fields(string(data[m[2]:m[3]]))
 			body := data[m[4]:m[5]]
 			if slices.Contains(meta, fragmentMarker) || !topName.Match(body) || !topJobs.Match(body) || topOn.Match(body) {

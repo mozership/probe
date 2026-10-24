@@ -730,7 +730,7 @@ probe base-monitoring.yml,development.yml
 probe base-monitoring.yml,production.yml
 ```
 
-後のファイルに `jobs` があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは `base-monitoring.yml` に置き、`skipif` で `ENVIRONMENT` が `production` のときだけ実行します。
+後のファイルに`jobs`があると、前のファイルのジョブはすべて置き換わります。そのため、プロダクション専用のチェックは`base-monitoring.yml`に置き、`skipif`で`ENVIRONMENT`が`production`のときだけ実行します。
 
 ## ベストプラクティス
 

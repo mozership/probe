@@ -11,8 +11,10 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-// yamlBlock matches a fenced yaml code block in a page, capturing its body.
-var yamlBlock = regexp.MustCompile("(?s)```ya?ml[^\n]*\n(.*?)```")
+// DocsYAMLBlock matches a fenced yaml code block in a page, capturing the
+// words after the language, as in ```yaml fragment, and the body. It is
+// exported for TestDocsWorkflowsCheck, which is in package probe_test.
+var DocsYAMLBlock = regexp.MustCompile("(?s)```ya?ml([^\n]*)\n(.*?)```")
 
 // TestDocsYAMLBlocks parses every yaml code block in the docs, so that an
 // example a reader copies is not one Probe cannot load: a plain value holding
@@ -46,11 +48,11 @@ func TestDocsYAMLBlocks(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, m := range yamlBlock.FindAllSubmatchIndex(data, -1) {
+		for _, m := range DocsYAMLBlock.FindAllSubmatchIndex(data, -1) {
 			count++
-			line := strings.Count(string(data[:m[2]]), "\n") + 1
+			line := strings.Count(string(data[:m[4]]), "\n") + 1
 			var v any
-			err := yaml.UnmarshalWithOptions(data[m[2]:m[3]], &v, yaml.AllowDuplicateMapKey())
+			err := yaml.UnmarshalWithOptions(data[m[4]:m[5]], &v, yaml.AllowDuplicateMapKey())
 			if err != nil && !strings.Contains(err.Error(), "alias") {
 				t.Errorf("%s:%d: %s", path, line, strings.SplitN(err.Error(), "\n", 2)[0])
 			}

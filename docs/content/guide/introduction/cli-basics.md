@@ -251,7 +251,7 @@ The merge order matters - later files override values from earlier files.
 
 ## Working with Environment Variables
 
-Probe reads environment variables into the workflow's `vars`, where steps read them:
+A step cannot read the environment itself. The templates of the workflow's `vars` can, so each environment variable a step needs is given a var, here with a default for when it is not set:
 
 ```yaml
 name: Database Test
