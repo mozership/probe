@@ -745,6 +745,23 @@ probe -v workflow.yml
     Headers: {{res.headers}}
 ```
 
+#### JavaScript や Python から来た場合
+
+式は [expr-lang](https://expr-lang.org) で書きます。expr-lang の値はメソッドを持たないため、JavaScript や Python で値に対して呼ぶ処理は、演算子か関数で書きます。メソッド呼び出しはステップの実行時に `invalid operation: int(string)` などのエラーで失敗し、エラーの後に以下の書き方を示すヒントが続きます。`probe check` はワークフローを実行する前にこれを報告します。
+
+| 誤り | 正しい書き方 |
+|------|--------------|
+| `res.body.contains("x")`, `res.body.includes("x")` | `res.body contains "x"`、リストなら `"x" in list` |
+| `res.body.startsWith("x")`, `startsWith(res.body, "x")` | `res.body startsWith "x"`、または `hasPrefix(res.body, "x")` |
+| `res.body.endsWith("x")` | `res.body endsWith "x"`、または `hasSuffix(res.body, "x")` |
+| `res.body.matches("^a")` | `res.body matches "^a"` |
+| `res.body.length`, `items.size()` | `len(res.body)`, `len(items)` |
+| `s.toLowerCase()`, `s.toUpperCase()`, `s.trim()` | `lower(s)`, `upper(s)`, `trim(s)` |
+| `s.split(",")`, `items.join(",")`, `s.replace("a", "b")` | `split(s, ",")`, `join(items, ",")`, `replace(s, "a", "b")`（JavaScript と異なり、最初の一致だけでなくすべての一致を置換します） |
+| `n.toString()`, `obj.keys()` | `string(n)`, `keys(obj)` |
+| `===`, `!==` | `==`, `!=` |
+| `null`, `undefined`, `None` | `nil` |
+
 #### Null値の処理
 
 存在しないフィールドはnullになり、それをそのまま比較しても意味のある結果は得られません。先に存在を確認します。
