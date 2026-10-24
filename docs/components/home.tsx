@@ -7,6 +7,8 @@ import { StructureChart } from './structure-chart'
 import {
   agentCheck,
   agentWorkflow,
+  browserReport,
+  browserWorkflow,
   heroReport,
   heroWorkflow,
   installCommand,
@@ -166,6 +168,30 @@ export function Home({ locale }: { locale: Locale }) {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="lp-section">
+        <div className="lp-section__head">
+          <h2 className="lp-section__heading">{t.browser.heading}</h2>
+          <p className="lp-section__body">{t.browser.body}</p>
+        </div>
+        {/* The workflow is the longer, so it scrolls to the height of the report. */}
+        <div className="lp-pair">
+          <SourcePanel
+            label={t.browser.workflowLabel}
+            code={browserWorkflow}
+            className="lp-pair__source"
+          />
+          <figure className="lp-panel lp-panel--readout">
+            <figcaption className="lp-panel__label">{t.browser.reportLabel}</figcaption>
+            <Report lines={browserReport} wrap />
+          </figure>
+        </div>
+        <p className="lp-section__note">{t.browser.note}</p>
+
+        <Link className="lp-button lp-button--solid lp-section__link" href={t.browser.link.href}>
+          {t.browser.link.label}
+        </Link>
       </section>
 
       <section className="lp-section">

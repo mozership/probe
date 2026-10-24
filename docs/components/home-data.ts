@@ -216,6 +216,59 @@ export const agentCheck: ReportLine[] = [
   { text: '3 errors, 1 warning', tone: 'total' },
 ]
 
+/*
+ * The pair below is the second of two runs of `probe signup.yml` against the
+ * sign-up of probe-agent's e2e server, with ANTHROPIC_API_KEY and PASSWORD
+ * set: the first recorded the steps in signup.json, and this one replayed
+ * them without the model. Only the url was swapped for a presentable one,
+ * and the lines Probe prints as a step starts and ends were left out, as in
+ * heroReport.
+ */
+
+export const browserWorkflow = `name: Sign-up
+
+actions:
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+
+vars:
+  password: "{{PASSWORD}}"
+
+jobs:
+- name: Sign-up
+  steps:
+  - name: A new user signs up
+    uses: agent
+    with:
+      url: https://staging.example.com/
+      task: |
+        Sign up as Ada Lovelace with the email address
+        {secret:EMAIL} and the password {secret:PASSWORD},
+        agreeing to the terms.
+      expect: |
+        A page welcomes Ada Lovelace by name and says
+        the account is ready.
+      secrets:
+        EMAIL: "ada+{{random_str(8)}}@example.com"
+        PASSWORD: "{{vars.password}}"
+      cache: signup.json
+      evidence_dir: out
+    test: res.verdict == "pass"`
+
+export const browserReport: ReportLine[] = [
+  { text: 'Sign-up', tone: 'title' },
+  { text: '' },
+  { text: '⏺ Sign-up (Completed in 7.37s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  A new user signs up', tone: 'pass' },
+  { text: "         ✅ pass: After the signup form was submitted, the browser ended on /welcome. The main heading there welcomes Ada Lovelace by name, and the text below it says the account is ready. This matches the expectation. The only failed request was a 404 for the favicon, which doesn't affect the result." },
+  { text: '           evidence: "Welcome to Acme Notes, Ada Lovelace!"' },
+  { text: '           evidence: "Your account {secret:EMAIL} is ready."' },
+  { text: '           cache: hit, 7 steps replayed without the model' },
+  { text: '           7 steps, stopped: done, 6s' },
+  { text: '           report: out/probe-agent-1961736983/report.md' },
+  { text: '' },
+  { text: 'Total workflow time: 7.37s ✓ All jobs succeeded', tone: 'total' },
+]
+
 export const installCommand = 'brew install mozership/tap/probe'
 
 export const sourceCommands = 'go install github.com/mozership/probe/cmd/probe@latest'

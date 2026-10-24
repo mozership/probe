@@ -592,7 +592,8 @@
   text-indent: -2ch;
 }
 
-.lp-agents__note {
+.lp-agents__note,
+.lp-section__note {
   max-width: var(--lp-measure);
   margin: 1.25rem 0 0;
   color: var(--lp-muted);

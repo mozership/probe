@@ -48,6 +48,14 @@ export type HomeCopy = {
     link: { label: string; href: string }
   }
   parts: { heading: string; body: string; items: Part[] }
+  browser: {
+    heading: string
+    body: string
+    workflowLabel: string
+    reportLabel: string
+    note: string
+    link: { label: string; href: string }
+  }
   agents: {
     heading: string
     body: string
@@ -81,7 +89,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         runnerNote: 'workflow runner',
         builtInLabel: 'Built in',
         externalLabel: 'Yours',
-        externalNames: ['graphql', 'jmap'],
+        externalNames: ['agent', 'graphql', 'jmap'],
         transport: 'gRPC',
       },
       link: { label: 'Read the actions reference', href: '/reference/actions-reference' },
@@ -140,6 +148,14 @@ export const homeCopy: Record<Locale, HomeCopy> = {
           code: 'wait: 5s',
         },
       ],
+    },
+    browser: {
+      heading: 'Test the UI in natural language',
+      body: 'Write what a user does in task, and what has to hold afterwards in expect. The agent action has a model carry out the task in a real Chrome, and another call of the model judge it from what the pages showed, quoting them. The steps of a run that passed are recorded, and the next run replays them without the model. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine.',
+      workflowLabel: 'signup.yml',
+      reportLabel: '$ probe signup.yml',
+      note: 'This is the second run. In the first, the model signed up in 10 steps, which were recorded in signup.json; this one replayed them without the model, and only the judge was asked, so each quote was still checked against what the pages showed.',
+      link: { label: 'Read the agent action reference', href: '/reference/actions/agent' },
     },
     agents: {
       heading: 'Built for coding agents',
@@ -215,7 +231,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
         runnerNote: 'ワークフロー実行',
         builtInLabel: 'ビルトイン',
         externalLabel: '自作のアクション',
-        externalNames: ['graphql', 'jmap'],
+        externalNames: ['agent', 'graphql', 'jmap'],
         transport: 'gRPC',
       },
       link: { label: 'アクションリファレンスを読む', href: '/ja/reference/actions/variables' },
@@ -274,6 +290,14 @@ export const homeCopy: Record<Locale, HomeCopy> = {
           code: 'wait: 5s',
         },
       ],
+    },
+    browser: {
+      heading: '画面のテストは自然言語で',
+      body: 'ユーザーが行うことをtaskに、終わったあとに成り立つべきことをexpectに書きます。agentアクションでは、モデルが実際のChromeでタスクを行い、別に呼び出したモデルがページに表示された内容を引用して判定します。通った実行の手順は記録し、次の実行ではモデルを使わずに再生します。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます。',
+      workflowLabel: 'signup.yml',
+      reportLabel: '$ probe signup.yml',
+      note: 'これは2回目の実行です。1回目はモデルが10手で登録し、その手順をsignup.jsonに記録しました。2回目はモデルを使わずにそれを再生し、モデルには判定だけを頼んだので、引用は今回もページに表示された内容と照合しています。',
+      link: { label: 'agentアクションのリファレンスを読む', href: '/ja/reference/actions/agent' },
     },
     agents: {
       heading: 'AIエージェントのために',
