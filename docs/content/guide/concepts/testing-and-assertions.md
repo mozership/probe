@@ -657,7 +657,7 @@ jobs:
 
 ## Performance Testing
 
-`res.time` makes response time an ordinary assertion, so a workflow can hold a service to a time budget as well as a correctness one.
+`rt` makes response time an ordinary assertion, so a workflow can hold a service to a time budget as well as a correctness one.
 
 ### Response Time Benchmarks
 

@@ -191,6 +191,7 @@ req:
   env:                      # 環境変数
     NODE_ENV: "production"
   background: false         # background設定
+  ready: {}                 # ready設定
 ```
 
 `background: true`の場合、結果ができた時点でコマンドはまだ動いています。
