@@ -1028,6 +1028,8 @@ func TestCmd_mistypedSubCommand(t *testing.T) {
 		{"a path", []string{"probe", "./chek"}, 0, ""},
 		{"a YAML file", []string{"probe", "check.yml"}, 0, ""},
 		{"after --", []string{"probe", "--", "chek"}, 0, ""},
+		{"a --job named as a subcommand", []string{"probe", "--job", "check", "w.yml"}, 0, ""},
+		{"after a flag with a value", []string{"probe", "--report", "json", "chek"}, probe.ExitConfigError, "[ERROR] unknown command \"chek\"; did you mean \"check\"?\ntry --help to know more\n"},
 		{"close to no subcommand", []string{"probe", "workflow"}, 0, ""},
 	}
 
@@ -1152,6 +1154,8 @@ func TestCmd_manifest(t *testing.T) {
 		{"no checksums file", []string{"probe", "manifest", "v0.2.0"}, probe.ExitConfigError, "", "       probe manifest <tag>"},
 		{"init without a repository", []string{"probe", "manifest", "init"}, probe.ExitConfigError, "", "Usage: probe manifest init"},
 		{"mistyped init", []string{"probe", "manifest", "ini", "example/probe-greet"}, probe.ExitConfigError, "", `unknown manifest argument "ini"; did you mean "init"?`},
+		{"tag close to init", []string{"probe", "manifest", "lint", checksums, action}, 0, strings.Replace(released, "v0.2.0", "lint", 1), ""},
+		{"tag in capitals", []string{"probe", "manifest", "INIT", checksums, action}, 0, strings.Replace(released, "v0.2.0", "INIT", 1), ""},
 		{"init with too many arguments", []string{"probe", "manifest", "init", "example/probe-greet", "more"}, probe.ExitConfigError, "", "Usage: probe manifest init"},
 		{"init with a bad repository", []string{"probe", "manifest", "init", "probe-greet"}, probe.ExitConfigError, "", "must be <owner>/<repo>"},
 		{"too many arguments", []string{"probe", "manifest", "v0.2.0", checksums, action, "more"}, probe.ExitConfigError, "", "Usage: probe manifest"},

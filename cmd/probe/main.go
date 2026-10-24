@@ -61,8 +61,8 @@ type Cmd struct {
 	// guardFlags are the guard's flags given, apart from their values, so
 	// that a flag given empty or false wins over its environment variable.
 	guardFlags map[string]bool
-	// firstFile is the first workflow file given before any --, which is
-	// a subcommand's name mistyped when no file has it.
+	// firstFile is the first workflow file given before any --, checked
+	// as a possibly mistyped subcommand.
 	firstFile  string
 	validFlags []string
 	ver        string
@@ -402,6 +402,9 @@ func (c *Cmd) start(args []string) int {
 		return probe.ExitConfigError
 	}
 
+	// firstFile is set only when no subcommand is given.
+	mistyped := mistypedSubCommand(c.firstFile)
+
 	switch {
 	case c.Help:
 		c.usage()
@@ -411,8 +414,8 @@ func (c *Cmd) start(args []string) int {
 		c.printVersion()
 		return 0
 
-	case c.SubCommand == "" && mistypedSubCommand(c.firstFile) != "":
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown command %q; did you mean %q?\n", c.firstFile, mistypedSubCommand(c.firstFile))
+	case mistyped != "":
+		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown command %q; did you mean %q?\n", c.firstFile, mistyped)
 		_, _ = fmt.Fprintf(c.errWriter, "try --help to know more\n")
 		return probe.ExitConfigError
 
@@ -845,14 +848,25 @@ func (c *Cmd) runSkill() int {
 	}
 }
 
+// fileExists reports whether the first of args names a file that exists.
+func fileExists(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	_, err := os.Stat(args[0])
+	return err == nil
+}
+
 // runManifest prints the action.yml of a release of an external action,
 // from the one of the release before it and the checksums of its
 // executables, or, with "init <owner>/<repo>", one to start a new action
 // from.
 func (c *Cmd) runManifest() int {
 	args := c.SubCommandArgs
-	// A tag is not a word close to init, as v1.2.0 is not.
-	if len(args) > 0 && args[0] != "init" && suggest.Closest(args[0], []string{"init"}) != "" {
+	// A word close to init, such as ini, may yet be a tag: lint is one.
+	// After a tag comes a checksums file, and after init a repository, so
+	// init is suggested only when the next argument names no file.
+	if len(args) > 0 && args[0] != "init" && suggest.Closest(args[0], []string{"init"}) != "" && !fileExists(args[1:]) {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown manifest argument %q; did you mean %q?\n", args[0], "init")
 		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
 		_, _ = fmt.Fprintf(c.errWriter, "       probe manifest <tag> <checksums-file> [action-file]\n")
