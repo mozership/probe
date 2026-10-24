@@ -425,7 +425,7 @@ Here the error is the expected result, so the test asserts on the status and the
     with:
       url: "{{vars.api_url}}/users/does-not-exist"
       method: GET
-    test: res.code == 404 && res.body.error != null
+    test: res.code == 404 && res.body.error != nil
 ```
 
 ### Retrying a Flaky Endpoint

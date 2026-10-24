@@ -222,7 +222,7 @@ jobs:
   test: |
     res.code == 200 &&
     res.body.success == true &&
-    res.body.data != null &&
+    res.body.data != nil &&
     (rt.sec * 1000) < 1000
 ```
 
@@ -251,7 +251,7 @@ test: res.headers["X-Rate-Limit-Remaining"] > "10"
 # JSON レスポンステスト
 test: res.body.status == "success"
 test: len(res.body.data.users) > 0
-test: res.body.error == null
+test: res.body.error == nil
 
 # テキストレスポンステスト
 test: res.body contains "Success"
@@ -288,7 +288,7 @@ test: 'any(res.body.items, #.price > 100)'
 
 # オブジェクトプロパティテスト
 test: '"id" in res.body.user && "email" in res.body.user'
-test: res.body.config.database.host != null
+test: res.body.config.database.host != nil
 ```
 
 #### 複雑な論理条件
@@ -304,7 +304,7 @@ test: |
 # ネストした条件検証
 test: |
   res.code == 200 &&
-  res.body.data != null &&
+  res.body.data != nil &&
   (
     (res.body.data.type == "user" && res.body.data.user.active == true) ||
     (res.body.data.type == "system" && res.body.data.system.healthy == true)
@@ -750,8 +750,8 @@ probe -v workflow.yml
 存在しないフィールドはnullになり、それをそのまま比較しても意味のある結果は得られません。先に存在を確認します。
 
 ```yaml
-# 良い例: 潜在的な null 値を処理
-test: res.body.user != null && res.body.user.active == true
+# 良い例: 潜在的な nil 値を処理
+test: res.body.user != nil && res.body.user.active == true
 
 # 良い例: デフォルト値を使用
 echo: "User count: {{outputs.api.user_count || 0}}"
@@ -801,8 +801,8 @@ outputs:
 # 良い例: 防御的プログラミング
 test: |
   res.code == 200 &&
-  res.body != null &&
-  res.body.users != null &&
+  res.body != nil &&
+  res.body.users != nil &&
   len(res.body.users) > 0
 
 # 良い例: デフォルト値を提供
@@ -827,8 +827,8 @@ echo: "Processing {{outputs.api.item_count || 0}} items"
   test: |
     res.code == 200 &&
     (rt.sec * 1000) < 2000 &&
-    res.body.users != null &&
-    res.body.revenue != null &&
+    res.body.users != nil &&
+    res.body.revenue != nil &&
     len(filter(res.body.users, #.active == true)) > 0 &&
     res.body.revenue > 1000
 ```

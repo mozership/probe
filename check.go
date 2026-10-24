@@ -80,8 +80,10 @@ type CheckOptions struct {
 // wrong with it or weak in it, without running anything: keys a workflow
 // does not take, what a run would refuse to load, actions that do not
 // exist, needs that cannot be met, expressions and templates that do not
-// parse, and outputs read before or without being published, as errors;
-// and steps that nothing checks, or whose test reads nothing, as warnings.
+// parse or that read a name that is not there to read, and outputs read
+// before or without being published, as errors; and steps that nothing
+// checks, tests that read nothing, and vars that nothing defines, as
+// warnings.
 //
 // The error it returns is for a workflow that cannot be read at all, such
 // as a file that does not exist.
@@ -148,6 +150,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.checkNeeds()
 	c.checkProblems(problems)
 	c.checkOutputs()
+	c.checkNames()
 	c.checkTests()
 	c.checkRepeatTests()
 	return c.sorted(), nil
@@ -431,8 +434,14 @@ func (c *checker) noteLines(path string, n ast.Node) {
 }
 
 // suggest returns the key of allowed closest to key, when one is close
-// enough to be what was meant.
+// enough to be what was meant. One that differs from key only in case, as
+// api_url does from API_URL, is closest.
 func suggest(key string, allowed []string) string {
+	for _, a := range allowed {
+		if strings.EqualFold(key, a) {
+			return a
+		}
+	}
 	best, bestDist := "", 3
 	for _, a := range allowed {
 		if d := distance(key, a); d < bestDist {
@@ -766,12 +775,8 @@ func (c *checker) checkOutputs() {
 	}
 	needs := c.ancestors()
 
-	// read checks the outputs input, an expression, reads at the point of
-	// job i and step j, -1 for a field of the job read before its steps.
-	// late is whether the field is read once the step has published its
-	// outputs, as test and echo are.
-	read := func(path, where, field string, i, j int, late bool, input string) {
-		chains := expr.Reads(input, "outputs")
+	c.eachExpr(func(e exprAt) {
+		chains := expr.Reads(e.input, "outputs")
 		// outputs.auth.token also reads outputs.auth, which is not reported
 		// on its own.
 		deeper := map[string]bool{}
@@ -787,39 +792,220 @@ func (c *checker) checkOutputs() {
 				continue
 			}
 			seen[key] = true
-			msg, severity := c.outputRead(chain, byID, byKey, needs, i, j, late)
+			msg, severity := c.outputRead(chain, byID, byKey, needs, e.job, e.step, e.late)
 			if msg != "" {
-				c.add(severity, c.line(path), where, "%s: outputs.%s %s", field, key, msg)
+				c.add(severity, c.line(e.path), e.where, "%s: outputs.%s %s", e.field, key, msg)
 			}
 		}
-	}
-	readTemplates := func(path, where, field string, i, j int, late bool, v any) {
-		forStrings(path, v, func(path, s string) {
-			for _, e := range expr.TemplateExprs(s) {
-				read(path, where, field, i, j, late, e)
+	})
+}
+
+// exprAt is an expression of a job or a step, or one of the templates of
+// it, and where it is.
+type exprAt struct {
+	path, where, field string
+	// job and step are the indexes of the job and the step it is in; step
+	// is -1 for a field of the job read before its steps.
+	job, step int
+	// late is whether it is read once the step has published its outputs,
+	// as test and echo are.
+	late  bool
+	input string
+}
+
+// eachExpr calls f with each expression of the jobs and their steps, and
+// each template, in the order they are read.
+func (c *checker) eachExpr(f func(exprAt)) {
+	templates := func(e exprAt, v any) {
+		forStrings(e.path, v, func(path, s string) {
+			for _, input := range expr.TemplateExprs(s) {
+				e.path, e.input = path, input
+				f(e)
 			}
 		})
 	}
-
 	for i, job := range c.wf.Jobs {
 		jp := fmt.Sprintf("jobs[%d]", i)
-		readTemplates(jp+".name", c.jobWhere(i), "name", i, -1, false, job.Name)
-		read(jp+".skipif", c.jobWhere(i), "skipif", i, -1, false, job.SkipIf)
+		jobField := func(key string) exprAt {
+			return exprAt{path: jp + "." + key, where: c.jobWhere(i), field: key, job: i, step: -1}
+		}
+		templates(jobField("name"), job.Name)
+		e := jobField("skipif")
+		e.input = job.SkipIf
+		f(e)
 		for j, st := range job.Steps {
 			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
-			where := c.stepWhere(i, j)
-			readTemplates(sp+".name", where, "name", i, j, false, st.Name)
-			readTemplates(sp+".with", where, "with", i, j, false, st.With)
-			readTemplates(sp+".vars", where, "vars", i, j, false, st.Vars)
-			readTemplates(sp+".iteration", where, "iteration", i, j, false, st.Iteration.Expr)
-			read(sp+".skipif", where, "skipif", i, j, false, st.SkipIf)
-			for _, k := range slices.Sorted(maps.Keys(st.Outputs)) {
-				read(sp+".outputs."+k, where, "outputs."+k, i, j, false, st.Outputs[k])
+			field := func(key string, late bool) exprAt {
+				return exprAt{path: sp + "." + key, where: c.stepWhere(i, j), field: key, job: i, step: j, late: late}
 			}
-			read(sp+".test", where, "test", i, j, true, st.Test)
-			readTemplates(sp+".echo", where, "echo", i, j, true, st.Echo)
+			expression := func(key string, late bool, input string) {
+				e := field(key, late)
+				e.input = input
+				f(e)
+			}
+			templates(field("name", false), st.Name)
+			templates(field("with", false), st.With)
+			templates(field("vars", false), st.Vars)
+			templates(field("iteration", false), st.Iteration.Expr)
+			templates(field("wait", false), st.Wait)
+			expression("skipif", false, st.SkipIf)
+			for _, k := range slices.Sorted(maps.Keys(st.Outputs)) {
+				expression("outputs."+k, false, st.Outputs[k])
+			}
+			expression("test", true, st.Test)
+			templates(field("echo", true), st.Echo)
 		}
 	}
+}
+
+// The names an expression of a step, or the skipif of a job, reads from,
+// and those the tests of a repeated job read from, from the fields of what
+// they are evaluated against.
+var (
+	stepNames   = exprKeys(reflect.TypeFor[StepContext]())
+	repeatNames = exprKeys(reflect.TypeFor[repeatTestEnv]())
+)
+
+func exprKeys(t reflect.Type) []string {
+	var keys []string
+	for f := range t.Fields() {
+		if name := f.Tag.Get("expr"); name != "" {
+			keys = append(keys, name)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// checkNames checks the names that the expressions and templates read. A
+// name that what they are evaluated against does not have, such as steps in
+// the test of a step, is an error: there is nothing to read it from, so the
+// expression fails. A var that neither the workflow nor the step defines is
+// a warning, as it reads nil unless --var gives it, which check cannot know.
+//
+// Of the templates of a job's name, which are evaluated against the job and
+// so can read more than they are meant to, and of the workflow's vars, which
+// read the environment, only the vars they read are checked.
+func (c *checker) checkNames() {
+	workflowVars := varNames(c.wf.Vars)
+	seen := map[string]bool{}
+	read := func(path, where, field, input string, names, vars []string) {
+		add := func(severity, format string, args ...any) {
+			key := path + "\x00" + fmt.Sprintf(format, args...)
+			if !seen[key] {
+				seen[key] = true
+				c.add(severity, c.line(path), where, "%s: "+format, append([]any{field}, args...)...)
+			}
+		}
+		for _, name := range expr.Names(input) {
+			if names == nil || slices.Contains(names, name) {
+				continue
+			}
+			add(SeverityError, "%s is not defined; it can read %s%s", name, listNames(names), nameHint(name, names))
+		}
+		if vars == nil {
+			return
+		}
+		for _, chain := range expr.Reads(input, "vars") {
+			if slices.Contains(vars, chain[0]) {
+				continue
+			}
+			msg := fmt.Sprintf("vars.%s is not defined by the workflow, so it is nil unless --var gives it", chain[0])
+			if s := suggest(chain[0], vars); s != "" {
+				msg += fmt.Sprintf("; did you mean %q?", s)
+			}
+			add(SeverityWarning, "%s", msg)
+		}
+	}
+
+	forStrings("vars", c.wf.Vars, func(path, s string) {
+		for _, input := range expr.TemplateExprs(s) {
+			read(path, "", "vars", input, nil, workflowVars)
+		}
+	})
+	c.eachExpr(func(e exprAt) {
+		names, vars := stepNames, workflowVars
+		if e.step < 0 {
+			if e.field == "name" {
+				names = nil
+			}
+		} else {
+			vars = stepVars(workflowVars, c.wf.Jobs[e.job].Steps[e.step])
+		}
+		read(e.path, e.where, e.field, e.input, names, vars)
+	})
+	for i, job := range c.wf.Jobs {
+		if job.Repeat == nil {
+			continue
+		}
+		for _, t := range []struct{ key, test string }{
+			{"test", job.Repeat.Test},
+			{"baseline_test", job.Repeat.BaselineTest},
+		} {
+			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars)
+		}
+	}
+}
+
+// nameHint returns what name, which is not among names, was likely meant
+// as, to follow what names it, or an empty string.
+func nameHint(name string, names []string) string {
+	step := slices.Equal(names, stepNames)
+	switch {
+	case name == "null" || name == "undefined":
+		return "; did you mean nil?"
+	case suggest(name, names) != "":
+		return fmt.Sprintf("; did you mean %q?", suggest(name, names))
+	case step && name == "steps":
+		return "; what an earlier step publishes is read under outputs"
+	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":
+		return fmt.Sprintf("; the environment is read only by the workflow's vars, as token: \"{{%s}}\"", name)
+	}
+	return ""
+}
+
+// varNames returns the names of vars, sorted, or nil when a name holds a
+// template, so that the names are known only as the workflow runs.
+func varNames(vars map[string]any) []string {
+	names := make([]string, 0, len(vars))
+	for name := range vars {
+		if len(expr.TemplateExprs(name)) > 0 {
+			return nil
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// stepVars returns the names of the vars a step reads: those of the
+// workflow, and those the step and the entries of its iteration give; nil
+// when they are not known before it runs, as those of an iteration a
+// template gives are not.
+func stepVars(workflow []string, st *Step) []string {
+	if workflow == nil || st.Iteration.Expr != "" {
+		return nil
+	}
+	own := varNames(st.Vars)
+	if own == nil && len(st.Vars) > 0 {
+		return nil
+	}
+	names := append(slices.Clone(workflow), own...)
+	for _, entry := range st.Iteration.Entries {
+		for name := range entry {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+// listNames lists names as a, b and c.
+func listNames(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // forStrings calls f with each string in v, a string or a map or list of

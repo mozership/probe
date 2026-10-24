@@ -239,7 +239,7 @@ jobs:
       url: https://us-east.api.example.com/health
     test: res.code == 200
     outputs:
-      region: "us-east"
+      region: "'us-east'"
       status: res.body.status
       response_time: (rt.sec * 1000)
 
@@ -253,7 +253,7 @@ jobs:
       url: https://us-west.api.example.com/health
     test: res.code == 200
     outputs:
-      region: "us-west"
+      region: "'us-west'"
       status: res.body.status
       response_time: (rt.sec * 1000)
 
@@ -267,7 +267,7 @@ jobs:
       url: https://eu.api.example.com/health
     test: res.code == 200
     outputs:
-      region: "eu"
+      region: "'eu'"
       status: res.body.status
       response_time: (rt.sec * 1000)
 

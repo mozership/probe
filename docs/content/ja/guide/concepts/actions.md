@@ -154,7 +154,7 @@ jobs:
         "query": "query GetUser($id: ID!) { user(id: $id) { name email active } }",
         "variables": { "id": "{{vars.test_user_id}}" }
       }
-  test: res.code == 200 && res.body.data.user != null
+  test: res.code == 200 && res.body.data.user != nil
   outputs:
     user_name: res.body.data.user.name
     user_email: res.body.data.user.email
@@ -293,7 +293,7 @@ shellアクションは複数のセキュリティレイヤーを実装します
 **Helloアクション レスポンス:** このアクション固有のパラメータはありません。`with`に渡したキーはそのまま`res`に返り、`status`は常に`0`です。
 
 ```yaml
-test: status == 0 && res.message != null
+test: status == 0 && res.message != nil
 ```
 
 ### SMTPアクション
@@ -887,7 +887,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
   test: |
     res.code == 200 &&
     res.headers["Content-Type"] contains "application/json" &&
-    res.body.users != null &&
+    res.body.users != nil &&
     len(res.body.users) > 0 &&
     (rt.sec * 1000) < 1000
   outputs:

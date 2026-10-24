@@ -118,7 +118,7 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.products != null &&
+        res.body.products != nil &&
         len(res.body.products) > 0
       outputs:
         product_count: len(res.body.products)
@@ -136,8 +136,8 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.user != null &&
-        res.body.user.id != null
+        res.body.user != nil &&
+        res.body.user.id != nil
       outputs:
         authenticated: res.code == 200
         user_id: res.body.user.id
@@ -154,7 +154,7 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.orders != null
+        res.body.orders != nil
       outputs:
         order_count: len(res.body.orders)
         response_time: (rt.sec * 1000)
@@ -177,7 +177,7 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.results != null
+        res.body.results != nil
       outputs:
         result_count: len(res.body.results)
         response_time: (rt.sec * 1000)
@@ -267,7 +267,7 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.products != null &&
+        res.body.products != nil &&
         len(res.body.products) > 0
       outputs:
         product_count: 'res.body.products ? len(res.body.products) : 0'
@@ -298,8 +298,8 @@ probe monitoring.yml
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < vars.MAX_RESPONSE_TIME &&
-        res.body.user != null &&
-        res.body.user.id != null
+        res.body.user != nil &&
+        res.body.user.id != nil
       outputs:
         authenticated: res.code == 200
         user_id: 'res.body.user ? res.body.user.id : "unknown"'

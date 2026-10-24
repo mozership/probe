@@ -171,9 +171,9 @@ test: |
 # JSON 構造検証
 test: |
   res.code == 200 &&
-  res.body != null &&
+  res.body != nil &&
   res.body.status == "success" &&
-  res.body.data != null
+  res.body.data != nil
 
 # 必須フィールド存在
 test: |
@@ -210,14 +210,14 @@ test: |
 ```yaml
 # 配列検証
 test: |
-  res.body.users != null &&
+  res.body.users != nil &&
   len(res.body.users) > 0 &&
   len(res.body.users) <= 100
 
 # 配列コンテンツ検証
 test: |
-  all(res.body.users, #.id != null && 
-    #.email != null)
+  all(res.body.users, #.id != nil &&
+    #.email != nil)
 
 # 特定要素チェック
 test: |
@@ -236,16 +236,16 @@ test: |
 ```yaml
 # 深いオブジェクト検証
 test: |
-  res.body.user != null &&
-  res.body.user.profile != null &&
-  res.body.user.profile.preferences != null &&
+  res.body.user != nil &&
+  res.body.user.profile != nil &&
+  res.body.user.profile.preferences != nil &&
   res.body.user.profile.preferences.notifications == true
 
 # 複雑なネスト構造
 test: |
-  all(res.body.data.orders, #.id != null &&
+  all(res.body.data.orders, #.id != nil &&
     len(#.items) > 0 &&
-    #all(.items, #.product_id != null && 
+    #all(.items, #.product_id != nil &&
       #.quantity > 0 && 
       #.price > 0) &&
     #.total == sum(map(#.items, #.quantity * #.price)))
@@ -334,8 +334,8 @@ test: |
 test: |
   res.code == 200 &&
   (res.body.features.beta_enabled == true ?
-    res.body.beta_data != null :    # ベータ機能にはデータが必要
-    res.body.beta_data == null      # ベータ機能は存在しないべき
+    res.body.beta_data != nil :    # ベータ機能にはデータが必要
+    res.body.beta_data == nil      # ベータ機能は存在しないべき
   )
 ```
 
@@ -393,7 +393,7 @@ jobs:
     url: "{{vars.API_URL}}/orders/{{vars.TEST_ORDER_ID}}"
   test: |
     res.code == 200 &&
-    res.body.order != null &&
+    res.body.order != nil &&
     
     # 注文合計が品目の合計と等しい
     res.body.order.total == 
@@ -457,7 +457,7 @@ jobs:
   test: |
     res.code == 400 &&
     res.body.error contains "json" &&
-    res.body.details != null
+    res.body.details != nil
 ```
 
 ### 境界値テスト
@@ -479,8 +479,8 @@ jobs:
   test: |
     res.code in [201, 400] &&  # 作成成功またはバリデーションエラー
     (res.code == 400 ? 
-      res.body.validation_errors != null :
-      res.body.user.id != null
+      res.body.validation_errors != nil :
+      res.body.user.id != nil
     )
 ```
 
@@ -515,8 +515,8 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: |
         res.code == 200 &&
-        res.body.users != null &&
-        res.body.pagination != null
+        res.body.users != nil &&
+        res.body.pagination != nil
 
 - id: integration-tests
   name: Integration Tests
@@ -556,8 +556,8 @@ jobs:
           }
       test: |
         res.code == 200 &&
-        res.body.access_token != null &&
-        res.body.refresh_token != null &&
+        res.body.access_token != nil &&
+        res.body.refresh_token != nil &&
         res.body.expires_in > 0
       outputs:
         access_token: res.body.access_token
@@ -593,9 +593,9 @@ jobs:
           }
       test: |
         res.code == 201 &&
-        res.body.user.id != null &&
-        res.body.user.name != null &&
-        res.body.user.email != null
+        res.body.user.id != nil &&
+        res.body.user.name != nil &&
+        res.body.user.email != nil
       outputs:
         user_id: res.body.user.id
         user_email: res.body.user.email
@@ -777,7 +777,7 @@ jobs:
     res.code in [201, 400] &&
     (res.code == 201 ? 
       !res.body.comment.content contains "<script>" :  # サニタイズされるべき
-      res.body.validation_errors != null               # または拒否される
+      res.body.validation_errors != nil               # または拒否される
     )
 ```
 
@@ -804,10 +804,10 @@ jobs:
   # 明確な検証ポイント付き包括的テスト
   test: |
     res.code == 201 &&                                    # 1. 作成成功
-    res.body.user.id != null &&                            # 2. ユーザーID割り当て
-    res.body.user.email != null &&                         # 3. メール保存
-    res.body.user.password == null &&                      # 4. パスワード未返却
-    res.body.user.created_at != null &&                    # 5. タイムスタンプ記録
+    res.body.user.id != nil &&                            # 2. ユーザーID割り当て
+    res.body.user.email != nil &&                         # 3. メール保存
+    res.body.user.password == nil &&                      # 4. パスワード未返却
+    res.body.user.created_at != nil &&                    # 5. タイムスタンプ記録
     res.body.user.email_verified == false &&               # 6. 初期未認証メール
     res.body.verification_email_sent == true &&            # 7. 認証トリガー
     "Location" in res.headers &&                         # 8. Location ヘッダー存在
@@ -860,7 +860,7 @@ jobs:
 test: |
   res.code == 200 &&
   len(res.body.users) >= 1 &&
-  res.body.users[0].id != null
+  res.body.users[0].id != nil
 
 # 避ける: 曖昧または不完全なテスト
 test: res.code == 200  # レスポンス内容はどうなのか？
@@ -876,7 +876,7 @@ test: res.code == 200  # レスポンス内容はどうなのか？
   test: res.code == 200 && res.body.success == true
 
 - name: Invalid Request Test  
-  test: res.code == 400 && res.body.error != null
+  test: res.code == 400 && res.body.error != nil
 ```
 
 ### 3. パフォーマンスを意識したテスト
@@ -888,7 +888,7 @@ test: res.code == 200  # レスポンス内容はどうなのか？
 test: |
   res.code == 200 &&
   (rt.sec * 1000) < 1000 &&
-  res.body.data != null
+  res.body.data != nil
 
 # 良い例: 環境固有のパフォーマンス閾値
 test: |
@@ -904,12 +904,12 @@ test: |
 # 良い例: 読みやすく、よく構造化されたテスト
 test: |
   res.code == 200 &&
-  res.body.user != null &&
+  res.body.user != nil &&
   res.body.user.id > 0 &&
   res.body.user.email contains "@"
 
 # 避ける: 複雑で読みにくいテスト
-test: res.code == 200 && res.body.user != null && res.body.user.id > 0 && res.body.user.email contains "@" && res.body.user.active == true && (rt.sec * 1000) < 1000
+test: res.code == 200 && res.body.user != nil && res.body.user.id > 0 && res.body.user.email contains "@" && res.body.user.active == true && (rt.sec * 1000) < 1000
 ```
 
 ## 次のステップ
