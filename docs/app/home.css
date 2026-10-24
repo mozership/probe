@@ -13,6 +13,8 @@
   --lp-muted: #476b85;
   --lp-rule: #608cab;
   --lp-stripe: #f1f7fb;
+  /* The accent, quieted toward the paper, for the word above a heading. */
+  --lp-kicker: color-mix(in srgb, var(--lp-accent) 72%, var(--lp-paper));
 
   --lp-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   --lp-font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
@@ -37,6 +39,7 @@
   --lp-muted: #9dbed4;
   --lp-rule: #608cab;
   --lp-stripe: #324b5e;
+  --lp-kicker: color-mix(in srgb, var(--lp-accent) 60%, var(--lp-ink));
 }
 
 /* The landing page manages its own gutters and background. */
@@ -471,7 +474,7 @@
 /* What a section is about, in a word or two, above its heading. */
 .lp-section__kicker {
   margin: 0 0 0.6rem;
-  color: var(--lp-blue);
+  color: var(--lp-kicker);
   font-family: var(--lp-font-mono);
   font-size: 0.8125rem;
   font-weight: 600;
