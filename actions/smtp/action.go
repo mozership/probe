@@ -43,3 +43,15 @@ func Serve() {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// Fields returns the fields of the req and the res the smtp action returns:
+// those of Req and of Res.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{Req: mapping.FieldTags(Req{}), Res: mapping.FieldTags(Res{})}
+}
+
+// Required returns the keys of with the smtp action cannot run without:
+// addr, from and to.
+func Required() [][]string {
+	return [][]string{{"addr"}, {"from"}, {"to"}}
+}

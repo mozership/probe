@@ -47,3 +47,15 @@ func Serve() {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// Fields returns the fields of the req and the res the ssh action returns:
+// those of Req and of Res.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{Req: mapping.FieldTags(Req{}), Res: mapping.FieldTags(Res{})}
+}
+
+// Required returns the keys of with the ssh action cannot run without: host,
+// user and cmd, and password or key_file, to log in with.
+func Required() [][]string {
+	return [][]string{{"host"}, {"user"}, {"cmd"}, {"password", "key_file"}}
+}

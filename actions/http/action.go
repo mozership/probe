@@ -93,3 +93,28 @@ func Params() []string {
 	}
 	return append(params, "basic_auth", "cookies", "form", "keep_cookies", "multipart", "openapi", "trace_header")
 }
+
+// Fields returns the fields of the req and the res the http action returns:
+// those of Req, and multipart, for a request that sends one; and those of
+// Res, and violations and contract, for a response checked against an
+// OpenAPI document.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{
+		Req: append(mapping.FieldTags(Req{}), "multipart"),
+		Res: append(mapping.FieldTags(Res{}), "contract", "violations"),
+	}
+}
+
+// Required returns the keys of with the http action cannot run without, each
+// as the keys that stand for it: the URL, which url or a method shorthand,
+// such as get, gives, and the method, which method or a shorthand gives.
+func Required() [][]string {
+	var shorthands []string
+	for _, m := range httpMethods {
+		shorthands = append(shorthands, strings.ToLower(m))
+	}
+	return [][]string{
+		append([]string{"url"}, shorthands...),
+		append([]string{"method"}, shorthands...),
+	}
+}

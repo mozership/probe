@@ -79,3 +79,15 @@ func stopStartedOnSignal() {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// Fields returns the fields of the req and the res the shell action returns:
+// those of Req and of Res.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{Req: mapping.FieldTags(Req{}), Res: mapping.FieldTags(Res{})}
+}
+
+// Required returns the keys of with the shell action cannot run without:
+// cmd.
+func Required() [][]string {
+	return [][]string{{"cmd"}}
+}

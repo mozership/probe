@@ -42,3 +42,16 @@ func Keeps() []string {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// Fields returns the fields of the req and the res the dns action returns.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{
+		Req: mapping.FieldTags(Req{}),
+		Res: []string{"answers", "authoritative", "protocol", "rcode", "server", "values"},
+	}
+}
+
+// Required returns the keys of with the dns action cannot run without: name.
+func Required() [][]string {
+	return [][]string{{"name"}}
+}

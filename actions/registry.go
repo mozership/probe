@@ -128,6 +128,57 @@ func AllParams() map[string][]string {
 	return out
 }
 
+// fields are the fields of the req and the res each built-in action
+// returns, as its package declares them.
+var fields = map[string]func() actionrpc.Fields{
+	"db":       db.Fields,
+	"dns":      dns.Fields,
+	"embedded": embedded.Fields,
+	"grpc":     grpc.Fields,
+	"hello":    hello.Fields,
+	"http":     http.Fields,
+	"imap":     imap.Fields,
+	"shell":    shell.Fields,
+	"smtp":     smtp.Fields,
+	"ssh":      ssh.Fields,
+}
+
+// AllFields returns the fields of the req and the res each built-in action
+// returns, by its name.
+func AllFields() map[string]actionrpc.Fields {
+	out := make(map[string]actionrpc.Fields, len(fields))
+	for name, f := range fields {
+		out[name] = f()
+	}
+	return out
+}
+
+// required are the keys of with each built-in action cannot run without.
+// hello, which needs none, is left out.
+var required = map[string]func() [][]string{
+	"db":       db.Required,
+	"dns":      dns.Required,
+	"embedded": embedded.Required,
+	"grpc":     grpc.Required,
+	"http":     http.Required,
+	"imap":     imap.Required,
+	"shell":    shell.Required,
+	"smtp":     smtp.Required,
+	"ssh":      ssh.Required,
+}
+
+// AllRequired returns the keys of with each built-in action cannot run
+// without, by its name, each as the keys that stand for one another, such
+// as url and get for the http action, of which one is enough. An action
+// that needs none is left out.
+func AllRequired() map[string][][]string {
+	out := make(map[string][][]string, len(required))
+	for name, f := range required {
+		out[name] = f()
+	}
+	return out
+}
+
 // Lookup returns the serve function of a built-in action.
 func Lookup(name string) (func(), bool) {
 	// The embedded action runs steps of its own, so it is told which

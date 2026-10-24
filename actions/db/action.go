@@ -80,3 +80,15 @@ func Keeps() []string {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// Fields returns the fields of the req and the res the db action returns:
+// those of Req and of Res.
+func Fields() actionrpc.Fields {
+	return actionrpc.Fields{Req: mapping.FieldTags(Req{}), Res: mapping.FieldTags(Res{})}
+}
+
+// Required returns the keys of with the db action cannot run without: dsn
+// and query.
+func Required() [][]string {
+	return [][]string{{"dsn"}, {"query"}}
+}
