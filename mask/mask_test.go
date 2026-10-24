@@ -893,3 +893,43 @@ func TestMasker_StringRedactsQueryCredentialsInJSON(t *testing.T) {
 		t.Errorf("String(%s) = %s", js, got)
 	}
 }
+
+// TestMasker_SecretInURLKeepsItsName covers a declared secret that stands in
+// a URL: it is replaced whole with its label before the URL is scanned, so
+// its name is kept, a quote it holds does not cut it, and the credentials of
+// the URL around it are still hidden.
+func TestMasker_SecretInURLKeepsItsName(t *testing.T) {
+	m := New([]string{"TOKEN", "USER", "HOST", "PASS"}, map[string]string{
+		"TOKEN": `e2e-s3cr"et\v`,
+		"USER":  "app-user",
+		"HOST":  "db.internal",
+		"PASS":  "long-password",
+	})
+	tests := []struct {
+		name, in, want string
+	}{
+		{"query value", `GET http://h:1/?token=e2e-s3cr"et\v`, `GET http://h:1/?token=<secret:TOKEN>`},
+		{"go quoted", fmt.Sprintf("Get %q: refused", `http://h:1/?token=e2e-s3cr"et\v`), `Get "http://h:1/?token=<secret:TOKEN>": refused`},
+		{"query value then a credential", `http://h/?token=e2e-s3cr"et\v&password=pw`, `http://h/?token=<secret:TOKEN>&password=<redacted>`},
+		{"user", `postgres://app-user:pw@db/main`, `postgres://<secret:USER>:<redacted>@db/main`},
+		{"host before a query", `https://db.internal/x?password=pw`, `https://<secret:HOST>/x?password=<redacted>`},
+		{"password", `postgres://app:long-password@db/main`, `postgres://app:<secret:PASS>@db/main`},
+		{"password and more", `postgres://app:long-password2@db/main`, `postgres://app:<redacted>@db/main`},
+		{"angle brackets around a url", `see <https://h/?token=abc>`, `see <https://h/?token=<redacted>>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.String(tt.in); got != tt.want {
+				t.Errorf("String(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			if got := m.String(m.String(tt.in)); got != tt.want {
+				t.Errorf("String twice = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	got := m.Map(map[string]any{"dsn": "postgres://app-user:pw@db.internal/main?password=x"})
+	if want := "postgres://<secret:USER>:<redacted>@<secret:HOST>/main?password=<redacted>"; got["dsn"] != want {
+		t.Errorf("Map dsn = %v, want %v", got["dsn"], want)
+	}
+}
