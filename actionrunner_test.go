@@ -14,7 +14,11 @@ import (
 )
 
 // The runners here stand in for the actions of the steps under test, given
-// to a run as Config.ActionRunner or to a job with WithActionRunner.
+// to a run as Config.ActionRunner or to a job with WithActionRunner. With
+// them are startGroup and waitGroupGone, which start a process group as an
+// action that leaves one does, and tell when it is stopped: the tests of a
+// step and the end-to-end tests check with them that a run stops what its
+// actions leave.
 
 // mockRunner returns the result, the error and the state set for each action
 // by its name, and records each call. Its fields are read and written under
