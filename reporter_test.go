@@ -21,7 +21,6 @@ func newTestStreamPrinter(bufferIDs []string) (*Printer, *bytes.Buffer, *bytes.B
 	p.spinner = nil
 
 	r := newStreamReporter(p, newReportRenderer(bufferIDs, nil, nil))
-	p.SetReporter(r)
 
 	return p, out, errOut, r
 }
@@ -398,7 +397,6 @@ func TestBufferedReporter_PrintsOnFinish(t *testing.T) {
 	p.spinner = nil
 
 	r := newBufferedReporter(p, newReportRenderer([]string{"first"}, nil, nil))
-	p.SetReporter(r)
 
 	rs := newTestResult(time.Now())
 	rs.SetReporter(r)
@@ -422,14 +420,22 @@ func TestBufferedReporter_PrintsOnFinish(t *testing.T) {
 	}
 }
 
-// TestPrinter_StepStartFallsBackToSpinner covers a printer with no reporter,
-// as used by Job.RunStandalone.
-func TestPrinter_StepStartFallsBackToSpinner(t *testing.T) {
-	p := newBufferPrinter()
-	if p.Reporter() != nil {
-		t.Fatal("a fresh printer should have no reporter")
+// The start of a step reaches the reporter through the result, which
+// tells nothing when it has no reporter, or when there is no result.
+func TestResult_notifyStepStart(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	_, _, errOut, r := newTestStreamPrinter([]string{"first"})
+	rs := NewResult()
+	rs.SetReporter(r)
+	rs.notifyStepStart("first", "Calling API")
+	if _, rest, _ := strings.Cut(errOut.String(), " "); rest != "[first] ▸ Calling API\n" {
+		t.Errorf("progress = %q, want the step that started", errOut.String())
 	}
 
-	// Must not panic with a nil reporter and a nil spinner.
-	p.StepStart("job", "step")
+	// Must not panic without a reporter, or without a result.
+	NewResult().notifyStepStart("first", "step")
+	var none *Result
+	none.notifyStepStart("first", "step")
 }

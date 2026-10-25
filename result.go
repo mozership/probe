@@ -172,8 +172,9 @@ type RepeatTestResult struct {
 // Result manages execution results for multiple jobs
 type Result struct {
 	Jobs map[string]*JobResult
-	// reporter is notified as results become final so that the report can be
-	// emitted incrementally. It may be nil, in which case nothing is streamed.
+	// reporter is told as steps start and as results become final, so
+	// that the report can be emitted incrementally. It is the one way the
+	// run tells it anything. It may be nil, in which case nothing is told.
 	reporter Reporter
 	// failures holds the kinds of failure seen during the run, which decide
 	// the exit code. Jobs run concurrently, so access goes through failuresMu.
@@ -181,9 +182,21 @@ type Result struct {
 	failuresMu sync.Mutex
 }
 
-// SetReporter installs the reporter notified when steps and jobs finish.
+// SetReporter installs the reporter told when steps start and when steps
+// and jobs finish.
 func (rs *Result) SetReporter(r Reporter) {
 	rs.reporter = r
+}
+
+// notifyStepStart tells the reporter that a step of the job of jobID
+// began. The buffered reporter shows it by the spinner, the stream reporter
+// by a line of progress. A nil Result, which some contexts run without,
+// tells nothing.
+func (rs *Result) notifyStepStart(jobID, stepName string) {
+	if rs == nil || rs.reporter == nil {
+		return
+	}
+	rs.reporter.StepStart(jobID, stepName)
 }
 
 // notifyJobDone tells the reporter that a job's report block is final.

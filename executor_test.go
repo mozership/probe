@@ -71,7 +71,7 @@ func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := w.newJobContext(Config{ActionRunner: runner}, nil, scheduler)
+	ctx := w.newJobContext(Config{ActionRunner: runner}, nil, scheduler, nil)
 	ctx.Outputs = NewOutputs()
 	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)

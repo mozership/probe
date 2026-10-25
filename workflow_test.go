@@ -1744,7 +1744,7 @@ func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) 
 	scheduler.Start("a")
 
 	errc := make(chan error, 1)
-	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler)) }()
+	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler, nil)) }()
 	select {
 	case err := <-errc:
 		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {

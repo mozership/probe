@@ -67,7 +67,6 @@ type Printer struct {
 	spinner   *spinner.Spinner
 	outWriter io.Writer
 	errWriter io.Writer
-	reporter  Reporter
 	// writeMu serializes writes to outWriter and errWriter. Jobs run
 	// concurrently and report errors as they happen, so without it two
 	// messages could interleave, and a buffer writer would race.
@@ -118,26 +117,6 @@ func newBufferPrinter() *Printer {
 	// helpers no-op.
 	pr.spinner = nil
 	return pr
-}
-
-// SetReporter installs the output strategy used for this run.
-func (p *Printer) SetReporter(r Reporter) {
-	p.reporter = r
-}
-
-// Reporter returns the installed output strategy, or nil when none was set.
-func (p *Printer) Reporter() Reporter {
-	return p.reporter
-}
-
-// StepStart announces that a step began. The buffered reporter turns this into
-// the spinner suffix, the stream reporter into a stderr progress line.
-func (p *Printer) StepStart(jobID, stepName string) {
-	if p.reporter != nil {
-		p.reporter.StepStart(jobID, stepName)
-		return
-	}
-	p.AddSpinnerSuffix(stepName)
 }
 
 func (p *Printer) StartSpinner() {

@@ -137,7 +137,7 @@ func (st *stepRun) prepare(jCtx *JobContext) (string, bool) {
 	}
 
 	st.expandedName = name
-	jCtx.Printer.StepStart(jCtx.CurrentJobID, name)
+	jCtx.Result.notifyStepStart(jCtx.CurrentJobID, name)
 
 	// Check if step should be skipped BEFORE waiting
 	if st.shouldSkip(jCtx) {
@@ -1078,7 +1078,7 @@ func (st *stepRun) skipWithoutRun(reason string, jCtx *JobContext) {
 // as when what it would run with cannot be worked out.
 func (st *stepRun) failBeforeRun(err error, jCtx *JobContext) {
 	name := st.nameWithoutRun()
-	jCtx.Printer.StepStart(jCtx.CurrentJobID, name)
+	jCtx.Result.notifyStepStart(jCtx.CurrentJobID, name)
 	st.handleActionError(err, name, jCtx)
 }
 
