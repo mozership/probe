@@ -72,7 +72,7 @@ func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
 		t.Fatal(err)
 	}
 	r := &workflowRun{w: w, config: Config{ActionRunner: runner}, jobs: w.Jobs, scheduler: scheduler, outputs: NewOutputs()}
-	ctx := r.newJobContext(nil)
+	ctx := r.newJobContext(nil, nil)
 	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
 	return passed, ctx.Result.Jobs[job.ID]
@@ -292,7 +292,7 @@ func TestJobRepeat_snapshotCounters(t *testing.T) {
 	rep.counters[0] = StepRepeatCounter{
 		Name: "first", RepeatTotal: 4,
 		Failure: failure, Contract: contract,
-		RTs: []float64{0.1}, EchoOutputs: []string{"echo"},
+		RTs: []float64{0.1}, Echoes: []string{"echo"},
 	}
 	rep.counters[3] = StepRepeatCounter{Name: "second"}
 
@@ -318,8 +318,8 @@ func TestJobRepeat_snapshotCounters(t *testing.T) {
 		t.Error("the snapshot should point to the stored counter's failure and contract")
 	}
 	got[0].RTs[0] = 9
-	got[0].EchoOutputs[0] = "changed"
-	if rep.counters[0].RTs[0] != 9 || rep.counters[0].EchoOutputs[0] != "changed" {
+	got[0].Echoes[0] = "changed"
+	if rep.counters[0].RTs[0] != 9 || rep.counters[0].Echoes[0] != "changed" {
 		t.Error("the snapshot should share the stored counter's RTs and echo outputs")
 	}
 }

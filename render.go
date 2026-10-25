@@ -114,7 +114,7 @@ func (r *reportRenderer) writeStepRepeatError(b *strings.Builder, counter *StepR
 	}
 	switch f.Kind {
 	case FailureAction, FailureTemplate, FailureRefused:
-		b.WriteString(indentDetail(f.Message))
+		b.WriteString(r.failureText(f, ""))
 	}
 }
 
@@ -144,7 +144,37 @@ func (r *reportRenderer) repeatTestText(label string, rt *RepeatTestResult) stri
 	case rt.Passed:
 		return fmt.Sprintf("    %s %s: %s\n", colorSuccess().Sprintf(IconSuccess), label, rt.Test)
 	}
-	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, rt.Output)
+	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, r.failureText(rt.Failure, rt.Test))
+}
+
+// failureText returns why a step, or a test of a repeated job, failed, as
+// it is shown under it: f is its failure and test its test. A test that is
+// false is told by the condition of it that is false and what that
+// compared, then the request and the response; one that could not be
+// evaluated, or did not come to a boolean, by that; a contract that is
+// broken by where, then the request and the response; and an error by its
+// message. It is empty when f is nil.
+func (r *reportRenderer) failureText(f *StepFailure, test string) string {
+	if f == nil {
+		return ""
+	}
+	switch f.Kind {
+	case FailureAssertion:
+		var b strings.Builder
+		if f.clause != nil {
+			b.WriteString(falseClauseDetail(maskClause(r.masker, *f.clause)))
+		}
+		b.WriteString(exchangeDetail(r.masker, f.Request, f.Response))
+		return b.String()
+	case FailureTestError:
+		return testErrorDetail(f.Message)
+	case FailureTestType:
+		return typeMismatchDetail(test, f.got)
+	case FailureContractResponse, FailureContractRequest:
+		return contractDetail(r.masker, f)
+	default:
+		return indentDetail(f.Message)
+	}
 }
 
 // writeUnderJob writes text as the body of the block of a job: its first
@@ -170,17 +200,48 @@ func (r *reportRenderer) writeUnderJob(b *strings.Builder, text string) {
 	b.WriteString("\n")
 }
 
+// reportTotals are what the footer of a report tells of the jobs whose
+// blocks it ends: how many of them succeeded, and the time from the
+// earliest start of one to the latest end, which is the time of the
+// workflow, as jobs run at once. The buffered and the streamed report
+// both add their jobs to one, so that their footers are the same.
+type reportTotals struct {
+	succeeded  int
+	start, end time.Time
+}
+
+// add counts jr in the totals. Callers hold jr.mutex.
+func (t *reportTotals) add(jr *JobResult) {
+	if jr.Succeeded() {
+		t.succeeded++
+	}
+	if t.start.IsZero() || jr.StartTime.Before(t.start) {
+		t.start = jr.StartTime
+	}
+	if t.end.IsZero() || jr.EndTime.After(t.end) {
+		t.end = jr.EndTime
+	}
+}
+
+// seconds is the time of the workflow in seconds, 0 before a job is added.
+func (t reportTotals) seconds() float64 {
+	if t.start.IsZero() || t.end.IsZero() {
+		return 0
+	}
+	return t.end.Sub(t.start).Seconds()
+}
+
 // writeFooter writes the line that ends the report: the time of the
-// workflow and how many of its jobs failed.
-func (r *reportRenderer) writeFooter(b *strings.Builder, totalTime float64, successCount, totalJobs int) {
-	if successCount == totalJobs {
+// workflow and how many of its totalJobs jobs failed, of the totals t.
+func (r *reportRenderer) writeFooter(b *strings.Builder, t reportTotals, totalJobs int) {
+	if t.succeeded == totalJobs {
 		r.fprintf(b, "Total workflow time: %.2fs %s\n",
-			totalTime,
+			t.seconds(),
 			colorSuccess().Sprintf(IconSuccess+"All jobs succeeded"))
 	} else {
-		failedCount := totalJobs - successCount
+		failedCount := totalJobs - t.succeeded
 		r.fprintf(b, "Total workflow time: %.2fs %s\n",
-			totalTime,
+			t.seconds(),
 			colorError().Sprintf(IconError+"%d job(s) failed", failedCount))
 	}
 }
@@ -225,26 +286,21 @@ func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, stat
 	}
 }
 
-// jobText returns the block of a job: the status line followed by
-// its step results. It also reports whether the job counts as successful and
-// the time range it covered, so that both the buffered and the streaming
-// report can build the same footer.
-func (r *reportRenderer) jobText(jr *JobResult) (string, bool, time.Time, time.Time) {
+// jobText returns the block of a job: the status line followed by its step
+// results. It adds the job to totals, as it was when its block was
+// rendered, for the footer.
+func (r *reportRenderer) jobText(jr *JobResult, totals *reportTotals) string {
 	jr.mutex.Lock()
 	defer jr.mutex.Unlock()
 
 	var output strings.Builder
 
 	duration := jr.EndTime.Sub(jr.StartTime)
-
-	// A skipped job did not fail.
-	status := jr.Status
-	succeeded := jr.Succeeded()
-
-	r.writeJobStatus(&output, jr.JobName, status, duration.Seconds())
+	r.writeJobStatus(&output, jr.JobName, jr.Status, duration.Seconds())
 	r.writeUnderJob(&output, r.stepResultsText(jr.JobID, jr.StepResults)+r.repeatTestText("repeat test", jr.RepeatTest)+r.repeatTestText("baseline test", jr.BaselineTest))
+	totals.add(jr)
 
-	return output.String(), succeeded, jr.StartTime, jr.EndTime
+	return output.String()
 }
 
 // reportText returns the report of rs: the block of each job, in order,
@@ -255,36 +311,13 @@ func (r *reportRenderer) reportText(rs *Result) string {
 	}
 
 	var output strings.Builder
-	successCount := 0
-	var earliestStart, latestEnd time.Time
-
+	var totals reportTotals
 	for _, jobID := range r.order {
 		if jr, exists := rs.Jobs[jobID]; exists {
-			block, succeeded, start, end := r.jobText(jr)
-
-			// Track earliest start and latest end time for wall clock calculation
-			if earliestStart.IsZero() || start.Before(earliestStart) {
-				earliestStart = start
-			}
-			if latestEnd.IsZero() || end.After(latestEnd) {
-				latestEnd = end
-			}
-
-			if succeeded {
-				successCount++
-			}
-
-			output.WriteString(block)
+			output.WriteString(r.jobText(jr, &totals))
 		}
 	}
-
-	// Calculate actual wall clock time (for parallel jobs)
-	var totalTime float64
-	if !earliestStart.IsZero() && !latestEnd.IsZero() {
-		totalTime = latestEnd.Sub(earliestStart).Seconds()
-	}
-
-	r.writeFooter(&output, totalTime, successCount, len(rs.Jobs))
+	r.writeFooter(&output, totals, len(rs.Jobs))
 
 	return output.String()
 }
@@ -327,12 +360,12 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 			r.writeStepRepeatResult(&output, stepResult.RepeatCounter, stepResult.HasTest)
 			r.writeStepRepeatError(&output, stepResult.RepeatCounter)
 			r.writeStepBaseline(&output, stepResult.RepeatCounter, baseline.Next(stepResult.ID))
-			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
-				echo = strings.TrimRight(echo, " \n\t\r")
-				if echo == "" {
+			for _, echo := range stepResult.RepeatCounter.Echoes {
+				// A run that echoed nothing but white space is left out.
+				if strings.TrimSpace(echo) == "" {
 					continue
 				}
-				output.WriteString(colorInfo().Sprint(echo) + "\n")
+				writeEcho(&output, echo)
 			}
 		} else {
 			num := colorDim().Sprintf("%2d.", stepResult.Index)
@@ -367,19 +400,19 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 				ps += colorDim().Sprintf(" (%s)", timing)
 			}
 
+			icon, c := statusIcon(stepResult.Status)
+			mark := c.Sprint(icon)
 			switch stepResult.Status {
-			case StatusSuccess:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorSuccess().Sprintf(IconSuccess), waitPrefix, stepResult.Name, ps)
+			case StatusSuccess, StatusWarning:
+				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
 			case StatusError:
-				if stepResult.TestOutput != "" {
-					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps, stepResult.TestOutput)
+				if why := r.failureText(stepResult.Failure, stepResult.Test); why != "" {
+					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, mark, waitPrefix, stepResult.Name, ps, why)
 				} else {
-					r.fprintf(&output, "%s %s %s%s%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps)
+					r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
 				}
-			case StatusWarning:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorNoTest().Sprintf(IconTriangle), waitPrefix, stepResult.Name, ps)
 			case StatusSkipped:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorInfo().Sprintf(IconSkip), waitPrefix, colorDim().Sprintf("%s", stepResult.Name), ps)
+				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, colorDim().Sprintf("%s", stepTitle(stepResult)), ps)
 			}
 
 			if stepResult.Report != "" {
@@ -389,17 +422,33 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 				output.WriteString(a5space + re + "\n")
 			}
 
-			if stepResult.EchoOutput != "" {
-				// NOTE:
-				// If you apply an ANSI reset code to a string that contains line breaks, the Trim methods will no longer work as expected.
-				// Therefore, remove the trailing line breaks first, then apply the color settings and finally add the line break.
-				echo := strings.TrimRight(stepResult.EchoOutput, " \n\t\r")
-				output.WriteString(colorInfo().Sprint(echo) + "\n")
+			if stepResult.HasEcho {
+				writeEcho(&output, stepResult.Echo)
 			}
 		}
 	}
 
 	return output.String()
+}
+
+// writeEcho writes what a step echoed under it, each line indented to the
+// column of its name, in the color of info.
+func writeEcho(b *strings.Builder, echo string) {
+	// An ANSI reset code after a line break would keep the Trim methods
+	// from seeing it, so the trailing white space is removed before the
+	// color is put on, and the line break is added after.
+	echo = strings.TrimRight(indentDetail(echo), " \n\t\r")
+	b.WriteString(colorInfo().Sprint(echo) + "\n")
+}
+
+// stepTitle returns how a step is named in the report and in the progress
+// of a run: by its name, marked as skipped when it was. A repeated step is
+// not marked, as its counts tell how many of its runs were skipped.
+func stepTitle(sr StepResult) string {
+	if sr.Status == StatusSkipped && sr.RepeatCounter == nil {
+		return sr.Name + " (SKIPPED)"
+	}
+	return sr.Name
 }
 
 // headerText returns the name and description of the workflow that head

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/report"
 )
 
@@ -37,8 +38,9 @@ type StepRepeatCounter struct {
 	// step's result needs of the step is kept here.
 	Test        string
 	LastResult  bool
-	RepeatTotal int      // Total number of times the step should be repeated
-	EchoOutputs []string // Formatted echo output captured per iteration
+	RepeatTotal int // Total number of times the step should be repeated
+	// Echoes are what the step's echo came to in each run, as it is.
+	Echoes []string
 	// RTs is the time in seconds the action took in each run that it
 	// returned one in, whether or not the step's test held.
 	RTs []float64
@@ -66,15 +68,18 @@ type StepResult struct {
 	Index int
 	// ID is the id of the step, or step_ and where it is written in the job
 	// when it has none; see Step.repeatID.
-	ID            string
-	Name          string
-	Status        StatusType
-	StartedAt     time.Time
-	RT            string
-	RTSec         float64
-	WaitTime      string
-	TestOutput    string
-	EchoOutput    string
+	ID        string
+	Name      string
+	Status    StatusType
+	StartedAt time.Time
+	RT        string
+	RTSec     float64
+	WaitTime  string
+	// Echo is what the step's echo came to, as it is: the report indents
+	// and colors it. HasEcho is whether the step has an echo, which may
+	// come to nothing.
+	Echo          string
+	HasEcho       bool
 	Report        string
 	HasTest       bool
 	RetryAttempt  int                // Number of attempts made (0 = retry not performed, 1 = succeeded first try)
@@ -118,6 +123,13 @@ type StepFailure struct {
 	// refused is what the guard of the run refused, when Kind is
 	// FailureRefused, so that why is read from it rather than the message.
 	refused *actionrpc.Refused
+	// clause is the condition of the test that is false, when Kind is
+	// FailureAssertion and it could be told, as it is: the report hides the
+	// secrets in it as it shows it, as it does in Request and Response; got
+	// is what the test came to, when Kind is FailureTestType. The report
+	// shows them under the step.
+	clause *expr.Clause
+	got    any
 }
 
 // JobResult stores execution results for a job
@@ -150,8 +162,6 @@ func (jr *JobResult) Succeeded() bool {
 type RepeatTestResult struct {
 	Test   string
 	Passed bool
-	// Output is what the terminal shows under the test when it failed.
-	Output string
 	// Failure is why the test failed; nil when it passed.
 	Failure *StepFailure
 	// Skipped is why the test was not checked, which a test against the run
@@ -163,8 +173,9 @@ type RepeatTestResult struct {
 // Result manages execution results for multiple jobs
 type Result struct {
 	Jobs map[string]*JobResult
-	// reporter is notified as results become final so that the report can be
-	// emitted incrementally. It may be nil, in which case nothing is streamed.
+	// reporter is told as steps start and as results become final, so
+	// that the report can be emitted incrementally. It is the one way the
+	// run tells it anything. It may be nil, in which case nothing is told.
 	reporter Reporter
 	// failures holds the kinds of failure seen during the run, which decide
 	// the exit code. Jobs run concurrently, so access goes through failuresMu.
@@ -172,9 +183,21 @@ type Result struct {
 	failuresMu sync.Mutex
 }
 
-// SetReporter installs the reporter notified when steps and jobs finish.
+// SetReporter installs the reporter told when steps start and when steps
+// and jobs finish.
 func (rs *Result) SetReporter(r Reporter) {
 	rs.reporter = r
+}
+
+// notifyStepStart tells the reporter that a step of the job of jobID
+// began. The buffered reporter shows it by the spinner, the stream reporter
+// by a line of progress. A nil Result, which some contexts run without,
+// tells nothing.
+func (rs *Result) notifyStepStart(jobID, stepName string) {
+	if rs == nil || rs.reporter == nil {
+		return
+	}
+	rs.reporter.StepStart(jobID, stepName)
 }
 
 // notifyJobDone tells the reporter that a job's report block is final.
