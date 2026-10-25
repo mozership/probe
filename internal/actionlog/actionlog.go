@@ -4,8 +4,6 @@
 package actionlog
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -113,7 +111,9 @@ func fieldMap(args []any) map[string]any {
 }
 
 // fieldValue returns what a field's value is laid out as: an error as its
-// message, and a value hclog formats as it formats it.
+// message, and a value hclog formats as it formats it. A format that does
+// not start with a string, which hclog would panic on, is written as its
+// values are.
 func fieldValue(v any) any {
 	switch val := v.(type) {
 	case error:
@@ -122,7 +122,10 @@ func fieldValue(v any) any {
 		if len(val) == 0 {
 			return ""
 		}
-		format, _ := val[0].(string)
+		format, ok := val[0].(string)
+		if !ok {
+			return fmt.Sprint(val...)
+		}
 		return fmt.Sprintf(format, val[1:]...)
 	case fmt.Stringer:
 		return val.String()
@@ -191,13 +194,17 @@ func (l *Logger) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
 }
 
 // lineWriter calls itself with each line written to it, without its
-// newline.
+// newline or a carriage return before it. Each write is taken as whole
+// lines, as log.Logger makes one write of each record, and a line of any
+// length is kept.
 type lineWriter func(line string)
 
 func (w lineWriter) Write(p []byte) (int, error) {
-	s := bufio.NewScanner(bytes.NewReader(p))
-	for s.Scan() {
-		w(s.Text())
+	if len(p) == 0 {
+		return 0, nil
+	}
+	for line := range strings.SplitSeq(strings.TrimSuffix(string(p), "\n"), "\n") {
+		w(strings.TrimSuffix(line, "\r"))
 	}
 	return len(p), nil
 }

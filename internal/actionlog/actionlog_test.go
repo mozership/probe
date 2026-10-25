@@ -203,6 +203,7 @@ func TestStandardWriterLevel(t *testing.T) {
 // line without its newline, a last line without one as well, and so a line
 // split across writes as two.
 func TestLineWriter(t *testing.T) {
+	long := strings.Repeat("x", 100_000)
 	tests := []struct {
 		name   string
 		writes []string
@@ -216,6 +217,7 @@ func TestLineWriter(t *testing.T) {
 		{"empty lines", []string{"\n\na\n"}, []string{"", "", "a"}},
 		{"carriage returns", []string{"a\r\nb\r\n"}, []string{"a", "b"}},
 		{"a line split across writes", []string{"par", "tial\n"}, []string{"par", "tial"}},
+		{"a long line", []string{long + "\n"}, []string{long}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -259,6 +261,7 @@ func TestFieldValue(t *testing.T) {
 		{"format", hclog.Fmt("%d of %s", 2, "three"), "2 of three"},
 		{"format without arguments", hclog.Format{"100%%"}, "100%"},
 		{"empty format", hclog.Format{}, ""},
+		{"format that does not start with a string", hclog.Format{42, 7}, "42 7"},
 		{"stringer", stringer("s"), "s"},
 		{"int", 2, 2},
 		{"map", map[string]any{"k": "v"}, map[string]any{"k": "v"}},
