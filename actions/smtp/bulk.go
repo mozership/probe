@@ -50,13 +50,6 @@ type DeliveryResult struct {
 	Rejected bool
 }
 
-func (b *Bulk) Deliver() {
-	result := b.DeliverWithResult()
-	if result.Failed > 0 {
-		fmt.Printf("[INFO] Delivery complete. Success: %d, Failed: %d\n", result.Sent, result.Failed)
-	}
-}
-
 func (b *Bulk) DeliverWithResult() DeliveryResult {
 	type sendResult struct {
 		count int
@@ -177,11 +170,6 @@ func (b *Bulk) calcMessageNumEachSession() int {
 	}
 	b.count += n
 	return n
-}
-
-// MakeData returns the mail data for external access
-func (b *Bulk) MakeData() []byte {
-	return b.makeData()
 }
 
 func (b *Bulk) makeData() []byte {

@@ -266,26 +266,19 @@ func (p *Plugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *g
 	return &Client{client: pb.NewActionsClient(c)}, nil
 }
 
-// Client calls an Action in another process.
+// Client calls an Action in the process that serves it. Each of its methods
+// calls the method of the same name of StepAction or Cleaner, and takes a
+// ctx as well, to give up on the call by. It is not an Action itself: the
+// runner always calls an action for a step, and one that is not a
+// StepAction is run with the parameters alone.
 type Client struct {
 	client pb.ActionsClient
 }
 
-// Run calls the action with the given parameters.
-func (m *Client) Run(with map[string]any) (map[string]any, error) {
-	result, _, err := m.RunStep(Call{With: with})
-	return result, err
-}
-
 // RunStep calls the action for a step, and returns the state it leaves,
 // which is nil when the action keeps none. An action that is not a
-// StepAction is run with the parameters alone.
-func (m *Client) RunStep(call Call) (map[string]any, map[string]any, error) {
-	return m.RunStepContext(context.Background(), call)
-}
-
-// RunStepContext is RunStep that gives up on the call once ctx is done.
-func (m *Client) RunStepContext(ctx context.Context, call Call) (map[string]any, map[string]any, error) {
+// StepAction is run with the parameters alone. It gives up once ctx is done.
+func (m *Client) RunStep(ctx context.Context, call Call) (map[string]any, map[string]any, error) {
 	// Convert map[string]any directly to protobuf.Struct
 	withStruct, err := structpb.NewStruct(call.With)
 	if err != nil {

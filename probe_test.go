@@ -1,7 +1,6 @@
 package probe
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,7 +14,6 @@ func TestLoad(t *testing.T) {
 	p := &Probe{
 		FilePath: "./testdata/workflow.yml",
 		Config: Config{
-			Log:     os.Stdout,
 			Verbose: true,
 			Timing:  false,
 		},
@@ -48,7 +46,6 @@ func TestNew(t *testing.T) {
 			expected: &Probe{
 				FilePath: "./test.yml",
 				Config: Config{
-					Log:     os.Stdout,
 					Verbose: true,
 					Timing:  false,
 				},
@@ -61,7 +58,6 @@ func TestNew(t *testing.T) {
 			expected: &Probe{
 				FilePath: "./another.yml",
 				Config: Config{
-					Log:     os.Stdout,
 					Verbose: false,
 					Timing:  false,
 				},
@@ -329,7 +325,6 @@ func TestLoadWithInvalidYaml(t *testing.T) {
 	p := &Probe{
 		FilePath: "./nonexistent.yml",
 		Config: Config{
-			Log:     io.Discard,
 			Verbose: false,
 			Timing:  false,
 		},
@@ -377,7 +372,6 @@ func TestDoWithInvalidPath(t *testing.T) {
 	p := &Probe{
 		FilePath: "./nonexistent.yml",
 		Config: Config{
-			Log:     io.Discard,
 			Verbose: false,
 			Timing:  false,
 		},

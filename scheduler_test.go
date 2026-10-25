@@ -2,6 +2,9 @@ package probe
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -82,9 +85,11 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 			t.Errorf("Expected no more jobs to be skipped, got: %v", skipped2)
 		}
 
-		// Verify AllJobsCompleted returns true
-		if !scheduler.AllJobsCompleted() {
-			t.Error("Expected AllJobsCompleted to return true after all jobs are in terminal state")
+		// Every job is completed or skipped
+		for id, status := range scheduler.status {
+			if status != JobCompleted && status != JobSkipped {
+				t.Errorf("Expected %s to be in a terminal state, got: %v", id, status)
+			}
 		}
 	})
 
@@ -139,39 +144,16 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 		}
 
 		// job3 should be runnable
-		if !scheduler.CanRunJob("job3") {
+		if !canRun(scheduler, "job3") {
 			t.Error("Expected job3 to be runnable")
 		}
 	})
 }
 
-func TestJobScheduler_CanRunJob_UnknownIDReturnsFalse(t *testing.T) {
-	// CanRunJob is exported, so callers may pass arbitrary IDs. Looking up
-	// a missing ID in js.jobs returns nil; without a guard, ranging over
-	// the nil *Job's Needs slice panics. The function must instead return
-	// false for unknown jobs.
-	scheduler := NewJobScheduler()
-
-	known := &Job{ID: "known", Name: "known"}
-	if err := scheduler.AddJob(known); err != nil {
-		t.Fatalf("AddJob: %v", err)
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("CanRunJob panicked on unknown jobID: %v", r)
-		}
-	}()
-
-	if got := scheduler.CanRunJob("does-not-exist"); got {
-		t.Errorf("CanRunJob(unknown) = true, want false")
-	}
-}
-
 func TestJobScheduler_NoDeadlockOnConcurrentReadAndWrite(t *testing.T) {
 	// Regression test for the recursive RLock deadlock.
 	//
-	// GetRunnableJobs holds RLock, then calls CanRunJob which tries to
+	// GetRunnableJobs held RLock, then called a method which tried to
 	// acquire RLock again. Per Go's sync.RWMutex contract, a blocked Lock
 	// call excludes new readers from acquiring the lock to avoid writer
 	// starvation; therefore, if any writer is waiting, the second RLock
@@ -354,11 +336,11 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 			&Job{ID: "work"},
 			&Job{ID: "cleanup", Needs: []string{"work"}, Always: true},
 		)
-		if s.CanRunJob("cleanup") {
+		if canRun(s, "cleanup") {
 			t.Error("cleanup can run before work has started")
 		}
 		s.StartJob("work")
-		if s.CanRunJob("cleanup") {
+		if canRun(s, "cleanup") {
 			t.Error("cleanup can run while work is running")
 		}
 	})
@@ -370,7 +352,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		)
 		s.IncrementRepeatCounter("work")
 		s.FinishJob("work", true)
-		if !s.CanRunJob("cleanup") {
+		if !canRun(s, "cleanup") {
 			t.Error("cleanup cannot run after work succeeded")
 		}
 	})
@@ -384,16 +366,16 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		s.IncrementRepeatCounter("work")
 		s.FinishJob("work", false)
 
-		if !s.CanRunJob("cleanup") {
+		if !canRun(s, "cleanup") {
 			t.Error("cleanup cannot run after work failed")
 		}
-		if s.CanRunJob("report") {
+		if canRun(s, "report") {
 			t.Error("report can run after work failed")
 		}
 		if skipped := s.MarkJobsWithFailedDependencies(); len(skipped) != 1 || skipped[0] != "report" {
 			t.Errorf("skipped = %v, want report alone", skipped)
 		}
-		if !s.CanRunJob("cleanup") {
+		if !canRun(s, "cleanup") {
 			t.Error("cleanup cannot run once the others are skipped")
 		}
 	})
@@ -407,13 +389,13 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		)
 		s.IncrementRepeatCounter("setup")
 		s.FinishJob("setup", false)
-		if s.CanRunJob("cleanup") {
+		if canRun(s, "cleanup") {
 			t.Error("cleanup can run while work is still pending")
 		}
 		if skipped := s.MarkJobsWithFailedDependencies(); len(skipped) != 1 || skipped[0] != "work" {
 			t.Errorf("skipped = %v, want work alone: cleanup always runs, and after waits for it", skipped)
 		}
-		if !s.CanRunJob("cleanup") {
+		if !canRun(s, "cleanup") {
 			t.Error("cleanup cannot run once work is skipped")
 		}
 
@@ -421,7 +403,7 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		// one ends, as it is to any other.
 		s.IncrementRepeatCounter("cleanup")
 		s.FinishJob("cleanup", true)
-		if !s.CanRunJob("after") {
+		if !canRun(s, "after") {
 			t.Error("after cannot run although cleanup succeeded")
 		}
 	})
@@ -433,11 +415,11 @@ func TestJobScheduler_AlwaysJob(t *testing.T) {
 		)
 		s.IncrementRepeatCounter("work")
 		s.FinishJob("work", false)
-		if s.CanRunJob("cleanup") {
+		if canRun(s, "cleanup") {
 			t.Error("cleanup can run before the second run of work")
 		}
 		s.IncrementRepeatCounter("work")
-		if !s.CanRunJob("cleanup") {
+		if !canRun(s, "cleanup") {
 			t.Error("cleanup cannot run after both runs of work")
 		}
 	})
@@ -449,4 +431,37 @@ func TestJobScheduler_AddJob_WithoutID(t *testing.T) {
 	if err := NewJobScheduler().AddJob(&Job{Name: "a"}); err == nil {
 		t.Error("AddJob() of a job without an ID succeeded")
 	}
+}
+
+// A cycle is told from its first job in the workflow, not in the order of
+// the IDs, by a run and by probe dag alike.
+func TestCycleIsToldInWorkflowOrder(t *testing.T) {
+	const want = "circular dependency detected: zeta -> alpha"
+
+	t.Run("run", func(t *testing.T) {
+		w := &Workflow{Jobs: []Job{
+			{ID: "zeta", Name: "Zeta", Needs: []string{"alpha"}},
+			{ID: "alpha", Name: "Alpha", Needs: []string{"zeta"}},
+		}}
+		if _, err := w.initJobScheduler(); err == nil || err.Error() != want {
+			t.Errorf("initJobScheduler() error = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("dag", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "cycle.yml")
+		content := "name: Cycle\njobs:\n- id: zeta\n  name: Zeta\n  needs: [alpha]\n  steps:\n  - uses: hello\n- id: alpha\n  name: Alpha\n  needs: [zeta]\n  steps:\n  - uses: hello\n"
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p := &Probe{FilePath: path}
+		if _, err := p.DagMermaid(); err == nil || err.Error() != want {
+			t.Errorf("DagMermaid() error = %v, want %q", err, want)
+		}
+	})
+}
+
+// canRun reports whether the scheduler would start jobID now.
+func canRun(s *JobScheduler, jobID string) bool {
+	return slices.Contains(s.GetRunnableJobs(), jobID)
 }

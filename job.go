@@ -27,23 +27,6 @@ type Job struct {
 	SkipIf   string  `yaml:"skipif,omitempty"`
 }
 
-func (j *Job) Start(ctx JobContext) error {
-	failed, err := j.run(ctx)
-	if err != nil {
-		return err
-	}
-	if failed {
-		return errStepsFailed(j.Name)
-	}
-	return nil
-}
-
-// errStepsFailed is the error Start returns when a step of the job failed.
-func errStepsFailed(jobName string) error {
-	return NewExecutionError("job_start", "job execution failed", nil).
-		WithContext("job_name", jobName)
-}
-
 // run runs the job. It reports whether a step failed separately from the
 // error that kept the job from running at all, such as an invalid step.
 func (j *Job) run(ctx JobContext) (failed bool, err error) {
@@ -380,18 +363,6 @@ type JobRun struct {
 	Duration time.Duration
 }
 
-// RunStandalone runs the job outside a workflow, as an embedded job is run.
-// A local action is resolved relative to baseDir, the directory of the file
-// the job comes from, or to the working directory when baseDir is empty.
-func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, opts ...StandaloneOption) JobRun {
-	cfg := standaloneConfig{}
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	run, _ := j.runStandalone(vars, printer, jobID, baseDir, cfg, true)
-	return run
-}
-
 // StandaloneOption changes how RunStandalone runs a job.
 type StandaloneOption func(*standaloneConfig)
 
@@ -452,24 +423,6 @@ func WithBuiltinActions(names []string) StandaloneOption {
 	}
 }
 
-// RunIndependently executes a job independently with its own context and result tracking
-// Returns success/failure status, outputs, report, error message, and duration
-//
-// Unlike RunStandalone, it resolves an external action only when a step runs
-// it, as it did before RunStandalone existed: a skipped job or step does not
-// need its action, and one that cannot be resolved fails its step.
-func (j *Job) RunIndependently(vars map[string]any, printer *Printer, jobID string) (bool, map[string]any, string, string, time.Duration) {
-	run, failed := j.runStandalone(vars, printer, jobID, "", standaloneConfig{}, false)
-	errorMsg := ""
-	switch {
-	case run.Err != nil:
-		errorMsg = run.Err.Error()
-	case failed:
-		errorMsg = errStepsFailed(j.Name).Error()
-	}
-	return run.Success, run.Outputs, run.Report, errorMsg, run.Duration
-}
-
 // firstRefusal returns why the guard refused the first step of jr it
 // refused, or nil when it refused none.
 func firstRefusal(jr *JobResult) *actionrpc.Refused {
@@ -486,9 +439,14 @@ func firstRefusal(jr *JobResult) *actionrpc.Refused {
 	return nil
 }
 
-// runStandalone is RunStandalone, also reporting whether a step failed.
-// resolveFirst resolves the job's external actions before any step runs.
-func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, cfg standaloneConfig, resolveFirst bool) (JobRun, bool) {
+// RunStandalone runs the job outside a workflow, as an embedded job is run.
+// A local action is resolved relative to baseDir, the directory of the file
+// the job comes from, or to the working directory when baseDir is empty.
+func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, opts ...StandaloneOption) JobRun {
+	cfg := standaloneConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	start := time.Now()
 	j.ID = jobID
 	runID := cfg.runID
@@ -548,7 +506,7 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 		ctx.Result.recordFailure(failureConfig)
 		ctx.Printer.PrintError("%v", err)
 	}
-	if err == nil && resolveFirst {
+	if err == nil {
 		ctx.Guard, err = resolveExternalActions([]*Job{j}, baseDir, ctx.Guard, cfg.builtin)
 	}
 	if err == nil {
@@ -570,5 +528,5 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	run.Outputs = ctx.Outputs.GetAll()
 	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).GenerateReportOnlySteps(result)
 
-	return run, failed
+	return run
 }

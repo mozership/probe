@@ -12,26 +12,6 @@ import (
 	"github.com/mozership/probe/internal/kind"
 )
 
-func TestKeepingAreBuiltin(t *testing.T) {
-	names := Names()
-	for _, name := range Keeping() {
-		if !slices.Contains(names, name) {
-			t.Errorf("%s keeps to the guard but is not a built-in action", name)
-		}
-	}
-	if !slices.IsSorted(Keeping()) {
-		t.Errorf("Keeping() = %v, want it sorted", Keeping())
-	}
-}
-
-func TestKeepingIsACopy(t *testing.T) {
-	k := Keeping()
-	k[0] = "shell"
-	if slices.Contains(Keeping(), "shell") {
-		t.Error("changing what Keeping returns should not change the actions that keep to the guard")
-	}
-}
-
 func TestKeeps(t *testing.T) {
 	names := Names()
 	known := []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
@@ -51,8 +31,13 @@ func TestKeeps(t *testing.T) {
 			t.Errorf("%s should keep to no guard", name)
 		}
 	}
-	if want := []string{"db", "dns", "embedded", "grpc", "hello", "http"}; !slices.Equal(Keeping(), want) {
-		t.Errorf("Keeping() = %v, want %v", Keeping(), want)
+	// The others keep to every kind.
+	for _, name := range []string{"db", "dns", "embedded", "grpc", "hello", "http"} {
+		for _, k := range known {
+			if !slices.Contains(Keeps()[name], k) {
+				t.Errorf("%s should keep to %q, got %v", name, k, Keeps()[name])
+			}
+		}
 	}
 	k := Keeps()
 	k["http"][0] = "changed"
@@ -63,7 +48,7 @@ func TestKeeps(t *testing.T) {
 
 func TestParams(t *testing.T) {
 	for _, name := range Names() {
-		params, ok := Params(name)
+		params, ok := AllParams()[name]
 		if name == "hello" {
 			if ok {
 				t.Errorf("hello takes any key, want no params, got %v", params)
@@ -71,13 +56,13 @@ func TestParams(t *testing.T) {
 			continue
 		}
 		if !ok || len(params) == 0 {
-			t.Errorf("Params(%s) = %v, %v; want the keys it takes", name, params, ok)
+			t.Errorf("AllParams()[%s] = %v, %v; want the keys it takes", name, params, ok)
 		}
 	}
-	if _, ok := Params("no-such-action"); ok {
+	if _, ok := AllParams()["no-such-action"]; ok {
 		t.Error("an action that is not built in should have no params")
 	}
-	http, _ := Params("http")
+	http := AllParams()["http"]
 	for _, key := range []string{"url", "headers", "body", "get", "post", "form", "multipart", "openapi", "trace_header"} {
 		if !slices.Contains(http, key) {
 			t.Errorf("http params %v lack %s", http, key)
@@ -102,7 +87,7 @@ func TestContracts(t *testing.T) {
 		}
 	}
 	for name, keys := range got {
-		params, _ := Params(name)
+		params := AllParams()[name]
 		for _, key := range keys {
 			if !slices.Contains(params, key) {
 				t.Errorf("%s checks against a contract by %q, which is not among its params %v", name, key, params)
@@ -112,7 +97,7 @@ func TestContracts(t *testing.T) {
 }
 
 // TestParamsCoverTheDocs checks that each key the reference page of an
-// action lists in its parameters is one Params gives, so that probe check
+// action lists in its parameters is one AllParams gives, so that probe check
 // does not refuse a key the action takes. Keys of a map nested in with,
 // which the pages list too, are left out.
 func TestParamsCoverTheDocs(t *testing.T) {
@@ -139,7 +124,7 @@ func TestParamsCoverTheDocs(t *testing.T) {
 		}
 		for _, m := range row.FindAllStringSubmatch(section, -1) {
 			if !slices.Contains(keys, m[1]) && !slices.Contains(nested[name], m[1]) {
-				t.Errorf("the %s page lists %s, which Params does not give", name, m[1])
+				t.Errorf("the %s page lists %s, which AllParams does not give", name, m[1])
 			}
 		}
 	}
@@ -155,7 +140,7 @@ func TestFieldsAndRequired(t *testing.T) {
 		if _, ok := req[name]; !ok || len(res[name]) == 0 {
 			t.Errorf("%s declares no fields of req or of res: %v, %v", name, req[name], res[name])
 		}
-		params, takesAny := Params(name)
+		params, takesAny := AllParams()[name]
 		if name == "hello" {
 			if _, ok := required[name]; ok || takesAny {
 				t.Errorf("hello needs no key of with, want none required")
@@ -280,5 +265,21 @@ func TestTypesMatchTheDocs(t *testing.T) {
 	}
 	if rows == 0 {
 		t.Error("no page gives the type of a field, so nothing was checked")
+	}
+}
+
+// Each name Names gives is served, the embedded action as well, which init
+// adds.
+func TestLookup(t *testing.T) {
+	if !slices.Contains(Names(), "embedded") {
+		t.Errorf("Names() = %v, want embedded among them", Names())
+	}
+	for _, name := range Names() {
+		if serve, ok := Lookup(name); !ok || serve == nil {
+			t.Errorf("Lookup(%s) gave no serve function", name)
+		}
+	}
+	if _, ok := Lookup("no-such-action"); ok {
+		t.Error("Lookup() found an action that is not built in")
 	}
 }
