@@ -698,3 +698,139 @@ func TestReportRenderer_writeStepRepeatResult_Skipped(t *testing.T) {
 		})
 	}
 }
+
+// A repeated step tells by its icon how its runs went: all passed, some
+// failed, or all failed; without a test, whether any of them failed.
+func TestReportRenderer_writeStepRepeatResult_Icons(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+	r := newReportRenderer(nil, nil, nil)
+
+	tests := []struct {
+		name    string
+		counter StepRepeatCounter
+		hasTest bool
+		want    string
+	}{
+		{"all passed", StepRepeatCounter{SuccessCount: 3, RepeatTotal: 3}, true, "    ✓  3/3 success (100.0%)\n"},
+		{"some failed", StepRepeatCounter{SuccessCount: 2, FailureCount: 1, RepeatTotal: 3}, true, "    △  2/3 success (66.7%)\n"},
+		{"all failed", StepRepeatCounter{FailureCount: 3, RepeatTotal: 3}, true, "    ✗  0/3 success (0.0%)\n"},
+		{"no test", StepRepeatCounter{SuccessCount: 1000, RepeatTotal: 1000}, false, "    △  1000/1000 completed (no test)\n"},
+		{"no test, some failed", StepRepeatCounter{SuccessCount: 2, FailureCount: 1, RepeatTotal: 3}, false, "    ✗  2/3 completed (no test)\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			r.writeStepRepeatResult(&out, &tt.counter, tt.hasTest)
+			if got := out.String(); got != tt.want {
+				t.Errorf("writeStepRepeatResult() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReportRenderer_repeatTestText(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+	r := newReportRenderer(nil, nil, nil)
+
+	tests := []struct {
+		name string
+		rt   *RepeatTestResult
+		want string
+	}{
+		{"none", nil, ""},
+		{"skipped", &RepeatTestResult{Test: "p95 < 100", Skipped: "no run took a time"}, "    ⏭  repeat test: p95 < 100\n       skipped: no run took a time\n"},
+		{"passed", &RepeatTestResult{Test: "p95 < 100", Passed: true}, "    ✓  repeat test: p95 < 100\n"},
+		{"failed", &RepeatTestResult{Test: "p95 < 100", Output: "       p95 = 120\n"}, "    ✗  repeat test: p95 < 100\n       p95 = 120\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := r.repeatTestText("repeat test", tt.rt); got != tt.want {
+				t.Errorf("repeatTestText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A step's line ends with the attempt it passed in, when it was retried,
+// and with when it started and how long it took, as far as they are known.
+func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+	r := newReportRenderer(nil, nil, nil)
+	started := time.Unix(1700000000, 0)
+
+	tests := []struct {
+		name string
+		step StepResult
+		want string
+	}{
+		{"no time", StepResult{Index: 1, Name: "get", Status: StatusSuccess}, " 1. ✓  get\n"},
+		{"start alone", StepResult{Index: 1, Name: "get", Status: StatusSuccess, StartedAt: started}, " 1. ✓  get (@1700000000)\n"},
+		{"time alone", StepResult{Index: 1, Name: "get", Status: StatusSuccess, RT: "12ms"}, " 1. ✓  get (12ms)\n"},
+		{"start and time", StepResult{Index: 1, Name: "get", Status: StatusSuccess, StartedAt: started, RT: "12ms"}, " 1. ✓  get (@1700000000 12ms)\n"},
+		{"retried, then timed", StepResult{Index: 1, Name: "get", Status: StatusSuccess, RetryAttempt: 2, RetryMax: 3, RT: "12ms"}, " 1. ✓  get ⟳ 2/3 (12ms)\n"},
+		{"waited", StepResult{Index: 1, Name: "get", Status: StatusSuccess, WaitTime: "1s"}, " 1. ✓  " + IconWait + "1s → get\n"},
+		{"failed", StepResult{Index: 2, Name: "post", Status: StatusError}, " 2. ✗  post\n"},
+		{"failed, with why", StepResult{Index: 2, Name: "post", Status: StatusError, TestOutput: "       res.code = 500"}, " 2. ✗  post\n       res.code = 500\n"},
+		{"untested", StepResult{Index: 3, Name: "sleep", Status: StatusWarning}, " 3. △  sleep\n"},
+		{"skipped", StepResult{Index: 4, Name: "later", Status: StatusSkipped}, " 4. ⏭  later\n"},
+		{"echoed", StepResult{Index: 5, Name: "echo", Status: StatusWarning, EchoOutput: "hello\n\n"}, " 5. △  echo\nhello\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := r.stepResultsText("", []StepResult{tt.step}); got != tt.want {
+				t.Errorf("stepResultsText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The attempt a step passed in is dim when it passed in the first, and in
+// the color of a warning when it took more.
+func TestReportRenderer_stepResultsText_RetryColor(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = false
+	r := newReportRenderer(nil, nil, nil)
+
+	if colorDim().Sprint("x") == colorWarning().Sprint("x") {
+		t.Fatal("the dim and the warning colors should differ")
+	}
+	for attempt, want := range map[int]string{
+		1: colorDim().Sprintf(" %s %d/%d", IconRetry, 1, 3),
+		2: colorWarning().Sprintf(" %s %d/%d", IconRetry, 2, 3),
+	} {
+		got := r.stepResultsText("", []StepResult{{Index: 1, Name: "get", Status: StatusSuccess, RetryAttempt: attempt, RetryMax: 3}})
+		if !strings.Contains(got, want) {
+			t.Errorf("attempt %d: stepResultsText() = %q, want it to hold %q", attempt, got, want)
+		}
+	}
+}
+
+// What a repeated step echoed is shown under it, run by run, without the
+// runs that echoed nothing but white space.
+func TestReportRenderer_stepResultsText_RepeatEchoSkipsBlank(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+	r := newReportRenderer(nil, nil, nil)
+
+	got := r.stepResultsText("", []StepResult{{
+		Index: 1, Name: "echo", Status: StatusWarning,
+		RepeatCounter: &StepRepeatCounter{Name: "echo", SuccessCount: 3, RepeatTotal: 3, EchoOutputs: []string{"first\n", " \n\t", "third"}},
+	}})
+	if want := "    △  3/3 completed (no test)\nfirst\nthird\n"; !strings.HasSuffix(got, want) {
+		t.Errorf("stepResultsText() = %q, want it to end with %q", got, want)
+	}
+}
+
+// There is nothing to render of no result.
+func TestReportRenderer_NilResult(t *testing.T) {
+	r := newReportRenderer([]string{"job"}, nil, nil)
+	if got := r.reportText(nil); got != "" {
+		t.Errorf("reportText(nil) = %q, want nothing", got)
+	}
+	if got := r.stepsText(nil); got != "" {
+		t.Errorf("stepsText(nil) = %q, want nothing", got)
+	}
+}
