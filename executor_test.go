@@ -32,11 +32,7 @@ func TestExecutor_setupContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			job := &Job{Name: "job", ID: "job", Repeat: tt.repeat}
-			scheduler := NewJobScheduler()
-			if err := scheduler.AddJob(job); err != nil {
-				t.Fatal(err)
-			}
-			env := &runEnv{Printer: newBufferPrinter(), JobScheduler: scheduler}
+			env := &runEnv{Printer: newBufferPrinter()}
 			ctx := NewExecutor(job).setupContext(JobContext{runEnv: env})
 
 			if ctx.runEnv != env {
@@ -75,7 +71,7 @@ func runJob(t *testing.T, job Job) (bool, *JobResult) {
 	}
 	ctx := w.newJobContext(Config{}, nil, scheduler)
 	ctx.Outputs = NewOutputs()
-	scheduler.StartJob(job.ID)
+	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
 	return passed, ctx.Result.Jobs[job.ID]
 }

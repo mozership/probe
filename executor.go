@@ -55,8 +55,7 @@ func (e *Executor) Run(ctx JobContext) bool {
 // setupContext gives the job's context what its runs share: when the runs
 // are counted, the counts they are counted in.
 func (e *Executor) setupContext(ctx JobContext) JobContext {
-	jobID := e.job.ID
-	_, total := ctx.JobScheduler.GetRepeatInfo(jobID)
+	total := e.runs()
 	var r Repeat
 	if e.job.Repeat != nil {
 		r = *e.job.Repeat
@@ -93,11 +92,10 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 	}
 
 	// Synchronous execution (original behavior)
-	jobID := e.job.ID
+	total := e.runs()
 	overallSuccess := true
 
-	for ctx.JobScheduler.ShouldRepeatJob(jobID) {
-		current, _ := ctx.JobScheduler.GetRepeatInfo(jobID)
+	for current := range total {
 		ctx.RepeatCurrent = current
 
 		// Execute single run. A job that cannot start fails in any run; a
@@ -108,8 +106,7 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 			overallSuccess = false
 		}
 
-		ctx.JobScheduler.IncrementRepeatCounter(jobID)
-		e.sleepBetweenRepeats(ctx)
+		e.sleepBetweenRepeats(current+1, total)
 	}
 
 	return overallSuccess
@@ -117,8 +114,7 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 
 // executeJobRepeatLoopAsync handles async execution loop with repeat logic
 func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
-	jobID := e.job.ID
-	_, total := ctx.JobScheduler.GetRepeatInfo(jobID)
+	total := e.runs()
 
 	var wg sync.WaitGroup
 	var overallSuccess atomic.Bool
@@ -137,9 +133,7 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 	var runsMu sync.Mutex
 	runs := make(map[int]*Outputs)
 
-	for ctx.JobScheduler.ShouldRepeatJob(jobID) {
-		current, _ := ctx.JobScheduler.GetRepeatInfo(jobID)
-
+	for current := range total {
 		// The runs share the job: what a run of it finds out is kept in the
 		// run's context and in a stepRun for each step, and the job is not
 		// changed by running it.
@@ -165,8 +159,6 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 			}
 		}(current, e.job)
 
-		ctx.JobScheduler.IncrementRepeatCounter(jobID)
-
 		// Wait for interval before next execution (except for the last one)
 		if current+1 < total {
 			<-ticker.C
@@ -190,16 +182,25 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 	return overallSuccess.Load()
 }
 
-// sleepBetweenRepeats handles the interval sleep between job repetitions
-func (e *Executor) sleepBetweenRepeats(ctx JobContext) {
-	jobID := e.job.ID
-	current, target := ctx.JobScheduler.GetRepeatInfo(jobID)
-	if current < target && e.job.Repeat != nil {
+// runs returns the number of times the job runs: once, or as many times
+// as its repeat says, warmup runs included.
+func (e *Executor) runs() int {
+	if e.job.Repeat == nil {
+		return 1
+	}
+	return e.job.Repeat.Runs()
+}
+
+// sleepBetweenRepeats waits for the interval of the job's repeat once done
+// of its total runs are done, unless that was the last of them.
+func (e *Executor) sleepBetweenRepeats(done, total int) {
+	if done < total && e.job.Repeat != nil {
 		time.Sleep(e.job.Repeat.Interval.Duration)
 	}
 }
 
-// finalize updates the final job status and marks it as completed
+// finalize updates the final job status and tells the scheduler the job is
+// over, once all of its runs are done.
 func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	jobID := e.job.ID
 	jr := ctx.Result.Jobs[jobID]
@@ -213,7 +214,7 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	}
 	jr.mutex.Unlock()
 
-	ctx.JobScheduler.FinishJob(jobID, overallSuccess)
+	ctx.scheduler.Finish(jobID, overallSuccess)
 
 	// The job's report block is final now, so it can be streamed out.
 	ctx.Result.notifyJobDone(jobID)
