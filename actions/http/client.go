@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"mime"
 	"net"
 	hp "net/http"
 	"net/url"
@@ -372,7 +371,7 @@ func ResolveMethodAndURL(data map[string]any) error {
 func hasJSONContentType(headers any) bool {
 	checkHeader := func(k string, v any) bool {
 		s, ok := v.(string)
-		return ok && strings.EqualFold(k, "content-type") && isJSONMediaType(s)
+		return ok && strings.EqualFold(k, "content-type") && binary.IsJSONMediaType(s)
 	}
 
 	switch h := headers.(type) {
@@ -390,16 +389,6 @@ func hasJSONContentType(headers any) bool {
 		}
 	}
 	return false
-}
-
-// isJSONMediaType reports whether a Content-Type value names JSON, ignoring
-// parameters such as charset.
-func isJSONMediaType(v string) bool {
-	mediaType, _, err := mime.ParseMediaType(v)
-	if err != nil {
-		return false
-	}
-	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 // MarshalBodyIfJSON converts body to JSON string when Content-Type is application/json
