@@ -684,19 +684,19 @@ func TestStepRetryValidation(t *testing.T) {
 // in code, which Probe.Load has not checked, so Start has to refuse the
 // repeat that cannot run rather than panic.
 func TestWorkflowStartRefusesAsyncRepeatWithoutInterval(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	workflow := &Workflow{
 		Name: "burst",
 		Jobs: []Job{{
 			Name:   "burst",
 			ID:     "burst",
-			Steps:  []*Step{{Name: "tick", Uses: "hello", actionRunner: runner}},
+			Steps:  []*Step{{Name: "tick", Uses: "hello"}},
 			Repeat: &Repeat{Count: 5, Async: true},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	err := workflow.Start(Config{})
+	err := workflow.Start(Config{ActionRunner: runner})
 	if err == nil || !strings.Contains(err.Error(), "needs an interval") {
 		t.Fatalf("Start() = %v, want an error about the interval", err)
 	}
@@ -750,12 +750,12 @@ func TestWorkflowRepeatWarmupAsync(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 3, Warmup: 2, Async: true, Interval: Interval{Duration: time.Millisecond}},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "repeat_index >= 2", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "repeat_index >= 2"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if workflow.exitStatus != ExitOK {
@@ -787,12 +787,12 @@ func TestWorkflowRepeatWarmupCannotStart(t *testing.T) {
 					ID:     "search",
 					Name:   "{{ nofunc() }}",
 					Repeat: &Repeat{Count: 0, Warmup: 1, Async: async, Interval: Interval{Duration: time.Millisecond}},
-					Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+					Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 				}},
 				printer: newBufferPrinter(),
 			}
 
-			if err := workflow.Start(Config{}); err != nil {
+			if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 				t.Fatalf("Start: %v", err)
 			}
 			if workflow.exitStatus != ExitConfigError {

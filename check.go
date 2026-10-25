@@ -50,7 +50,8 @@ func (f Finding) String() string {
 	return b.String()
 }
 
-// CheckOptions tunes Check.
+// CheckOptions tunes Check. actions.CheckOptions gives what it is to know of
+// the built-in actions.
 type CheckOptions struct {
 	// Actions are the names of the actions a step may use, besides the
 	// external ones it names by a path or a repository. When it is empty,
@@ -84,6 +85,10 @@ type CheckOptions struct {
 	// step's with too, besides the fields they are named with, as an action
 	// that returns what it is given does.
 	WithFields []string
+	// NeedsNoCheck are the actions whose steps pass without a test, as
+	// Config.NeedsNoCheck says. A step of one that has no test is not warned
+	// of as unchecked.
+	NeedsNoCheck []string
 	// Required are the keys of with each action cannot run without, by its
 	// name, each as the keys that stand for one another, of which one is
 	// enough: as get stands for method in the http action.

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 
 	"github.com/fatih/color"
@@ -1010,14 +1011,14 @@ func TestWorkflowBuffer_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-// newOrderTestWorkflow builds a workflow of independent jobs whose actions are
-// mocked, so that Start can be driven from a test. withIDs selects whether the
+// newOrderTestWorkflow builds a workflow of independent jobs, whose actions a
+// mock runner is to run, so that Start can be driven from a test. withIDs selects whether the
 // jobs declare an ID or leave it to the scheduler.
 func newOrderTestWorkflow(withIDs bool) *Workflow {
 	mk := func(id, name string) Job {
 		job := Job{
 			Name:  name,
-			Steps: []*Step{{Name: name + " step", Uses: "hello", actionRunner: NewMockActionRunner()}},
+			Steps: []*Step{{Name: name + " step", Uses: "hello"}},
 		}
 		if withIDs {
 			job.ID = id
@@ -1031,11 +1032,11 @@ func newOrderTestWorkflow(withIDs bool) *Workflow {
 	}
 }
 
-// startCapturing runs the workflow with a printer writing into a buffer and
-// returns what reached stdout.
-func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
+// startCapturing runs the workflow, its actions run by runner, with a
+// printer writing into a buffer and returns what reached stdout.
+func startCapturing(t *testing.T, w *Workflow, mode OutputMode, runner ActionRunner) string {
 	t.Helper()
-	return startCapturingWith(t, w, Config{Output: mode})
+	return startCapturingWith(t, w, Config{Output: mode, ActionRunner: runner})
 }
 
 // startCapturingWith is startCapturing with the whole of the configuration
@@ -1066,7 +1067,7 @@ func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
 func TestWorkflow_Start_ReportsJobsWithGeneratedIDs(t *testing.T) {
 	for _, mode := range []OutputMode{OutputModeSpinner, OutputModeStream} {
 		t.Run(mode.String(), func(t *testing.T) {
-			report := startCapturing(t, newOrderTestWorkflow(false), mode)
+			report := startCapturing(t, newOrderTestWorkflow(false), mode, newMockRunner())
 
 			alphaAt := strings.Index(report, "Alpha")
 			bravoAt := strings.Index(report, "Bravo")
@@ -1097,7 +1098,7 @@ func TestWorkflow_Start_StreamLabelsJobsByName(t *testing.T) {
 	p.errWriter = errOut
 	w.printer = p
 
-	startCapturing(t, w, OutputModeStream)
+	startCapturing(t, w, OutputModeStream, newMockRunner())
 
 	progress := errOut.String()
 	for _, want := range []string{"[Alpha]", "[Bravo staging]", "[Charlie]"} {
@@ -1130,7 +1131,7 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 	p.errWriter = errOut
 	w.printer = p
 
-	startCapturing(t, w, OutputModeStream)
+	startCapturing(t, w, OutputModeStream, newMockRunner())
 
 	progress := errOut.String()
 	if strings.Contains(progress, "abcd") {
@@ -1163,8 +1164,8 @@ func TestWorkflow_Start_StreamAndSpinnerAgree(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			spinner := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeSpinner)
-			stream := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeStream)
+			spinner := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeSpinner, newMockRunner())
+			stream := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeStream, newMockRunner())
 
 			if stripDurations(spinner) != stripDurations(stream) {
 				t.Errorf("reports differ\nspinner:\n%s\nstream:\n%s", spinner, stream)
@@ -1180,8 +1181,8 @@ func TestWorkflow_Start_TwiceReportsBothRuns(t *testing.T) {
 		t.Run(mode.String(), func(t *testing.T) {
 			w := newOrderTestWorkflow(true)
 
-			first := startCapturing(t, w, mode)
-			second := startCapturing(t, w, mode)
+			first := startCapturing(t, w, mode, newMockRunner())
+			second := startCapturing(t, w, mode, newMockRunner())
 
 			if stripDurations(first) != stripDurations(second) {
 				t.Errorf("a second run should report the same jobs\nfirst:\n%s\nsecond:\n%s", first, second)
@@ -1225,9 +1226,8 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 					"url":     "http://api.test/?key={{vars.key}}",
 					"headers": map[string]any{"authorization": "Bearer runtime-tok"},
 				},
-				Test:         "res.code == 200",
-				Echo:         "body was {{res.body}}",
-				actionRunner: runner,
+				Test: "res.code == 200",
+				Echo: "body was {{res.body}}",
 			}},
 		}},
 		printer: newBufferPrinter(),
@@ -1235,7 +1235,7 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 	w.printer.verbose = true
 
 	path := filepath.Join(t.TempDir(), "report.json")
-	if err := w.Start(Config{Verbose: true, Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner, Verbose: true, Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -1272,31 +1272,33 @@ type recordingRunner struct {
 	opts   RunOptions
 }
 
-func (r *recordingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *recordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.with = with
+	r.with = call.With
 	r.opts = opts
-	return r.result, nil
+	return r.result, nil, nil
 }
 
 // A job that always runs does so after a job it needs failed, where a job
 // that does not is skipped, and the run still fails.
 func TestWorkflow_Start_AlwaysJob(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	cleanup := NewMockActionRunner()
-	skipped := NewMockActionRunner()
+	cleanup := newMockRunner()
+	skipped := newMockRunner()
 
 	w := &Workflow{
 		Name: "Always",
 		Jobs: []Job{
-			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
-			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello", actionRunner: skipped}}},
-			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
+			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello"}}},
+			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello"}}},
+			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello"}}},
 		},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{
+		"Fails": failing, "Never runs": skipped, "Removes": cleanup,
+	}})
 
 	if len(cleanup.Calls["hello"]) != 1 {
 		t.Errorf("the job that always runs ran %d times, want once:\n%s", len(cleanup.Calls["hello"]), report)
@@ -1317,26 +1319,28 @@ func TestWorkflow_Start_AlwaysJob(t *testing.T) {
 func TestWorkflow_Start_FailFast(t *testing.T) {
 	for _, failFast := range []bool{true, false} {
 		t.Run(fmt.Sprintf("fail_fast %v", failFast), func(t *testing.T) {
-			before := NewMockActionRunner()
-			failing := NewMockActionRunner()
+			before := newMockRunner()
+			failing := newMockRunner()
 			failing.SetError("hello", errors.New("boom"))
-			after := NewMockActionRunner()
-			other := NewMockActionRunner()
+			after := newMockRunner()
+			other := newMockRunner()
 
 			w := &Workflow{
 				Name: "Fail fast",
 				Jobs: []Job{
 					{ID: "work", Name: "Work", FailFast: failFast, Steps: []*Step{
-						{Name: "Before", Uses: "hello", actionRunner: before},
-						{Name: "Fails", Uses: "hello", actionRunner: failing},
-						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
-						{Name: "Last", Uses: "hello", actionRunner: after, Wait: "10ms"},
+						{Name: "Before", Uses: "hello"},
+						{Name: "Fails", Uses: "hello"},
+						{Name: "After {{vars.n}}", Uses: "hello", Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
+						{Name: "Last", Uses: "hello", Wait: "10ms"},
 					}},
 					// Another job is not held back by it.
-					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: other}}},
+					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello"}}},
 				},
 			}
-			report := startCapturing(t, w, OutputModeSpinner)
+			report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{
+				"Before": before, "Fails": failing, "Runs": other,
+			}, fallback: after})
 
 			if len(before.Calls["hello"]) != 1 || len(other.Calls["hello"]) != 1 {
 				t.Errorf("the step before the failure and the other job should run:\n%s", report)
@@ -1364,13 +1368,14 @@ func TestWorkflow_Start_FailFast(t *testing.T) {
 // Each run of a repeated job with fail_fast starts over: a failure in one
 // run does not skip the steps of the next.
 func TestJob_FailFastStartsOverEachRun(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	after := NewMockActionRunner()
+	after := newMockRunner()
 	job := &Job{ID: "work", Name: "Work", FailFast: true, Steps: []*Step{
-		{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 1"},
-		{Name: "After", Uses: "hello", actionRunner: after},
+		{Name: "Fails", Uses: "hello", SkipIf: "repeat_index == 1"},
+		{Name: "After", Uses: "hello"},
 	}}
+	runner := stepRunners{byName: map[string]ActionRunner{"Fails": failing, "After": after}}
 
 	for i := range 2 {
 		printer := newBufferPrinter()
@@ -1379,6 +1384,7 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
 		failed, err := job.run(JobContext{
 			runEnv: &runEnv{
+				Config:  Config{ActionRunner: runner},
 				Printer: printer,
 				Result:  result,
 			},
@@ -1398,18 +1404,18 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 }
 
 func TestWorkflow_Start_GivenVars(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name: "Given",
 		Vars: map[string]any{"url": "http://localhost"},
-		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", actionRunner: runner, With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
 	}
 	p := NewPrinter(false)
 	p.spinner = nil
 	p.outWriter = new(bytes.Buffer)
 	p.errWriter = new(bytes.Buffer)
 	w.printer = p
-	if err := w.Start(Config{Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner, Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := runner.Calls["hello"][0].With["url"]; got != "http://given/health" {
@@ -1420,7 +1426,7 @@ func TestWorkflow_Start_GivenVars(t *testing.T) {
 // The variables read from files are read by the vars as the environment
 // is, which comes before them, and a secret among them is hidden.
 func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name:    "Env",
 		Secrets: []string{"FILE_TOKEN"},
@@ -1431,12 +1437,12 @@ func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
 		},
 		env: map[string]string{"BOTH": "from the environment"},
 		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
-			Name: "S", Uses: "hello", actionRunner: runner,
+			Name: "S", Uses: "hello",
 			With: map[string]any{"url": "{{vars.url}}", "both": "{{vars.both}}"},
 			Echo: "token is {{vars.token}}",
 		}}}},
 	}
-	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, Env: map[string]string{
+	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, ActionRunner: runner, Env: map[string]string{
 		"FILE_URL":   "http://from-a-file",
 		"BOTH":       "from a file",
 		"FILE_TOKEN": "s3cr3t-from-a-file",
@@ -1458,21 +1464,21 @@ func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
 // neither a success nor a failure of the step: it is counted on its own,
 // and a step that was never run is reported as skipped.
 func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	after := NewMockActionRunner()
+	after := newMockRunner()
 	w := &Workflow{
 		Name: "Fail fast",
 		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 3}, Steps: []*Step{
 			// Fails in the first two runs, and is skipped in the last.
-			{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 2"},
-			{Name: "Sometimes", Uses: "hello", actionRunner: after, Test: "true"},
+			{Name: "Fails", Uses: "hello", SkipIf: "repeat_index == 2"},
+			{Name: "Sometimes", Uses: "hello", Test: "true"},
 			// Reached in the last run alone, where its own skipif skips it,
 			// which is a success of it.
-			{Name: "Own skipif", Uses: "hello", actionRunner: after, SkipIf: "repeat_index == 2", Test: "true"},
+			{Name: "Own skipif", Uses: "hello", SkipIf: "repeat_index == 2", Test: "true"},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{"Fails": failing}, fallback: after})
 
 	if got := len(after.Calls["hello"]); got != 1 {
 		t.Errorf("the steps after the failure ran %d times, want once, in the run without it:\n%s", got, report)
@@ -1565,18 +1571,18 @@ func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
 
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	ok := NewMockActionRunner()
+	ok := newMockRunner()
 	w := &Workflow{
 		Name: "Repeat",
 		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 2}, Steps: []*Step{
-			{Name: "Each {{vars.n}}", Uses: "hello", actionRunner: ok, Test: "true", Iteration: Iteration{Entries: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}}},
-			{Name: "Fails", Uses: "hello", actionRunner: failing},
-			{Name: "After", Uses: "hello", actionRunner: ok, Test: "true"},
+			{Name: "Each {{vars.n}}", Uses: "hello", Test: "true", Iteration: Iteration{Entries: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}}},
+			{Name: "Fails", Uses: "hello"},
+			{Name: "After", Uses: "hello", Test: "true"},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{"Fails": failing}, fallback: ok})
 
 	for _, want := range []string{
 		" 0. Each a (repeating 2 times)",
@@ -1603,7 +1609,8 @@ type timingRunner struct {
 	ended map[string]time.Time
 }
 
-func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *timingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	with := call.With
 	key, _ := with["key"].(string)
 	r.mu.Lock()
 	r.begun[key] = time.Now()
@@ -1615,7 +1622,7 @@ func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOpti
 	r.mu.Lock()
 	r.ended[key] = time.Now()
 	r.mu.Unlock()
-	return map[string]any{"status": 0, "res": map[string]any{"code": 200}}, nil
+	return map[string]any{"status": 0, "res": map[string]any{"code": 200}}, nil, nil
 }
 
 // A job starts once the jobs it needs are done, and does not wait for one
@@ -1623,7 +1630,7 @@ func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOpti
 func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 	runner := &timingRunner{begun: map[string]time.Time{}, ended: map[string]time.Time{}}
 	step := func(key, take string) []*Step {
-		return []*Step{{Name: key, Uses: "hello", Test: "res.code == 200", actionRunner: runner, With: map[string]any{"key": key, "take": take}}}
+		return []*Step{{Name: key, Uses: "hello", Test: "res.code == 200", With: map[string]any{"key": key, "take": take}}}
 	}
 	w := &Workflow{Name: "needs", Jobs: []Job{
 		{ID: "slow", Name: "Slow", Steps: step("slow", "1s")},
@@ -1631,7 +1638,7 @@ func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 		{ID: "after", Name: "After", Needs: []string{"fast"}, Steps: step("after", "0s")},
 		{ID: "last", Name: "Last", Needs: []string{"slow", "after"}, Steps: step("last", "0s")},
 	}}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, runner)
 
 	if w.exitStatus != 0 {
 		t.Fatalf("exit status = %d, want 0:\n%s", w.exitStatus, report)
@@ -1758,15 +1765,14 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 			ID:   "job",
 			Name: "job",
 			Steps: []*Step{{
-				Name:         "reads probe.StepContext",
-				Uses:         "http",
-				With:         map[string]any{"url": "http://api.test/"},
-				actionRunner: &recordingRunner{result: map[string]any{"res": map[string]any{"code": 200}}},
+				Name: "reads probe.StepContext",
+				Uses: "http",
+				With: map[string]any{"url": "http://api.test/"},
 			}},
 		}},
 		printer: newBufferPrinter(),
 	}
-	if err := w.Start(Config{}); err != nil {
+	if err := w.Start(Config{ActionRunner: &recordingRunner{result: map[string]any{"res": map[string]any{"code": 200}}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 

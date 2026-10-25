@@ -45,18 +45,20 @@ func serve() {
 // neither writes nor connects to anything, takes any key in with, and needs
 // none. It returns the keys of with as its req, and in its res too, where it
 // sets status and dump over the keys of the same names. Only those two are
-// of a kind known, as the keys of with may hold anything.
+// of a kind known, as the keys of with may hold anything. A step of it needs
+// no test, as it does nothing that could fail.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
-		Serve:      serve,
-		Keeps:      []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-		AnyParams:  true,
-		Contracts:  actionspec.NoContracts(),
-		ReqFields:  []string{},
-		ResFields:  []string{"dump", "status"},
-		ReqTypes:   map[string]string{},
-		ResTypes:   map[string]string{"dump": kind.Bool, "status": kind.Number},
-		WithFields: true,
-		Required:   actionspec.NoneRequired(),
+		Serve:        serve,
+		Keeps:        []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		AnyParams:    true,
+		Contracts:    actionspec.NoContracts(),
+		ReqFields:    []string{},
+		ResFields:    []string{"dump", "status"},
+		ReqTypes:     map[string]string{},
+		ResTypes:     map[string]string{"dump": kind.Bool, "status": kind.Number},
+		WithFields:   true,
+		NeedsNoCheck: true,
+		Required:     actionspec.NoneRequired(),
 	}
 }

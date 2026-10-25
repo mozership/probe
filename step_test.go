@@ -708,7 +708,7 @@ func TestStep_executeAction(t *testing.T) {
 		}
 
 		// Set up mock runner
-		mock := NewMockActionRunner()
+		mock := newMockRunner()
 		mock.SetResult("http", map[string]any{
 			"status": 0,
 			"res": map[string]any{
@@ -716,12 +716,11 @@ func TestStep_executeAction(t *testing.T) {
 				"body": "OK",
 			},
 		})
-		step.actionRunner = mock
 
 		// Create minimal job context
 		jCtx := &JobContext{
 			runEnv: &runEnv{
-				Config: Config{Verbose: false},
+				Config: Config{Verbose: false, ActionRunner: mock},
 			},
 		}
 
@@ -752,15 +751,14 @@ func TestStep_executeAction(t *testing.T) {
 		}
 
 		// Set up mock runner with error
-		mock := NewMockActionRunner()
+		mock := newMockRunner()
 		testErr := fmt.Errorf("connection failed")
 		mock.SetError("failing-action", testErr)
-		step.actionRunner = mock
 
 		// Create minimal job context
 		jCtx := &JobContext{
 			runEnv: &runEnv{
-				Config: Config{Verbose: false},
+				Config: Config{Verbose: false, ActionRunner: mock},
 			},
 		}
 
@@ -778,25 +776,13 @@ func TestStep_executeAction(t *testing.T) {
 	})
 
 	t.Run("uses default plugin runner when none set", func(t *testing.T) {
-		step := &stepRun{
-			Step: &Step{
-				Uses: "test-action",
-				With: map[string]any{},
-			},
-			expr: &expr.Expr{},
+		if _, ok := (&runEnv{}).runner().(*PluginActionRunner); !ok {
+			t.Errorf("runner() = %T, want a *PluginActionRunner", (&runEnv{}).runner())
 		}
-		// Don't set actionRunner - should use default PluginActionRunner
-
-		// Initialize step context
-		step.ctx = StepContext{}
-
-		// We can't actually test plugin execution, but we can verify
-		// the method handles the default case without panicking
-		// This will timeout in CI/CD, but verifies the code path exists
-		var methodFunc = step.executeAction
-		_ = methodFunc
-
-		t.Logf("executeAction() default case verified successfully")
+		mock := newMockRunner()
+		if got := (&runEnv{Config: Config{ActionRunner: mock}}).runner(); got != mock {
+			t.Errorf("runner() = %T, want the runner the run was given", got)
+		}
 	})
 }
 
@@ -1002,7 +988,7 @@ func TestStep_Do_Integration(t *testing.T) {
 		}, nil)
 
 		// Set up mock runner for successful execution
-		mock := NewMockActionRunner()
+		mock := newMockRunner()
 		mock.SetResult("http", map[string]any{
 			"code": 0,
 			"results": map[string]any{
@@ -1011,7 +997,6 @@ func TestStep_Do_Integration(t *testing.T) {
 			},
 			"rt": "100ms",
 		})
-		step.actionRunner = mock
 
 		step.ctx = StepContext{
 			Vars: map[string]any{},
@@ -1019,7 +1004,7 @@ func TestStep_Do_Integration(t *testing.T) {
 
 		jobContext := JobContext{
 			runEnv: &runEnv{
-				Config:  Config{Verbose: false},
+				Config:  Config{Verbose: false, ActionRunner: mock},
 				Printer: newBufferPrinter(),
 			},
 		}
@@ -1051,10 +1036,9 @@ func TestStep_Do_Integration(t *testing.T) {
 		}, nil)
 
 		// Set up mock runner for failed execution
-		mock := NewMockActionRunner()
+		mock := newMockRunner()
 		testErr := fmt.Errorf("network error")
 		mock.SetError("failing-action", testErr)
-		step.actionRunner = mock
 
 		step.ctx = StepContext{
 			Vars: map[string]any{},
@@ -1062,7 +1046,7 @@ func TestStep_Do_Integration(t *testing.T) {
 
 		jobContext := JobContext{
 			runEnv: &runEnv{
-				Config:  Config{Verbose: false},
+				Config:  Config{Verbose: false, ActionRunner: mock},
 				Printer: newBufferPrinter(),
 			},
 		}
@@ -1307,16 +1291,6 @@ func TestStepContext_RepeatIndex(t *testing.T) {
 	}
 }
 
-// SlowMockActionRunner is a mock that simulates slow action execution
-type SlowMockActionRunner struct {
-	delay time.Duration
-}
-
-func (m *SlowMockActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	time.Sleep(m.delay)
-	return map[string]any{"status": 0}, nil
-}
-
 func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
 	step := &stepRun{
 		Step: &Step{
@@ -1327,7 +1301,7 @@ func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {
 	}
 
 	// Mock runner that completes quickly
-	mock := NewMockActionRunner()
+	mock := newMockRunner()
 	mock.SetResult("test-action", map[string]any{"status": 0})
 
 	jCtx := &JobContext{
@@ -1359,7 +1333,7 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	}
 
 	// Mock runner that takes 3 seconds (longer than timeout)
-	slowMock := &SlowMockActionRunner{delay: 3 * time.Second}
+	slowMock := &slowRunner{delay: 3 * time.Second}
 
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -1385,19 +1359,6 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	if duration < 1900*time.Millisecond || duration > 2500*time.Millisecond {
 		t.Errorf("Expected timeout around 2s, took %v", duration)
 	}
-}
-
-// stoppableRunner is an action that runs until the step gives up on it, and
-// tells when it was told to stop.
-type stoppableRunner struct {
-	stopped chan struct{}
-	err     error
-}
-
-func (r *stoppableRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	<-opts.context().Done()
-	close(r.stopped)
-	return nil, r.err
 }
 
 // An action that times out is told to stop, rather than run on unseen. One
@@ -1446,18 +1407,6 @@ func TestStep_executeSingleAction_ContextOfAnActionDoneInTime(t *testing.T) {
 	}
 }
 
-// contextRecordingRunner records the context an action is given, and whether
-// it was done while the action ran.
-type contextRecordingRunner struct {
-	ctx    context.Context
-	during error
-}
-
-func (r *contextRecordingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	r.ctx, r.during = opts.ctx, opts.context().Err()
-	return map[string]any{"status": 0}, nil
-}
-
 func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
 	step := &stepRun{
 		Step: &Step{
@@ -1468,7 +1417,7 @@ func TestStep_executeSingleAction_CompletesBeforeTimeout(t *testing.T) {
 	}
 
 	// Mock runner that takes 1 second (less than timeout)
-	slowMock := &SlowMockActionRunner{delay: 1 * time.Second}
+	slowMock := &slowRunner{delay: 1 * time.Second}
 
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -1508,7 +1457,7 @@ func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
 	}
 
 	// Mock runner that takes 1 second per attempt (longer than timeout)
-	slowMock := &SlowMockActionRunner{delay: 1 * time.Second}
+	slowMock := &slowRunner{delay: 1 * time.Second}
 
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -1545,7 +1494,7 @@ func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
 
 func TestStep_executeActionWithRetry_NoTest(t *testing.T) {
 	callCount := 0
-	mock := &CountingMockActionRunner{
+	mock := &callCountingRunner{
 		result:    map[string]any{"status": 0},
 		callCount: &callCount,
 	}
@@ -1580,7 +1529,7 @@ func TestStep_executeActionWithRetry_NoTest(t *testing.T) {
 
 func TestStep_executeActionWithRetry_TestFailThenPass(t *testing.T) {
 	callCount := 0
-	mock := &CountingMockActionRunner{
+	mock := &callCountingRunner{
 		callCount: &callCount,
 		resultFunc: func(count int) map[string]any {
 			if count <= 2 {
@@ -1628,7 +1577,7 @@ func TestStep_executeActionWithRetry_TestFailThenPass(t *testing.T) {
 
 func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 	callCount := 0
-	mock := &CountingMockActionRunner{
+	mock := &callCountingRunner{
 		callCount: &callCount,
 		result: map[string]any{
 			"status": 0,
@@ -1665,38 +1614,6 @@ func TestStep_executeActionWithRetry_TestFailAllAttempts(t *testing.T) {
 	if callCount != 3 {
 		t.Errorf("Expected all 3 attempts to be tried, got %d", callCount)
 	}
-}
-
-// CountingMockActionRunner is a mock that counts calls and can return different results per call
-type CountingMockActionRunner struct {
-	result     map[string]any
-	resultFunc func(count int) map[string]any
-	// contractFunc is the check of each call against a contract that the
-	// action reports, or nil for none.
-	contractFunc func(count int) *actionrpc.ContractCheck
-	callCount    *int
-	err          error // returned by every call when set
-}
-
-func (m *CountingMockActionRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	ret, err := m.RunActions(name, call.With, opts)
-	if err == nil && m.contractFunc != nil {
-		if check := m.contractFunc(*m.callCount); check != nil {
-			call.Contract.Report(*check)
-		}
-	}
-	return ret, nil, err
-}
-
-func (m *CountingMockActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	*m.callCount++
-	if m.err != nil {
-		return nil, m.err
-	}
-	if m.resultFunc != nil {
-		return m.resultFunc(*m.callCount), nil
-	}
-	return m.result, nil
 }
 
 func TestStep_DefaultStepTimeout_Value(t *testing.T) {
@@ -1804,41 +1721,12 @@ func TestParseExitStatus(t *testing.T) {
 	}
 }
 
-// OptionsRecordingActionRunner records the RunOptions every call receives and
-// keeps failing until failUntil attempts have been made.
-type OptionsRecordingActionRunner struct {
-	mu        sync.Mutex
-	opts      []RunOptions
-	failUntil int
-}
-
-func (m *OptionsRecordingActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	m.mu.Lock()
-	m.opts = append(m.opts, opts)
-	attempt := len(m.opts)
-	m.mu.Unlock()
-
-	if attempt <= m.failUntil {
-		return nil, fmt.Errorf("action failed on attempt %d", attempt)
-	}
-	return map[string]any{
-		"status": 0,
-		"res":    map[string]any{"code": 200},
-	}, nil
-}
-
-func (m *OptionsRecordingActionRunner) recorded() []RunOptions {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]RunOptions(nil), m.opts...)
-}
-
 // TestStep_executeActionWithRetry_QuietsNonFinalAttempts pins the behaviour
 // that keeps a readiness wait from logging its retries as errors: an action
 // cannot tell that it is being retried, so the runner silences every attempt
 // that still has another one behind it.
 func TestStep_executeActionWithRetry_QuietsNonFinalAttempts(t *testing.T) {
-	mock := &OptionsRecordingActionRunner{failUntil: 2}
+	mock := &optionsRecordingRunner{failUntil: 2}
 
 	step := &stepRun{
 		Step: &Step{
@@ -1881,7 +1769,7 @@ func TestStep_executeActionWithRetry_QuietsNonFinalAttempts(t *testing.T) {
 // TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet makes sure a step
 // that really fails still reports the action's own error.
 func TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet(t *testing.T) {
-	mock := &OptionsRecordingActionRunner{failUntil: 3}
+	mock := &optionsRecordingRunner{failUntil: 3}
 
 	step := &stepRun{
 		Step: &Step{
@@ -1923,7 +1811,7 @@ func TestStep_executeActionWithRetry_FinalAttemptIsNotQuiet(t *testing.T) {
 // TestStep_executeActionWithRetry_VerboseOverridesQuiet keeps --verbose able
 // to show what each retry attempt did.
 func TestStep_executeActionWithRetry_VerboseOverridesQuiet(t *testing.T) {
-	mock := &OptionsRecordingActionRunner{failUntil: 1}
+	mock := &optionsRecordingRunner{failUntil: 1}
 
 	step := &stepRun{
 		Step: &Step{
@@ -1961,7 +1849,7 @@ func TestStep_executeActionWithRetry_VerboseOverridesQuiet(t *testing.T) {
 // TestStep_executeSingleAction_WithoutRetryIsNotQuiet covers a step with no
 // retry: its only attempt must report failures.
 func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
-	mock := &OptionsRecordingActionRunner{}
+	mock := &optionsRecordingRunner{}
 
 	step := &stepRun{
 		Step: &Step{
@@ -1996,7 +1884,7 @@ func TestStep_executeSingleAction_WithoutRetryIsNotQuiet(t *testing.T) {
 // TestStep_executeSingleAction_Trace passes -vv on to the action, whose log
 // then shows how its process is run as well.
 func TestStep_executeSingleAction_Trace(t *testing.T) {
-	mock := &OptionsRecordingActionRunner{}
+	mock := &optionsRecordingRunner{}
 	step := &stepRun{Step: &Step{Uses: "test-action"}, expr: &expr.Expr{}}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -2079,32 +1967,6 @@ func waitGroupGone(pid int) bool {
 		time.Sleep(20 * time.Millisecond)
 	}
 	return true
-}
-
-// lateBackgroundRunner leaves a process running in the background, as a
-// background shell step does, after delay, and then fails with err when it
-// is not nil.
-type lateBackgroundRunner struct {
-	t     *testing.T
-	delay time.Duration
-	err   error
-	pid   chan int
-}
-
-func (r *lateBackgroundRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	result, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return result, err
-}
-
-func (r *lateBackgroundRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	time.Sleep(r.delay)
-	pid := startGroup(r.t, "sleep 60")
-	call.Processes.Add(actionrpc.Process{PID: pid})
-	r.pid <- pid
-	if r.err != nil {
-		return nil, nil, r.err
-	}
-	return map[string]any{"res": map[string]any{"code": -1}}, nil, nil
 }
 
 // A process any action says it left running is stopped once the workflow is
@@ -2225,10 +2087,10 @@ func TestStep_processActionResultStdoutJSON(t *testing.T) {
 // TestStepTellsTheActionAboutTheStep checks that every call of an action is
 // told the run, the job and the step it is made for.
 func TestStepTellsTheActionAboutTheStep(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("hello", map[string]any{"status": 0})
 	step := func(id, name, test string, retry *StepRetry) *Step {
-		return &Step{ID: id, Name: name, Uses: "hello", Test: test, Retry: retry, actionRunner: runner}
+		return &Step{ID: id, Name: name, Uses: "hello", Test: test, Retry: retry}
 	}
 	workflow := &Workflow{
 		Name: "steps",
@@ -2246,7 +2108,7 @@ func TestStepTellsTheActionAboutTheStep(t *testing.T) {
 		},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	run := workflow.RunID()
 	if len(run) != 16 {
@@ -2285,7 +2147,7 @@ func contractOf(vs ...map[string]any) *actionrpc.ContractCheck {
 func TestStep_executeSingleAction_TakesTheContractTheActionReports(t *testing.T) {
 	callCount := 0
 	broken := contractOf(map[string]any{"in": "response", "message": "body failed"})
-	runner := &CountingMockActionRunner{
+	runner := &callCountingRunner{
 		callCount: &callCount,
 		result:    map[string]any{"res": map[string]any{"code": 200}},
 		contractFunc: func(int) *actionrpc.ContractCheck {
@@ -2444,7 +2306,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 
 func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 	callCount := 0
-	mock := &CountingMockActionRunner{
+	mock := &callCountingRunner{
 		callCount: &callCount,
 		resultFunc: func(count int) map[string]any {
 			return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
@@ -2658,7 +2520,7 @@ func TestStep_executeActionWithRetry_ContractOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			callCount := 0
-			mock := &CountingMockActionRunner{
+			mock := &callCountingRunner{
 				callCount: &callCount,
 				resultFunc: func(count int) map[string]any {
 					return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
@@ -2706,7 +2568,7 @@ func TestStep_executeActionWithRetry_UncheckedRunsOnce(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			callCount := 0
-			mock := &CountingMockActionRunner{callCount: &callCount, result: tt.result, err: tt.err}
+			mock := &callCountingRunner{callCount: &callCount, result: tt.result, err: tt.err}
 			step := &stepRun{
 				Step: &Step{
 					Uses:  "http",
@@ -2751,11 +2613,11 @@ func TestStep_executeAction_Guard(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := NewMockActionRunner()
-			st := &stepRun{Step: &Step{Uses: tt.uses, With: map[string]any{}, actionRunner: mock}, expr: &expr.Expr{}}
+			mock := newMockRunner()
+			st := &stepRun{Step: &Step{Uses: tt.uses, With: map[string]any{}}, expr: &expr.Expr{}}
 			jCtx := &JobContext{
 				runEnv: &runEnv{
-					Config:  Config{Guard: tt.guard},
+					Config:  Config{Guard: tt.guard, ActionRunner: mock},
 					Printer: newBufferPrinter(),
 				},
 			}
@@ -2785,21 +2647,20 @@ func TestStep_executeAction_Guard(t *testing.T) {
 }
 
 func TestStep_executeActionWithRetry_Refused(t *testing.T) {
-	mock := NewMockActionRunner()
+	mock := newMockRunner()
 	mock.SetError("http", actionrpc.Refuse("POST may write"))
 	st := &stepRun{
 		Step: &Step{
-			Uses:         "http",
-			With:         map[string]any{},
-			Test:         "res.code == 201",
-			Retry:        &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
-			actionRunner: mock,
+			Uses:  "http",
+			With:  map[string]any{},
+			Test:  "res.code == 201",
+			Retry: &StepRetry{MaxAttempts: 3, Interval: Interval{Duration: time.Millisecond}},
 		},
 		expr: &expr.Expr{},
 	}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
-			Config:  Config{Guard: actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}},
+			Config:  Config{Guard: actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}, ActionRunner: mock},
 			Printer: newBufferPrinter(),
 		},
 	}
@@ -2908,13 +2769,12 @@ func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	mock := NewMockActionRunner()
+	mock := newMockRunner()
 	mock.SetError("http", errors.New("connection refused"))
 	st := &stepRun{
 		Step: &Step{
-			Uses:         "http",
-			With:         map[string]any{"url": "http://{{vars.host}}", "password": "hunter2"},
-			actionRunner: mock,
+			Uses: "http",
+			With: map[string]any{"url": "http://{{vars.host}}", "password": "hunter2"},
 		},
 		expr: &expr.Expr{},
 		ctx:  StepContext{Vars: map[string]any{"host": "127.0.0.1:1"}},
@@ -2922,7 +2782,7 @@ func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
 	printer := newBufferPrinter()
 	printer.verbose = true
 	printer.SetMasker(mask.New(nil, nil))
-	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true, ActionRunner: mock}, Printer: printer}}
 
 	_, err := st.executeAction("h", jCtx)
 	if err == nil {
