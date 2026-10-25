@@ -283,3 +283,46 @@ func TestLookup(t *testing.T) {
 		t.Error("Lookup() found an action that is not built in")
 	}
 }
+
+// Each built-in action declares every field of its spec, an action that has
+// none of something saying so, so that one that forgets a field, such as the
+// guards it keeps to, is told apart from one that keeps to none.
+func TestSpecsDeclareEveryField(t *testing.T) {
+	for _, name := range Names() {
+		if missing := specs[name].Undeclared(); len(missing) > 0 {
+			t.Errorf("%s leaves %v undeclared", name, missing)
+		}
+	}
+}
+
+// Each function of the registry returns a copy of what the actions declare,
+// so that what a caller does with it changes no declaration.
+func TestRegistryReturnsCopies(t *testing.T) {
+	Keeps()["http"][0] = "changed"
+	Contracts()["http"][0] = "changed"
+	AllParams()["http"][0] = "changed"
+	AllReqFields()["http"][0] = "changed"
+	AllResFields()["http"][0] = "changed"
+	AllReqTypes()["http"]["url"] = "changed"
+	AllResTypes()["http"]["code"] = "changed"
+	AllRequired()["http"][0][0] = "changed"
+	s := specs["http"]
+	for field, v := range map[string]string{
+		"Keeps": s.Keeps[0], "Contracts": s.Contracts[0], "Params": s.Params[0],
+		"ReqFields": s.ReqFields[0], "ResFields": s.ResFields[0],
+		"ReqTypes": s.ReqTypes["url"], "ResTypes": s.ResTypes["code"],
+		"Required": s.Required[0][0],
+	} {
+		if v == "changed" {
+			t.Errorf("changing what the registry returns changed the %s of http", field)
+		}
+	}
+}
+
+// WithFields gives the actions that declare their req and res hold the keys
+// of with: hello alone.
+func TestWithFields(t *testing.T) {
+	if got := WithFields(); !slices.Equal(got, []string{"hello"}) {
+		t.Errorf("WithFields() = %v, want [hello]", got)
+	}
+}

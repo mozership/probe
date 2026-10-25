@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 )
 
@@ -34,40 +35,26 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	return result, nil
 }
 
-func Serve() {
+func serve() {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log}
 	})
 }
 
-// Keeps returns the kinds of guard the hello action keeps to: all of them,
-// as it neither writes nor connects to anything.
-func Keeps() []string {
-	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-}
-
-// ReqFields returns the fields of the req the hello action returns besides
-// the keys of with, which it returns as req: none.
-func ReqFields() []string {
-	return []string{}
-}
-
-// ResFields returns the fields of the res the hello action returns besides
-// the keys of with, which it returns in res too: status and dump.
-func ResFields() []string {
-	return []string{"dump", "status"}
-}
-
-// ReqTypes returns the kinds of the fields of the req the hello action
-// returns: none, as the keys of with, which it returns as req, may hold
-// anything. ResTypes returns those of its res: status and dump, which it
-// sets over the keys of with of the same names.
-func ReqTypes() map[string]string {
-	return map[string]string{}
-}
-
-// ResTypes returns the kinds of the fields of the res the hello action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
-	return map[string]string{"dump": kind.Bool, "status": kind.Number}
+// Spec declares the hello action. It keeps to every kind of guard, as it
+// neither writes nor connects to anything, takes any key in with, and needs
+// none. It returns the keys of with as its req, and in its res too, where it
+// sets status and dump over the keys of the same names. Only those two are
+// of a kind known, as the keys of with may hold anything.
+var Spec = actionspec.Spec{
+	Serve:      serve,
+	Keeps:      []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+	AnyParams:  true,
+	Contracts:  actionspec.NoContracts,
+	ReqFields:  []string{},
+	ResFields:  []string{"dump", "status"},
+	ReqTypes:   map[string]string{},
+	ResTypes:   map[string]string{"dump": kind.Bool, "status": kind.Number},
+	WithFields: true,
+	Required:   actionspec.NoneRequired,
 }

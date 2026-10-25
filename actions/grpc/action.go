@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
@@ -44,66 +45,39 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	return ret, nil, err
 }
 
-func Serve() {
+func serve() {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log}
 	})
 }
 
-// Keeps returns the kinds of guard the grpc action keeps to: it calls only
-// a method declared without side effects under read-only, and connects
-// only to a host the guard allows.
-func Keeps() []string {
-	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
+// Spec declares the grpc action. It keeps to every kind of guard: it calls
+// only a method declared without side effects under read-only, and
+// connects only to a host the guard allows. proto, the .proto files of the
+// service, which it reads apart from Req, asks it to check a step against
+// them. Its res holds, besides the fields of Res, violations and contract,
+// for a call checked against .proto files, and messages and complete, for
+// one whose responses stream. It cannot run without addr, service and
+// method.
+var Spec = actionspec.Spec{
+	Serve:     serve,
+	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+	Params:    append(mapping.FieldTags(Req{}), "proto"),
+	Contracts: []string{"proto"},
+	ReqFields: mapping.FieldTags(Req{}),
+	ResFields: append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations"),
+	ReqTypes:  kind.Fields(Req{}),
+	ResTypes:  resTypes(),
+	Required:  [][]string{{"addr"}, {"service"}, {"method"}},
 }
 
-// Contracts returns the keys of with that ask the action to check a step
-// against a contract: proto, the .proto files of the service.
-func Contracts() []string {
-	return []string{"proto"}
-}
-
-// Params returns the keys the grpc action takes in with: those of Req, and
-// proto, which it reads apart from Req.
-func Params() []string {
-	return append(mapping.FieldTags(Req{}), "proto")
-}
-
-// ReqFields returns the fields of the req the grpc action returns: those of
-// Req. ResFields returns those of its res: those of Res, and those it adds:
-// violations and contract, for a call checked against .proto files, and
-// messages and complete, for one whose responses stream.
-func ReqFields() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ResFields returns the fields of the res the grpc action returns; see
-// ReqFields.
-func ResFields() []string {
-	return append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations")
-}
-
-// ReqTypes returns the kinds of the fields of the req the grpc action
-// returns, those of Req, and ResTypes those of its res, those of Res and of
-// the fields it adds, for probe check to report an expression that does
-// with a field what its kind does not allow.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the grpc action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
+// resTypes returns the kinds of the fields of Res and of those the action
+// adds to its res.
+func resTypes() map[string]string {
 	types := kind.Fields(Res{})
 	types["complete"] = kind.Bool
 	types["contract"] = kind.Map
 	types["messages"] = kind.List
 	types["violations"] = kind.List
 	return types
-}
-
-// Required returns the keys of with the grpc action cannot run without:
-// addr, service and method.
-func Required() [][]string {
-	return [][]string{{"addr"}, {"service"}, {"method"}}
 }

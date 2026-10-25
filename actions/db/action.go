@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
@@ -64,53 +65,23 @@ func (a *Action) run(with map[string]any, guard actionrpc.Guard) (map[string]any
 	return result, err
 }
 
-func Serve() {
+func serve() {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log}
 	})
 }
 
-// Keeps returns the kinds of guard the db action keeps to: it runs only a
-// statement that reads under read-only, and connects only to a host the
-// guard allows.
-func Keeps() []string {
-	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-}
-
-// Params returns the keys the db action takes in with.
-func Params() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ReqFields returns the fields of the req the db action returns, those of
-// Req, and ResFields those of its res, those of Res, for probe check to
-// report a step that reads another.
-func ReqFields() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ResFields returns the fields of the res the db action returns; see
-// ReqFields.
-func ResFields() []string {
-	return mapping.FieldTags(Res{})
-}
-
-// ReqTypes returns the kinds of the fields of the req the db action
-// returns, those of Req, and ResTypes those of its res, those of Res, for
-// probe check to report an expression that does with a field what its kind
-// does not allow.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the db action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
-	return kind.Fields(Res{})
-}
-
-// Required returns the keys of with the db action cannot run without: dsn
-// and query.
-func Required() [][]string {
-	return [][]string{{"dsn"}, {"query"}}
+// Spec declares the db action. It keeps to every kind of guard: it runs
+// only a statement that reads under read-only, and connects only to a host
+// the guard allows. It cannot run without dsn and query.
+var Spec = actionspec.Spec{
+	Serve:     serve,
+	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+	Params:    mapping.FieldTags(Req{}),
+	Contracts: actionspec.NoContracts,
+	ReqFields: mapping.FieldTags(Req{}),
+	ResFields: mapping.FieldTags(Res{}),
+	ReqTypes:  kind.Fields(Req{}),
+	ResTypes:  kind.Fields(Res{}),
+	Required:  [][]string{{"dsn"}, {"query"}},
 }

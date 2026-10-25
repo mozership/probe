@@ -8,7 +8,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
-	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
+	kinds := actiontest.NewKinds(t, Spec.ReqTypes, Spec.ResTypes)
 	server, _, _ := startServer(t, false)
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, with := range []map[string]any{
@@ -20,7 +20,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}
-		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		actiontest.CheckFields(t, Spec.ReqFields, Spec.ResFields, nil, ret)
 		kinds.Check(ret)
 	}
 	kinds.Covered()
@@ -28,7 +28,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 
 func TestRequired(t *testing.T) {
 	a := &Action{log: hclog.NewNullLogger()}
-	actiontest.CheckRequired(t, Required(), map[string]any{"name": "example.test", "server": "127.0.0.1:1"}, func(with map[string]any) error {
+	actiontest.CheckRequired(t, Spec.Required, map[string]any{"name": "example.test", "server": "127.0.0.1:1"}, func(with map[string]any) error {
 		_, err := a.Run(with)
 		return err
 	})
