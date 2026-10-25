@@ -2,7 +2,9 @@ package truncate
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
@@ -61,6 +63,36 @@ func TestString(t *testing.T) {
 			maxLen:   0,
 			expected: "... [⚠︎ probe truncated]",
 		},
+		{
+			name:     "a cut at a rune boundary",
+			input:    "日本語のテキスト",
+			maxLen:   6,
+			expected: "日本... [⚠︎ probe truncated]",
+		},
+		{
+			name:     "a cut inside a rune backs off to its start",
+			input:    "日本語のテキスト",
+			maxLen:   8,
+			expected: "日本... [⚠︎ probe truncated]",
+		},
+		{
+			name:     "a cut inside the first rune leaves nothing of it",
+			input:    "日本語",
+			maxLen:   2,
+			expected: "... [⚠︎ probe truncated]",
+		},
+		{
+			name:     "a cut inside an emoji",
+			input:    "ok🙂🙂",
+			maxLen:   5,
+			expected: "ok... [⚠︎ probe truncated]",
+		},
+		{
+			name:     "invalid UTF-8 is cut by its bytes",
+			input:    "\xff\xfe\xfd",
+			maxLen:   1,
+			expected: "\xff... [⚠︎ probe truncated]",
+		},
 	}
 
 	for _, tt := range tests {
@@ -70,6 +102,26 @@ func TestString(t *testing.T) {
 				t.Errorf("String(%q, %d) = %q, want %q", tt.input, tt.maxLen, result, tt.expected)
 			}
 		})
+	}
+}
+
+// TestStringKeepsValidUTF8 cuts multibyte text at every length and checks
+// the result is still valid UTF-8 of at most that many bytes before the
+// marker.
+func TestStringKeepsValidUTF8(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	s := "aé日🙂b日本"
+	for maxLen := 0; maxLen < len(s); maxLen++ {
+		got := String(s, maxLen)
+		kept, ok := strings.CutSuffix(got, Message())
+		if !ok {
+			t.Fatalf("String(%q, %d) = %q, want the marker at the end", s, maxLen, got)
+		}
+		if !utf8.ValidString(kept) || len(kept) > maxLen || !strings.HasPrefix(s, kept) {
+			t.Errorf("String(%q, %d) kept %q, want a valid prefix of at most %d bytes", s, maxLen, kept, maxLen)
+		}
 	}
 }
 
