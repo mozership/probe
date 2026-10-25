@@ -1310,12 +1310,71 @@ func TestCmd_readOnlyTakesABoolean(t *testing.T) {
 	}
 }
 
-func TestCmd_guardFlagsNeedAnArgument(t *testing.T) {
-	for _, flag := range []string{"--allow-host", "--allow-action"} {
-		c := newBufferCmd()
-		if err := c.parseArgs([]string{"w.yml", flag}); err == nil || !strings.Contains(err.Error(), "flag needs an argument") {
-			t.Errorf("parseArgs(%s) = %v, want an error", flag, err)
+func TestCmd_flagsNeedAnArgument(t *testing.T) {
+	flags := []string{"--output", "--report", "--baseline", "--allow-host", "--allow-action", "--var", "--env-file", "--job"}
+	for _, flag := range flags {
+		for _, args := range [][]string{{"w.yml", flag}, {flag, "--verbose", "w.yml"}} {
+			c := newBufferCmd()
+			want := "flag needs an argument: " + flag
+			if err := c.parseArgs(args); err == nil || err.Error() != want {
+				t.Errorf("parseArgs(%q) = %v, want %q", args, err, want)
+			}
 		}
+	}
+}
+
+func TestCmd_flagsWithoutAValueLeaveTheNextArgument(t *testing.T) {
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"--timing", "w.yml", "--read-only", "x.yml"}); err != nil {
+		t.Fatalf("parseArgs() error = %v", err)
+	}
+	if c.WorkflowPath != "w.yml,x.yml" || !c.Timing || !c.ReadOnly {
+		t.Errorf("parseArgs() = %+v, want w.yml,x.yml with --timing and --read-only", c)
+	}
+}
+
+func TestCmd_errorf(t *testing.T) {
+	c := newBufferCmd()
+	c.errorf("%s: %v", "w.yml", "100%")
+	if got, want := fmt.Sprint(c.errWriter), "[ERROR] w.yml: 100%\n"; got != want {
+		t.Errorf("errorf() wrote %q, want %q", got, want)
+	}
+}
+
+func TestCmd_usageError(t *testing.T) {
+	c := newBufferCmd()
+	c.usageError(manifestUsage, "a tag and a checksums file are required")
+	want := "[ERROR] a tag and a checksums file are required\n" +
+		"Usage: probe manifest init <owner>/<repo>\n" +
+		"       probe manifest <tag> <checksums-file> [action-file]\n"
+	if got := fmt.Sprint(c.errWriter); got != want {
+		t.Errorf("usageError() wrote %q, want %q", got, want)
+	}
+}
+
+// TestExportTTY tests that exportTTY sets no PROBE_TTY for an output that is
+// no terminal, as that of a process that serves an action, and keeps the one
+// the process was given.
+func TestExportTTY(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close(); _ = w.Close() }()
+
+	t.Setenv("PROBE_TTY", "")
+	if err := os.Unsetenv("PROBE_TTY"); err != nil {
+		t.Fatal(err)
+	}
+	exportTTY(w)
+	if v, ok := os.LookupEnv("PROBE_TTY"); ok {
+		t.Errorf("PROBE_TTY = %q for a pipe, want it unset", v)
+	}
+
+	t.Setenv("PROBE_TTY", "1")
+	exportTTY(w)
+	if v := os.Getenv("PROBE_TTY"); v != "1" {
+		t.Errorf("PROBE_TTY = %q, want the 1 it was given", v)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/mattn/go-isatty"
 	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/report"
 )
@@ -73,11 +72,6 @@ type Config struct {
 }
 
 func New(path string, v bool) *Probe {
-	// Set TTY detection for embedded plugins
-	if isatty.IsTerminal(os.Stdout.Fd()) {
-		_ = os.Setenv("PROBE_TTY", "1")
-	}
-
 	return &Probe{
 		FilePath: path,
 		Config: Config{
