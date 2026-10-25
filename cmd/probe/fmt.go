@@ -22,8 +22,7 @@ const fmtUsage = "Usage: probe fmt [--check] <workflow-file>...\n"
 func (c *Cmd) runFmt() int {
 	args := c.SubCommandArgs
 	if len(args) == 0 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprint(c.errWriter, fmtUsage)
+		c.usageError(fmtUsage, "workflow file is required")
 		return probe.ExitConfigError
 	}
 	if len(args) == 1 && args[0] == "-" {
@@ -32,7 +31,7 @@ func (c *Cmd) runFmt() int {
 
 	files, err := fmtFiles(args)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 
@@ -40,7 +39,7 @@ func (c *Cmd) runFmt() int {
 	for _, path := range files {
 		changed, err := c.fmtFile(path)
 		if err != nil {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %s: %v\n", path, firstLine(err.Error()))
+			c.errorf("%s: %v", path, firstLine(err.Error()))
 			code = probe.ExitConfigError
 			continue
 		}
@@ -60,12 +59,12 @@ func (c *Cmd) runFmt() int {
 func (c *Cmd) fmtStdin() int {
 	src, err := io.ReadAll(c.inReader)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	out, err := yamlfmt.Format(src)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", firstLine(err.Error()))
+		c.errorf("%v", firstLine(err.Error()))
 		return probe.ExitConfigError
 	}
 	if c.FmtCheck {

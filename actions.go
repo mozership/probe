@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionlog"
 	"github.com/mozership/probe/mask"
 )
 
@@ -55,7 +56,7 @@ func (o RunOptions) logLevel() hclog.Level {
 	if o.Quiet && !o.Verbose {
 		return hclog.Off
 	}
-	return actionLogLevel(o.Verbose, o.Trace)
+	return actionlog.Level(o.Verbose, o.Trace)
 }
 
 // ActionRunner runs the action of a step: the action named name, as the
@@ -85,7 +86,7 @@ type PluginActionRunner struct{}
 func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
-	log := newActionLog(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
+	log := actionlog.New(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
 	// An action that runs steps of its own, as embedded does, says which
 	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
