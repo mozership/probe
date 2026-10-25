@@ -62,16 +62,6 @@ func serve() {
 	})
 }
 
-// joinHeader returns h with the values of each header joined, as the result
-// shows them.
-func joinHeader(h hp.Header) map[string]any {
-	out := make(map[string]any, len(h))
-	for k, v := range h {
-		out[k] = strings.Join(v, ", ")
-	}
-	return out
-}
-
 // Spec declares the http action. It keeps to every kind of guard: it sends
 // only GET, HEAD and OPTIONS under read-only, and connects only to a host
 // the guard allows, redirects included. openapi, an OpenAPI document, asks

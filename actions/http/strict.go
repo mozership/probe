@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 )
 
@@ -161,5 +162,5 @@ func undeclaredViolation(in string, p undeclaredProperty) map[string]any {
 	if len(p.declared) > 0 {
 		reason = "the schema declares " + strings.Join(p.declared, ", ")
 	}
-	return violation(in, fmt.Sprintf("%s property '%s' is not declared in the schema", in, p.name), reason, p.field)
+	return contractcheck.Violation(in, fmt.Sprintf("%s property '%s' is not declared in the schema", in, p.name), reason, p.field)
 }

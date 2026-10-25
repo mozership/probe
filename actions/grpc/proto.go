@@ -12,6 +12,7 @@ import (
 	"buf.build/go/protovalidate"
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
+	"github.com/mozership/probe/internal/contractcheck"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -76,11 +77,11 @@ func takeProto(m map[string]any) (*contract, error) {
 		if err != nil {
 			return nil, err
 		}
-		request, err := protoFlag(o, "request", true)
+		request, err := contractcheck.Flag(o, "proto", "request", true)
 		if err != nil {
 			return nil, err
 		}
-		strict, err := protoFlag(o, "strict", false)
+		strict, err := contractcheck.Flag(o, "proto", "strict", false)
 		if err != nil {
 			return nil, err
 		}
@@ -113,18 +114,6 @@ func stringList(o map[string]any, key string) ([]string, error) {
 		out = append(out, s)
 	}
 	return out, nil
-}
-
-func protoFlag(o map[string]any, key string, def bool) (bool, error) {
-	v, ok := o[key]
-	if !ok {
-		return def, nil
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return false, fmt.Errorf("proto.%s must be true or false", key)
-	}
-	return b, nil
 }
 
 // loadContract compiles the .proto files, as protoc would with the import
@@ -228,7 +217,7 @@ func (c *contract) checkRequest(spec protoreflect.MethodDescriptor, body string)
 	}
 	msg := dynamicpb.NewMessage(spec.Input())
 	if err := protojson.Unmarshal([]byte(body), msg); err != nil {
-		return []any{violation("request", fmt.Sprintf("request body does not keep to %s", spec.Input().FullName()), err.Error(), "")}
+		return []any{contractcheck.Violation("request", fmt.Sprintf("request body does not keep to %s", spec.Input().FullName()), err.Error(), "")}
 	}
 	return c.constraints("request", msg)
 }
@@ -241,7 +230,7 @@ func (c *contract) checkRequest(spec protoreflect.MethodDescriptor, body string)
 func (c *contract) checkDefinition(spec, server protoreflect.MethodDescriptor) []any {
 	var out []any
 	if spec.IsStreamingClient() != server.IsStreamingClient() || spec.IsStreamingServer() != server.IsStreamingServer() {
-		out = append(out, violation("response", fmt.Sprintf("the server's definition of %s %s", spec.Name(), streamingKind(server)), fmt.Sprintf("the .proto files declare that it %s", streamingKind(spec)), ""))
+		out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's definition of %s %s", spec.Name(), streamingKind(server)), fmt.Sprintf("the .proto files declare that it %s", streamingKind(spec)), ""))
 	}
 	pairs := []struct {
 		what         string
@@ -253,7 +242,7 @@ func (c *contract) checkDefinition(spec, server protoreflect.MethodDescriptor) [
 	seen := map[[2]protoreflect.FullName]bool{}
 	for _, p := range pairs {
 		if p.spec.FullName() != p.server.FullName() {
-			out = append(out, violation("response", fmt.Sprintf("the server's %s message is %s", p.what, p.server.FullName()), fmt.Sprintf("the .proto files declare %s", p.spec.FullName()), ""))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's %s message is %s", p.what, p.server.FullName()), fmt.Sprintf("the .proto files declare %s", p.spec.FullName()), ""))
 			continue
 		}
 		out = append(out, c.compareMessages(p.spec, p.server, "$", seen)...)
@@ -275,17 +264,17 @@ func (c *contract) compareMessages(spec, server protoreflect.MessageDescriptor, 
 		field := path + "." + string(s.Name())
 		v := server.Fields().ByNumber(s.Number())
 		if v == nil {
-			out = append(out, violation("response", fmt.Sprintf("the server's %s declares no field %d", server.FullName(), s.Number()), fmt.Sprintf("the .proto files declare %s %s = %d", fieldType(s), s.Name(), s.Number()), field))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's %s declares no field %d", server.FullName(), s.Number()), fmt.Sprintf("the .proto files declare %s %s = %d", fieldType(s), s.Name(), s.Number()), field))
 			continue
 		}
 		if v.Name() != s.Name() || fieldType(v) != fieldType(s) {
-			out = append(out, violation("response", fmt.Sprintf("the server's %s declares %s %s = %d", server.FullName(), fieldType(v), v.Name(), v.Number()), fmt.Sprintf("the .proto files declare %s %s = %d", fieldType(s), s.Name(), s.Number()), field))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's %s declares %s %s = %d", server.FullName(), fieldType(v), v.Name(), v.Number()), fmt.Sprintf("the .proto files declare %s %s = %d", fieldType(s), s.Name(), s.Number()), field))
 			continue
 		}
 		// proto2 tells a required field from an optional one, which the type
 		// alone does not.
 		if v.Cardinality() != s.Cardinality() {
-			out = append(out, violation("response", fmt.Sprintf("the server's %s declares %s %s as %s", server.FullName(), fieldType(v), v.Name(), v.Cardinality()), fmt.Sprintf("the .proto files declare it %s", s.Cardinality()), field))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's %s declares %s %s as %s", server.FullName(), fieldType(v), v.Name(), v.Cardinality()), fmt.Sprintf("the .proto files declare it %s", s.Cardinality()), field))
 			continue
 		}
 		if s.Message() != nil && !s.IsMap() {
@@ -300,7 +289,7 @@ func (c *contract) compareMessages(spec, server protoreflect.MessageDescriptor, 
 		for i := 0; i < vf.Len(); i++ {
 			v := vf.Get(i)
 			if sf.ByNumber(v.Number()) == nil {
-				out = append(out, violation("response", fmt.Sprintf("the server's %s declares %s %s = %d", server.FullName(), fieldType(v), v.Name(), v.Number()), "the .proto files do not declare it", path+"."+string(v.Name())))
+				out = append(out, contractcheck.Violation("response", fmt.Sprintf("the server's %s declares %s %s = %d", server.FullName(), fieldType(v), v.Name(), v.Number()), "the .proto files do not declare it", path+"."+string(v.Name())))
 			}
 		}
 	}
@@ -349,7 +338,7 @@ func fieldType(f protoreflect.FieldDescriptor) string {
 func (c *contract) checkResponse(spec protoreflect.MethodDescriptor, data []byte) []any {
 	msg := dynamicpb.NewMessage(spec.Output())
 	if err := proto.Unmarshal(data, msg); err != nil {
-		return []any{violation("response", fmt.Sprintf("response body does not read as %s", spec.Output().FullName()), err.Error(), "")}
+		return []any{contractcheck.Violation("response", fmt.Sprintf("response body does not read as %s", spec.Output().FullName()), err.Error(), "")}
 	}
 	return append(c.unread(msg, "$"), c.constraints("response", msg)...)
 }
@@ -361,7 +350,7 @@ func (c *contract) checkResponse(spec protoreflect.MethodDescriptor, data []byte
 func (c *contract) checkResponseJSON(spec protoreflect.MethodDescriptor, data []byte) []any {
 	msg := dynamicpb.NewMessage(spec.Output())
 	if err := (protojson.UnmarshalOptions{DiscardUnknown: !c.strict}).Unmarshal(data, msg); err != nil {
-		return []any{violation("response", fmt.Sprintf("response body does not read as %s", spec.Output().FullName()), err.Error(), "")}
+		return []any{contractcheck.Violation("response", fmt.Sprintf("response body does not read as %s", spec.Output().FullName()), err.Error(), "")}
 	}
 	return c.constraints("response", msg)
 }
@@ -380,9 +369,9 @@ func (c *contract) unread(msg protoreflect.Message, path string) []any {
 		}
 		b = b[n:]
 		if f := fields.ByNumber(num); f != nil {
-			out = append(out, violation("response", fmt.Sprintf("field %d of %s is not encoded as %s %s", num, msg.Descriptor().FullName(), fieldType(f), f.Name()), fmt.Sprintf("it arrived as wire type %d", typ), path+"."+string(f.Name())))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("field %d of %s is not encoded as %s %s", num, msg.Descriptor().FullName(), fieldType(f), f.Name()), fmt.Sprintf("it arrived as wire type %d", typ), path+"."+string(f.Name())))
 		} else if c.strict {
-			out = append(out, violation("response", fmt.Sprintf("field %d of %s is not declared in the .proto files", num, msg.Descriptor().FullName()), "the server sends a field the files do not declare", path))
+			out = append(out, contractcheck.Violation("response", fmt.Sprintf("field %d of %s is not declared in the .proto files", num, msg.Descriptor().FullName()), "the server sends a field the files do not declare", path))
 		}
 	}
 
@@ -433,17 +422,4 @@ func hasRequestViolation(violations []any) bool {
 		}
 	}
 	return false
-}
-
-// violation is one thing a contract does not allow, found in the request
-// or the response as in says.
-func violation(in, message, reason, field string) map[string]any {
-	v := map[string]any{"in": in, "message": message}
-	if reason != "" {
-		v["reason"] = reason
-	}
-	if field != "" {
-		v["field"] = field
-	}
-	return v
 }
