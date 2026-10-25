@@ -412,26 +412,6 @@ func checkLength(input string) error {
 	return nil
 }
 
-// EvalOrEvalTemplate evaluates input as a template when it holds one, as
-// HasTemplate tells, and as an expression otherwise, and returns the value
-// as text. Braces that are not a template, such as those in the string
-// literals of "}}" + "{{", leave input an expression.
-func (e *Expr) EvalOrEvalTemplate(input string, env any) (string, error) {
-	// Security: Validate input expression
-	if err := checkLength(input); err != nil {
-		return "", fmt.Errorf("expression validation failed: %w", err)
-	}
-
-	if HasTemplate(input) {
-		return e.EvalTemplate(input, env)
-	}
-	output, err := e.Eval(input, env)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%v", output), nil
-}
-
 // Eval evaluates input, an expression, against env and returns its value.
 // When input cannot be evaluated, the value is nil.
 func (e *Expr) Eval(input string, env any) (any, error) {

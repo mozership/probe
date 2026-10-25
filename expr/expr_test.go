@@ -151,106 +151,6 @@ func TestEval(t *testing.T) {
 	}
 }
 
-func TestEvalOrEvalTemplate(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		env      map[string]any
-		expected string
-		hasError bool
-	}{
-		{
-			name:     "simple expression without template",
-			input:    "1 + 1",
-			env:      map[string]any{},
-			expected: "2",
-			hasError: false,
-		},
-		{
-			name:  "template with variable",
-			input: "Hello {{name}}!",
-			env: map[string]any{
-				"name": "World",
-			},
-			expected: "Hello World!",
-			hasError: false,
-		},
-		{
-			name:  "boolean expression",
-			input: "status == 200",
-			env: map[string]any{
-				"status": 200,
-			},
-			expected: "true",
-			hasError: false,
-		},
-		// The inputs below hold braces that are not a template, or a
-		// template inside what reads as a string.
-		{
-			name:     "an opener that is never closed is an expression",
-			input:    "a {{ b",
-			hasError: true,
-		},
-		{
-			name:     "a closer alone is an expression",
-			input:    "a }}",
-			hasError: true,
-		},
-		{
-			name:     "an opener with no closer is an expression",
-			input:    "{{ x",
-			hasError: true,
-		},
-		{
-			name:     "a closer before an opener is an expression",
-			input:    "}} {{",
-			hasError: true,
-		},
-		{
-			name:     "braces in the string literals of an expression are an expression",
-			input:    `"}}" + "{{"`,
-			expected: "}}{{",
-		},
-		{
-			name:     "a closer in an unclosed string literal is an expression",
-			input:    `{{ "x }}`,
-			hasError: true,
-		},
-		{
-			name:     "an opener in a string literal is an expression",
-			input:    `"{{"`,
-			expected: "{{",
-		},
-		{
-			name:     "a closer in the string literal of a template",
-			input:    `{{ "}}" }}`,
-			expected: "}}",
-		},
-		{
-			name:     "a template between quotes is evaluated",
-			input:    "'{{ 1 }}'",
-			expected: "'1'",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			expr := &Expr{}
-			result, err := expr.EvalOrEvalTemplate(tt.input, tt.env)
-
-			if tt.hasError && err == nil {
-				t.Errorf("expected error but got none")
-			}
-			if !tt.hasError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if !tt.hasError && result != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, result)
-			}
-		})
-	}
-}
-
 func TestSecurityValidation(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -310,6 +210,8 @@ func TestFunctions(t *testing.T) {
 		env     any
 		want    any
 		wantErr string
+		// notErr, when it is set, is text the error must not hold.
+		notErr string
 		// check, when it is set, checks a value that cannot be known in
 		// advance, such as a random one, in place of want.
 		check func(got any) error
@@ -317,7 +219,7 @@ func TestFunctions(t *testing.T) {
 		// match_json
 		{name: "match_json of equal objects", input: "match_json(src, target)", env: pair(map[string]any{"name": "test", "age": 25}, map[string]any{"name": "test", "age": 25}), want: true},
 		{name: "match_json of different objects", input: "match_json(src, target)", env: pair(map[string]any{"name": "test"}, map[string]any{"name": "other"}), want: false},
-		{name: "match_json with an invalid regex", input: `match_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "match_json: invalid regex at key 'x'"},
+		{name: "match_json with an invalid regex", input: `match_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "match_json: invalid regex at key 'x'", notErr: "panicked"},
 		{name: "match_json with one parameter", input: "match_json(src)", env: map[string]any{"src": map[string]any{"name": "test"}}, wantErr: "match_json requires exactly 2 parameters"},
 		{name: "match_json of a number", input: "match_json(1, {})", wantErr: "match_json parameters must be objects"},
 		{name: "match_json of a string target", input: "match_json({}, 'a')", wantErr: "match_json parameters must be objects"},
@@ -330,7 +232,7 @@ func TestFunctions(t *testing.T) {
 			return nil
 		}},
 		{name: "diff_json of equal objects", input: "diff_json({'a': 1}, {'a': 1})", want: "No diff"},
-		{name: "diff_json with an invalid regex", input: `diff_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "diff_json: invalid regex at key 'x'"},
+		{name: "diff_json with an invalid regex", input: `diff_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "diff_json: invalid regex at key 'x'", notErr: "panicked"},
 		{name: "diff_json with one parameter", input: "diff_json({})", wantErr: "diff_json requires exactly 2 parameters"},
 		{name: "diff_json of a number", input: "diff_json({}, 1)", wantErr: "diff_json parameters must be objects"},
 
@@ -467,6 +369,9 @@ func TestFunctions(t *testing.T) {
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("got %#v, %v, want an error containing %q", got, err, tt.wantErr)
+				}
+				if tt.notErr != "" && strings.Contains(err.Error(), tt.notErr) {
+					t.Errorf("error = %v, want one without %q", err, tt.notErr)
 				}
 				return
 			}
@@ -757,11 +662,12 @@ func TestExpressionContextIsNotFiltered(t *testing.T) {
 	}
 }
 
-// TestValidateExpressionAllowsEnvLikeText pins the fix for a guard that used to
-// reject any expression whose text contained "env.path", "env.secret" and
-// friends. The evaluation context has no `env` namespace, so the guard only
-// ever rejected ordinary strings that happened to contain the pattern.
-func TestValidateExpressionAllowsEnvLikeText(t *testing.T) {
+// TestCheckLengthAllowsEnvLikeText pins the fix for a guard that used to
+// reject, with the length check, any expression whose text contained
+// "env.path", "env.secret" and friends. The evaluation context has no `env`
+// namespace, so the guard only ever rejected ordinary strings that happened
+// to contain the pattern.
+func TestCheckLengthAllowsEnvLikeText(t *testing.T) {
 	expr := &Expr{}
 
 	inputs := []string{
@@ -1003,6 +909,11 @@ func TestTimeoutProtection(t *testing.T) {
 		got, err := (&Expr{}).Eval("boom()", env)
 		if err == nil || !strings.Contains(err.Error(), "boom") {
 			t.Fatalf("Eval = %#v, %v, want the panic as an error", got, err)
+		}
+		// The error is expr's, not the one withTimeout makes of a panic
+		// that gets past expr.
+		if strings.Contains(err.Error(), "expression execution panicked") {
+			t.Errorf("Eval error = %v, want the panic recovered by expr", err)
 		}
 	})
 }
