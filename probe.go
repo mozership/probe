@@ -2,11 +2,11 @@ package probe
 
 import (
 	"bytes"
-	"fmt"
-	"github.com/mozership/probe/actionrpc"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/mozership/probe/actionrpc"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
@@ -196,24 +196,15 @@ func (p *Probe) load(files []string, y string) ([]aliasProblem, []problem, error
 
 	p.setDefaultsToSteps()
 
-	// Additional validation and ID initialization
-	if err := p.validateIDs(); err != nil {
+	// The order the workflow is refused in is set out in validate.go.
+	if err := p.workflow.validateIDs(); err != nil {
 		return aliases, nil, err
 	}
-
-	if err := p.workflow.validateRepeatLimits(); err != nil {
+	found, err := p.workflow.validate()
+	if err != nil {
 		return aliases, nil, err
 	}
-
-	// Each job without an ID is given its default one, by where it is
-	// written. A step without an ID is left without one, so that what needs
-	// one, such as its outputs, is refused: it is read as defaultStepID
-	// where it is read by where it is written.
-	if err := p.workflow.assignJobIDs(); err != nil {
-		return aliases, nil, err
-	}
-
-	return aliases, p.workflow.problems(), nil
+	return aliases, found, nil
 }
 
 func (p *Probe) setDefaultsToSteps() {
@@ -223,37 +214,4 @@ func (p *Probe) setDefaultsToSteps() {
 		p.workflow.Jobs[i].ApplyDefaults()
 		p.workflow.Jobs[i].applyDefaults(p.workflow.Defaults)
 	}
-}
-
-// validateIDs checks for duplicate job IDs and step IDs across the workflow
-func (p *Probe) validateIDs() error {
-	jobIDs := make(map[string]int)           // jobID -> jobIndex
-	globalStepIDs := make(map[string]string) // stepID -> "job[index].step[index]"
-
-	for jobIdx, job := range p.workflow.Jobs {
-		// Check for duplicate job IDs
-		if job.ID != "" {
-			if existingIdx, exists := jobIDs[job.ID]; exists {
-				return NewConfigurationError("duplicate_job_id",
-					fmt.Sprintf("duplicate job ID '%s' found in job %d (already used in job %d)",
-						job.ID, jobIdx, existingIdx), nil)
-			}
-			jobIDs[job.ID] = jobIdx
-		}
-
-		// Check for duplicate step IDs across all jobs
-		for stepIdx, step := range job.Steps {
-			if step != nil && step.ID != "" {
-				stepLocation := fmt.Sprintf("job[%d].step[%d]", jobIdx, stepIdx)
-				if existingLocation, exists := globalStepIDs[step.ID]; exists {
-					return NewConfigurationError("duplicate_step_id",
-						fmt.Sprintf("duplicate step ID '%s' found in %s (already used in %s)",
-							step.ID, stepLocation, existingLocation), nil)
-				}
-				globalStepIDs[step.ID] = stepLocation
-			}
-		}
-	}
-
-	return nil
 }
