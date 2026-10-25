@@ -144,7 +144,7 @@ func (p *Probe) Load() error {
 	}
 	if p.Config.Warn != nil {
 		for _, r := range redefinedJobs(files, data) {
-			_, _ = fmt.Fprintln(p.Config.Warn, colorWarning().Sprintf("[WARN] %s", r))
+			_, _ = io.WriteString(p.Config.Warn, warnLine(r.String()))
 		}
 	}
 
@@ -199,12 +199,15 @@ func (p *Probe) load(files []string, y string) ([]aliasProblem, []problem, error
 		return aliases, nil, err
 	}
 
-	// Validate repeat and retry limits
-	if err := p.validateRepeatLimits(); err != nil {
+	if err := p.workflow.validateRepeatLimits(); err != nil {
 		return aliases, nil, err
 	}
 
-	if err := p.initializeEmptyIDs(); err != nil {
+	// Each job without an ID is given its default one, by where it is
+	// written. A step without an ID is left without one, so that what needs
+	// one, such as its outputs, is refused: it is read as defaultStepID
+	// where it is read by where it is written.
+	if err := p.workflow.assignJobIDs(); err != nil {
 		return aliases, nil, err
 	}
 
@@ -373,17 +376,4 @@ func (p *Probe) validateIDs() error {
 	}
 
 	return nil
-}
-
-// initializeEmptyIDs gives each job without an ID its default one, by where
-// it is written. A step without an ID is left without one, so that what
-// needs one, such as its outputs, is refused: it is read as defaultStepID
-// where it is read by where it is written.
-func (p *Probe) initializeEmptyIDs() error {
-	return p.workflow.assignJobIDs()
-}
-
-// validateRepeatLimits validates repeat count and max_attempts against configured limits
-func (p *Probe) validateRepeatLimits() error {
-	return p.workflow.validateRepeatLimits()
 }

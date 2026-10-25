@@ -553,7 +553,7 @@ func TestProbe_validateIDs(t *testing.T) {
 	}
 }
 
-func TestProbe_initializeEmptyIDs(t *testing.T) {
+func TestProbe_assignJobIDs(t *testing.T) {
 	tests := []struct {
 		name            string
 		workflow        Workflow
@@ -639,8 +639,8 @@ func TestProbe_initializeEmptyIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Probe{workflow: tt.workflow}
-			if err := p.initializeEmptyIDs(); err != nil {
-				t.Fatalf("initializeEmptyIDs() error = %v", err)
+			if err := p.workflow.assignJobIDs(); err != nil {
+				t.Fatalf("assignJobIDs() error = %v", err)
 			}
 
 			// Check job IDs
@@ -755,8 +755,8 @@ func TestProbe_validateAndInitializeIDs_Integration(t *testing.T) {
 			}
 
 			// Run initialization
-			if err := p.initializeEmptyIDs(); err != nil {
-				t.Fatalf("initializeEmptyIDs() error = %v", err)
+			if err := p.workflow.assignJobIDs(); err != nil {
+				t.Fatalf("assignJobIDs() error = %v", err)
 			}
 
 			// Check results
