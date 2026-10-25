@@ -24,7 +24,7 @@ steps:
 | `type` | No | `A` | The type of record, in any case: `A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, `SOA`, `SRV`, `PTR`, `CAA`, or any other type DNS has. `AXFR` and `IXFR`, which transfer a zone, are not queries the action sends |
 | `server` | No | The resolvers of the machine | The server to ask, as `host` or `host:port`. An IPv6 address is given bare or in brackets, and in brackets with a port |
 | `protocol` | No | `udp` | `udp`, `tcp`, or `tls` for DNS over TLS |
-| `timeout` | No | `5s` | How long the whole query may take, as a duration such as `500ms` or `10s`, or a number of seconds |
+| `timeout` | No | `5s` | How long the whole query may take, as a duration such as `500ms` or `10s`, or a number of seconds. It must be above zero |
 
 Without `server`, the action reads the resolvers from `/etc/resolv.conf` and asks them in order until one answers. Each is given an equal part of the `timeout` that is left, so that a resolver that does not answer leaves time for the next: with two resolvers and the default `5s`, the first has 2.5 seconds. The port is 53, or 853 with `protocol: tls`.
 

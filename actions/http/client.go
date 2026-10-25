@@ -84,30 +84,29 @@ func NewReq() *Req {
 	}
 }
 
-// parseTimeout turns the request's timeout field into a duration. It accepts a
-// Go duration string ("10s", "1m30s") and, like the workflow-level interval
-// fields, a bare number of seconds. An empty value falls back to
-// DefaultTimeout, and zero disables the limit.
+// parseTimeout turns the request's timeout field into a duration. It reads
+// it as mapping.ParseTimeout does, as a duration string ("10s", "1m30s") or a
+// number of seconds, except that an empty value falls back to DefaultTimeout
+// and a zero, which ParseTimeout refuses, disables the limit.
 func parseTimeout(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return DefaultTimeout, nil
 	}
-
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		sec, ferr := strconv.ParseFloat(s, 64)
-		if ferr != nil {
-			return 0, fmt.Errorf("invalid timeout: %q", s)
-		}
-		d = time.Duration(sec * float64(time.Second))
+	if isZeroTimeout(s) {
+		return 0, nil
 	}
+	return mapping.ParseTimeout(s)
+}
 
-	if d < 0 {
-		return 0, fmt.Errorf("timeout must not be negative: %q", s)
+// isZeroTimeout reports whether s is a zero written as a duration, such as
+// "0s", or as a number, such as "0" or "0.0".
+func isZeroTimeout(s string) bool {
+	if d, err := time.ParseDuration(s); err == nil {
+		return d == 0
 	}
-
-	return d, nil
+	f, err := strconv.ParseFloat(s, 64)
+	return err == nil && f == 0
 }
 
 // joinHeader returns h with the values of each header joined, as the result

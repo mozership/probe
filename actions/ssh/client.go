@@ -135,9 +135,9 @@ func parseParams(req *Req) (*sshParams, error) {
 	if timeoutStr == "" {
 		timeoutStr = "30s"
 	}
-	timeout, err := time.ParseDuration(timeoutStr)
+	timeout, err := mapping.ParseTimeout(timeoutStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timeout format: %s", timeoutStr)
+		return nil, err
 	}
 	params.timeout = timeout
 

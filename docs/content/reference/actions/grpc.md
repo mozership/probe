@@ -31,7 +31,7 @@ The fields below describe the call. All of them accept template expressions.
 | `method` | String | Yes | - | Method name |
 | `body` | String, Object or List | No | `""` | Request message as JSON. An object is serialized as JSON. A list is the messages of a stream of requests; see [Streaming Methods](#streaming-methods) |
 | `metadata` | Object | No | `{}` | Request metadata (the gRPC equivalent of headers) |
-| `timeout` | String | No | `30s` | Time limit for the call, including connecting and the reflection lookup. A Go duration such as `"10s"`; any other value is an error |
+| `timeout` | String | No | `30s` | Time limit for the call, including connecting and the reflection lookup. A duration such as `"10s"`, or a number of seconds such as `10`. A value that is neither, or not above zero, is an error |
 | `tls` | Boolean | No | `false` | Use TLS |
 | `insecure` | Boolean | No | `false` | Skip verifying the server's certificate. `ca_file` has no effect then; a client certificate is still sent |
 | `cert_file` | String | No | - | Client certificate for mutual TLS. Give it with `key_file` |
