@@ -119,7 +119,7 @@ func TestEvalRepeatTest(t *testing.T) {
 				t.Fatalf("result = %+v, want the test, passed: %v", res, tt.wantPassed)
 			}
 			if tt.wantPassed {
-				if res.Failure != nil || res.Output != "" {
+				if res.Failure != nil {
 					t.Errorf("result = %+v, want no failure", res)
 				}
 				return
@@ -129,13 +129,13 @@ func TestEvalRepeatTest(t *testing.T) {
 			}
 			if tt.wantKind == FailureTestError {
 				_, err := (&expr.Expr{}).Eval(tt.test, env)
-				tt.wantMessage, tt.wantOutput = err.Error(), testErrorDetail(err)
+				tt.wantMessage, tt.wantOutput = err.Error(), testErrorDetail(err.Error())
 			}
 			if res.Failure.Message != tt.wantMessage {
 				t.Errorf("message = %q, want %q", res.Failure.Message, tt.wantMessage)
 			}
-			if res.Output != tt.wantOutput {
-				t.Errorf("output = %q, want %q", res.Output, tt.wantOutput)
+			if out := failureTextOf(res.Failure, res.Test); out != tt.wantOutput {
+				t.Errorf("output = %q, want %q", out, tt.wantOutput)
 			}
 		})
 	}

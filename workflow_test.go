@@ -1747,7 +1747,7 @@ func TestWorkflowRun_runJobsStopsWhenNothingCanRun(t *testing.T) {
 	r.scheduler.Start("a")
 
 	errc := make(chan error, 1)
-	go func() { errc <- r.runJobs(r.newJobContext(nil)) }()
+	go func() { errc <- r.runJobs(r.newJobContext(nil, nil)) }()
 	select {
 	case err := <-errc:
 		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {
@@ -1866,5 +1866,55 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 	}
 	if strings.Contains(stderr, "API_KEY") {
 		t.Errorf("a secret long enough to mask should not be warned about:\n%s", stderr)
+	}
+}
+
+// A secret that a later step teaches the masker is hidden in what the
+// report shows of an earlier step that failed: the response under it and
+// what the false condition compared. Both are masked as the report shows
+// them, before they are cut short, so the report has <redacted> where the
+// secret was, not the part of it that the cut left, which no masker finds.
+func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	tests := []struct {
+		name string
+		body string
+		test string
+	}{
+		// The response is cut after 512 bytes, inside the token.
+		{name: "in the response", body: strings.Repeat("x", 500) + token, test: "res.code == 200"},
+		// A value the condition compared is cut after 200 characters,
+		// inside the token.
+		{name: "in the false condition", body: strings.Repeat("x", 180) + token, test: `res.body == ""`},
+	}
+	for _, tt := range tests {
+		for _, mode := range []OutputMode{OutputModeSpinner, OutputModeStream} {
+			t.Run(tt.name+"/"+mode.String(), func(t *testing.T) {
+				defer func(was bool) { color.NoColor = was }(color.NoColor)
+				color.NoColor = true
+
+				leaks := newMockRunner()
+				leaks.SetResult("http", map[string]any{"res": map[string]any{"code": 500, "body": tt.body}, "status": 0})
+				w := &Workflow{
+					Name: "Leak",
+					Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{
+						{Name: "Leaks", Uses: "http", Test: tt.test},
+						// The token is a credential of this step, which
+						// teaches the masker it.
+						{Name: "Uses", Uses: "http", With: map[string]any{"headers": map[string]any{"authorization": token}}},
+					}}},
+				}
+				report := startCapturing(t, w, mode, stepRunners{byName: map[string]ActionRunner{"Leaks": leaks}, fallback: newMockRunner()})
+
+				if !strings.Contains(report, "Leaks") || !strings.Contains(report, "<redacted>") {
+					t.Fatalf("the report should show the failed step with the token hidden:\n%s", report)
+				}
+				for _, part := range []string{token, token[:9], token[:12]} {
+					if strings.Contains(report, part) {
+						t.Errorf("the report shows %q of the token:\n%s", part, report)
+					}
+				}
+			})
+		}
 	}
 }

@@ -155,7 +155,7 @@ func (r *workflowRun) execute() error {
 		return &maskedError{err: err, masker: r.printer().Masker()}
 	}
 
-	ctx := r.newJobContext(vars)
+	ctx := r.newJobContext(vars, reporter)
 	// A process a step started in the background lives on after its step,
 	// for later steps and jobs to use, but not after the workflow, and not
 	// after probe is interrupted. The watch for signals is deferred first so
@@ -207,7 +207,6 @@ func (r *workflowRun) startReport() Reporter {
 	// for this run alone, so every run gets a fresh one.
 	render := newReportRenderer(r.jobIDs(), r.config.Baseline, p.Masker())
 	reporter := newReporter(r.config.Output, p, render)
-	p.SetReporter(reporter)
 
 	r.startedAt = time.Now()
 	reporter.Start(r.w.Name, r.w.Description)
@@ -223,11 +222,11 @@ func (r *workflowRun) evalVars() (map[string]any, error) {
 }
 
 // newJobContext returns the context the jobs of the run run with, with a
-// result of their own and vars.
-func (r *workflowRun) newJobContext(vars map[string]any) JobContext {
+// result of their own, which tells reporter how the run goes, and vars.
+func (r *workflowRun) newJobContext(vars map[string]any, reporter Reporter) JobContext {
 	p := r.printer()
 	rs := r.newResult()
-	rs.SetReporter(p.Reporter())
+	rs.SetReporter(reporter)
 
 	return JobContext{
 		runEnv: &runEnv{

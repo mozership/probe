@@ -10,65 +10,6 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-func TestEchoDetail(t *testing.T) {
-	// Disable color output for consistent testing
-	defer func(was bool) { color.NoColor = was }(color.NoColor)
-	color.NoColor = true
-
-	tests := []struct {
-		name     string
-		content  string
-		err      error
-		expected string
-	}{
-		{
-			name:     "single line content",
-			content:  "Hello World",
-			err:      nil,
-			expected: "       Hello World\n",
-		},
-		{
-			name:     "multi-line content with explicit newlines",
-			content:  "Line 1\nLine 2\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       Line 2\n       Line 3\n",
-		},
-		{
-			name:     "complex multiline with indentation",
-			content:  "Header\n  Indented\n    More indented\nBack to left",
-			err:      nil,
-			expected: "       Header\n         Indented\n           More indented\n       Back to left\n",
-		},
-		{
-			name:     "empty line handling",
-			content:  "Line 1\n\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       \n       Line 3\n",
-		},
-		{
-			name:     "error case",
-			content:  "",
-			err:      fmt.Errorf("template error"),
-			expected: "       error: template error\n",
-		},
-		{
-			name:     "empty content",
-			content:  "",
-			err:      nil,
-			expected: "       \n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := echoDetail(tt.content, tt.err)
-			if result != tt.expected {
-				t.Errorf("echoDetail() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestExchangeDetail(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
@@ -182,7 +123,7 @@ func TestTestErrorDetail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := testErrorDetail(tt.err)
+			result := testErrorDetail(tt.err.Error())
 			if result != tt.expected {
 				t.Errorf("testErrorDetail() = %q, want %q", result, tt.expected)
 			}

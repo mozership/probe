@@ -265,8 +265,8 @@ func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounte
 
 // evalRepeatTest evaluates test, a test of a repeated job, against env.
 func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestResult {
-	passed, failure, detail := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
-	return &RepeatTestResult{Test: test, Passed: passed, Failure: failure, Output: detail}
+	passed, failure := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
+	return &RepeatTestResult{Test: test, Passed: passed, Failure: failure}
 }
 
 // recordRepeatTest records res, the outcome of a test of a repeated job, by

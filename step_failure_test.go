@@ -502,8 +502,8 @@ func TestStep_ExpressionHints(t *testing.T) {
 		t.Error("the job is not marked failed")
 	}
 	for _, want := range []string{"test error: ", "| res.code.toString() == \"200\"", "hint: expressions have no toString() method: write string(res.code)"} {
-		if !strings.Contains(result.TestOutput, want) {
-			t.Errorf("test output %q does not contain %q", result.TestOutput, want)
+		if !strings.Contains(failureTextOf(result.Failure, result.Test), want) {
+			t.Errorf("test output %q does not contain %q", failureTextOf(result.Failure, result.Test), want)
 		}
 	}
 

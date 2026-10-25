@@ -1,6 +1,8 @@
 package probe
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/mozership/probe/expr"
@@ -61,4 +63,48 @@ func TestResponseTimeExpressions(t *testing.T) {
 			t.Errorf("Expected template result to be '%s', got '%s'", expected, result)
 		}
 	})
+}
+
+// What a verbose run shows of the context of a test is the context by the
+// names the test reads it by, but for the request and the response, which
+// the step has just shown.
+func TestStepContext_testEnv(t *testing.T) {
+	ctx := StepContext{
+		Vars:        map[string]any{"v": 1},
+		Res:         map[string]any{"code": 200},
+		Req:         map[string]any{"url": "/"},
+		RT:          ResponseTime{Duration: "250ms", Sec: 0.25},
+		Report:      "r",
+		Outputs:     map[string]any{"o": 2},
+		Status:      3,
+		RepeatIndex: 4,
+	}
+	env := ctx.testEnv()
+
+	var names []string
+	for f := range reflect.TypeFor[StepContext]().Fields() {
+		if name := f.Tag.Get("expr"); name != "req" && name != "res" {
+			names = append(names, name)
+		}
+	}
+	var keys []string
+	for k := range env {
+		keys = append(keys, k)
+	}
+	slices.Sort(names)
+	slices.Sort(keys)
+	if !slices.Equal(keys, names) {
+		t.Errorf("keys = %v, want %v", keys, names)
+	}
+	want := map[string]any{
+		"vars":         ctx.Vars,
+		"outputs":      ctx.Outputs,
+		"status":       3,
+		"rt":           map[string]any{"duration": "250ms", "sec": 0.25},
+		"report":       "r",
+		"repeat_index": 4,
+	}
+	if !reflect.DeepEqual(env, want) {
+		t.Errorf("testEnv() = %v, want %v", env, want)
+	}
 }
