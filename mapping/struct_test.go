@@ -329,7 +329,7 @@ func TestMapToStructByTags_Int(t *testing.T) {
 		{in: 3, want: 3},
 		{in: int64(-3), want: -3},
 		{in: float64(3), want: 3},
-		{in: -0.0, want: 0},
+		{in: math.Copysign(0, -1), want: 0},
 		{in: "42", want: 42},
 		{in: float64(-1 << 63), want: math.MinInt},
 		// A number that is not whole was cut down to one, so 2.5 was 2 and
