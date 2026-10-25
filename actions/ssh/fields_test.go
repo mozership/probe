@@ -8,6 +8,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, handle := range []handler{echo, func(session) (uint32, bool) { return 3, true }} {
 		srv := newTestServer(t, handle)
@@ -27,7 +28,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			t.Fatal(err)
 		}
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

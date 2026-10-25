@@ -169,6 +169,57 @@ func AllResFields() map[string][]string {
 	return collect(resFields)
 }
 
+// reqTypes and resTypes are the kinds of the fields of the req and the res
+// each built-in action returns, as its package declares them.
+var (
+	reqTypes = map[string]func() map[string]string{
+		"db":       db.ReqTypes,
+		"dns":      dns.ReqTypes,
+		"embedded": embedded.ReqTypes,
+		"grpc":     grpc.ReqTypes,
+		"hello":    hello.ReqTypes,
+		"http":     http.ReqTypes,
+		"imap":     imap.ReqTypes,
+		"shell":    shell.ReqTypes,
+		"smtp":     smtp.ReqTypes,
+		"ssh":      ssh.ReqTypes,
+	}
+	resTypes = map[string]func() map[string]string{
+		"db":       db.ResTypes,
+		"dns":      dns.ResTypes,
+		"embedded": embedded.ResTypes,
+		"grpc":     grpc.ResTypes,
+		"hello":    hello.ResTypes,
+		"http":     http.ResTypes,
+		"imap":     imap.ResTypes,
+		"shell":    shell.ResTypes,
+		"smtp":     smtp.ResTypes,
+		"ssh":      ssh.ResTypes,
+	}
+)
+
+// AllReqTypes returns the kinds of the fields of the req each built-in
+// action returns, by its name, as number, string, bool, map or list, for
+// probe check to report an expression that does with a field what its kind
+// does not allow. A field left out may hold anything.
+func AllReqTypes() map[string]map[string]string {
+	return collectTypes(reqTypes)
+}
+
+// AllResTypes returns the kinds of the fields of the res each built-in
+// action returns, by its name; see AllReqTypes.
+func AllResTypes() map[string]map[string]string {
+	return collectTypes(resTypes)
+}
+
+func collectTypes(m map[string]func() map[string]string) map[string]map[string]string {
+	out := make(map[string]map[string]string, len(m))
+	for name, f := range m {
+		out[name] = f()
+	}
+	return out
+}
+
 // WithFields returns the names of the built-in actions whose req and res
 // hold the keys of the step's with, besides the fields they declare: hello,
 // which returns what it is given.

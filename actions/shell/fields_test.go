@@ -9,6 +9,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	a := &Action{log: hclog.NewNullLogger()}
 	t.Cleanup(StopStarted)
 	for _, with := range []map[string]any{
@@ -23,7 +24,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			t.Fatalf("%v: %v", with, err)
 		}
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

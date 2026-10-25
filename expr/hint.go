@@ -55,7 +55,15 @@ func withHints(input string, err error) error {
 func Hints(input string, err error) []string {
 	tree, perr := parser.Parse(input)
 	if perr != nil {
-		return operatorHints(input)
+		hints := operatorHints(input)
+		// An expression written as a template, as {{ res.code == 200 }}, is
+		// read as a map in a map.
+		if inner := extractTemplateExpression(input); inner != "" {
+			if _, err := parser.Parse(inner); err == nil {
+				hints = append([]string{fmt.Sprintf("an expression is written without {{ }}: write %s", inner)}, hints...)
+			}
+		}
+		return hints
 	}
 	f := &mistakeFinder{callees: map[ast.Node]bool{}}
 	ast.Walk(&tree.Node, f)

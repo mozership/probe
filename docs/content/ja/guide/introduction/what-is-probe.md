@@ -92,28 +92,25 @@ Total workflow time: 1.07s ✓ All jobs succeeded
 実際の使用例として、APIの稼働状況を監視するワークフローです：
 
 ```yaml
-name: GitHub API
+name: API Health Check
 
 jobs:
-- name: Check APIs
+- name: Monitor API Health
   defaults:
     http:
-      url: https://api.github.com
-      headers:
-        content_type: application/json
-
+      url: https://httpbin.org
   steps:
-  - name: Check Repo API
+  - name: Check Homepage
     uses: http
     with:
-      get: /repos/mozership/probe
-    test: res.code == "200 OK" && res.body.language == "Go"
+      get: /status/200
+    test: res.code == 200
 
-  - name: Check User API
+  - name: Check API Response
     uses: http
     with:
-      get: /users/linyows
-    test: res.code == "200 OK" && res.body.id == 72049
+      get: /json
+    test: res.code == 200 && res.body != nil
 ```
 
 このように、Probeを使えば**簡単**で**迅速**、そして**楽しく**ワークフローを作成・実行できます。

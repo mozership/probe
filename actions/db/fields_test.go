@@ -9,6 +9,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	dsn := "file:" + filepath.Join(t.TempDir(), "test.db")
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, query := range []string{
@@ -23,7 +24,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			t.Fatalf("%s: %v", query, err)
 		}
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

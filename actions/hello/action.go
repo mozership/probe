@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 )
 
 type Action struct {
@@ -55,4 +56,18 @@ func ReqFields() []string {
 // the keys of with, which it returns in res too: status and dump.
 func ResFields() []string {
 	return []string{"dump", "status"}
+}
+
+// ReqTypes returns the kinds of the fields of the req the hello action
+// returns: none, as the keys of with, which it returns as req, may hold
+// anything. ResTypes returns those of its res: status and dump, which it
+// sets over the keys of with of the same names.
+func ReqTypes() map[string]string {
+	return map[string]string{}
+}
+
+// ResTypes returns the kinds of the fields of the res the hello action
+// returns; see ReqTypes.
+func ResTypes() map[string]string {
+	return map[string]string{"dump": kind.Bool, "status": kind.Number}
 }

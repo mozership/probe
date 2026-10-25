@@ -2,6 +2,7 @@ package probe
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"time"
 
@@ -68,6 +69,20 @@ func addedResFields(res []string) []string {
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// readResTypes returns types, the kinds of the fields of res an action
+// declares, as the fields are read once readActionResult has read them: a
+// body, which is read as the value it holds when it holds JSON, is of any
+// kind, and rawbody, which keeps such a body as text, is a string, as the
+// body is. json, which stdout of JSON is read as, is of any kind.
+func readResTypes(types map[string]string) map[string]string {
+	out := maps.Clone(types)
+	if k, ok := out["body"]; ok {
+		delete(out, "body")
+		out["rawbody"] = k
+	}
+	return out
 }
 
 // parseExitStatus reads the status an action returned: a number, as it is

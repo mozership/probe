@@ -468,12 +468,13 @@ workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_ur
 - ステップの`name`、`with`、`vars`、`iteration`、`wait`、`skipif`で読む`res`や`req`。これらはステップの実行前に評価されるので、空のまま読みます
 - どのジョブも指していない`needs`、循環する`needs`
 - 実行時に拒否されるステップID
-- 解析できない式（`test`、`skipif`、`outputs`、`repeat.test`、`repeat.baseline_test`）とテンプレート（`name`、`with`、`vars`、`echo`）
+- 解析できない式（`test`、`skipif`、`outputs`、`repeat.test`、`repeat.baseline_test`）とテンプレート（`name`、`with`、`vars`、`echo`）。`test: "{{ res.code == 200 }}"`のようにテンプレートとして書いた式には、`{{ }}`なしで書くよう伝えます
 - そのジョブにないステップや、`steps`の下にないフィールドを読む`repeat.test`（`success_rate`のつもりの`steps.search.rate`など）。`steps`や`baseline.steps`の下で同じものを読むか、`baseline`の下の`steps`以外を読む`repeat.baseline_test`
 - `baseline`を読む`repeat.test`。`baseline`を読めるのは`repeat.baseline_test`だけ
 - `baseline.steps`の下のステップやフィールドを、`baseline.steps[vars.id]`のように実行時に決まるキーで読む`repeat.baseline_test`
 - どのステップも公開していない出力、そのステップが公開していない出力、そのステップが公開する前に読む出力（同じジョブの前のステップから読む場合など）の参照
 - 式やテンプレートが読む名前のうち、読める場所にないもの。読んだところで失敗します。ステップの`name`、`with`、`vars`、`iteration`、`test`、`echo`ではステップが失敗し、`skipif`、`wait`、出力ではエラーを表示してそれを無視するので、ステップは書いていないかのように実行されます。ステップが読めるのは`vars`、`outputs`、`res`、`req`、`rt`、`status`、`report`、`repeat_index`なので、ステップの`test`の`steps.login.code`、`nil`のつもりの`null`、ステップの`with`の`{{API_TOKEN}}`を報告します。環境変数を読めるのはワークフローの`vars`だけです。繰り返すジョブのテストが読めるのは`vars`、`steps`、`baseline`です。ジョブの`name`とワークフローの`vars`のテンプレートは、この確認の対象外です
+- 読む値の種類から、必ずうまくいかないとわかる式やテンプレート。受け付けない値を渡した演算子（`"id-" + 1`など。失敗します。文字列としてつなぐなら`"id-" + string(1)`と書きます）、決して等しくならない値の比較（`res.code == "200 OK"`など。httpアクションのステータスコードは数値で、ステータス行は`res.status`です）、真偽値以外になる`test`、`skipif`、`repeat.test`、`repeat.baseline_test`（`test: res.code`など。ステップは失敗し、`skipif`ではステップやジョブはスキップされません）です。種類がわかるのは、式に書いた値（`1`や`"id-"`など）、式の関数が返す値（`len()`など）、`res`と`req`以外にステップが読む値（`status`や`rt.sec`など）、各組み込みアクションが宣言する`res`と`req`のフィールド（httpアクションの`res.code`や`res.status`など）です。[`--var`](#--var)が文字列で与える`vars`、`outputs`、`res.body`のようなフィールドの中、外部アクションのフィールドには何でも入りうるので、それを読む式は確かめません。真偽値以外を渡すと失敗せずにその値になる`and`と`or`も確かめません。数値は整数か小数かを区別せずに確かめるので、`rt.sec % 1`のように小数のときだけ失敗するものは報告しません
 
 **警告**として報告するもの:
 
