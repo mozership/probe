@@ -18,7 +18,6 @@ import (
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
 )
 
@@ -481,7 +480,7 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 			Printer:      w.printer,
 			Result:       rs,
 			JobScheduler: scheduler,
-			background:   procgroup.NewTracker(),
+			background:   newBackground(),
 			cleanups:     newCleanups(w.runID, w.printer, c.Trace),
 			baseDir:      w.basePath,
 			runID:        w.runID,
@@ -595,7 +594,7 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 				continue
 			}
 			// A path the vars of the workflow give is known by now.
-			if len(expr.TemplateExprs(path)) > 0 {
+			if expr.HasTemplate(path) {
 				expanded, err := ev.EvalTemplate(path, env)
 				if err != nil {
 					continue

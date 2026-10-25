@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// StopGrace is how long a background process is given to exit on SIGTERM
-// before it is killed.
-const StopGrace = 3 * time.Second
+// TermGrace is how long a background process group is given to exit on
+// SIGTERM before it is killed.
+const TermGrace = 3 * time.Second
 
 // proc is a process a step left running, along with the file its output goes
 // to.
@@ -36,6 +36,8 @@ type Tracker struct {
 	// pending counts actions still running. One can start a process
 	// even after its step timed out, so stop gives them a moment to report.
 	pending int
+	// pendingWait bounds how long Stop waits for those actions to report.
+	pendingWait time.Duration
 	// stopped is set once Stop has run; a process reported after that is
 	// stopped as soon as it is.
 	stopped bool
@@ -46,33 +48,34 @@ type Tracker struct {
 	afterStop []func()
 }
 
-// NewTracker returns a Tracker with nothing recorded.
-func NewTracker() *Tracker {
-	return &Tracker{}
+// NewTracker returns a Tracker with nothing recorded, whose Stop waits up
+// to pendingWait for the actions that Begin was called for to report.
+func NewTracker(pendingWait time.Duration) *Tracker {
+	return &Tracker{pendingWait: pendingWait}
 }
 
 // Begin is called before an action that can start a background process runs,
 // and the function it returns once the action has returned and its process,
 // if any, has been tracked. Stop waits a moment for such actions to report.
-func (b *Tracker) Begin() func() {
-	if b == nil {
+func (t *Tracker) Begin() func() {
+	if t == nil {
 		return func() {}
 	}
-	b.mu.Lock()
-	b.pending++
-	b.mu.Unlock()
+	t.mu.Lock()
+	t.pending++
+	t.mu.Unlock()
 	return func() {
-		b.mu.Lock()
-		b.pending--
-		b.mu.Unlock()
+		t.mu.Lock()
+		t.pending--
+		t.mu.Unlock()
 	}
 }
 
 // Track records a process group a step started in the background, led by
 // pid, and the file its output goes to, which is removed along with it. An
 // empty log has no file to remove.
-func (b *Tracker) Track(pid int, log string) {
-	if b == nil || pid <= 0 {
+func (t *Tracker) Track(pid int, log string) {
+	if t == nil || pid <= 0 {
 		return
 	}
 	p := proc{pid: pid, log: log}
@@ -80,26 +83,26 @@ func (b *Tracker) Track(pid int, log string) {
 		p.started = started
 	}
 
-	b.mu.Lock()
-	if b.stopped {
-		b.mu.Unlock()
+	t.mu.Lock()
+	if t.stopped {
+		t.mu.Unlock()
 		terminate([]proc{p})
 		return
 	}
-	b.procs = append(b.procs, p)
-	b.mu.Unlock()
+	t.procs = append(t.procs, p)
+	t.mu.Unlock()
 }
 
 // AfterStop has Stop call f once the processes are gone, each time it is
 // called, for what else is to be undone when the workflow is over or probe
 // is interrupted.
-func (b *Tracker) AfterStop(f func()) {
-	if b == nil {
+func (t *Tracker) AfterStop(f func()) {
+	if t == nil {
 		return
 	}
-	b.mu.Lock()
-	b.afterStop = append(b.afterStop, f)
-	b.mu.Unlock()
+	t.mu.Lock()
+	t.afterStop = append(t.afterStop, f)
+	t.mu.Unlock()
 }
 
 // StopOnSignal stops the recorded processes when probe is interrupted,
@@ -108,8 +111,8 @@ func (b *Tracker) AfterStop(f func()) {
 // signal never reaches them, and nothing else would stop them. The first
 // signal restores the default handling, so a second one ends probe at once.
 // The returned function ends the watch.
-func (b *Tracker) StopOnSignal() func() {
-	if b == nil {
+func (t *Tracker) StopOnSignal() func() {
+	if t == nil {
 		return func() {}
 	}
 	ch := make(chan os.Signal, 1)
@@ -120,7 +123,7 @@ func (b *Tracker) StopOnSignal() func() {
 		select {
 		case sig := <-ch:
 			signal.Stop(ch)
-			b.Stop()
+			t.Stop()
 			if s, ok := sig.(syscall.Signal); ok {
 				_ = syscall.Kill(os.Getpid(), s)
 			}
@@ -142,24 +145,24 @@ func (b *Tracker) StopOnSignal() func() {
 
 // Stop terminates every recorded process and removes its log file, and then
 // calls what AfterStop was given.
-func (b *Tracker) Stop() {
-	if b == nil {
+func (t *Tracker) Stop() {
+	if t == nil {
 		return
 	}
-	b.stopping.Lock()
-	defer b.stopping.Unlock()
+	t.stopping.Lock()
+	defer t.stopping.Unlock()
 
-	deadline := time.Now().Add(StopGrace)
-	for b.pendingCount() > 0 && time.Now().Before(deadline) {
+	deadline := time.Now().Add(t.pendingWait)
+	for t.pendingCount() > 0 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	b.mu.Lock()
-	procs := b.procs
-	b.procs = nil
-	b.stopped = true
-	after := b.afterStop
-	b.mu.Unlock()
+	t.mu.Lock()
+	procs := t.procs
+	t.procs = nil
+	t.stopped = true
+	after := t.afterStop
+	t.mu.Unlock()
 
 	terminate(procs)
 	for _, f := range after {
@@ -167,10 +170,10 @@ func (b *Tracker) Stop() {
 	}
 }
 
-func (b *Tracker) pendingCount() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.pending
+func (t *Tracker) pendingCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pending
 }
 
 // terminate stops the given processes and removes their logs. Each process
@@ -186,7 +189,7 @@ func terminate(procs []proc) {
 		}
 	}
 
-	deadline := time.Now().Add(StopGrace)
+	deadline := time.Now().Add(TermGrace)
 	for _, p := range owned {
 		for groupAlive(p.pid) && time.Now().Before(deadline) {
 			time.Sleep(50 * time.Millisecond)

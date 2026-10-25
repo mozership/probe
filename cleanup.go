@@ -9,7 +9,6 @@ import (
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/procgroup"
 )
 
 // cleanupTimeout is how long an action is given to clean up after a run.
@@ -145,7 +144,9 @@ func (c *cleanups) run() {
 	if c == nil {
 		return
 	}
-	deadline := time.Now().Add(procgroup.StopGrace)
+	// An action whose step timed out is still being stopped, and returns
+	// within ExitWait.
+	deadline := time.Now().Add(actionrpc.ExitWait)
 	for c.runningCount() > 0 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}

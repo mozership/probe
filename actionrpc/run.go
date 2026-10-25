@@ -19,9 +19,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// StopGrace is how long an action whose call is given up on is given to exit
+// TermGrace is how long an action whose call is given up on is given to exit
 // on SIGTERM before it is killed.
-const StopGrace = 2 * time.Second
+const TermGrace = 2 * time.Second
+
+// ExitWait is how long, at most, a step call that is given up on takes to
+// return once its context is done: TermGrace for the action to exit on
+// SIGTERM or be killed, and a second more for awaitExit to see it gone.
+// That relies on command setting WaitDelay to TermGrace, so the process is
+// already dead when Kill runs and its own graceful wait does not apply.
+const ExitWait = TermGrace + time.Second
 
 // RunBuiltin starts the built-in action named name from the running probe
 // binary, calls it once for a step, and stops it. The action is told about
@@ -32,7 +39,7 @@ const StopGrace = 2 * time.Second
 // what of them is shown.
 //
 // Once ctx is done, the action is sent SIGTERM, and killed if it has not
-// exited StopGrace later, and ctx's error is returned.
+// exited TermGrace later, and ctx's error is returned.
 func RunBuiltin(ctx context.Context, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
 	return runStep(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
 }
@@ -48,7 +55,7 @@ func RunExecutable(ctx context.Context, path string, sum []byte, call Call, log 
 // CleanupExecutable starts the action served by the executable at path, as
 // RunExecutable does, has it clean up after the run that call names, and
 // stops it. Once ctx is done, the action is killed where it is, without the
-// StopGrace the action of a step is given, and ctx's error is returned.
+// TermGrace the action of a step is given, and ctx's error is returned.
 func CleanupExecutable(ctx context.Context, path string, sum []byte, call CleanupCall, log hclog.Logger) error {
 	// The process ends with ctx as well, so that one that does not come up
 	// is not waited for any longer than one that does not answer. The grace
@@ -65,11 +72,11 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 // command returns the command that serves an action for a step, which is
 // stopped once ctx is done. It is sent SIGTERM rather than killed, so that
 // it can stop what it started, such as the background commands of the shell
-// action, and is killed if it has not exited StopGrace later.
+// action, and is killed if it has not exited TermGrace later.
 func command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = StopGrace
+	cmd.WaitDelay = TermGrace
 	return cmd
 }
 
@@ -358,11 +365,11 @@ func (o *stderrOutput) reason() string {
 
 // awaitExit waits for the process that serves an action to exit once ctx is
 // done: one that serves a step is sent SIGTERM by command, and exits by
-// StopGrace or is killed then, and one that cleans up is killed at once by
-// exec.CommandContext. It gives up a little after StopGrace, for Kill to see
-// to the process.
+// TermGrace or is killed then, and one that cleans up is killed at once by
+// exec.CommandContext. It gives up at ExitWait, a little later, for Kill to
+// see to the process.
 func awaitExit(cl *plugin.Client) {
-	deadline := time.Now().Add(StopGrace + time.Second)
+	deadline := time.Now().Add(ExitWait)
 	for !cl.Exited() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}

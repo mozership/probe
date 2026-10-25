@@ -8,7 +8,6 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 )
 
 type Job struct {
@@ -498,7 +497,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 			},
 			Printer:    printer,
 			Result:     result,
-			background: procgroup.NewTracker(),
+			background: newBackground(),
 			cleanups:   newCleanups(runID, printer, false),
 			baseDir:    baseDir,
 			runID:      runID,

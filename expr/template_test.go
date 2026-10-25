@@ -105,6 +105,17 @@ func TestEvalTemplateWithTypePreservationMapLiteral(t *testing.T) {
 	}
 }
 
+func TestTemplateExprs(t *testing.T) {
+	got := TemplateExprs(`Bearer {{outputs.auth.token}} for {{ vars.name }}`)
+	want := []string{"outputs.auth.token", " vars.name "}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("TemplateExprs = %q, want %q", got, want)
+	}
+	if got := TemplateExprs("no template"); got != nil {
+		t.Errorf("TemplateExprs = %q, want none", got)
+	}
+}
+
 func TestReplaceTemplates(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"no template", "no template"},
@@ -117,6 +128,32 @@ func TestReplaceTemplates(t *testing.T) {
 	for _, tt := range tests {
 		if got := ReplaceTemplates(tt.in, "_"); got != tt.want {
 			t.Errorf("ReplaceTemplates(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestHasTemplate(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"no template", false},
+		{"", false},
+		{"{{a}}", true},
+		{"a {{ b }} c", true},
+		{"{{{a}}}", true},
+		{`{{ "}}" }}`, true},
+		{"'{{ 1 }}'", true},
+		{"left {{ open", false},
+		{"a }}", false},
+		{"}} {{", false},
+		{`"}}" + "{{"`, false},
+		{`{{ "x }}`, false},
+		{"{{ open, then {{ closed }}", true},
+	}
+	for _, tt := range tests {
+		if got := HasTemplate(tt.in); got != tt.want {
+			t.Errorf("HasTemplate(%q) = %v, want %v", tt.in, got, tt.want)
 		}
 	}
 }

@@ -925,13 +925,10 @@ func (st *stepRun) getWaitTimeForDisplay() string {
 		}
 	}
 
+	// A wait that is not a time, or whose templates could not be evaluated
+	// yet, shows nothing rather than an error in the result.
 	duration, err := parseWaitDuration(waitExpr)
 	if err != nil {
-		// If template evaluation failed and we still have template syntax, return empty
-		// This prevents display errors during result creation
-		if strings.Contains(waitExpr, "{{") {
-			return ""
-		}
 		return ""
 	}
 

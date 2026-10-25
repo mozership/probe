@@ -2,7 +2,6 @@ package expr
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/expr-lang/expr/ast"
 	"github.com/expr-lang/expr/parser"
@@ -15,30 +14,6 @@ import (
 func Parse(input string) error {
 	_, err := parser.Parse(input)
 	return withHints(input, err)
-}
-
-// TemplateExprs returns the expressions of the {{ }} templates in s, in the
-// order they come.
-func TemplateExprs(s string) []string {
-	var out []string
-	for _, span := range findTemplates(s) {
-		out = append(out, span.expr)
-	}
-	return out
-}
-
-// ReplaceTemplates returns s with repl in place of each {{ }} template in
-// it, for what is written around the templates to be read without them.
-func ReplaceTemplates(s, repl string) string {
-	var b strings.Builder
-	last := 0
-	for _, span := range findTemplates(s) {
-		b.WriteString(s[last:span.start])
-		b.WriteString(repl)
-		last = span.end
-	}
-	b.WriteString(s[last:])
-	return b.String()
 }
 
 // Reads returns the constant keys that input, an expression, reads from the
