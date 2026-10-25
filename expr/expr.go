@@ -72,7 +72,7 @@ type Expr struct {
 // enforcing it would have broken the documented way of reading credentials
 // into `vars`.
 //
-// What still bounds an expression is the length check in validateExpression,
+// What still bounds an expression is the length check in checkLength,
 // the evaluation timeout in executeWithTimeout, and the argument limits on the
 // functions registered below.
 func (e *Expr) Options(env any) []ex.Option {
@@ -390,19 +390,19 @@ func checkRegular(path string, info os.FileInfo) error {
 	return nil
 }
 
-// validateExpression bounds an expression before it is compiled.
+// checkLength returns an error when input, an expression or a template, is
+// longer than an expression may be, so that it is bounded before it is
+// compiled.
 //
 // This used to also reject any expression whose text contained "env.secret",
 // "env.path" and similar. That guarded a namespace expressions never had -
 // the evaluation context exposes vars, res, req, rt, status, outputs and
 // repeat_index, never env - while rejecting ordinary strings that happen to
 // contain one of the patterns, such as the URL "https://env.pathfinder.example.com".
-func (e *Expr) validateExpression(expression string) error {
-	// Security: Check expression length
-	if len(expression) > maxExpressionLength {
+func checkLength(input string) error {
+	if len(input) > maxExpressionLength {
 		return fmt.Errorf("SECURITY: expression exceeds maximum length (%d chars)", maxExpressionLength)
 	}
-
 	return nil
 }
 
@@ -412,7 +412,7 @@ func (e *Expr) validateExpression(expression string) error {
 // literals of "}}" + "{{", leave input an expression.
 func (e *Expr) EvalOrEvalTemplate(input string, env any) (string, error) {
 	// Security: Validate input expression
-	if err := e.validateExpression(input); err != nil {
+	if err := checkLength(input); err != nil {
 		return "", fmt.Errorf("expression validation failed: %w", err)
 	}
 
@@ -426,49 +426,45 @@ func (e *Expr) EvalOrEvalTemplate(input string, env any) (string, error) {
 	return fmt.Sprintf("%v", output), nil
 }
 
+// Eval evaluates input, an expression, against env and returns its value.
+// When input cannot be evaluated, the value is nil.
 func (e *Expr) Eval(input string, env any) (any, error) {
 	// Security: Validate expression before compilation
-	if err := e.validateExpression(input); err != nil {
+	if err := checkLength(input); err != nil {
 		return nil, fmt.Errorf("expression validation failed: %w", err)
 	}
 
 	program, err := ex.Compile(input, e.Options(env)...)
 	if err != nil {
-		return false, withHints(input, err)
+		return nil, withHints(input, err)
 	}
 
 	// Security: Execute with timeout to prevent infinite loops
-	output, err := e.executeWithTimeout(program, env)
+	output, err := executeWithTimeout(program, env)
 	return output, withHints(input, err)
 }
 
-// Security: Execute expression with timeout protection
-func (e *Expr) executeWithTimeout(program *vm.Program, env any) (any, error) {
+// executeWithTimeout runs program against env, and returns an error instead
+// of its value when it panics or runs for longer than evaluationTimeout.
+func executeWithTimeout(program *vm.Program, env any) (any, error) {
 	type result struct {
 		output any
 		err    error
 	}
 
+	// The channel holds the one result the goroutine sends, so that it does
+	// not block on sending it after the evaluation has timed out.
 	resultCh := make(chan result, 1)
-	done := make(chan bool, 1)
 
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				select {
-				case resultCh <- result{nil, fmt.Errorf("expression execution panicked: %v", r)}:
-				default:
-				}
-				done <- true
+				resultCh <- result{nil, fmt.Errorf("expression execution panicked: %v", r)}
 			}
 		}()
 
 		output, err := ex.Run(program, env)
-		select {
-		case resultCh <- result{output, err}:
-		default:
-		}
-		done <- true
+		resultCh <- result{output, err}
 	}()
 
 	select {
@@ -501,7 +497,7 @@ func extractTemplateExpression(input string) string {
 // were right.
 func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 	// Security: Validate template input
-	if err := e.validateExpression(input); err != nil {
+	if err := checkLength(input); err != nil {
 		return "", fmt.Errorf("template validation failed: %w", err)
 	}
 
@@ -529,7 +525,7 @@ func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 		expression := strings.TrimSpace(span.expr)
 
 		// Security: Validate individual expression
-		if err := e.validateExpression(expression); err != nil {
+		if err := checkLength(expression); err != nil {
 			return "", fmt.Errorf("template expression validation failed: %w", err)
 		}
 
@@ -540,7 +536,7 @@ func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 		}
 
 		// Security: Execute with timeout protection
-		output, err := e.executeWithTimeout(program, env)
+		output, err := executeWithTimeout(program, env)
 		if err != nil {
 			return "", &TemplateError{Template: input[span.start:span.end], Err: withHints(expression, err)}
 		}
@@ -597,7 +593,7 @@ func (e *FieldError) Unwrap() error {
 
 func (e *Expr) EvalTemplateWithTypePreservation(input string, env any) (any, error) {
 	// Security: Validate template input
-	if err := e.validateExpression(input); err != nil {
+	if err := checkLength(input); err != nil {
 		return "", fmt.Errorf("template validation failed: %w", err)
 	}
 

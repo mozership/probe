@@ -727,15 +727,14 @@ func TestValidateExpressionAllowsEnvLikeText(t *testing.T) {
 	}
 }
 
-// TestValidateExpressionRejectsOverlongInput keeps the one limit that
-// validateExpression still enforces.
-func TestValidateExpressionRejectsOverlongInput(t *testing.T) {
-	expr := &Expr{}
-
-	if err := expr.validateExpression(strings.Repeat("a", maxExpressionLength+1)); err == nil {
+func TestCheckLength(t *testing.T) {
+	if err := checkLength(strings.Repeat("a", maxExpressionLength)); err != nil {
+		t.Errorf("unexpected error for an expression of the length limit: %s", err)
+	}
+	if err := checkLength(strings.Repeat("a", maxExpressionLength+1)); err == nil {
 		t.Error("expected an error for an expression over the length limit")
 	}
-	if err := expr.validateExpression(strings.Repeat("a", 10)); err != nil {
+	if err := checkLength(strings.Repeat("a", 10)); err != nil {
 		t.Errorf("unexpected error for a short expression: %s", err)
 	}
 }
@@ -772,10 +771,25 @@ func TestPredicateBuiltinsAreAvailable(t *testing.T) {
 func TestErrorHandling(t *testing.T) {
 	t.Run("handles compilation errors", func(t *testing.T) {
 		expr := &Expr{}
-		_, err := expr.Eval("invalid syntax $$", map[string]any{})
+		result, err := expr.Eval("invalid syntax $$", map[string]any{})
 
 		if err == nil {
 			t.Errorf("expected compilation error")
+		}
+		if result != nil {
+			t.Errorf("expected no value with the error, got %#v", result)
+		}
+	})
+
+	t.Run("an expression over the length limit has no value", func(t *testing.T) {
+		expr := &Expr{}
+		result, err := expr.Eval(strings.Repeat("1", maxExpressionLength+1), map[string]any{})
+
+		if err == nil {
+			t.Errorf("expected an error for an expression over the length limit")
+		}
+		if result != nil {
+			t.Errorf("expected no value with the error, got %#v", result)
 		}
 	})
 
