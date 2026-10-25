@@ -227,6 +227,14 @@ func WithFields() []string {
 	return []string{"hello"}
 }
 
+// NeedsNoCheck returns the names of the built-in actions whose steps pass
+// without a test: hello, which does nothing that could fail, so that a step
+// of it there for its echo, or to publish what it is given, is not counted
+// as untested.
+func NeedsNoCheck() []string {
+	return []string{"hello"}
+}
+
 func collect(m map[string]func() []string) map[string][]string {
 	out := make(map[string][]string, len(m))
 	for name, f := range m {
@@ -266,7 +274,7 @@ func Lookup(name string) (func(), bool) {
 	// The embedded action runs steps of its own, so it is told which
 	// actions there are.
 	if name == "embedded" {
-		return func() { embedded.ServeWithActions(Names()) }, true
+		return func() { embedded.ServeWithActions(Names(), NeedsNoCheck()) }, true
 	}
 	serve, ok := builtin[name]
 	return serve, ok

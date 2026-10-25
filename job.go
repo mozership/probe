@@ -407,8 +407,19 @@ type standaloneConfig struct {
 	builtin []string
 	// cleanups are those of the run the job is part of.
 	cleanups *actionrpc.Cleanups
+	// needsNoCheck are the actions whose steps pass without a test.
+	needsNoCheck []string
 	// runner runs the actions of the job's steps; nil for the default.
 	runner ActionRunner
+}
+
+// WithNeedsNoCheck tells the job the names of the actions whose steps pass
+// without a test, as Config.NeedsNoCheck tells a workflow. Without it, a
+// step that nothing checks is counted as untested whatever its action.
+func WithNeedsNoCheck(names []string) StandaloneOption {
+	return func(c *standaloneConfig) {
+		c.needsNoCheck = names
+	}
 }
 
 // WithActionRunner runs the actions of the job's steps with r, as
@@ -529,6 +540,7 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 			Config: Config{
 				Verbose:      printer.verbose,
 				Guard:        cfg.guard,
+				NeedsNoCheck: cfg.needsNoCheck,
 				ActionRunner: cfg.runner,
 			},
 			Printer:    printer,

@@ -84,6 +84,10 @@ type CheckOptions struct {
 	// step's with too, besides the fields they are named with, as an action
 	// that returns what it is given does.
 	WithFields []string
+	// NeedsNoCheck are the actions whose steps pass without a test, as
+	// Config.NeedsNoCheck says. A step of one that has no test is not warned
+	// of as unchecked.
+	NeedsNoCheck []string
 	// Required are the keys of with each action cannot run without, by its
 	// name, each as the keys that stand for one another, of which one is
 	// enough: as get stands for method in the http action.

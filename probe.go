@@ -69,6 +69,12 @@ type Config struct {
 	// they need and those that always run after them; all jobs when it is
 	// empty.
 	Jobs []string
+	// NeedsNoCheck are the names of the actions whose steps pass without a
+	// test, as those of an action that does nothing that could fail: such
+	// a step is there for its echo, or to publish what it is given, and is
+	// not counted as untested. A step of any other action that nothing
+	// checks is.
+	NeedsNoCheck []string
 	// ActionRunner runs the action of each step. When it is nil, each runs
 	// in a process of its own, as PluginActionRunner runs it.
 	ActionRunner ActionRunner

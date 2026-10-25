@@ -788,12 +788,24 @@ func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
 	}
 }
 
-// TestWorkflow_HelloPassesWithoutTest passes a hello step without a test,
-// once and repeated, as it does nothing that could fail, while a step of
-// another action without a test is untested.
-func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
+// TestWorkflow_NeedsNoCheckPassesWithoutTest passes a step without a test of
+// an action Config.NeedsNoCheck names, as hello, once and repeated, while a
+// step of another action without a test is untested. Without the action
+// named there, its step is untested too: the engine knows of no action by
+// itself.
+func TestWorkflow_NeedsNoCheckPassesWithoutTest(t *testing.T) {
 	answer := map[string]any{"res": map[string]any{"status": 0}, "rt": "1ms"}
-	for _, count := range []int{0, 2} {
+	for _, tt := range []struct {
+		count        int
+		needsNoCheck []string
+		want         string
+	}{
+		{count: 0, needsNoCheck: []string{"hello"}, want: report.Passed},
+		{count: 2, needsNoCheck: []string{"hello"}, want: report.Passed},
+		{count: 0, want: report.Untested},
+		{count: 2, want: report.Untested},
+	} {
+		count := tt.count
 		runner := &timedRunner{answers: []map[string]any{answer, answer, answer, answer}}
 		job := Job{
 			ID:   "report",
@@ -808,10 +820,17 @@ func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
 		}
 		workflow := &Workflow{Name: "Hello", Jobs: []Job{job}, printer: newBufferPrinter()}
 
-		r := startWithReport(t, workflow, runner)
+		path := filepath.Join(t.TempDir(), "report.json")
+		if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}, ActionRunner: runner, NeedsNoCheck: tt.needsNoCheck}); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		r, err := report.Read(path)
+		if err != nil {
+			t.Fatal(err)
+		}
 		steps := r.Jobs[0].Steps
-		if steps[0].Status != report.Passed {
-			t.Errorf("count %d: hello step = %q, want %q", count, steps[0].Status, report.Passed)
+		if steps[0].Status != tt.want {
+			t.Errorf("count %d, needs no check %v: hello step = %q, want %q", count, tt.needsNoCheck, steps[0].Status, tt.want)
 		}
 		if steps[1].Status != report.Untested {
 			t.Errorf("count %d: http step = %q, want %q", count, steps[1].Status, report.Untested)

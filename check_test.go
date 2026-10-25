@@ -45,8 +45,9 @@ func checkFindings(t *testing.T, findings []Finding, wants []want) {
 }
 
 var checkActions = CheckOptions{
-	Actions:   []string{"embedded", "grpc", "hello", "http", "shell"},
-	Contracts: map[string][]string{"grpc": {"proto"}, "http": {"openapi"}},
+	Actions:      []string{"embedded", "grpc", "hello", "http", "shell"},
+	Contracts:    map[string][]string{"grpc": {"proto"}, "http": {"openapi"}},
+	NeedsNoCheck: []string{"hello"},
 }
 
 func TestCheck(t *testing.T) {

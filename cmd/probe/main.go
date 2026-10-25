@@ -511,6 +511,7 @@ func (c *Cmd) runProbe() int {
 	p := probe.New(c.WorkflowPath, c.Verbose)
 	p.Config.Trace = c.Trace
 	p.Config.Actions = actions.Names()
+	p.Config.NeedsNoCheck = actions.NeedsNoCheck()
 	p.Config.Warn = c.errWriter
 	if c.Timing {
 		p.Config.Timing = true
@@ -735,7 +736,7 @@ func (c *Cmd) runCheck() int {
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), ReqTypes: actions.AllReqTypes(), ResTypes: actions.AllResTypes(), WithFields: actions.WithFields(), Required: actions.AllRequired(), Manifest: actionref.ReadManifest})
+	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), ReqTypes: actions.AllReqTypes(), ResTypes: actions.AllResTypes(), WithFields: actions.WithFields(), NeedsNoCheck: actions.NeedsNoCheck(), Required: actions.AllRequired(), Manifest: actionref.ReadManifest})
 	if err != nil {
 		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
 		return probe.ExitConfigError
