@@ -264,10 +264,6 @@ func TestMockActions_Run(t *testing.T) {
 func TestActionInterface(t *testing.T) {
 	// Test that MockActions implements Action interface
 	var _ Action = &MockActions{}
-
-	// Test that Client implements Action interface
-	var _ Action = &Client{}
-
 }
 
 func TestConvertFloatToInt(t *testing.T) {
@@ -489,7 +485,7 @@ func TestClientRunStep(t *testing.T) {
 	log := hclog.New(&hclog.LoggerOptions{Output: &logBuf, Level: hclog.Trace})
 	c := &Client{client: directClient{&Server{Impl: &statefulAction{}, log: log}}}
 
-	result, state, err := c.RunStep(Call{With: map[string]any{"a": "b"}})
+	result, state, err := c.RunStep(context.Background(), Call{With: map[string]any{"a": "b"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -500,7 +496,7 @@ func TestClientRunStep(t *testing.T) {
 		t.Errorf("state = %v", state)
 	}
 
-	result, state, err = c.RunStep(Call{With: map[string]any{}, State: state})
+	result, state, err = c.RunStep(context.Background(), Call{With: map[string]any{}, State: state})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -517,24 +513,13 @@ func TestClientRunStep(t *testing.T) {
 func TestClientRunStepOfAnActionWithoutState(t *testing.T) {
 	for _, impl := range []Action{&MockActions{}, &statefulAction{keep: true}} {
 		c := &Client{client: directClient{&Server{Impl: impl}}}
-		_, state, err := c.RunStep(Call{With: map[string]any{}, State: map[string]any{"n": 1}})
+		_, state, err := c.RunStep(context.Background(), Call{With: map[string]any{}, State: map[string]any{"n": 1}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if state != nil {
 			t.Errorf("%T should leave no state, got %v", impl, state)
 		}
-	}
-}
-
-func TestClientRunDropsState(t *testing.T) {
-	c := &Client{client: directClient{&Server{Impl: &statefulAction{}}}}
-	result, err := c.Run(map[string]any{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(result, map[string]any{"n": int64(0)}) {
-		t.Errorf("result = %v", result)
 	}
 }
 
@@ -598,7 +583,7 @@ func TestClientRunStepTellsTheStep(t *testing.T) {
 	a := &statefulAction{}
 	c := &Client{client: directClient{&Server{Impl: a}}}
 	step := Step{RunID: "r1", JobID: "login", JobName: "Log in", Index: 2, ID: "auth", Name: "Post", Repeat: 1, Attempt: 3}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}, Step: step}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Step: step}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if a.step != step {
@@ -610,14 +595,14 @@ func TestClientRunStepTellsTheNamesOfActions(t *testing.T) {
 	a := &statefulAction{}
 	c := &Client{client: directClient{&Server{Impl: a}}}
 	names := map[string]string{"redis": "github.com/mozership/probe-redis@0123456789abcdef0123456789abcdef01234567", "greet": "/work/greet"}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}, Actions: names}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Actions: names}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !maps.Equal(a.actions, names) {
 		t.Errorf("the action was told %v, want %v", a.actions, names)
 	}
 
-	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(a.actions) != 0 {
@@ -712,7 +697,7 @@ func TestClientRunStepGathersCleanups(t *testing.T) {
 			action := &cleaningAction{ran: tt.ran, err: tt.err, result: tt.result, state: tt.state}
 			c := &Client{client: directClient{&Server{Impl: action}}}
 
-			_, _, err := c.RunStep(Call{With: map[string]any{}, Cleanups: tt.cleanups})
+			_, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Cleanups: tt.cleanups})
 			if (err != nil) != (tt.err != nil || tt.wantErr != "") {
 				t.Fatalf("RunStep() error = %v, want %v%s", err, tt.err, tt.wantErr)
 			}
@@ -778,7 +763,7 @@ func TestClientRunStepGathersProcesses(t *testing.T) {
 			c := &Client{client: directClient{&Server{Impl: action}}}
 
 			got := &Processes{}
-			_, _, err := c.RunStep(Call{With: map[string]any{}, Processes: got})
+			_, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Processes: got})
 			if (err != nil) != (tt.err != nil || tt.result != nil) {
 				t.Fatalf("RunStep() error = %v", err)
 			}
@@ -790,7 +775,7 @@ func TestClientRunStepGathersProcesses(t *testing.T) {
 
 	// A runner that does not hear of them is not told.
 	c := &Client{client: directClient{&Server{Impl: &backgroundAction{procs: procs}}}}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}}); err != nil {
 		t.Errorf("RunStep() without Processes error = %v", err)
 	}
 }
