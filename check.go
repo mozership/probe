@@ -111,14 +111,14 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// What a run warns of as it loads is told as a finding here, as load
 	// writes no warning.
 	p := New(path, false)
-	files, err := p.yamlFiles()
+	files, err := yamlFiles(p.FilePath)
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no YAML file", path)
 	}
-	data, contents, err := p.readYamlFiles(files)
+	data, contents, err := readYamlFiles(files)
 	if err != nil {
 		return nil, err
 	}

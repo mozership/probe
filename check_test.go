@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -747,6 +748,34 @@ func TestCheck_FilesReadTogether(t *testing.T) {
 			t.Errorf("File = %q, want %q", f.File, jobs)
 		}
 	}
+}
+
+// TestCheck_ReadsEachFileOnce reads each file of the workflow once, so that
+// the text whose lines are told as lines of the files is the text loaded.
+// It replaces readFile, and so does not run in parallel.
+func TestCheck_ReadsEachFileOnce(t *testing.T) {
+	dir := t.TempDir()
+	base := writeWorkflow(t, dir, "base.yml", "name: once\n")
+	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: shell\n    tset: res.code == 0\n")
+
+	reads := map[string]int{}
+	t.Cleanup(func() { readFile = os.ReadFile })
+	readFile = func(name string) ([]byte, error) {
+		reads[name]++
+		return os.ReadFile(name)
+	}
+
+	findings, err := Check(base+","+jobs, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]int{base: 1, jobs: 1}; !maps.Equal(reads, want) {
+		t.Errorf("reads = %v, want %v", reads, want)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 4, "nothing checks this step"},
+		{SeverityError, 5, `unknown key "tset"`},
+	})
 }
 
 // TestCheck_JobsReplaced warns of a file whose jobs replace those of an
