@@ -19,7 +19,9 @@ func WithPort(hostport, port string) string {
 }
 
 // OfURL returns the host and port of u, taken at the port of its scheme when
-// it names none: 443 for https, and 80 for any other.
+// it names none: 443 for https, and 80 for any other. Only http and https
+// are known, so a URL of another scheme that connects over TLS, such as wss
+// or grpcs, is taken at 80, and a caller of one must name its port itself.
 func OfURL(u *url.URL) string {
 	if u.Port() != "" {
 		return u.Host

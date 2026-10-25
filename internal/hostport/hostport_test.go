@@ -19,6 +19,7 @@ func TestWithPort(t *testing.T) {
 		{"[::1]", "53", "[::1]:53"},
 		{"[::1]:5353", "53", "[::1]:5353"},
 		{"2001:db8::1", "853", "[2001:db8::1]:853"},
+		{"", "53", ":53"},
 	}
 	for _, tt := range tests {
 		if got := WithPort(tt.hostport, tt.port); got != tt.want {
@@ -37,6 +38,7 @@ func TestOfURL(t *testing.T) {
 		{"https://example.com:8443/path", "example.com:8443"},
 		{"http://example.com:8080", "example.com:8080"},
 		{"h2c://example.com", "example.com:80"},
+		{"wss://example.com", "example.com:80"},
 		{"https://[::1]/", "[::1]:443"},
 		{"http://[::1]:8080/", "[::1]:8080"},
 		{"https://example.com:/", "example.com:443"},
