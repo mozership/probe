@@ -763,7 +763,7 @@ func (st *stepRun) runTest(printer *Printer) bool {
 		// them, unless the action keeps them out of the report.
 		st.failure = st.newFailure(failure.Kind, failure.Message)
 		st.failure.clause = failure.clause
-		st.failure.summary = failure.summary
+		st.failure.head = failure.head
 	}
 	return false
 }
@@ -805,8 +805,8 @@ func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOpe
 		// and the report files mask it as they tell it, with the secrets
 		// known by then, some of which a later step may have taught the
 		// masker.
-		failure.summary = clauseSummary(maskClause(printer.Masker(), clause))
-		failure.Message += ": " + failure.summary
+		failure.head = failure.Message + ": "
+		failure.Message = failure.head + clauseSummary(maskClause(printer.Masker(), clause))
 		failure.clause = &clause
 	}
 	return false, failure

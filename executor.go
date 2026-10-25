@@ -299,12 +299,10 @@ func repeatStepResult(index int, counter StepRepeatCounter, readByTest bool) Ste
 		Contract:      counter.Contract,
 	}
 	if counter.Failure != nil {
-		f := *counter.Failure
 		// The runs the step was not run in are runs of the job too, as the
 		// count in the report files has them.
-		f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
-			counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount, f.Message)
-		result.Failure = &f
+		result.Failure = counter.Failure.prefixed(fmt.Sprintf("%d of %d iterations failed; the first: ",
+			counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount))
 	}
 	return result
 }

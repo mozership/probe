@@ -247,6 +247,12 @@ func TestBuildReport_MasksTheMessageWithWhatTheMaskerLearnedSince(t *testing.T) 
 	if got := buildStepReport(StepResult{Status: StatusError, Failure: f}, m).Failure.Message; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
+	// A repeated step keeps the count of the runs it failed in before the
+	// message of the first of them.
+	repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: f}, false)
+	if got, want := buildStepReport(repeated, m).Failure.Message, "2 of 3 iterations failed; the first: "+want; got != want {
+		t.Errorf("repeated step: message = %q, want %q", got, want)
+	}
 }
 
 func TestBuildReport_StepCarriesContract(t *testing.T) {

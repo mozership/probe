@@ -1,7 +1,6 @@
 package probe
 
 import (
-	"strings"
 	"sync"
 	"time"
 
@@ -132,23 +131,31 @@ type StepFailure struct {
 	// shows them under the step.
 	clause *expr.Clause
 	got    any
-	// summary is the condition as Message ends with it, masked and cut as
-	// the test was checked, so that the report files can tell it anew with
-	// the secrets known by then; see reportMessage.
-	summary string
+	// head is what Message has before the condition, when there is one, so
+	// that the report files can tell the condition anew with the secrets
+	// known by then; see reportMessage.
+	head string
 }
 
-// reportMessage is the message of f as the report files have it. The
-// condition of a test that is false, which Message ends with, is told anew
+// reportMessage is the message of f as the report files have it. With a
+// condition of a test that is false, it is head and the condition told anew
 // from the condition as it is, masked by m before its values are cut: a
 // secret a later step taught m would otherwise be left in the message as
 // the part of it the cut kept, which no masker finds. Without a condition,
 // or with no masker, it is Message.
 func (f *StepFailure) reportMessage(m *mask.Masker) string {
-	if m == nil || f.clause == nil || f.summary == "" || !strings.HasSuffix(f.Message, f.summary) {
+	if m == nil || f.clause == nil {
 		return f.Message
 	}
-	return strings.TrimSuffix(f.Message, f.summary) + clauseSummary(maskClause(m, *f.clause))
+	return f.head + clauseSummary(maskClause(m, *f.clause))
+}
+
+// prefixed returns a copy of f whose message starts with prefix, in the
+// report files as well.
+func (f StepFailure) prefixed(prefix string) *StepFailure {
+	f.Message = prefix + f.Message
+	f.head = prefix + f.head
+	return &f
 }
 
 // JobResult stores execution results for a job
