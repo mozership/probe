@@ -257,7 +257,11 @@ func (e *Expr) Options(env any) []ex.Option {
 				if len(s) > maxStringLength {
 					return nil, fmt.Errorf("parse_json parameter exceeds maximum length (%d chars)", maxStringLength)
 				}
-				return jsonutil.Parse(s)
+				v, err := jsonutil.Parse(s)
+				if err != nil {
+					return nil, fmt.Errorf("parse_json: %w", err)
+				}
+				return v, nil
 			},
 		),
 		ex.Function(

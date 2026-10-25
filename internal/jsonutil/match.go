@@ -1,7 +1,6 @@
 package jsonutil
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -208,32 +207,4 @@ func (m *matcher) deepMatch(src, target any, diffs *[]string, path string) bool 
 		}
 		return true
 	}
-}
-
-// Parse parses a JSON string into a map[string]any or []any.
-func Parse(s string) (any, error) {
-	s = strings.TrimSpace(s)
-	if len(s) == 0 {
-		return nil, fmt.Errorf("parse_json: empty string")
-	}
-
-	// Try parsing as object
-	if s[0] == '{' {
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(s), &obj); err != nil {
-			return nil, fmt.Errorf("parse_json: %w", err)
-		}
-		return obj, nil
-	}
-
-	// Try parsing as array
-	if s[0] == '[' {
-		var arr []any
-		if err := json.Unmarshal([]byte(s), &arr); err != nil {
-			return nil, fmt.Errorf("parse_json: %w", err)
-		}
-		return arr, nil
-	}
-
-	return nil, fmt.Errorf("parse_json: input is not a JSON object or array")
 }
