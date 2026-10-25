@@ -54,6 +54,8 @@ These functions are registered by Probe itself.
 
 Compares two objects strictly. Every key and value must match on both sides - extra or missing keys make it fail.
 
+A string in `target` written as `/pattern/` is a regular expression that the value in `src` must match. A pattern that does not compile is an error, not a mismatch.
+
 **Syntax:** `match_json(src, target)`
 **Returns:** Boolean
 
@@ -63,7 +65,7 @@ test: 'match_json(res.body, {"status": "ok", "count": 3})'
 
 ### `diff_json`
 
-Compares two objects the same way as `match_json` and describes the differences. Returns the string `No diff` when they match.
+Compares two objects the same way as `match_json` and describes the first difference, checking keys in alphabetical order so the same input always reports the same difference. Returns the string `No diff` when they match.
 
 **Syntax:** `diff_json(src, target)`
 **Returns:** String

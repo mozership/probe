@@ -172,7 +172,7 @@ After the request, `res` holds what came back.
 | `res.headers` | Object | Response headers, keyed by canonical name such as `Content-Type` |
 | `res.body` | Any | Response body. Parsed into an object or array when the response is JSON, otherwise the raw string |
 | `res.rawbody` | String | The unparsed body, present when the body was parsed as JSON |
-| `res.filepath` | String | Path to the saved file when the response is binary |
+| `res.filepath` | String | Path to the saved file when the response is binary, that is when its `Content-Type` is not text: `text/*`, JSON, XML, JavaScript, a form, or a type ending in `+json` or `+xml` such as `application/problem+json` or `image/svg+xml`. A response without a `Content-Type` is text |
 | `res.cookies` | Object | The cookies the server set, by name, on redirects included |
 | `res.violations` | Array | What the OpenAPI document does not allow in the request and the response, empty when it allows all of it. Present only when `openapi` is given |
 | `res.contract` | Object | What the response was matched to in the OpenAPI document: `spec`, `operation` such as `GET /users/{id}`, and `response` such as `200`, `2XX` or `default`, left out when the operation declares none for the status. Present only when the document has an operation for the request |

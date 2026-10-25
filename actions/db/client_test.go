@@ -457,6 +457,68 @@ func TestExecuteCloseFailure(t *testing.T) {
 	}
 }
 
+// rowDriver is a database whose queries return one row, and whose other
+// statements return none, so that a test tells which way a statement ran.
+type rowDriver struct{}
+
+func (rowDriver) Open(string) (driver.Conn, error) { return rowConn{}, nil }
+
+type rowConn struct{}
+
+func (rowConn) Prepare(string) (driver.Stmt, error) { return rowStmt{}, nil }
+func (rowConn) Close() error                        { return nil }
+func (rowConn) Begin() (driver.Tx, error)           { return nil, errors.New("not supported") }
+
+type rowStmt struct{}
+
+func (rowStmt) Close() error                               { return nil }
+func (rowStmt) NumInput() int                              { return -1 }
+func (rowStmt) Exec([]driver.Value) (driver.Result, error) { return driver.RowsAffected(0), nil }
+func (rowStmt) Query([]driver.Value) (driver.Rows, error)  { return &oneRow{}, nil }
+
+type oneRow struct{ done bool }
+
+func (*oneRow) Columns() []string { return []string{"Field"} }
+func (*oneRow) Close() error      { return nil }
+func (r *oneRow) Next(dest []driver.Value) error {
+	if r.done {
+		return io.EOF
+	}
+	r.done = true
+	dest[0] = "id"
+	return nil
+}
+
+func init() {
+	sql.Register("rows", rowDriver{})
+}
+
+func TestExecuteReadsTheRowsOfAStatementThatReads(t *testing.T) {
+	tests := []struct {
+		query string
+		rows  int
+	}{
+		{query: "DESC users", rows: 1},
+		{query: "describe users", rows: 1},
+		{query: "\n  SELECT * FROM users", rows: 1},
+		{query: "INSERT INTO users VALUES (1)", rows: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			req := &Req{Driver: "rows", Query: tt.query, cb: &Callback{}}
+			ret, err := req.Execute("", time.Second)
+			if err != nil {
+				t.Fatalf("Execute() error: %v", err)
+			}
+			res, _ := ret["res"].(map[string]any)
+			rows, _ := res["rows"].([]any)
+			if len(rows) != tt.rows {
+				t.Errorf("rows = %v, want %d", res["rows"], tt.rows)
+			}
+		})
+	}
+}
+
 func TestExecuteQueryTimeout(t *testing.T) {
 	// A query that would run for minutes is cut off at the timeout, and the
 	// step gets a result that says so.
