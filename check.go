@@ -249,3 +249,11 @@ func (c *checker) jobWhere(i int) string {
 func (c *checker) stepWhere(i, j int) string {
 	return stepWhere(c.jobWhere(i), j, c.wf.Jobs[i].Steps[j])
 }
+
+// listNames lists names as a, b and c.
+func listNames(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
