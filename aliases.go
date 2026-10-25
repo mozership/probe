@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // aliasName is a name a workflow can give an external action: one that

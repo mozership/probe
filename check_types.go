@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/kind"
 )
 
@@ -164,6 +164,9 @@ func repeatShapes(job Job) map[string]expr.Shape {
 	steps := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	baseline := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	for j, st := range job.Steps {
+		if st == nil {
+			continue
+		}
 		id := st.idAt(j)
 		steps.Fields[id] = run(repeatRunFields)
 		baseline.Fields[id] = run(baselineRunFields)

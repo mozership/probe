@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/fielderr"
 )
 

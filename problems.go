@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // problem is what keeps a job from running as it is written. It is found as
@@ -64,11 +64,14 @@ func (j *Job) problems(jp, where string) []problem {
 		out = append(out, expressionProblems(jp+".repeat.baseline_test", where, "repeat.baseline_test", j.Repeat.BaselineTest)...)
 	}
 	for k, st := range j.Steps {
-		if st == nil {
-			continue
-		}
 		sp := fmt.Sprintf("%s.steps[%d]", jp, k)
 		sw := stepWhere(where, k, st)
+		// An item under steps that holds nothing is decoded as no step,
+		// which a run has nothing to run of.
+		if st == nil {
+			out = append(out, problem{path: sp, where: sw, err: errors.New("the step is empty")})
+			continue
+		}
 		out = append(out, templateProblems(sp+".name", sw, "name", st.Name)...)
 		out = append(out, templateProblems(sp+".with", sw, "with", st.With)...)
 		out = append(out, templateProblems(sp+".vars", sw, "vars", st.Vars)...)

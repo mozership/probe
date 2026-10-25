@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 func TestStep_executeSingleAction_DefaultTimeout(t *testing.T) {

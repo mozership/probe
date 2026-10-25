@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {

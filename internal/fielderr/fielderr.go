@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // unjoin returns the errors joined into err, or err alone.

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
 
@@ -26,6 +26,9 @@ func (c *checker) checkOutputs() {
 	byKey := map[string][]publisher{}
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			p := publisher{job: i, step: j, id: st.ID, keys: slices.Sorted(maps.Keys(st.Outputs))}
 			if len(p.keys) > 0 && st.ID != "" {
 				byID[st.ID] = append(byID[st.ID], p)

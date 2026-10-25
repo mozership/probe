@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 func TestStep_createSkippedStepResult(t *testing.T) {

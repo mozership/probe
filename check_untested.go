@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // checkTests warns of steps that nothing checks, and of tests that read
@@ -19,6 +19,9 @@ func (c *checker) checkTests() {
 			tested = repeatReads(job.Repeat.Test, job.Repeat.BaselineTest)
 		}
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
 			id := st.idAt(j)
 			switch {

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/duration"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/fielderr"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"

@@ -688,6 +688,58 @@ jobs:
 				{SeverityError, 0, "repeat.baseline_test: baseline.steps is read by a key known only when the test runs"},
 			},
 		},
+		{
+			name:     "an empty step that is the only one",
+			workflow: "name: e\njobs:\n- name: J\n  steps:\n  -\n",
+			want:     []want{{SeverityError, 5, "the step is empty"}},
+		},
+		{
+			name: "empty steps among others that are checked as without them",
+			workflow: `name: e
+vars:
+  url: http://localhost
+jobs:
+- name: J
+  id: j
+  defaults:
+    http:
+      url: "{{ vars.url }}"
+  repeat:
+    count: 2
+    interval: 1s
+    test: steps.first.success_rate == 100
+  steps:
+  - name: first
+    id: first
+    uses: http
+    with:
+      get: /
+    retry:
+      max_attempts: 2
+    outputs:
+      code: res.code
+    test: res.code == 200
+  -
+  - name: last
+    uses: http
+    with:
+      get: /{{ outputs.first.code }}
+    echo: "{{ res.body }}"
+    test: res.code == 200
+  -
+- name: K
+  needs: [j]
+  steps:
+  - uses: shell
+    with:
+      cmd: echo {{ outputs.first.code }}
+    test: res.code == 0
+`,
+			want: []want{
+				{SeverityError, 25, "the step is empty"},
+				{SeverityError, 32, "the step is empty"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

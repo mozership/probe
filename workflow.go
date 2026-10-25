@@ -10,7 +10,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/mask"

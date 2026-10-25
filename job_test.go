@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 )
 
