@@ -46,7 +46,7 @@ var specs = map[string]func() actionspec.Spec{
 func init() {
 	specs["embedded"] = func() actionspec.Spec {
 		s := embedded.Spec()
-		s.Serve = func() { embedded.ServeWithActions(Names()) }
+		s.Serve = func() { embedded.ServeWithActions(Names(), embedded.WithNeedsNoCheck(NeedsNoCheck())) }
 		return s
 	}
 }
@@ -130,6 +130,20 @@ func WithFields() []string {
 	var names []string
 	for _, name := range Names() {
 		if specs[name]().WithFields {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// NeedsNoCheck returns, in alphabetical order, the names of the built-in
+// actions whose steps pass without a test, such as hello, which does nothing
+// that could fail, so that a step of it there for its echo, or to publish
+// what it is given, is not counted as untested.
+func NeedsNoCheck() []string {
+	var names []string
+	for _, name := range Names() {
+		if specs[name]().NeedsNoCheck {
 			names = append(names, name)
 		}
 	}

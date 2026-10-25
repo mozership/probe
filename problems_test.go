@@ -76,16 +76,16 @@ jobs:
 
 // A workflow made in code is refused when it starts, before any job runs.
 func TestWorkflow_Start_RefusesWhatCannotRun(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name: "made in code",
 		Jobs: []Job{
-			{Name: "first", Steps: []*Step{{Name: "ok", Uses: "hello", actionRunner: runner}}},
-			{Name: "second", Steps: []*Step{{Name: "broken", Uses: "hello", SkipIf: "(", actionRunner: runner}}},
+			{Name: "first", Steps: []*Step{{Name: "ok", Uses: "hello"}}},
+			{Name: "second", Steps: []*Step{{Name: "broken", Uses: "hello", SkipIf: "("}}},
 		},
 		printer: newBufferPrinter(),
 	}
-	err := w.Start(Config{})
+	err := w.Start(Config{ActionRunner: runner})
 	if err == nil || !strings.Contains(err.Error(), `job 1 "second", step 0 "broken": skipif:`) {
 		t.Fatalf("Start() error = %v, want the skipif refused", err)
 	}
@@ -148,21 +148,21 @@ jobs:
 // The outputs of a step without an id are read by their names alone, by the
 // steps of later jobs too, and not by where the step is written.
 func TestWorkflow_OutputsOfAStepWithoutAnID(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("publish", map[string]any{"res": map[string]any{"pid": 42}, "status": 0})
 	w := &Workflow{
 		Name: "outputs",
 		Jobs: []Job{
 			{ID: "start", Name: "Start", Steps: []*Step{
-				{Name: "Publish", Uses: "publish", Test: "res.pid == 42", Outputs: map[string]string{"pid": "res.pid"}, actionRunner: runner},
+				{Name: "Publish", Uses: "publish", Test: "res.pid == 42", Outputs: map[string]string{"pid": "res.pid"}},
 			}},
 			{ID: "use", Name: "Use", Needs: []string{"start"}, Steps: []*Step{
-				{Name: "Read", Uses: "read", Test: "outputs.pid == 42 && outputs.step_0 == nil", actionRunner: runner},
+				{Name: "Read", Uses: "read", Test: "outputs.pid == 42 && outputs.step_0 == nil"},
 			}},
 		},
 		printer: newBufferPrinter(),
 	}
-	if err := w.Start(Config{}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if w.exitStatus != ExitOK {

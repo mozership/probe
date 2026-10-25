@@ -14,11 +14,11 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-func TestMockActionRunner(t *testing.T) {
-	mock := NewMockActionRunner()
+func TestMockRunner(t *testing.T) {
+	mock := newMockRunner()
 
 	// Test default behavior
-	result, err := mock.RunActions("test", map[string]any{"key": "value"}, RunOptions{})
+	result, _, err := mock.Run("test", actionrpc.Call{With: map[string]any{"key": "value"}}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -36,7 +36,7 @@ func TestMockActionRunner(t *testing.T) {
 	}
 	mock.SetResult("http", customResult)
 
-	result, err = mock.RunActions("http", map[string]any{}, RunOptions{})
+	result, _, err = mock.Run("http", actionrpc.Call{}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestMockActionRunner(t *testing.T) {
 	testErr := errors.New("test error")
 	mock.SetError("failing-action", testErr)
 
-	result, err = mock.RunActions("failing-action", map[string]any{}, RunOptions{})
+	result, _, err = mock.Run("failing-action", actionrpc.Call{}, RunOptions{})
 	if err != testErr {
 		t.Errorf("Expected test error, got %v", err)
 	}
@@ -66,7 +66,7 @@ func TestStepWithMockRunner(t *testing.T) {
 	}, nil)
 
 	// Set up mock runner
-	mock := NewMockActionRunner()
+	mock := newMockRunner()
 	mock.SetResult("http", map[string]any{
 		"status": 0,
 		"res": map[string]any{
@@ -75,13 +75,11 @@ func TestStepWithMockRunner(t *testing.T) {
 		},
 	})
 
-	// Set the mock runner directly on the step
-	step.actionRunner = mock
-
-	// Create minimal job context for testing
+	// Create minimal job context for testing, which runs the actions of
+	// its steps with the mock
 	jCtx := &JobContext{
 		runEnv: &runEnv{
-			Config: Config{Verbose: false},
+			Config: Config{Verbose: false, ActionRunner: mock},
 		},
 	}
 
@@ -252,7 +250,7 @@ func TestActionLogLevel(t *testing.T) {
 	}
 }
 
-// countingRunner is a StepActionRunner whose actions count their calls
+// countingRunner is an ActionRunner whose actions count their calls
 // in the state they keep. It records the count each call was given, or "-"
 // for no state. A call with fail fails, and one with keep leaves no state.
 type countingRunner struct {
@@ -260,12 +258,7 @@ type countingRunner struct {
 	received []string
 }
 
-func (r *countingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *countingRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *countingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -287,7 +280,7 @@ func (r *countingRunner) RunStep(name string, call actionrpc.Call, opts RunOptio
 func TestActionStateIsKeptInARunOfAJob(t *testing.T) {
 	runner := &countingRunner{}
 	step := func(uses string, with map[string]any) *Step {
-		return &Step{Name: uses, Uses: uses, With: with, actionRunner: runner}
+		return &Step{Name: uses, Uses: uses, With: with}
 	}
 
 	workflow := &Workflow{
@@ -308,7 +301,7 @@ func TestActionStateIsKeptInARunOfAJob(t *testing.T) {
 		},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// A failed call and one that leaves no state keep the state as it was,
 	// each action keeps its own, and the second run starts over.
@@ -325,7 +318,7 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 		return Job{
 			Name:  id,
 			ID:    id,
-			Steps: []*Step{{Name: "a", Uses: "counter", actionRunner: runner}, {Name: "b", Uses: "counter", actionRunner: runner}},
+			Steps: []*Step{{Name: "a", Uses: "counter"}, {Name: "b", Uses: "counter"}},
 		}
 	}
 	second := job("second")
@@ -335,7 +328,7 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 		Jobs:    []Job{job("first"), second},
 		printer: newBufferPrinter(),
 	}
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("workflow failed: %v", err)
 	}
 
@@ -345,16 +338,11 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 	}
 }
 
-func TestMockActionRunnerCarriesState(t *testing.T) {
-	m := NewMockActionRunner()
+func TestMockRunnerCarriesState(t *testing.T) {
+	m := newMockRunner()
 	m.States["counter"] = map[string]any{"n": 1}
 
-	var r ActionRunner = m
-	sr, ok := r.(StepActionRunner)
-	if !ok {
-		t.Fatal("MockActionRunner should carry state")
-	}
-	_, state, err := sr.RunStep("counter", actionrpc.Call{State: map[string]any{"n": 0}}, RunOptions{})
+	_, state, err := m.Run("counter", actionrpc.Call{State: map[string]any{"n": 0}}, RunOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,12 +360,7 @@ type mutatingRunner struct {
 	got []any
 }
 
-func (r *mutatingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *mutatingRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *mutatingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	list, _ := state["list"].([]any)
 	r.got = append(r.got, fmt.Sprint(list))
@@ -395,7 +378,7 @@ func (r *mutatingRunner) RunStep(name string, call actionrpc.Call, opts RunOptio
 func TestActionStateIsNotChangedByTheRunner(t *testing.T) {
 	runner := &mutatingRunner{}
 	step := func(with map[string]any) *Step {
-		return &Step{Name: "s", Uses: "mutating", With: with, actionRunner: runner}
+		return &Step{Name: "s", Uses: "mutating", With: with}
 	}
 	workflow := &Workflow{
 		Name: "state",
@@ -406,7 +389,7 @@ func TestActionStateIsNotChangedByTheRunner(t *testing.T) {
 		}},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// The failed step changed what it was given, which is not what the job
 	// keeps, and the state kept is not what the first step went on to hold.
@@ -424,12 +407,7 @@ type typedStateRunner struct {
 	got  []string
 }
 
-func (r *typedStateRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *typedStateRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *typedStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.got = append(r.got, fmt.Sprint(call.State))
 	if r.kept != nil {
 		r.kept["tags"].([]string)[0] = "changed"
@@ -442,17 +420,17 @@ func (r *typedStateRunner) RunStep(name string, call actionrpc.Call, opts RunOpt
 
 func TestActionStateOfOtherTypesIsNotChangedByTheRunner(t *testing.T) {
 	runner := &typedStateRunner{}
-	step := &Step{Name: "s", Uses: "typed", actionRunner: runner}
+	step := &Step{Name: "s", Uses: "typed"}
 	workflow := &Workflow{
 		Name: "state",
 		Jobs: []Job{{
 			Name:  "typed",
 			ID:    "typed",
-			Steps: []*Step{step, {Name: "s", Uses: "typed", actionRunner: runner}, {Name: "s", Uses: "typed", actionRunner: runner}},
+			Steps: []*Step{step, {Name: "s", Uses: "typed"}, {Name: "s", Uses: "typed"}},
 		}},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// The state is given in the form the protocol carries, and keeps what
 	// was returned, not what the runner changed it to afterwards.
@@ -465,11 +443,7 @@ func TestActionStateOfOtherTypesIsNotChangedByTheRunner(t *testing.T) {
 // unsendableStateRunner leaves a state that cannot be sent.
 type unsendableStateRunner struct{}
 
-func (unsendableStateRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	return map[string]any{"status": 0}, nil
-}
-
-func (unsendableStateRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (unsendableStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	return map[string]any{"status": 0}, map[string]any{"bad": map[struct{}]int{{}: 1}}, nil
 }
 

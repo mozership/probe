@@ -49,6 +49,10 @@ type Spec struct {
 	// with besides the fields declared, as they do for an action that
 	// returns what it is given.
 	WithFields bool
+	// NeedsNoCheck says that a step of the action passes without a test, as
+	// one of an action that does nothing that could fail does: it is there
+	// for its echo, or to publish what it is given.
+	NeedsNoCheck bool
 	// Required are the keys of with the action cannot run without, each as
 	// the keys that stand for one another, of which one is enough. An action
 	// that needs none declares NoneRequired.

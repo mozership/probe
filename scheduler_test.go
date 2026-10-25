@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/actionrpc"
 )
 
 // A job is given its ID before it is scheduled, so the scheduler does not
@@ -58,15 +60,15 @@ type orderRunner struct {
 	calls []string
 }
 
-func (r *orderRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	who, _ := with["who"].(string)
+func (r *orderRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	who, _ := call.With["who"].(string)
 	r.mu.Lock()
 	r.calls = append(r.calls, who)
 	r.mu.Unlock()
 	if who == r.failing {
-		return nil, errors.New("boom")
+		return nil, nil, errors.New("boom")
 	}
-	return map[string]any{"status": 0}, nil
+	return map[string]any{"status": 0}, nil, nil
 }
 
 // A job that needs a repeated one waits for every run of it, as the
@@ -84,7 +86,7 @@ func TestWorkflow_Start_NeedsRepeatedJob(t *testing.T) {
 					runner.failing = "work"
 				}
 				step := func(who string) []*Step {
-					return []*Step{{Name: who, Uses: "hello", With: map[string]any{"who": who}, actionRunner: runner}}
+					return []*Step{{Name: who, Uses: "hello", With: map[string]any{"who": who}}}
 				}
 				w := &Workflow{
 					Name: "Repeated",
@@ -93,12 +95,12 @@ func TestWorkflow_Start_NeedsRepeatedJob(t *testing.T) {
 							ID: "work", Name: "Work", Steps: step("work"),
 							Repeat: &Repeat{Count: 3, Interval: Interval{Duration: 20 * time.Millisecond}, Async: async},
 						},
-						{ID: "side", Name: "Side", Steps: []*Step{{Name: "side", Uses: "hello", Wait: "10ms", With: map[string]any{"who": "side"}, actionRunner: runner}}},
+						{ID: "side", Name: "Side", Steps: []*Step{{Name: "side", Uses: "hello", Wait: "10ms", With: map[string]any{"who": "side"}}}},
 						{ID: "after", Name: "After", Needs: []string{"work"}, Steps: step("after")},
 						{ID: "cleanup", Name: "Cleanup", Needs: []string{"work"}, Always: true, Steps: step("cleanup")},
 					},
 				}
-				report := startCapturing(t, w, OutputModeSpinner)
+				report := startCapturing(t, w, OutputModeSpinner, runner)
 
 				runner.mu.Lock()
 				calls := slices.DeleteFunc(slices.Clone(runner.calls), func(who string) bool { return who == "side" })
