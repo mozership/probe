@@ -2,8 +2,11 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -11,7 +14,11 @@ import (
 )
 
 // The runners here stand in for the actions of the steps under test, given
-// to a run as Config.ActionRunner or to a job with WithActionRunner.
+// to a run as Config.ActionRunner or to a job with WithActionRunner. With
+// them are startGroup and waitGroupGone, which start a process group as an
+// action that leaves one does, and tell when it is stopped: the tests of a
+// step and the end-to-end tests check with them that a run stops what its
+// actions leave.
 
 // mockRunner returns the result, the error and the state set for each action
 // by its name, and records each call. Its fields are read and written under
@@ -202,4 +209,53 @@ func (r *lateBackgroundRunner) Run(name string, call actionrpc.Call, opts RunOpt
 		return nil, nil, r.err
 	}
 	return map[string]any{"res": map[string]any{"code": -1}}, nil, nil
+}
+
+// startGroup starts cmd in a process group of its own, as the shell action
+// does for a background step, and returns its pid.
+func startGroup(t *testing.T, cmd string) int {
+	t.Helper()
+	c := exec.Command("/bin/sh", "-c", cmd)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := c.Start(); err != nil {
+		t.Fatalf("start %q: %v", cmd, err)
+	}
+	// Reap the process once it is stopped, so that the group is really gone.
+	go func() { _ = c.Wait() }()
+	pid := c.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
+	return pid
+}
+
+// waitGroupGone reports whether the group led by pid is gone within a second.
+// A killed process stays visible until it is reaped, which happens on its
+// own schedule.
+func waitGroupGone(pid int) bool {
+	deadline := time.Now().Add(time.Second)
+	for syscall.Kill(-pid, 0) == nil {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
+// timedRunner answers the n-th call with the n-th of its answers, an error
+// when the answer has none to give.
+type timedRunner struct {
+	mu      sync.Mutex
+	calls   int
+	answers []map[string]any
+}
+
+func (r *timedRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a := r.answers[r.calls]
+	r.calls++
+	if a == nil {
+		return nil, nil, errors.New("connection refused")
+	}
+	return a, nil, nil
 }
