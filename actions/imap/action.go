@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -55,6 +56,20 @@ func ReqFields() []string {
 // ReqFields.
 func ResFields() []string {
 	return mapping.FieldTags(Res{})
+}
+
+// ReqTypes returns the kinds of the fields of the req the imap action
+// returns, those of Req, and ResTypes those of its res, those of Res, for
+// probe check to report an expression that does with a field what its kind
+// does not allow.
+func ReqTypes() map[string]kind.Kind {
+	return kind.Fields(Req{})
+}
+
+// ResTypes returns the kinds of the fields of the res the imap action
+// returns; see ReqTypes.
+func ResTypes() map[string]kind.Kind {
+	return kind.Fields(Res{})
 }
 
 // Required returns the keys of with the imap action cannot run without:

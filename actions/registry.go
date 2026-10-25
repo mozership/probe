@@ -22,6 +22,7 @@ import (
 	"github.com/mozership/probe/actions/shell"
 	"github.com/mozership/probe/actions/smtp"
 	"github.com/mozership/probe/actions/ssh"
+	"github.com/mozership/probe/internal/kind"
 )
 
 // builtin maps an action name to the function that serves it. Each value
@@ -167,6 +168,57 @@ func AllReqFields() map[string][]string {
 // by its name.
 func AllResFields() map[string][]string {
 	return collect(resFields)
+}
+
+// reqTypes and resTypes are the kinds of the fields of the req and the res
+// each built-in action returns, as its package declares them.
+var (
+	reqTypes = map[string]func() map[string]kind.Kind{
+		"db":       db.ReqTypes,
+		"dns":      dns.ReqTypes,
+		"embedded": embedded.ReqTypes,
+		"grpc":     grpc.ReqTypes,
+		"hello":    hello.ReqTypes,
+		"http":     http.ReqTypes,
+		"imap":     imap.ReqTypes,
+		"shell":    shell.ReqTypes,
+		"smtp":     smtp.ReqTypes,
+		"ssh":      ssh.ReqTypes,
+	}
+	resTypes = map[string]func() map[string]kind.Kind{
+		"db":       db.ResTypes,
+		"dns":      dns.ResTypes,
+		"embedded": embedded.ResTypes,
+		"grpc":     grpc.ResTypes,
+		"hello":    hello.ResTypes,
+		"http":     http.ResTypes,
+		"imap":     imap.ResTypes,
+		"shell":    shell.ResTypes,
+		"smtp":     smtp.ResTypes,
+		"ssh":      ssh.ResTypes,
+	}
+)
+
+// AllReqTypes returns the kinds of the fields of the req each built-in
+// action returns, by its name, for probe check to report an expression that
+// does with a field what its kind does not allow. A field left out may hold
+// anything.
+func AllReqTypes() map[string]map[string]kind.Kind {
+	return collectTypes(reqTypes)
+}
+
+// AllResTypes returns the kinds of the fields of the res each built-in
+// action returns, by its name; see AllReqTypes.
+func AllResTypes() map[string]map[string]kind.Kind {
+	return collectTypes(resTypes)
+}
+
+func collectTypes(m map[string]func() map[string]kind.Kind) map[string]map[string]kind.Kind {
+	out := make(map[string]map[string]kind.Kind, len(m))
+	for name, f := range m {
+		out[name] = f()
+	}
+	return out
 }
 
 // WithFields returns the names of the built-in actions whose req and res

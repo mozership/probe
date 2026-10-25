@@ -8,6 +8,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	addr := startMockServer(t, false)
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, with := range []map[string]any{
@@ -19,7 +20,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			t.Fatal(err)
 		}
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

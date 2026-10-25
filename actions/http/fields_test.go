@@ -12,6 +12,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	srv := httptest.NewServer(hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
 		hp.SetCookie(w, &hp.Cookie{Name: "session", Value: "abc", Path: "/"})
 		w.Header().Set("Content-Type", "application/json")
@@ -34,7 +35,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			t.Fatalf("%v: %v", with, err)
 		}
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

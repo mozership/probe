@@ -8,6 +8,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, job := range []string{
 		"name: j\nsteps:\n- uses: hello\n  skipif: \"true\"\n",
@@ -18,7 +19,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		// in res.error.
 		ret, _ := a.Run(with)
 		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		kinds.Check(ret)
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

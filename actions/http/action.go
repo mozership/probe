@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -106,6 +107,24 @@ func ReqFields() []string {
 // ReqFields.
 func ResFields() []string {
 	return append(mapping.FieldTags(Res{}), "contract", "violations")
+}
+
+// ReqTypes returns the kinds of the fields of the req the http action
+// returns, those of Req, and ResTypes those of its res, those of Res and of
+// the fields it adds, for probe check to report an expression that does
+// with a field what its kind does not allow. multipart, which shows what
+// was written, may hold anything.
+func ReqTypes() map[string]kind.Kind {
+	return kind.Fields(Req{})
+}
+
+// ResTypes returns the kinds of the fields of the res the http action
+// returns; see ReqTypes.
+func ResTypes() map[string]kind.Kind {
+	types := kind.Fields(Res{})
+	types["contract"] = kind.Map
+	types["violations"] = kind.List
+	return types
 }
 
 // Required returns the keys of with the http action cannot run without, each
