@@ -61,6 +61,18 @@ type Callback struct {
 	after  func(result *Result)
 }
 
+// maxSession is the most sessions a step may open at once. Each is a
+// connection of its own, and 1000 is far beyond what one server takes from
+// one client, such as the 50 of Postfix's smtpd_client_connection_count_limit,
+// while it keeps the goroutines and file descriptors of a step in bounds.
+const maxSession = 1000
+
+// maxLength is the longest body a step may ask for, 100 MiB. It is above the
+// limits of common servers, such as Postfix's 10240000 bytes and Gmail's
+// 25 MB, so that a test can still go past a server's limit, while it keeps
+// a session from asking for more memory than the machine has.
+const maxLength = 100 << 20
+
 // defaultTimeout is the timeout when the step does not give one.
 const defaultTimeout = 30 * time.Second
 
@@ -149,13 +161,15 @@ func (r *Req) validate() (string, error) {
 	case r.To == "":
 		return "", errors.New("to is required")
 	// Fewer than one session or message would send nothing and report
-	// only a failure, and a negative length was taken as 0.
-	case r.Session < 1:
-		return "", fmt.Errorf("invalid session %d: use 1 or more", r.Session)
+	// only a failure, and a negative length was taken as 0. Sessions and
+	// length have an upper bound as well, since every session opens its
+	// connection at once and holds its own copy of the message.
+	case r.Session < 1 || r.Session > maxSession:
+		return "", fmt.Errorf("invalid session %d: use 1 to %d", r.Session, maxSession)
 	case r.Message < 1:
 		return "", fmt.Errorf("invalid message %d: use 1 or more", r.Message)
-	case r.Length < 0:
-		return "", fmt.Errorf("invalid length %d: use 0 or more", r.Length)
+	case r.Length < 0 || r.Length > maxLength:
+		return "", fmt.Errorf("invalid length %d: use 0 to %d", r.Length, maxLength)
 	case r.Timeout < 0:
 		return "", fmt.Errorf("invalid timeout %s: use a duration above zero", r.Timeout)
 	}

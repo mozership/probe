@@ -32,9 +32,9 @@ The fields below describe the delivery. All of them accept template expressions.
 | `to` | String | Yes | - | Envelope recipient. Several recipients are separated by commas, such as `a@example.com, b@example.com` |
 | `subject` | String | No | `""` | Subject line |
 | `myhostname` | String | No | The machine's host name, or `localhost` if it is unknown | Hostname sent in the `EHLO` / `HELO` command. Many servers refuse a client that greets with `localhost`, so set a name the server accepts |
-| `session` | Integer | No | `1` | Number of SMTP sessions to open at the same time |
-| `message` | Integer | No | `1` | Messages to send in total, divided among the sessions |
-| `length` | Integer | No | `0` | Number of `*` characters appended to the generated body |
+| `session` | Integer | No | `1` | Number of SMTP sessions to open at the same time, from 1 to 1000 |
+| `message` | Integer | No | `1` | Messages to send in total, divided among the sessions. At least 1 |
+| `length` | Integer | No | `0` | Number of `*` characters appended to the generated body, up to 104857600 (100 MiB) |
 | `starttls` | String | No | `auto` | `auto` switches to TLS with `STARTTLS` when the server offers it, `required` fails a session whose server does not, and `off` never uses it |
 | `insecure_skip_tls` | Boolean | No | `false` | Accept any certificate after `STARTTLS`, such as a self-signed one |
 | `timeout` | Duration | No | `30s` | Time limit for connecting, and for each wait on the server to read or write |

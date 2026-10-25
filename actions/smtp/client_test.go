@@ -51,9 +51,11 @@ func TestReqDo_ValidationErrors(t *testing.T) {
 		{"missing addr", valid(func(r *Req) { r.Addr = "" }), "addr is required"},
 		{"missing from", valid(func(r *Req) { r.From = "" }), "from is required"},
 		{"missing to", valid(func(r *Req) { r.To = "" }), "to is required"},
-		{"no session", valid(func(r *Req) { r.Session = 0 }), "invalid session 0: use 1 or more"},
+		{"no session", valid(func(r *Req) { r.Session = 0 }), "invalid session 0: use 1 to 1000"},
+		{"too many sessions", valid(func(r *Req) { r.Session = 1001 }), "invalid session 1001: use 1 to 1000"},
 		{"no message", valid(func(r *Req) { r.Message = -1 }), "invalid message -1: use 1 or more"},
-		{"negative length", valid(func(r *Req) { r.Length = -1 }), "invalid length -1: use 0 or more"},
+		{"negative length", valid(func(r *Req) { r.Length = -1 }), "invalid length -1: use 0 to 104857600"},
+		{"too long", valid(func(r *Req) { r.Length = 100<<20 + 1 }), "invalid length 104857601: use 0 to 104857600"},
 		{"unknown starttls", valid(func(r *Req) { r.StartTLS = "sometimes" }), `invalid starttls "sometimes": use off, auto or required`},
 	}
 
@@ -97,9 +99,37 @@ func TestDeliverReadsParametersAsTheyCome(t *testing.T) {
 		}
 	}
 
-	_, err := Deliver(map[string]any{"addr": addr, "from": "f@example.com", "to": "t@example.com", "session": "two"})
-	if err == nil || !strings.Contains(err.Error(), "session") {
-		t.Errorf("unreadable session: error = %v, want one naming session", err)
+	// A number that is not whole, or does not fit an int, is refused rather
+	// than cut down: 1e20 used to become MaxInt64 on arm64 and panic in
+	// make(chan), and -0.5 became a length of 0.
+	for _, with := range []map[string]any{
+		{"session": "two"},
+		{"session": 2.5},
+		{"session": 1e20},
+		{"session": 1 << 40},
+		{"length": -0.5},
+		{"insecure_skip_tls": 2},
+	} {
+		var key string
+		for k := range with {
+			key = k
+		}
+		with["addr"] = addr
+		with["from"] = "f@example.com"
+		with["to"] = "t@example.com"
+		if _, err := Deliver(with); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("%v: error = %v, want one naming %s", with, err, key)
+		}
+	}
+
+	// A number for a bool reads as its string would, as it did when every
+	// parameter went through a string.
+	var got Req
+	if _, err := Deliver(map[string]any{
+		"addr": addr, "from": "f@example.com", "to": "t@example.com", "starttls": "off",
+		"insecure_skip_tls": int64(1),
+	}, WithAfter(func(r *Result) { got = r.Req })); err != nil || !got.InsecureSkipTLS {
+		t.Errorf("insecure_skip_tls 1: error = %v, insecure_skip_tls = %v, want true", err, got.InsecureSkipTLS)
 	}
 }
 

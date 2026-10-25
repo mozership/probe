@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"math"
 	"reflect"
 	"testing"
 )
@@ -168,6 +169,8 @@ func TestCalcMessageNumEachSessionTotal(t *testing.T) {
 		{session: 2, message: 3, want: []int{2, 1}},
 		{session: 3, message: 3, want: []int{1, 1, 1}},
 		{session: 2, message: 0, want: []int{0, 0}},
+		// Rounding up does not overflow.
+		{session: 3, message: math.MaxInt, want: []int{math.MaxInt/3 + 1, math.MaxInt/3 + 1, math.MaxInt - 2*(math.MaxInt/3+1)}},
 	}
 
 	for _, tt := range tests {

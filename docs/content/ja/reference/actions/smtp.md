@@ -32,9 +32,9 @@ steps:
 | `to` | String | 必須 | - | エンベロープの受信者。複数の受信者は`a@example.com, b@example.com`のようにカンマで区切る |
 | `subject` | String | 任意 | `""` | 件名 |
 | `myhostname` | String | 任意 | 実行マシンのホスト名。取得できなければ`localhost` | `EHLO` / `HELO`で名乗るホスト名。`localhost`を名乗るクライアントを拒否するサーバーが多いため、サーバーが受け付ける名前を指定する |
-| `session` | Integer | 任意 | `1` | 同時に開くSMTPセッション数 |
-| `message` | Integer | 任意 | `1` | 全セッション合計の送信通数。セッションに振り分けて送る |
-| `length` | Integer | 任意 | `0` | 生成する本文の末尾に付ける`*`の文字数 |
+| `session` | Integer | 任意 | `1` | 同時に開くSMTPセッション数。1から1000まで |
+| `message` | Integer | 任意 | `1` | 全セッション合計の送信通数。セッションに振り分けて送る。1以上 |
+| `length` | Integer | 任意 | `0` | 生成する本文の末尾に付ける`*`の文字数。104857600（100 MiB）まで |
 | `starttls` | String | 任意 | `auto` | `auto`はサーバーが提示していれば`STARTTLS`でTLSに切り替え、`required`は提示しないサーバーのセッションを失敗させ、`off`は使わない |
 | `insecure_skip_tls` | Boolean | 任意 | `false` | `STARTTLS`の後、自己署名などどんな証明書も受け入れる |
 | `timeout` | Duration | 任意 | `30s` | 接続と、サーバーとの読み書きでの1回ごとの待ち時間の上限 |

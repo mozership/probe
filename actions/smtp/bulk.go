@@ -175,7 +175,12 @@ func (b *Bulk) calcMessageNumEachSession() int {
 	// sessions get what is left and those after them get none. Resetting the
 	// count once it ran out, as this used to, handed the messages out again
 	// to the sessions after an empty one.
-	n := (b.Message + b.Session - 1) / b.Session
+	// Rounding up by dividing first does not overflow, as adding Session
+	// to a Message near the largest int would.
+	n := b.Message / b.Session
+	if b.Message%b.Session != 0 {
+		n++
+	}
 	if left := b.Message - b.count; left < n {
 		n = left
 	}
