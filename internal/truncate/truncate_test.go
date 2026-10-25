@@ -93,6 +93,18 @@ func TestString(t *testing.T) {
 			maxLen:   1,
 			expected: "\xff... [⚠︎ probe truncated]",
 		},
+		{
+			name:     "a run of continuation bytes is cut where the limit falls",
+			input:    strings.Repeat("\x80", 10),
+			maxLen:   6,
+			expected: strings.Repeat("\x80", 6) + "... [⚠︎ probe truncated]",
+		},
+		{
+			name:     "stray continuation bytes before a rune are kept",
+			input:    "ab\x80\x80日本",
+			maxLen:   6,
+			expected: "ab\x80\x80... [⚠︎ probe truncated]",
+		},
 	}
 
 	for _, tt := range tests {

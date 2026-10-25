@@ -20,14 +20,19 @@ func Message() string {
 
 // String cuts s to at most maxLen bytes and appends Message when s is
 // longer. The cut backs off to the start of a rune, so a multibyte
-// character, such as one of Japanese text, is never split in two.
+// character, such as one of Japanese text, is never split in two. It backs
+// off no further than a rune can be long: past that the bytes are not
+// UTF-8, and they are cut where maxLen falls rather than all left out.
 func String(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
 	cut := maxLen
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
+	for i := 0; i < utf8.UTFMax-1 && cut > 0 && !utf8.RuneStart(s[cut]); i++ {
 		cut--
+	}
+	if !utf8.RuneStart(s[cut]) {
+		cut = maxLen
 	}
 	return s[:cut] + Message()
 }
