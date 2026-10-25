@@ -24,8 +24,8 @@ type Req struct {
 	StartTLS        string `map:"starttls"`
 	InsecureSkipTLS bool   `map:"insecure_skip_tls"`
 	// Timeout limits connecting to the server, and each wait on it to
-	// read or write in a session. Zero, possible only through the Go API,
-	// means no limit.
+	// read or write in a session, with twice it for the reply to the end of
+	// a message. Zero, possible only through the Go API, means no limit.
 	Timeout time.Duration `map:"timeout"`
 	cb      *Callback
 }
@@ -73,8 +73,9 @@ const maxSession = 1000
 // a session from asking for more memory than the machine has.
 const maxLength = 100 << 20
 
-// defaultTimeout is the timeout when the step does not give one.
-const defaultTimeout = 30 * time.Second
+// defaultTimeout is the timeout when the step does not give one: the 5
+// minutes RFC 5321 4.5.3.2 asks a client to wait for most replies.
+const defaultTimeout = 5 * time.Minute
 
 func NewReq() *Req {
 	return &Req{

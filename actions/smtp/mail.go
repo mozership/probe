@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"time"
@@ -27,7 +26,7 @@ type Mail struct {
 	// self-signed one.
 	InsecureSkipVerify bool
 	// Timeout limits connecting, and each wait on the server to read or
-	// write. Zero means no limit.
+	// write, as Dial takes it. Zero means no limit.
 	Timeout      time.Duration
 	MessageCount int
 	// Delivered is how many messages the server accepted in the last
@@ -59,15 +58,6 @@ var osHostname = os.Hostname
 // SendSession opens one SMTP session to Addr and sends MessageCount copies of
 // Data in it, each stamped with its own Message-ID and send time.
 func (m *Mail) SendSession() error {
-	err := m.sendSession()
-	var netErr net.Error
-	if m.Timeout > 0 && errors.As(err, &netErr) && netErr.Timeout() {
-		return fmt.Errorf("%w (the server did not answer within the %s timeout)", err, m.Timeout)
-	}
-	return err
-}
-
-func (m *Mail) sendSession() error {
 	m.Delivered = 0
 	m.LastSent = nil
 	if err := validateLine(m.MailFrom); err != nil {

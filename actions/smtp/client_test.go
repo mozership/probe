@@ -24,7 +24,7 @@ func TestNewReq(t *testing.T) {
 		Message:    1,
 		Length:     0,
 		StartTLS:   StartTLSAuto,
-		Timeout:    30 * time.Second,
+		Timeout:    5 * time.Minute,
 	}
 
 	if !reflect.DeepEqual(got, expected) {
@@ -810,7 +810,7 @@ func TestDeliverTimesOutOnASilentServer(t *testing.T) {
 		"addr": startSlowServer(t, -1), "from": "from@example.com", "to": "to@example.com",
 		"timeout": "200ms",
 	})
-	if err == nil || !strings.Contains(err.Error(), "within the 200ms timeout") {
+	if err == nil || !strings.Contains(err.Error(), "(the server did not answer within 200ms)") {
 		t.Errorf("Deliver() error = %v, want one naming the 200ms timeout", err)
 	}
 	if took := time.Since(start); took > 5*time.Second {
@@ -856,5 +856,73 @@ func TestReqDoRefusesANegativeTimeout(t *testing.T) {
 	r.Timeout = -time.Second
 	if _, err := r.Do(); err == nil || err.Error() != "invalid timeout -1s: use a duration above zero" {
 		t.Errorf("Do() error = %v, want an invalid timeout", err)
+	}
+}
+
+// startSlowFinalReplyServer runs an SMTP server that answers at once but
+// waits delay before its reply to the end of each message.
+func startSlowFinalReplyServer(t *testing.T, delay time.Duration) string {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer func() { _ = conn.Close() }()
+				text := textproto.NewConn(conn)
+				_ = text.PrintfLine("220 test ESMTP")
+				for {
+					line, err := text.ReadLine()
+					if err != nil {
+						return
+					}
+					switch strings.ToUpper(strings.SplitN(line, " ", 2)[0]) {
+					case "DATA":
+						_ = text.PrintfLine("354 go ahead")
+						if _, err := text.ReadDotBytes(); err != nil {
+							return
+						}
+						time.Sleep(delay)
+						_ = text.PrintfLine("250 queued")
+					case "QUIT":
+						_ = text.PrintfLine("221 bye")
+						return
+					default:
+						_ = text.PrintfLine("250 ok")
+					}
+				}
+			}(conn)
+		}
+	}()
+
+	return lis.Addr().String()
+}
+
+func TestDeliverWaitsTwiceTheTimeoutForTheEndOfAMessage(t *testing.T) {
+	// RFC 5321 gives the reply to the end of a message twice as long as the
+	// others, since a server may check the message before it answers.
+	with := func(addr string) map[string]any {
+		return map[string]any{"addr": addr, "from": "from@example.com", "to": "to@example.com", "timeout": "200ms"}
+	}
+
+	ret, err := Deliver(with(startSlowFinalReplyServer(t, 300*time.Millisecond)))
+	if err != nil {
+		t.Fatalf("a reply within twice the timeout: Deliver() error: %v", err)
+	}
+	if res, _ := ret["res"].(map[string]any); res["sent"] != 1 {
+		t.Errorf("a reply within twice the timeout: res = %v, want the message sent", res)
+	}
+
+	_, err = Deliver(with(startSlowFinalReplyServer(t, time.Second)))
+	if err == nil || !strings.Contains(err.Error(), "smtp data close error") || !strings.Contains(err.Error(), "(the server did not answer within 400ms)") {
+		t.Errorf("a reply after twice the timeout: Deliver() error = %v, want one waiting 400ms for the end of the message", err)
 	}
 }

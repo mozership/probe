@@ -3,6 +3,7 @@ package smtp
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/textproto"
@@ -21,22 +22,38 @@ type Client struct {
 	localName  string
 	didHello   bool
 	helloError error
+	// deadline limits each wait on the server, and is nil without a
+	// timeout.
+	deadline *deadlineConn
 }
 
 // Dial connects to the SMTP server at addr and reads its greeting. A timeout
 // above zero limits connecting, and each read from and write to the
 // connection after, so that a server that stops answering fails the session
-// rather than holding it. Zero means no limit.
+// rather than holding it. The reply to the end of a message may take twice
+// the timeout, as RFC 5321 4.5.3.2 gives it 10 minutes against 5 for the
+// other replies: a server may check the message before it answers. Zero
+// means no limit.
 func Dial(addr string, timeout time.Duration) (*Client, error) {
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return nil, fmt.Errorf("%w (could not connect within %s)", err, timeout)
+		}
 		return nil, err
 	}
+	var deadline *deadlineConn
 	if timeout > 0 {
-		conn = &deadlineConn{Conn: conn, timeout: timeout}
+		deadline = &deadlineConn{Conn: conn, timeout: timeout}
+		conn = deadline
 	}
 	host, _, _ := net.SplitHostPort(addr)
-	return NewClient(conn, host)
+	c, err := NewClient(conn, host)
+	if err != nil {
+		return nil, err
+	}
+	c.deadline = deadline
+	return c, nil
 }
 
 // deadlineConn sets the connection's deadline afresh before each read and
@@ -51,14 +68,54 @@ func (c *deadlineConn) Read(b []byte) (int, error) {
 	if err := c.SetDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
 	}
-	return c.Conn.Read(b)
+	n, err := c.Conn.Read(b)
+	return n, c.waited(err)
 }
 
 func (c *deadlineConn) Write(b []byte) (int, error) {
 	if err := c.SetDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
 	}
-	return c.Conn.Write(b)
+	n, err := c.Conn.Write(b)
+	return n, c.waited(err)
+}
+
+// waited names how long the wait was when err is from running out of it.
+func (c *deadlineConn) waited(err error) error {
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return &waitTimeout{err: netErr, wait: c.timeout}
+	}
+	return err
+}
+
+// waitTimeout is a read or write that ran out of time. It is a net.Error
+// still, so that the TLS connection and textproto treat it as the timeout it
+// wraps.
+type waitTimeout struct {
+	err  net.Error
+	wait time.Duration
+}
+
+func (e *waitTimeout) Error() string {
+	return fmt.Sprintf("%s (the server did not answer within %s)", e.err, e.wait)
+}
+
+func (e *waitTimeout) Unwrap() error { return e.err }
+
+func (e *waitTimeout) Timeout() bool { return true }
+
+// Temporary is as the wrapped error has it, for net.Error.
+func (e *waitTimeout) Temporary() bool { return e.err.Temporary() } //nolint:staticcheck // net.Error still declares it
+
+// waitLonger runs f with the timeout of each wait multiplied by n.
+func (c *Client) waitLonger(n time.Duration, f func() error) error {
+	if c.deadline == nil {
+		return f()
+	}
+	timeout := c.deadline.timeout
+	c.deadline.timeout = n * timeout
+	defer func() { c.deadline.timeout = timeout }()
+	return f()
 }
 
 func NewClient(conn net.Conn, host string) (*Client, error) {
@@ -183,8 +240,10 @@ type dataCloser struct {
 
 func (d *dataCloser) Close() error {
 	_ = d.WriteCloser.Close()
-	_, _, err := d.c.Text.ReadResponse(250)
-	return err
+	return d.c.waitLonger(2, func() error {
+		_, _, err := d.c.Text.ReadResponse(250)
+		return err
+	})
 }
 
 func (c *Client) Data() (io.WriteCloser, error) {
