@@ -72,7 +72,8 @@ type Config struct {
 	// test, as those of an action that does nothing that could fail: such
 	// a step is there for its echo, or to publish what it is given, and is
 	// not counted as untested. A step of any other action that nothing
-	// checks is.
+	// checks is. The engine knows no action by itself: actions.Configure
+	// sets this and Actions for the built-in ones.
 	NeedsNoCheck []string
 	// ActionRunner runs the action of each step. When it is nil, each runs
 	// in a process of its own, as PluginActionRunner runs it.

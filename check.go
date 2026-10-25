@@ -50,7 +50,8 @@ func (f Finding) String() string {
 	return b.String()
 }
 
-// CheckOptions tunes Check.
+// CheckOptions tunes Check. actions.CheckOptions gives what it is to know of
+// the built-in actions.
 type CheckOptions struct {
 	// Actions are the names of the actions a step may use, besides the
 	// external ones it names by a path or a repository. When it is empty,
