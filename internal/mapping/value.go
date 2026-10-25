@@ -2,6 +2,8 @@ package mapping
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -9,27 +11,38 @@ import (
 	"github.com/mozership/probe/internal/scalar"
 )
 
-// StringMap returns the values of m that are a string, a bool or a number,
-// each written as text as scalar.String writes it, so a header such as
-// X-Retry: 3 is passed on as "3" instead of dropped. Any other value, such
-// as nil, a map or a list, is left out. m itself is not modified.
+// StringMap returns m with each value written as text: a string as it is,
+// a bool or a number as scalar.String writes it, so a header such as
+// X-Retry: 3 is passed on as "3", and nil, as YAML reads X-Empty: with
+// nothing after it, as an empty string. Any other value, such as a list or
+// a map, has no text to stand for it, and is an error that names its key.
+// m itself is not modified.
 //
 // Example:
 //
 //	StringMap(map[string]any{"a": "x", "b": 1024, "c": 0.5, "d": true, "e": nil})
-//	// map[string]string{"a": "x", "b": "1024", "c": "0.5", "d": "true"}
-func StringMap(m map[string]any) map[string]string {
+//	// map[string]string{"a": "x", "b": "1024", "c": "0.5", "d": "true", "e": ""}
+func StringMap(m map[string]any) (map[string]string, error) {
 	out := make(map[string]string, len(m))
-	for k, v := range m {
-		switch v.(type) {
+	// The keys in order, so that of two bad values the same one is told.
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		switch v := m[k].(type) {
+		case nil:
+			out[k] = ""
 		case string, bool,
 			int, int8, int16, int32, int64,
 			uint, uint8, uint16, uint32, uint64,
 			float32, float64:
 			out[k], _ = scalar.String(v)
+		case []any:
+			return nil, fmt.Errorf("cannot convert a list to a string for '%s'", k)
+		case map[string]any:
+			return nil, fmt.Errorf("cannot convert a map to a string for '%s'", k)
+		default:
+			return nil, fmt.Errorf("cannot convert %T to a string for '%s'", v, k)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // envPrefix marks a flat key that names one environment variable, as in

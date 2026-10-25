@@ -487,7 +487,10 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 			customHeaders = maps.Clone(headers)
 		} else if headersInterfaceMap, ok := headersInterface.(map[string]any); ok {
 			// A number such as Content-Length: 1024 is sent as its text.
-			customHeaders = mapping.StringMap(headersInterfaceMap)
+			customHeaders, err = mapping.StringMap(headersInterfaceMap)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%w in field 'headers'", err)
+			}
 		}
 	}
 

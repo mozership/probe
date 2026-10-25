@@ -185,22 +185,53 @@ func TestEnvToStringValue_MapsOntoStruct(t *testing.T) {
 
 func TestStringMap(t *testing.T) {
 	in := map[string]any{
-		"text":   "x",
-		"int":    1024,
-		"uint":   uint8(7),
-		"float":  100.5,
-		"bool":   true,
-		"nil":    nil,
-		"map":    map[string]any{"a": 1},
-		"list":   []any{"a"},
-		"struct": struct{}{},
+		"text":  "x",
+		"int":   1024,
+		"uint":  uint8(7),
+		"float": 100.5,
+		"bool":  true,
+		"nil":   nil,
 	}
-	want := map[string]string{"text": "x", "int": "1024", "uint": "7", "float": "100.5", "bool": "true"}
-	if got := StringMap(in); !reflect.DeepEqual(got, want) {
+	want := map[string]string{"text": "x", "int": "1024", "uint": "7", "float": "100.5", "bool": "true", "nil": ""}
+	got, err := StringMap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("StringMap() = %v, want %v", got, want)
 	}
 	if in["int"] != 1024 {
 		t.Error("the input should keep its original values")
+	}
+}
+
+func TestStringMapRefusesWhatHasNoText(t *testing.T) {
+	tests := []struct {
+		in   map[string]any
+		want string
+	}{
+		{map[string]any{"ok": "x", "X-List": []any{"a"}}, "cannot convert a list to a string for 'X-List'"},
+		{map[string]any{"X-Map": map[string]any{"a": 1}}, "cannot convert a map to a string for 'X-Map'"},
+		{map[string]any{"X-Struct": struct{}{}}, "cannot convert struct {} to a string for 'X-Struct'"},
+		// Of two bad values, the first key in order is told, every time.
+		{map[string]any{"b": []any{}, "a": map[string]any{}}, "cannot convert a map to a string for 'a'"},
+	}
+	for _, tt := range tests {
+		got, err := StringMap(tt.in)
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("StringMap(%v) = %v, %v; want error %q", tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestMapToStructByTags_StringMapNamesTheField(t *testing.T) {
+	type req struct {
+		Headers map[string]string `map:"headers"`
+	}
+	err := MapToStructByTags(map[string]any{"headers": map[string]any{"X-List": []any{1}}}, &req{})
+	want := "cannot convert a list to a string for 'X-List' in field 'headers'"
+	if err == nil || err.Error() != want {
+		t.Errorf("MapToStructByTags() error = %v, want %q", err, want)
 	}
 }
 

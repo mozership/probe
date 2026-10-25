@@ -44,13 +44,17 @@ func (e *ValidationError) AddMessage(s string) {
 //
 //	base := map[string]string{"a": "1", "b": "2"}
 //	over := map[string]any{"b": "overridden", "c": 3, "d": nil}
-//	result := mergeStringMaps(base, over)
-//	// result: map[string]string{"a": "1", "b": "overridden", "c": "3"}
-func mergeStringMaps(base map[string]string, over map[string]any) map[string]string {
-	res := make(map[string]string, len(base)+len(over))
+//	result, err := mergeStringMaps(base, over)
+//	// result: map[string]string{"a": "1", "b": "overridden", "c": "3", "d": ""}
+func mergeStringMaps(base map[string]string, over map[string]any) (map[string]string, error) {
+	strs, err := StringMap(over)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[string]string, len(base)+len(strs))
 	maps.Copy(res, base)
-	maps.Copy(res, StringMap(over))
-	return res
+	maps.Copy(res, strs)
+	return res, nil
 }
 
 func fromAnySlice[T any](s []any) ([]T, error) {
@@ -357,7 +361,10 @@ func MapToStructByTags(params map[string]any, dest any) error {
 				return fmt.Errorf("expected map[string]any for field '%s'", mapTag)
 			} else {
 				existingMap := field.Interface().(map[string]string)
-				mergedMap := mergeStringMaps(existingMap, v)
+				mergedMap, err := mergeStringMaps(existingMap, v)
+				if err != nil {
+					return fmt.Errorf("%w in field '%s'", err, mapTag)
+				}
 				field.Set(reflect.ValueOf(mergedMap))
 			}
 
