@@ -26,11 +26,11 @@ func startGroup(t *testing.T, cmd string) int {
 	return pid
 }
 
-// waitGroupGone reports whether the group led by pid is gone within a second.
-// A killed process stays visible until it is reaped, which happens on its
-// own schedule.
+// waitGroupGone reports whether the group led by pid is gone within ten
+// seconds, which a loaded machine can take. A killed process stays visible
+// until it is reaped, which happens on its own schedule.
 func waitGroupGone(pid int) bool {
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for groupAlive(pid) {
 		if time.Now().After(deadline) {
 			return false
@@ -42,9 +42,10 @@ func waitGroupGone(pid int) bool {
 
 func TestTrackerNil(t *testing.T) {
 	// A JobContext built without a tracker must not panic.
-	var b *Tracker
-	b.Track(123, "")
-	b.Stop()
+	var tr *Tracker
+	tr.Begin()()
+	tr.Track(123, "")
+	tr.Stop()
 }
 
 func TestTrackerStop(t *testing.T) {
@@ -58,9 +59,9 @@ func TestTrackerStop(t *testing.T) {
 	// have to go.
 	pid := startGroup(t, "sleep 60 & wait")
 
-	b := NewTracker()
-	b.Track(pid, log)
-	b.Stop()
+	tr := NewTracker()
+	tr.Track(pid, log)
+	tr.Stop()
 
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d is still running", pid)
@@ -68,8 +69,8 @@ func TestTrackerStop(t *testing.T) {
 	if _, err := os.Stat(log); !os.IsNotExist(err) {
 		t.Errorf("log %s was not removed: %v", log, err)
 	}
-	if len(b.procs) != 0 {
-		t.Errorf("procs = %v, want none left", b.procs)
+	if len(tr.procs) != 0 {
+		t.Errorf("procs = %v, want none left", tr.procs)
 	}
 }
 
@@ -77,22 +78,34 @@ func TestTrackerStopIgnoringTerm(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits for the grace period")
 	}
-	pid := startGroup(t, "trap '' TERM; sleep 60 & wait")
-	// Give the shell time to install the trap.
-	time.Sleep(200 * time.Millisecond)
+	// The shell says when the trap is installed and sleep has inherited it.
+	// A fixed pause would not cover a slow start on a loaded machine, and a
+	// shell signalled before its trap would exit at once.
+	ready := filepath.Join(t.TempDir(), "ready")
+	pid := startGroup(t, "trap '' TERM; sleep 60 & : > '"+ready+"'; wait")
+	deadline := time.Now().Add(time.Minute)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the shell did not install its trap")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 
-	b := NewTracker()
-	b.Track(pid, "")
+	tr := NewTracker()
+	tr.Track(pid, "")
 
 	start := time.Now()
-	b.Stop()
+	tr.Stop()
 	elapsed := time.Since(start)
 
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d survived SIGKILL", pid)
 	}
-	if elapsed < StopGrace {
-		t.Errorf("stopped after %v, want SIGKILL only after the %v grace", elapsed, StopGrace)
+	if elapsed < TermGrace {
+		t.Errorf("stopped after %v, want SIGKILL only after the %v grace", elapsed, TermGrace)
 	}
 }
 
@@ -103,13 +116,15 @@ func TestTrackerStopExited(t *testing.T) {
 		t.Fatalf("process group %d did not exit", pid)
 	}
 
-	b := NewTracker()
-	b.Track(pid, "")
+	tr := NewTracker()
+	tr.Track(pid, "")
 
 	start := time.Now()
-	b.Stop()
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("stop took %v for a process that had exited", elapsed)
+	tr.Stop()
+	// Waiting out the grace is what a skipped process must not do; anything
+	// shorter is a loaded machine.
+	if elapsed := time.Since(start); elapsed >= TermGrace {
+		t.Errorf("stop took %v for a process that had exited, want less than the %v grace", elapsed, TermGrace)
 	}
 }
 
@@ -141,9 +156,9 @@ func TestTrackerStopReusedPid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b := NewTracker()
-	b.procs = []proc{{pid: pid, started: started + 1}}
-	b.Stop()
+	tr := NewTracker()
+	tr.procs = []proc{{pid: pid, started: started + 1}}
+	tr.Stop()
 
 	if !groupAlive(pid) {
 		t.Errorf("process group %d was signalled although its leader is not the recorded one", pid)
@@ -165,9 +180,9 @@ func TestTrackerStopLeaderGone(t *testing.T) {
 		t.Fatalf("process group %d is gone before the test", pid)
 	}
 
-	b := NewTracker()
-	b.Track(pid, "")
-	b.Stop()
+	tr := NewTracker()
+	tr.Track(pid, "")
+	tr.Stop()
 
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d is still running", pid)
@@ -177,33 +192,33 @@ func TestTrackerStopLeaderGone(t *testing.T) {
 func TestTrackerTrackAfterStop(t *testing.T) {
 	// A step that timed out can report its process after the workflow has
 	// stopped the others; it is stopped right away.
-	b := NewTracker()
-	b.Stop()
+	tr := NewTracker()
+	tr.Stop()
 
 	pid := startGroup(t, "sleep 60")
-	b.Track(pid, "")
+	tr.Track(pid, "")
 
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d reported after stop is still running", pid)
 	}
-	if len(b.procs) != 0 {
-		t.Errorf("procs = %v, want none kept after stop", b.procs)
+	if len(tr.procs) != 0 {
+		t.Errorf("procs = %v, want none kept after stop", tr.procs)
 	}
 }
 
 func TestTrackerStopWaitsForPending(t *testing.T) {
 	// An action still running when the workflow ends gets a moment to report
 	// the process it started.
-	b := NewTracker()
-	done := b.Begin()
+	tr := NewTracker()
+	done := tr.Begin()
 	pid := startGroup(t, "sleep 60")
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		b.Track(pid, "")
+		tr.Track(pid, "")
 		done()
 	}()
 
-	b.Stop()
+	tr.Stop()
 
 	if !waitGroupGone(pid) {
 		t.Errorf("process group %d started by a pending action is still running", pid)
@@ -214,21 +229,21 @@ func TestTrackerAfterStop(t *testing.T) {
 	// What is to be undone along with the processes is undone once they are
 	// gone, in the order it was given, and again by a second stop, such as
 	// the one at the end of a workflow a signal already stopped.
-	b := NewTracker()
+	tr := NewTracker()
 	pid := startGroup(t, "sleep 60")
-	b.Track(pid, "")
+	tr.Track(pid, "")
 
 	var calls []string
-	b.AfterStop(func() {
+	tr.AfterStop(func() {
 		if groupAlive(pid) {
 			t.Errorf("process group %d is still running when what follows the stop is called", pid)
 		}
 		calls = append(calls, "first")
 	})
-	b.AfterStop(func() { calls = append(calls, "second") })
+	tr.AfterStop(func() { calls = append(calls, "second") })
 
-	b.Stop()
-	b.Stop()
+	tr.Stop()
+	tr.Stop()
 	if want := []string{"first", "second", "first", "second"}; !reflect.DeepEqual(calls, want) {
 		t.Errorf("calls = %v, want %v", calls, want)
 	}

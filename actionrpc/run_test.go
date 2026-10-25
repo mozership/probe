@@ -124,7 +124,7 @@ func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("RunExecutableStepContext() error = %v, want the deadline exceeded", err)
 	}
-	if took := time.Since(start); took > 2*time.Second+StopGrace+5*time.Second {
+	if took := time.Since(start); took > 2*time.Second+TermGrace+5*time.Second {
 		t.Errorf("RunExecutableStepContext() took %s", took)
 	}
 

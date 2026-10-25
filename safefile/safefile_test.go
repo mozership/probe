@@ -1,7 +1,10 @@
 package safefile
 
 import (
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,4 +165,144 @@ func TestOpenForAppend_RefusesLinkedParentDirectory(t *testing.T) {
 		t.Fatalf("an unconfined path should be opened as given: %v", err)
 	}
 	_ = f.Close()
+}
+
+// tempFiles returns the temporary files Replace left next to name in the
+// current directory.
+func tempFiles(t *testing.T, name string) []string {
+	t.Helper()
+	left, err := filepath.Glob("." + name + ".tmp*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return left
+}
+
+func TestReplace_WriteFails(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("report.json", []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// The write gets part of the way before it fails, as one cut short by a
+	// full disk would.
+	failure := errors.New("disk full")
+	err := Replace("report.json", func(w io.Writer) error {
+		_, _ = io.WriteString(w, "half a rep")
+		return failure
+	})
+	if !errors.Is(err, failure) {
+		t.Errorf("error = %v, want the write's own", err)
+	}
+	unchanged(t, "report.json")
+	if left := tempFiles(t, "report.json"); len(left) != 0 {
+		t.Errorf("temporary files left behind: %v", left)
+	}
+
+	// A file that did not exist is not created half written.
+	if err := Replace("new.json", func(io.Writer) error { return failure }); !errors.Is(err, failure) {
+		t.Errorf("error = %v, want the write's own", err)
+	}
+	if _, err := os.Lstat("new.json"); !os.IsNotExist(err) {
+		t.Errorf("new.json exists after a failed write: %v", err)
+	}
+	if left := tempFiles(t, "new.json"); len(left) != 0 {
+		t.Errorf("temporary files left behind: %v", left)
+	}
+}
+
+func TestReplace_UnwritableDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes to a read-only directory")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("report.json", []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	if err := Replace("report.json", writeText("report")); !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("error = %v, want the temporary file refused", err)
+	}
+	unchanged(t, "report.json")
+}
+
+func TestReplace_OutsideUnderAFile(t *testing.T) {
+	// The directory of an explicit path outside the working directory cannot
+	// be made where a file already is.
+	t.Chdir(t.TempDir())
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Replace(filepath.Join(file, "report.json"), writeText("report")); err == nil {
+		t.Error("Replace under a file succeeded")
+	}
+}
+
+func TestOpenForAppend_Size(t *testing.T) {
+	for _, confine := range []bool{true, false} {
+		t.Run(fmt.Sprintf("confine=%v", confine), func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if err := os.WriteFile("summary.md", []byte("0123456789"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			f, size, err := OpenForAppend("summary.md", confine)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if size != 10 {
+				t.Errorf("size = %d, want the 10 bytes the file holds", size)
+			}
+			if _, err := io.WriteString(f, "more"); err != nil {
+				t.Fatal(err)
+			}
+			_ = f.Close()
+			if data, _ := os.ReadFile("summary.md"); string(data) != "0123456789more" {
+				t.Errorf("content = %q, want the write appended", data)
+			}
+
+			// A missing file is created along with its directory, empty.
+			f, size, err = OpenForAppend(filepath.Join("new", "summary.md"), confine)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = f.Close()
+			if size != 0 {
+				t.Errorf("size = %d for a new file, want 0", size)
+			}
+			if _, err := os.Stat(filepath.Join("new", "summary.md")); err != nil {
+				t.Errorf("the new file was not created: %v", err)
+			}
+		})
+	}
+}
+
+func TestOpenForAppend_Errors(t *testing.T) {
+	for _, confine := range []bool{true, false} {
+		t.Run(fmt.Sprintf("confine=%v", confine), func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if err := os.Mkdir("dir", 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := OpenForAppend("dir", confine); err == nil {
+				t.Error("a directory was opened to append to")
+			}
+
+			// The directory of a path outside the working directory cannot
+			// be made where a file already is.
+			file := filepath.Join(t.TempDir(), "file")
+			if err := os.WriteFile(file, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := OpenForAppend(filepath.Join(file, "summary.md"), confine); err == nil {
+				t.Error("a file under a file was opened to append to")
+			}
+		})
+	}
 }

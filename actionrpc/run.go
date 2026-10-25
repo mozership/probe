@@ -29,9 +29,9 @@ func Run(name string, with map[string]any, log hclog.Logger) (map[string]any, er
 	return result, err
 }
 
-// StopGrace is how long an action whose call is given up on is given to exit
+// TermGrace is how long an action whose call is given up on is given to exit
 // on SIGTERM before it is killed.
-const StopGrace = 2 * time.Second
+const TermGrace = 2 * time.Second
 
 // RunStep is Run for a step: the action is told about the step and given the
 // state it left in the job, and the state it leaves is returned, which is nil
@@ -41,7 +41,7 @@ func RunStep(name string, call Call, log hclog.Logger) (map[string]any, map[stri
 }
 
 // RunStepContext is RunStep that gives up on the action once ctx is done:
-// the action is sent SIGTERM, and killed if it has not exited StopGrace
+// the action is sent SIGTERM, and killed if it has not exited TermGrace
 // later, and ctx's error is returned.
 func RunStepContext(ctx context.Context, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
 	return run(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
@@ -74,11 +74,11 @@ func RunExecutableStepContext(ctx context.Context, path string, sum []byte, call
 // command returns the command that serves an action, which is stopped once
 // ctx is done. It is sent SIGTERM rather than killed, so that it can stop
 // what it started, such as the background commands of the shell action, and
-// is killed if it has not exited StopGrace later.
+// is killed if it has not exited TermGrace later.
 func command(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = StopGrace
+	cmd.WaitDelay = TermGrace
 	return cmd
 }
 
@@ -362,10 +362,10 @@ func (o *stderrOutput) reason() string {
 }
 
 // awaitExit waits for the process that serves an action to exit, as one sent
-// SIGTERM by command does, by StopGrace or by being killed then. It gives up
+// SIGTERM by command does, by TermGrace or by being killed then. It gives up
 // a little later, for Kill to see to the process.
 func awaitExit(cl *plugin.Client) {
-	deadline := time.Now().Add(StopGrace + time.Second)
+	deadline := time.Now().Add(TermGrace + time.Second)
 	for !cl.Exited() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
