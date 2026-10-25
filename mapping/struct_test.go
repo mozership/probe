@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 type TestStruct struct {
@@ -383,6 +384,8 @@ func TestMapToStructByTags_Bool(t *testing.T) {
 		{in: int64(0), want: false},
 		{in: float64(1), want: true},
 		{in: float64(0), want: false},
+		{in: math.Copysign(0, -1), want: false},
+		{in: uint64(1), want: true},
 		{in: int64(2), wantErr: "cannot convert 2 to bool for field 'b': use true or false"},
 		{in: 0.5, wantErr: "cannot convert 0.5 to bool for field 'b'"},
 		{in: "yes", wantErr: "cannot convert 'yes' to bool for field 'b'"},
@@ -399,6 +402,89 @@ func TestMapToStructByTags_Bool(t *testing.T) {
 		}
 		if err != nil || got.B != tt.want {
 			t.Errorf("%v (%T): got %v, %v, want %v", tt.in, tt.in, got.B, err, tt.want)
+		}
+	}
+}
+
+func TestMapToStructByTags_NumberKinds(t *testing.T) {
+	// Each numeric kind takes a number that fits it, and refuses one that
+	// does not, rather than wrap it round or cut it down as a conversion
+	// does.
+	type dest struct {
+		U   uint          `map:"u"`
+		U8  uint8         `map:"u8"`
+		I8  int8          `map:"i8"`
+		I16 int16         `map:"i16"`
+		I32 int32         `map:"i32"`
+		I64 int64         `map:"i64"`
+		F32 float32       `map:"f32"`
+		F64 float64       `map:"f64"`
+		D   time.Duration `map:"d"`
+	}
+	tests := []struct {
+		key     string
+		in      any
+		want    any
+		wantErr string
+	}{
+		{key: "u", in: int64(7), want: uint(7)},
+		{key: "u", in: float64(7), want: uint(7)},
+		{key: "u", in: "7", want: uint(7)},
+		{key: "u", in: uint64(math.MaxUint64), want: uint(math.MaxUint)},
+		{key: "u", in: int64(-1), wantErr: "cannot convert -1 to uint for field 'u': out of range"},
+		{key: "u", in: -1.0, wantErr: "out of range"},
+		{key: "u", in: "-1", wantErr: "cannot convert '-1' to uint for field 'u'"},
+		{key: "u", in: 1.5, wantErr: "not a whole number"},
+		{key: "u", in: float64(1 << 64), wantErr: "out of range"},
+		{key: "u8", in: 255, want: uint8(255)},
+		{key: "u8", in: 256, wantErr: "cannot convert 256 to uint8 for field 'u8': out of range"},
+		{key: "i8", in: -128, want: int8(-128)},
+		{key: "i8", in: 128, wantErr: "out of range"},
+		{key: "i8", in: -129.0, wantErr: "out of range"},
+		{key: "i16", in: "32767", want: int16(32767)},
+		{key: "i16", in: "32768", wantErr: "cannot convert '32768' to int16"},
+		{key: "i32", in: int64(1 << 40), wantErr: "cannot convert 1099511627776 to int32 for field 'i32': out of range"},
+		{key: "i32", in: float64(math.MinInt32), want: int32(math.MinInt32)},
+		{key: "i32", in: float64(1 << 31), wantErr: "out of range"},
+		{key: "i64", in: uint64(math.MaxInt64), want: int64(math.MaxInt64)},
+		{key: "i64", in: uint64(1 << 63), wantErr: "out of range"},
+		{key: "i64", in: float64(1 << 63), wantErr: "out of range"},
+		{key: "i64", in: float64(-1 << 63), want: int64(math.MinInt64)},
+		{key: "f32", in: 1.5, want: float32(1.5)},
+		{key: "f32", in: int64(3), want: float32(3)},
+		{key: "f32", in: "2.25", want: float32(2.25)},
+		{key: "f32", in: 1e39, wantErr: "cannot convert 1e+39 to float32 for field 'f32': out of range"},
+		{key: "f32", in: math.Inf(1), want: float32(math.Inf(1))},
+		{key: "f64", in: 1e300, want: 1e300},
+		{key: "f64", in: uint64(math.MaxUint64), want: float64(math.MaxUint64)},
+		{key: "f64", in: "x", wantErr: "cannot convert 'x' to float64 for field 'f64'"},
+		{key: "f64", in: true, wantErr: "cannot convert bool to float64 for field 'f64'"},
+		// A time.Duration field takes a time.Duration only: a plain
+		// conversion made 30 thirty nanoseconds.
+		{key: "d", in: 30 * time.Second, want: 30 * time.Second},
+		{key: "d", in: int64(30), wantErr: "cannot convert int64 to time.Duration for field 'd': give a time.Duration"},
+		{key: "d", in: 1.5, wantErr: "give a time.Duration"},
+		{key: "d", in: "30s", wantErr: "give a time.Duration"},
+	}
+	for _, tt := range tests {
+		var got dest
+		err := MapToStructByTags(map[string]any{tt.key: tt.in}, &got)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("%s = %v (%T): error = %v, want %q", tt.key, tt.in, tt.in, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s = %v (%T): error = %v", tt.key, tt.in, tt.in, err)
+			continue
+		}
+		field := reflect.ValueOf(got).FieldByNameFunc(func(name string) bool {
+			f, _ := reflect.TypeOf(got).FieldByName(name)
+			return f.Tag.Get("map") == tt.key
+		})
+		if v := field.Interface(); v != tt.want {
+			t.Errorf("%s = %v (%T): got %v (%T), want %v (%T)", tt.key, tt.in, tt.in, v, v, tt.want, tt.want)
 		}
 	}
 }
