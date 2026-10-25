@@ -21,12 +21,6 @@ type Probe struct {
 	FilePath string
 	workflow Workflow
 	Config   Config
-	// aliasProblems, when it is set, is given what is wrong with the names
-	// the workflow's actions give, in place of Load failing on the first.
-	aliasProblems *[]aliasProblem
-	// problems, when it is set, is given what keeps the jobs from running
-	// as they are written, in place of Load failing on them.
-	problems *[]problem
 }
 
 type Config struct {
@@ -137,6 +131,8 @@ func (p *Probe) loadGraph() error {
 	return nil
 }
 
+// Load reads the workflow at FilePath, as a run reads it, and refuses it
+// for the first thing that keeps it from running as it is written.
 func (p *Probe) Load() error {
 	files, err := p.yamlFiles()
 	if err != nil {
@@ -152,10 +148,34 @@ func (p *Probe) Load() error {
 		}
 	}
 
+	aliases, found, err := p.load(files, y)
+	// A wrong name is told before what load stopped at, as all that
+	// follows the names reads the uses they give.
+	if len(aliases) > 0 {
+		return NewConfigurationError("resolve_alias", "failed to resolve the names of external actions", aliases[0])
+	}
+	if err != nil {
+		return err
+	}
+	// What keeps a job from running is found now, so that the run is
+	// refused before any job starts rather than when the job is reached.
+	if len(found) > 0 {
+		return problemsError(found)
+	}
+	return nil
+}
+
+// load decodes y, the text of files one after another, into the workflow.
+// It returns what is wrong with the names the workflow's actions give, and
+// what keeps its jobs from running as they are written, rather than failing
+// on them, so that probe check can tell each one and Load the first. The
+// error is for what the load cannot go past, such as a text that does not
+// decode; the names found before it are returned with it.
+func (p *Probe) load(files []string, y string) ([]aliasProblem, []problem, error) {
 	v := validator.New()
 	dec := yaml.NewDecoder(bytes.NewReader([]byte(y)), yaml.Validator(v), yaml.AllowDuplicateMapKey())
-	if err = dec.Decode(&p.workflow); err != nil {
-		return NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
+	if err := dec.Decode(&p.workflow); err != nil {
+		return nil, nil, NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}
 
 	// Set base path for resolving relative paths in embedded actions
@@ -168,40 +188,27 @@ func (p *Probe) Load() error {
 
 	// The names the workflow gives to external actions are replaced before
 	// anything reads a uses, the defaults included.
-	problems := p.workflow.aliasProblems(p.Config.Actions)
-	p.workflow.named = p.workflow.namedActions(problems)
-	problems = append(problems, p.workflow.resolveAliases(problems)...)
-	if p.aliasProblems != nil {
-		*p.aliasProblems = problems
-	} else if len(problems) > 0 {
-		return NewConfigurationError("resolve_alias", "failed to resolve the names of external actions", problems[0])
-	}
+	aliases := p.workflow.aliasProblems(p.Config.Actions)
+	p.workflow.named = p.workflow.namedActions(aliases)
+	aliases = append(aliases, p.workflow.resolveAliases(aliases)...)
 
 	p.setDefaultsToSteps()
 
 	// Additional validation and ID initialization
 	if err := p.validateIDs(); err != nil {
-		return err
+		return aliases, nil, err
 	}
 
 	// Validate repeat and retry limits
 	if err := p.validateRepeatLimits(); err != nil {
-		return err
+		return aliases, nil, err
 	}
 
 	if err := p.initializeEmptyIDs(); err != nil {
-		return err
+		return aliases, nil, err
 	}
 
-	// What keeps a job from running is found now, so that the run is
-	// refused before any job starts rather than when the job is reached.
-	found := p.workflow.problems()
-	if p.problems != nil {
-		*p.problems = found
-	} else if len(found) > 0 {
-		return problemsError(found)
-	}
-	return nil
+	return aliases, p.workflow.problems(), nil
 }
 
 // readYamlFiles returns the files at paths as one text, and the content of

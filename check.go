@@ -108,9 +108,9 @@ type CheckOptions struct {
 // The error it returns is for a workflow that cannot be read at all, such
 // as a file that does not exist.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
+	// What a run warns of as it loads is told as a finding here, as load
+	// writes no warning.
 	p := New(path, false)
-	// What a run warns of is told as a finding here.
-	p.Config.Warn = nil
 	files, err := p.yamlFiles()
 	if err != nil {
 		return nil, err
@@ -157,12 +157,11 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 
 	// What is wrong with the names of external actions is told on the line
 	// of each, with whatever else is wrong, rather than ending the check.
-	var aliases []aliasProblem
-	var problems []problem
+	// The workflow is loaded from the text read above, so that the lines
+	// mapped to the files are those of the text loaded.
 	p.Config.Actions = opts.Actions
-	p.aliasProblems = &aliases
-	p.problems = &problems
-	if err := p.Load(); err != nil {
+	aliases, problems, err := p.load(files, data)
+	if err != nil {
 		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
 		return c.sorted(), nil
 	}

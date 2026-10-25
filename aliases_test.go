@@ -217,11 +217,8 @@ jobs:
 func TestLoad_NamesForEmbeddedJobs(t *testing.T) {
 	redis := "github.com/mozership/probe-redis@" + aliasSHA
 	p := &Probe{Config: Config{Actions: builtinNames}}
-	// Problems are collected, as probe check does, so that the wrong name
-	// does not end the load.
-	p.aliasProblems = &[]aliasProblem{}
 	dir := t.TempDir()
-	p.FilePath = writeWorkflow(t, dir, "workflow.yml", `name: names
+	path := writeWorkflow(t, dir, "workflow.yml", `name: names
 actions:
   redis: `+redis+`
   greet: ./greet
@@ -235,8 +232,18 @@ jobs:
     with:
       path: job.yml
 `)
-	if err := p.Load(); err != nil {
+	// The problems are returned, as probe check has them, so that the
+	// wrong name does not end the load.
+	data, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
+	}
+	aliases, _, err := p.load([]string{path}, string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aliases) != 1 || aliases[0].name != "http" {
+		t.Errorf("aliases = %v, want the one of http", aliases)
 	}
 	// t.TempDir is a symbolic link on macOS, and the workflow is found by
 	// the path it was given.
