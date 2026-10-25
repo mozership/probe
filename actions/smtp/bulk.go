@@ -7,27 +7,20 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/mozership/probe/mapping"
 )
 
-func NewBulk(p map[string]any) (*Bulk, error) {
-	var b Bulk
-	if err := mapping.AssignStruct(p, &b); err != nil {
-		return nil, err
-	}
-	return &b, nil
-}
-
+// Bulk sends Message generated messages from From to To over Session SMTP
+// sessions at the same time. Req.Do builds it from the smtp action's
+// parameters once they are checked.
 type Bulk struct {
-	Addr       string `map:"addr" validate:"required"`
-	From       string `map:"from" validate:"required"`
-	To         string `map:"to" validate:"required"`
-	Subject    string `map:"subject"`
-	MyHostname string `map:"myhostname"`
-	Session    int    `map:"session"`
-	Message    int    `map:"message"`
-	Length     int    `map:"length"`
+	Addr       string
+	From       string
+	To         string
+	Subject    string
+	MyHostname string
+	Session    int
+	Message    int
+	Length     int
 
 	// StartTLS is off, auto or required, as the smtp action's starttls. It
 	// is off when empty, as Bulk always was.

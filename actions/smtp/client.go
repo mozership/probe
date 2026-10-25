@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -69,23 +70,9 @@ func (r *Req) Do() (*Result, error) {
 	// Always create result with current request data, even if validation fails
 	result := &Result{Req: *r}
 
-	if r.Addr == "" {
-		return result, fmt.Errorf("Req.Addr is required")
-	}
-	if r.From == "" {
-		return result, fmt.Errorf("Req.From is required")
-	}
-	if r.To == "" {
-		return result, fmt.Errorf("Req.To is required")
-	}
-	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
-	if startTLS == "" {
-		startTLS = StartTLSAuto
-	}
-	switch startTLS {
-	case StartTLSOff, StartTLSAuto, StartTLSRequired:
-	default:
-		return result, fmt.Errorf("invalid starttls %q: use off, auto or required", r.StartTLS)
+	startTLS, err := r.validate()
+	if err != nil {
+		return result, err
 	}
 
 	// callback before
@@ -95,38 +82,18 @@ func (r *Req) Do() (*Result, error) {
 
 	start := time.Now()
 
-	// Create parameter map for bulk email
-	params := map[string]string{
-		"addr":       r.Addr,
-		"from":       r.From,
-		"to":         r.To,
-		"subject":    r.Subject,
-		"myhostname": r.MyHostname,
+	bulk := &Bulk{
+		Addr:            r.Addr,
+		From:            r.From,
+		To:              r.To,
+		Subject:         r.Subject,
+		MyHostname:      r.MyHostname,
+		Session:         r.Session,
+		Message:         r.Message,
+		Length:          r.Length,
+		StartTLS:        startTLS,
+		InsecureSkipTLS: r.InsecureSkipTLS,
 	}
-
-	if r.Session > 0 {
-		params["session"] = fmt.Sprintf("%d", r.Session)
-	}
-	if r.Message > 0 {
-		params["message"] = fmt.Sprintf("%d", r.Message)
-	}
-	if r.Length > 0 {
-		params["length"] = fmt.Sprintf("%d", r.Length)
-	}
-
-	// Convert params to map[string]any for NewBulk
-	paramsAny := make(map[string]any)
-	for k, v := range params {
-		paramsAny[k] = v
-	}
-
-	// Create bulk mailer
-	bulk, err := NewBulk(paramsAny)
-	if err != nil {
-		return result, fmt.Errorf("failed to create bulk mailer: %w", err)
-	}
-	bulk.StartTLS = startTLS
-	bulk.InsecureSkipTLS = r.InsecureSkipTLS
 
 	// Execute mail delivery
 	deliveryResult := bulk.DeliverWithResult()
@@ -172,24 +139,38 @@ func (r *Req) Do() (*Result, error) {
 	return result, nil
 }
 
+// validate checks the parameters before anything is sent, naming the one
+// that is wrong, and returns starttls in the form Bulk takes.
+func (r *Req) validate() (string, error) {
+	switch {
+	case r.Addr == "":
+		return "", errors.New("addr is required")
+	case r.From == "":
+		return "", errors.New("from is required")
+	case r.To == "":
+		return "", errors.New("to is required")
+	// Fewer than one session or message would send nothing and report
+	// only a failure, and a negative length was taken as 0.
+	case r.Session < 1:
+		return "", fmt.Errorf("invalid session %d: use 1 or more", r.Session)
+	case r.Message < 1:
+		return "", fmt.Errorf("invalid message %d: use 1 or more", r.Message)
+	case r.Length < 0:
+		return "", fmt.Errorf("invalid length %d: use 0 or more", r.Length)
+	}
+	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
+	if startTLS == "" {
+		startTLS = StartTLSAuto
+	}
+	switch startTLS {
+	case StartTLSOff, StartTLSAuto, StartTLSRequired:
+		return startTLS, nil
+	default:
+		return "", fmt.Errorf("invalid starttls %q: use off, auto or required", r.StartTLS)
+	}
+}
+
 func Send(data map[string]any, opts ...Option) (map[string]any, error) {
-	// Convert map[string]any to map[string]string for internal processing
-	dataCopy := make(map[string]string)
-	for k, v := range data {
-		if str, ok := v.(string); ok {
-			dataCopy[k] = str
-		} else {
-			dataCopy[k] = fmt.Sprintf("%v", v)
-		}
-	}
-
-	// Convert map[string]string to map[string]any for HeaderToStringValue
-	dataCopyAny := make(map[string]any)
-	for k, v := range dataCopy {
-		dataCopyAny[k] = v
-	}
-	m := mapping.HeaderToStringValue(dataCopyAny)
-
 	r := NewReq()
 
 	cb := &Callback{}
@@ -201,7 +182,10 @@ func Send(data map[string]any, opts ...Option) (map[string]any, error) {
 	// A parameter that cannot be read stops the step before anything is
 	// sent: going on would send with that parameter at its zero value, such
 	// as insecure_skip_tls left false.
-	if err := mapping.MapToStructByTags(m, r); err != nil {
+	// MapToStructByTags reads a number or a numeric string into session,
+	// message and length, and a bool or "true" and "false" into
+	// insecure_skip_tls, so the parameters go to it as they are.
+	if err := mapping.MapToStructByTags(data, r); err != nil {
 		return map[string]any{}, err
 	}
 

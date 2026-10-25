@@ -32,64 +32,73 @@ func TestNewReq(t *testing.T) {
 }
 
 func TestReqDo_ValidationErrors(t *testing.T) {
+	// Each error names the parameter that is wrong, as the workflow spells
+	// it, and nothing is sent.
+	valid := func(edit func(r *Req)) *Req {
+		r := NewReq()
+		r.Addr = "127.0.0.1:1"
+		r.From = "test@example.com"
+		r.To = "recipient@example.com"
+		edit(r)
+		return r
+	}
 	tests := []struct {
-		name        string
-		req         *Req
-		expectError bool
-		errorMsg    string
+		name string
+		req  *Req
+		want string
 	}{
-		{
-			name: "missing addr",
-			req: &Req{
-				From: "test@example.com",
-				To:   "recipient@example.com",
-			},
-			expectError: true,
-			errorMsg:    "Req.Addr is required",
-		},
-		{
-			name: "missing from",
-			req: &Req{
-				Addr: "localhost:25",
-				To:   "recipient@example.com",
-			},
-			expectError: true,
-			errorMsg:    "Req.From is required",
-		},
-		{
-			name: "missing to",
-			req: &Req{
-				Addr: "localhost:25",
-				From: "test@example.com",
-			},
-			expectError: true,
-			errorMsg:    "Req.To is required",
-		},
+		{"missing addr", valid(func(r *Req) { r.Addr = "" }), "addr is required"},
+		{"missing from", valid(func(r *Req) { r.From = "" }), "from is required"},
+		{"missing to", valid(func(r *Req) { r.To = "" }), "to is required"},
+		{"no session", valid(func(r *Req) { r.Session = 0 }), "invalid session 0: use 1 or more"},
+		{"no message", valid(func(r *Req) { r.Message = -1 }), "invalid message -1: use 1 or more"},
+		{"negative length", valid(func(r *Req) { r.Length = -1 }), "invalid length -1: use 0 or more"},
+		{"unknown starttls", valid(func(r *Req) { r.StartTLS = "sometimes" }), `invalid starttls "sometimes": use off, auto or required`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.req.Do()
-
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("Do() expected error but got none")
-				}
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("Expected error message to contain '%s', got: %s", tt.errorMsg, err.Error())
-				}
-				return
+			before := false
+			tt.req.cb = &Callback{before: func(string, string, string) { before = true }}
+			_, err := tt.req.Do()
+			if err == nil || err.Error() != tt.want {
+				t.Errorf("Do() error = %v, want %q", err, tt.want)
 			}
-
-			if err != nil {
-				t.Errorf("Do() unexpected error: %v", err)
-				return
-			}
-
-			if result == nil {
-				t.Error("Do() returned nil result")
+			if before {
+				t.Error("Do() went on to send after a parameter was refused")
 			}
 		})
+	}
+}
+
+func TestSendReadsParametersAsTheyCome(t *testing.T) {
+	// A number may come as an int, a float64 as JSON gives it, or a numeric
+	// string, and a bool as a bool or its text. Each reaches the request
+	// as the same value.
+	addr := startMockServer(t, false)
+	for _, with := range []map[string]any{
+		{"session": 2, "message": 3, "length": 10, "insecure_skip_tls": true},
+		{"session": 2.0, "message": 3.0, "length": 10.0, "insecure_skip_tls": "true"},
+		{"session": "2", "message": "3", "length": "10", "insecure_skip_tls": "true"},
+	} {
+		with["addr"] = addr
+		with["from"] = "from@example.com"
+		with["to"] = "to@example.com"
+		with["starttls"] = "off"
+		var got Req
+		_, err := Send(with, WithAfter(func(r *Result) { got = r.Req }))
+		if err != nil {
+			t.Errorf("%v: Send() error: %v", with, err)
+			continue
+		}
+		if got.Session != 2 || got.Message != 3 || got.Length != 10 || !got.InsecureSkipTLS {
+			t.Errorf("%v: req = %+v, want session 2, message 3, length 10 and insecure_skip_tls", with, got)
+		}
+	}
+
+	_, err := Send(map[string]any{"addr": addr, "from": "f@example.com", "to": "t@example.com", "session": "two"})
+	if err == nil || !strings.Contains(err.Error(), "session") {
+		t.Errorf("unreadable session: error = %v, want one naming session", err)
 	}
 }
 
@@ -106,6 +115,8 @@ func TestReqDo_WithCallbacks(t *testing.T) {
 		From:    "test@example.com",
 		To:      "recipient@example.com",
 		Subject: "Test Subject",
+		Session: 1,
+		Message: 1,
 		cb: &Callback{
 			before: func(from string, to string, subject string) {
 				beforeCalled = true
