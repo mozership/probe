@@ -22,7 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.24
 	github.com/miekg/dns v1.1.73
 	github.com/pb33f/go-yaml v0.1.1
-	github.com/pb33f/libopenapi v0.41.3
+	github.com/pb33f/libopenapi v0.41.6
 	github.com/pb33f/libopenapi-validator v0.15.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/crypto v0.57.0
