@@ -350,7 +350,13 @@ func readFile(path string) (string, error) {
 	if err := checkRegular(path, info); err != nil {
 		return "", err
 	}
+	return readOpened(path, info)
+}
 
+// readOpened opens the file at path and reads it, as readFile does, once
+// info, what was found at path before it was opened, is known to be of a
+// regular file. The file opened must be the one info is of.
+func readOpened(path string, info os.FileInfo) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("file: %w", err)

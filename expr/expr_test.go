@@ -299,166 +299,224 @@ func TestSecurityValidation(t *testing.T) {
 	}
 }
 
-func TestCustomFunctions(t *testing.T) {
-	t.Run("match_json function", func(t *testing.T) {
-		expr := &Expr{}
-		input := "match_json(src, target)"
-		env := map[string]any{
-			"src": map[string]any{
-				"name": "test",
-				"age":  25,
-			},
-			"target": map[string]any{
-				"name": "test",
-				"age":  25,
-			},
-		}
+// TestFunctions evaluates the functions probe adds to expr. An input that
+// holds a template is evaluated as one, and any other as an expression.
+func TestFunctions(t *testing.T) {
+	over := strings.Repeat("a", maxStringLength+1)
+	pair := func(a, b any) map[string]any { return map[string]any{"src": a, "target": b} }
+	tests := []struct {
+		name    string
+		input   string
+		env     any
+		want    any
+		wantErr string
+		// check, when it is set, checks a value that cannot be known in
+		// advance, such as a random one, in place of want.
+		check func(got any) error
+	}{
+		// match_json
+		{name: "match_json of equal objects", input: "match_json(src, target)", env: pair(map[string]any{"name": "test", "age": 25}, map[string]any{"name": "test", "age": 25}), want: true},
+		{name: "match_json of different objects", input: "match_json(src, target)", env: pair(map[string]any{"name": "test"}, map[string]any{"name": "other"}), want: false},
+		{name: "match_json with an invalid regex", input: `match_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "match_json: invalid regex at key 'x'"},
+		{name: "match_json with one parameter", input: "match_json(src)", env: map[string]any{"src": map[string]any{"name": "test"}}, wantErr: "match_json requires exactly 2 parameters"},
+		{name: "match_json of a number", input: "match_json(1, {})", wantErr: "match_json parameters must be objects"},
+		{name: "match_json of a string target", input: "match_json({}, 'a')", wantErr: "match_json parameters must be objects"},
 
-		result, err := expr.Eval(input, env)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if result != true {
-			t.Errorf("expected true, got %v", result)
-		}
-	})
+		// diff_json
+		{name: "diff_json of different objects", input: "diff_json(src, target)", env: pair(map[string]any{"name": "test", "age": 25}, map[string]any{"name": "test", "age": 30}), check: func(got any) error {
+			if s, ok := got.(string); !ok || s == "" || s == "No diff" {
+				return fmt.Errorf("want a diff, got %#v", got)
+			}
+			return nil
+		}},
+		{name: "diff_json of equal objects", input: "diff_json({'a': 1}, {'a': 1})", want: "No diff"},
+		{name: "diff_json with an invalid regex", input: `diff_json(src, {"x": "/[/"})`, env: map[string]any{"src": map[string]any{"x": "abc"}}, wantErr: "diff_json: invalid regex at key 'x'"},
+		{name: "diff_json with one parameter", input: "diff_json({})", wantErr: "diff_json requires exactly 2 parameters"},
+		{name: "diff_json of a number", input: "diff_json({}, 1)", wantErr: "diff_json parameters must be objects"},
 
-	t.Run("diff_json function", func(t *testing.T) {
-		expr := &Expr{}
-		input := "diff_json(src, target)"
-		env := map[string]any{
-			"src": map[string]any{
-				"name": "test",
-				"age":  25,
-			},
-			"target": map[string]any{
-				"name": "test",
-				"age":  30,
-			},
-		}
+		// random_int
+		{name: "random_int with a positive integer", input: "random_int(100)", check: intBelow(100)},
+		{name: "random_int with a float", input: "random_int(100.0)", check: intBelow(100)},
+		{name: "random_int of 1", input: "random_int(1)", want: 0},
+		{name: "random_int of 2", input: "random_int(2)", check: intBelow(2)},
+		{name: "random_int with zero", input: "random_int(0)", wantErr: "random_int parameter must be positive"},
+		{name: "random_int with a negative", input: "random_int(-1)", wantErr: "random_int parameter must be positive"},
+		{name: "random_int with a string", input: "random_int('100')", wantErr: "random_int parameter must be an integer"},
+		{name: "random_int with no parameters", input: "random_int()", wantErr: "random_int requires exactly 1 parameter"},
+		{name: "random_int with two parameters", input: "random_int(100, 200)", wantErr: "random_int requires exactly 1 parameter"},
 
-		result, err := expr.Eval(input, env)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if result == nil {
-			t.Errorf("expected diff result, got nil")
-		}
-		// Should return difference as string
-		if resultStr, ok := result.(string); !ok || resultStr == "No diff" {
-			t.Errorf("expected diff string, got %v", result)
-		}
-	})
+		// random_str
+		{name: "random_str with a positive length", input: "random_str(10)", check: randomStr(10)},
+		{name: "random_str with a float", input: "random_str(5.0)", check: randomStr(5)},
+		{name: "random_str with a large length", input: "random_str(10000)", check: randomStr(10000)},
+		{name: "random_str of 1", input: "random_str(1)", check: randomStr(1)},
+		{name: "random_str with zero", input: "random_str(0)", wantErr: "random_str parameter must be positive"},
+		{name: "random_str with a negative", input: "random_str(-1)", wantErr: "random_str parameter must be positive"},
+		{name: "random_str too long", input: "random_str(1000001)", wantErr: "random_str parameter must be <= 1000000"},
+		{name: "random_str with a string", input: "random_str('10')", wantErr: "random_str parameter must be an integer"},
+		{name: "random_str with no parameters", input: "random_str()", wantErr: "random_str requires exactly 1 parameter"},
+		{name: "random_str with two parameters", input: "random_str(10, 20)", wantErr: "random_str requires exactly 1 parameter"},
 
-	t.Run("match_json and diff_json with an invalid regex", func(t *testing.T) {
-		for _, fn := range []string{"match_json", "diff_json"} {
-			t.Run(fn, func(t *testing.T) {
-				expr := &Expr{}
-				input := fn + `(src, {"x": "/[/"})`
-				env := map[string]any{"src": map[string]any{"x": "abc"}}
-
-				_, err := expr.Eval(input, env)
-				if err == nil {
-					t.Fatalf("expected error for invalid regex")
+		// unixtime
+		{name: "unixtime", input: "unixtime()", check: func(got any) error {
+			now := time.Now().Unix()
+			if v, ok := got.(int64); !ok || v > now || v < now-5 {
+				return fmt.Errorf("want the time now, %d, got %#v", now, got)
+			}
+			return nil
+		}},
+		{name: "unixtime called in succession", input: "[unixtime(), unixtime(), unixtime()]", check: func(got any) error {
+			times, ok := got.([]any)
+			if !ok || len(times) != 3 {
+				return fmt.Errorf("want three times, got %#v", got)
+			}
+			for i := 1; i < len(times); i++ {
+				if d := times[i].(int64) - times[i-1].(int64); d < 0 || d > 1 {
+					return fmt.Errorf("want each within a second of the one before, got %v", times)
 				}
-				msg := err.Error()
-				if strings.Contains(msg, "panicked") {
-					t.Errorf("expected a regex error, got a panic: %v", msg)
+			}
+			return nil
+		}},
+		{name: "unixtime with a number", input: "unixtime(123)", wantErr: "unixtime takes no parameters"},
+		{name: "unixtime with a string", input: "unixtime('now')", wantErr: "unixtime takes no parameters"},
+
+		// parse_float
+		{name: "parse_float of a decimal", input: "parse_float('1.5')", want: 1.5},
+		{name: "parse_float of an exponent", input: "parse_float(s)", env: map[string]any{"s": "-2e3"}, want: -2000.0},
+		{name: "parse_float of text", input: "parse_float('abc')", wantErr: `parse_float error: strconv.ParseFloat: parsing "abc": invalid syntax`},
+		{name: "parse_float of a number", input: "parse_float(1)", wantErr: "parse_float parameter must be a string"},
+		{name: "parse_float with no parameters", input: "parse_float()", wantErr: "parse_float requires exactly 1 parameter"},
+		{name: "parse_float with two parameters", input: "parse_float('1', '2')", wantErr: "parse_float requires exactly 1 parameter"},
+
+		// parse_int
+		{name: "parse_int of an integer string", input: "parse_int(num_str)", env: map[string]any{"num_str": "123"}, want: int64(123)},
+		{name: "parse_int of a negative integer", input: "parse_int(num_str)", env: map[string]any{"num_str": "-456"}, want: int64(-456)},
+		{name: "parse_int of text", input: "parse_int(num_str)", env: map[string]any{"num_str": "not_a_number"}, wantErr: "parse_int error"},
+		{name: "parse_int of an int", input: "parse_int(num)", env: map[string]any{"num": 123}, want: int64(123)},
+		{name: "parse_int of an int64", input: "parse_int(num)", env: map[string]any{"num": int64(-7)}, want: int64(-7)},
+		{name: "parse_int of a uint64", input: "parse_int(num)", env: map[string]any{"num": uint64(8)}, want: int64(8)},
+		{name: "parse_int of a float", input: "parse_int(num)", env: map[string]any{"num": 456.0}, want: int64(456)},
+		{name: "parse_int of a list", input: "parse_int(arr)", env: map[string]any{"arr": []int{1, 2, 3}}, wantErr: "parse_int parameter must be a string or number, got []int"},
+		{name: "parse_int with no parameters", input: "parse_int()", wantErr: "parse_int requires exactly 1 parameter"},
+
+		// encode_base64
+		{name: "encode_base64 of a string", input: "encode_base64('hello')", want: "aGVsbG8="},
+		{name: "encode_base64 of an empty string", input: "encode_base64('')", want: ""},
+		{name: "encode_base64 of punctuation", input: "encode_base64('Hello, World!')", want: "SGVsbG8sIFdvcmxkIQ=="},
+		{name: "encode_base64 with no parameters", input: "encode_base64()", wantErr: "encode_base64 requires exactly 1 parameter"},
+		{name: "encode_base64 with two parameters", input: "encode_base64('hello', 'world')", wantErr: "encode_base64 requires exactly 1 parameter"},
+		{name: "encode_base64 of a number", input: "encode_base64(123)", wantErr: "encode_base64 parameter must be a string"},
+		{name: "encode_base64 over the length limit", input: "encode_base64(s)", env: map[string]any{"s": over}, wantErr: "encode_base64 parameter exceeds maximum length (1000000 chars)"},
+
+		// decode_base64
+		{name: "decode_base64 of a string", input: "decode_base64('aGVsbG8=')", want: "hello"},
+		{name: "decode_base64 of an empty string", input: "decode_base64('')", want: ""},
+		{name: "decode_base64 of punctuation", input: "decode_base64('SGVsbG8sIFdvcmxkIQ==')", want: "Hello, World!"},
+		{name: "decode_base64 of what is not base64", input: "decode_base64('invalid!')", wantErr: "decode_base64 error"},
+		{name: "decode_base64 with no parameters", input: "decode_base64()", wantErr: "decode_base64 requires exactly 1 parameter"},
+		{name: "decode_base64 with two parameters", input: "decode_base64('aGVsbG8=', 'extra')", wantErr: "decode_base64 requires exactly 1 parameter"},
+		{name: "decode_base64 of a number", input: "decode_base64(123)", wantErr: "decode_base64 parameter must be a string"},
+		{name: "decode_base64 over the length limit", input: "decode_base64(s)", env: map[string]any{"s": over}, wantErr: "decode_base64 parameter exceeds maximum length (1000000 chars)"},
+
+		// encode_base64 and decode_base64 round trip
+		{name: "base64 round trip of words", input: "decode_base64(encode_base64('hello world'))", want: "hello world"},
+		{name: "base64 round trip of punctuation", input: "decode_base64(encode_base64('Hello, World!'))", want: "Hello, World!"},
+		{name: "base64 round trip of credentials", input: "decode_base64(encode_base64('user:password'))", want: "user:password"},
+		{name: "base64 round trip of symbols", input: "decode_base64(encode_base64('Special chars: !@#$%^&*()'))", want: "Special chars: !@#$%^&*()"},
+		{name: "base64 round trip of Unicode", input: "decode_base64(encode_base64('Unicode: こんにちは'))", want: "Unicode: こんにちは"},
+		{name: "base64 round trip of an empty string", input: "decode_base64(encode_base64(''))", want: ""},
+
+		// parse_json
+		{name: "parse_json and a field", input: "parse_json(data).name", env: map[string]any{"data": `{"name": "test", "id": 123}`}, want: "test"},
+		{name: "parse_json and a nested field", input: "parse_json(data).data.id", env: map[string]any{"data": `{"data": {"id": 456}}`}, want: float64(456)},
+		{name: "parse_json with match_json", input: "match_json(parse_json(data), expected)", env: map[string]any{"data": `{"name": "test"}`, "expected": map[string]any{"name": "test"}}, want: true},
+		{name: "parse_json of what is not JSON", input: "parse_json(data)", env: map[string]any{"data": "not json"}, wantErr: "parse_json"},
+		{name: "parse_json of an empty string", input: "parse_json('')", wantErr: "parse_json: empty string"},
+		{name: "parse_json of a number", input: "parse_json(data)", env: map[string]any{"data": 123}, wantErr: "parse_json parameter must be a string"},
+		{name: "parse_json with no parameters", input: "parse_json()", wantErr: "parse_json requires exactly 1 parameter"},
+		{name: "parse_json over the length limit", input: "parse_json(s)", env: map[string]any{"s": over}, wantErr: "parse_json parameter exceeds maximum length (1000000 chars)"},
+
+		// template
+		{name: "template with no parameters", input: "template()", wantErr: "template requires exactly 1 parameter"},
+		{name: "template with two parameters", input: "template('a', 'b')", wantErr: "template requires exactly 1 parameter"},
+		{name: "template over the length limit", input: "template(s)", env: map[string]any{"s": over}, wantErr: "template parameter exceeds maximum length (1000000 chars)"},
+
+		// In templates
+		{name: "random_int in a template", input: "User ID: {{random_int(9999)}}", check: expanded("User ID: ")},
+		{name: "random_str in a template", input: "Session: {{random_str(16)}}", check: expanded("Session: ")},
+		{name: "unixtime in a template", input: "Timestamp: {{unixtime()}}", check: expanded("Timestamp: ")},
+		{name: "functions in a template", input: "ID: {{random_int(1000)}}, Token: {{random_str(8)}}, Time: {{unixtime()}}", check: expanded("ID: ")},
+		{name: "parse_json in a template", input: "ID: {{parse_json(data).id}}", env: map[string]any{"data": `{"id": 42, "name": "test"}`}, want: "ID: 42"},
+		{name: "encode_base64 in a template", input: "Authorization: Basic {{encode_base64('user:pass')}}", want: "Authorization: Basic dXNlcjpwYXNz"},
+		{name: "decode_base64 in a template", input: "Decoded: {{decode_base64('aGVsbG8=')}}", want: "Decoded: hello"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := tt.env
+			if env == nil {
+				env = map[string]any{}
+			}
+			e := &Expr{}
+			var got any
+			var err error
+			if HasTemplate(tt.input) {
+				got, err = e.EvalTemplate(tt.input, env)
+			} else {
+				got, err = e.Eval(tt.input, env)
+			}
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("got %#v, %v, want an error containing %q", got, err, tt.wantErr)
 				}
-				want := fn + ": invalid regex at key 'x'"
-				if !strings.Contains(msg, want) {
-					t.Errorf("error = %q, want containing %q", msg, want)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.check != nil {
+				if err := tt.check(got); err != nil {
+					t.Error(err)
 				}
-			})
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %#v (%T), want %#v (%T)", got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
+// intBelow checks that a value is an int from 0 up to n.
+func intBelow(n int) func(any) error {
+	return func(got any) error {
+		if v, ok := got.(int); !ok || v < 0 || v >= n {
+			return fmt.Errorf("want an int from 0 up to %d, got %#v", n, got)
 		}
-	})
+		return nil
+	}
+}
 
-	t.Run("custom function with wrong parameters", func(t *testing.T) {
-		expr := &Expr{}
-		input := "match_json(src)"
-		env := map[string]any{
-			"src": map[string]any{"name": "test"},
+// randomStr checks that a value is a string of n letters and digits.
+func randomStr(n int) func(any) error {
+	return func(got any) error {
+		s, ok := got.(string)
+		if !ok || len(s) != n || !regexp.MustCompile("^[a-zA-Z0-9]+$").MatchString(s) {
+			return fmt.Errorf("want %d letters and digits, got %#v", n, got)
 		}
+		return nil
+	}
+}
 
-		_, err := expr.Eval(input, env)
-		if err == nil {
-			t.Errorf("expected error for wrong parameter count")
+// expanded checks that a value is text that starts with prefix and has no
+// braces left of a template.
+func expanded(prefix string) func(any) error {
+	return func(got any) error {
+		s, ok := got.(string)
+		if !ok || !strings.HasPrefix(s, prefix) || strings.ContainsAny(s, "{}") {
+			return fmt.Errorf("want the templates after %q evaluated, got %#v", prefix, got)
 		}
-	})
-
-	t.Run("parse_int function", func(t *testing.T) {
-		expr := &Expr{}
-		tests := []struct {
-			name     string
-			input    string
-			env      map[string]any
-			expected int64
-			wantErr  bool
-		}{
-			{
-				name:     "valid integer string",
-				input:    "parse_int(num_str)",
-				env:      map[string]any{"num_str": "123"},
-				expected: 123,
-				wantErr:  false,
-			},
-			{
-				name:     "negative integer",
-				input:    "parse_int(num_str)",
-				env:      map[string]any{"num_str": "-456"},
-				expected: -456,
-				wantErr:  false,
-			},
-			{
-				name:    "invalid string",
-				input:   "parse_int(num_str)",
-				env:     map[string]any{"num_str": "not_a_number"},
-				wantErr: true,
-			},
-			{
-				name:     "integer parameter",
-				input:    "parse_int(num)",
-				env:      map[string]any{"num": 123},
-				expected: 123,
-				wantErr:  false,
-			},
-			{
-				name:     "float64 parameter",
-				input:    "parse_int(num)",
-				env:      map[string]any{"num": 456.0},
-				expected: 456,
-				wantErr:  false,
-			},
-			{
-				name:    "unsupported parameter type",
-				input:   "parse_int(arr)",
-				env:     map[string]any{"arr": []int{1, 2, 3}},
-				wantErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, tt.env)
-
-				if tt.wantErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				if result != tt.expected {
-					t.Errorf("expected %v, got %v", tt.expected, result)
-				}
-			})
-		}
-	})
+		return nil
+	}
 }
 
 func TestWholeStringTemplateTypePreservation(t *testing.T) {
@@ -982,633 +1040,6 @@ func TestWithTimeout(t *testing.T) {
 	})
 }
 
-func TestNewCustomFunctions(t *testing.T) {
-	expr := &Expr{}
-	env := map[string]any{}
-
-	t.Run("random_int", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			expectErr bool
-		}{
-			{
-				name:      "valid random_int with positive integer",
-				input:     "random_int(100)",
-				expectErr: false,
-			},
-			{
-				name:      "valid random_int with float64 (common in JSON)",
-				input:     "random_int(100.0)",
-				expectErr: false,
-			},
-			{
-				name:      "invalid random_int with zero",
-				input:     "random_int(0)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_int with negative",
-				input:     "random_int(-1)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_int with string",
-				input:     "random_int('100')",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_int with no params",
-				input:     "random_int()",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_int with multiple params",
-				input:     "random_int(100, 200)",
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, env)
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				// Check result is integer and in valid range
-				if val, ok := result.(int); ok {
-					if tt.input == "random_int(100)" || tt.input == "random_int(100.0)" {
-						if val < 0 || val >= 100 {
-							t.Errorf("random_int(100) returned %d, expected 0 <= result < 100", val)
-						}
-					}
-				} else {
-					t.Errorf("expected int result, got %T", result)
-				}
-			})
-		}
-	})
-
-	t.Run("random_str", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			expectErr bool
-			length    int
-		}{
-			{
-				name:      "valid random_str with positive length",
-				input:     "random_str(10)",
-				expectErr: false,
-				length:    10,
-			},
-			{
-				name:      "valid random_str with float64",
-				input:     "random_str(5.0)",
-				expectErr: false,
-				length:    5,
-			},
-			{
-				name:      "valid random_str with large length",
-				input:     "random_str(10000)",
-				expectErr: false,
-				length:    10000,
-			},
-			{
-				name:      "invalid random_str with zero",
-				input:     "random_str(0)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_str with negative",
-				input:     "random_str(-1)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_str too long",
-				input:     "random_str(1000001)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_str with string",
-				input:     "random_str('10')",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_str with no params",
-				input:     "random_str()",
-				expectErr: true,
-			},
-			{
-				name:      "invalid random_str with multiple params",
-				input:     "random_str(10, 20)",
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, env)
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				// Check result is string with correct length
-				if str, ok := result.(string); ok {
-					if len(str) != tt.length {
-						t.Errorf("random_str(%d) returned string of length %d, expected %d", tt.length, len(str), tt.length)
-					}
-
-					// Check charset (alphanumeric)
-					matched, err := regexp.MatchString("^[a-zA-Z0-9]+$", str)
-					if err != nil {
-						t.Errorf("regex error: %v", err)
-					}
-					if !matched {
-						t.Errorf("random_str returned invalid characters: %s", str)
-					}
-				} else {
-					t.Errorf("expected string result, got %T", result)
-				}
-			})
-		}
-	})
-
-	t.Run("unixtime", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			expectErr bool
-		}{
-			{
-				name:      "valid unixtime with no params",
-				input:     "unixtime()",
-				expectErr: false,
-			},
-			{
-				name:      "invalid unixtime with params",
-				input:     "unixtime(123)",
-				expectErr: true,
-			},
-			{
-				name:      "invalid unixtime with string param",
-				input:     "unixtime('now')",
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				beforeCall := time.Now().Unix()
-				result, err := expr.Eval(tt.input, env)
-				afterCall := time.Now().Unix()
-
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				// Check result is int64 and reasonable timestamp
-				if val, ok := result.(int64); ok {
-					if val < beforeCall || val > afterCall {
-						t.Errorf("unixtime() returned %d, expected between %d and %d", val, beforeCall, afterCall)
-					}
-				} else {
-					t.Errorf("expected int64 result, got %T", result)
-				}
-			})
-		}
-	})
-
-	t.Run("template evaluation with custom functions", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			template string
-		}{
-			{
-				name:     "random_int in template",
-				template: "User ID: {{random_int(9999)}}",
-			},
-			{
-				name:     "random_str in template",
-				template: "Session: {{random_str(16)}}",
-			},
-			{
-				name:     "unixtime in template",
-				template: "Timestamp: {{unixtime()}}",
-			},
-			{
-				name:     "multiple functions in template",
-				template: "ID: {{random_int(1000)}}, Token: {{random_str(8)}}, Time: {{unixtime()}}",
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.EvalTemplate(tt.template, env)
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				// Basic validation that template was processed
-				if result == tt.template {
-					t.Errorf("template was not processed: %s", result)
-				}
-
-				// Check that placeholders were replaced
-				if regexp.MustCompile(`\{[^}]+\}`).MatchString(result) {
-					t.Errorf("template still contains unreplaced placeholders: %s", result)
-				}
-			})
-		}
-	})
-}
-
-func TestNewCustomFunctionsEdgeCases(t *testing.T) {
-	expr := &Expr{}
-	env := map[string]any{}
-
-	t.Run("random_int boundary values", func(t *testing.T) {
-		// Test with 1 (smallest valid value)
-		result, err := expr.Eval("random_int(1)", env)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if val, ok := result.(int); ok {
-			if val != 0 {
-				t.Errorf("random_int(1) should always return 0, got %d", val)
-			}
-		}
-
-		// Test with 2 (returns 0 or 1)
-		result, err = expr.Eval("random_int(2)", env)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if val, ok := result.(int); ok {
-			if val < 0 || val >= 2 {
-				t.Errorf("random_int(2) returned %d, expected 0 or 1", val)
-			}
-		}
-	})
-
-	t.Run("random_str boundary values", func(t *testing.T) {
-		// Test with 1 (smallest valid length)
-		result, err := expr.Eval("random_str(1)", env)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if str, ok := result.(string); ok {
-			if len(str) != 1 {
-				t.Errorf("random_str(1) returned string of length %d, expected 1", len(str))
-			}
-		}
-	})
-
-	t.Run("unixtime consistency", func(t *testing.T) {
-		// Call unixtime multiple times in quick succession
-		results := make([]int64, 3)
-		for i := range 3 {
-			result, err := expr.Eval("unixtime()", env)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if val, ok := result.(int64); ok {
-				results[i] = val
-			}
-		}
-
-		// All results should be within a reasonable time range (same second or consecutive seconds)
-		for i := 1; i < len(results); i++ {
-			diff := results[i] - results[i-1]
-			if diff < 0 || diff > 1 {
-				t.Errorf("unixtime() calls returned inconsistent results: %v", results)
-			}
-		}
-	})
-
-	t.Run("encode_base64", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			expectErr bool
-			expected  string
-		}{
-			{
-				name:      "valid encode_base64 with simple string",
-				input:     "encode_base64('hello')",
-				expectErr: false,
-				expected:  "aGVsbG8=",
-			},
-			{
-				name:      "valid encode_base64 with empty string",
-				input:     "encode_base64('')",
-				expectErr: false,
-				expected:  "",
-			},
-			{
-				name:      "valid encode_base64 with special characters",
-				input:     "encode_base64('Hello, World!')",
-				expectErr: false,
-				expected:  "SGVsbG8sIFdvcmxkIQ==",
-			},
-			{
-				name:      "invalid encode_base64 with no params",
-				input:     "encode_base64()",
-				expectErr: true,
-			},
-			{
-				name:      "invalid encode_base64 with multiple params",
-				input:     "encode_base64('hello', 'world')",
-				expectErr: true,
-			},
-			{
-				name:      "invalid encode_base64 with non-string param",
-				input:     "encode_base64(123)",
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, env)
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				if str, ok := result.(string); ok {
-					if str != tt.expected {
-						t.Errorf("encode_base64 returned %s, expected %s", str, tt.expected)
-					}
-				} else {
-					t.Errorf("expected string result, got %T", result)
-				}
-			})
-		}
-	})
-
-	t.Run("decode_base64", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			expectErr bool
-			expected  string
-		}{
-			{
-				name:      "valid decode_base64 with simple string",
-				input:     "decode_base64('aGVsbG8=')",
-				expectErr: false,
-				expected:  "hello",
-			},
-			{
-				name:      "valid decode_base64 with empty string",
-				input:     "decode_base64('')",
-				expectErr: false,
-				expected:  "",
-			},
-			{
-				name:      "valid decode_base64 with special characters",
-				input:     "decode_base64('SGVsbG8sIFdvcmxkIQ==')",
-				expectErr: false,
-				expected:  "Hello, World!",
-			},
-			{
-				name:      "invalid decode_base64 with invalid base64",
-				input:     "decode_base64('invalid!')",
-				expectErr: true,
-			},
-			{
-				name:      "invalid decode_base64 with no params",
-				input:     "decode_base64()",
-				expectErr: true,
-			},
-			{
-				name:      "invalid decode_base64 with multiple params",
-				input:     "decode_base64('aGVsbG8=', 'extra')",
-				expectErr: true,
-			},
-			{
-				name:      "invalid decode_base64 with non-string param",
-				input:     "decode_base64(123)",
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, env)
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				if str, ok := result.(string); ok {
-					if str != tt.expected {
-						t.Errorf("decode_base64 returned %s, expected %s", str, tt.expected)
-					}
-				} else {
-					t.Errorf("expected string result, got %T", result)
-				}
-			})
-		}
-	})
-
-	t.Run("base64 encode-decode round trip", func(t *testing.T) {
-		testStrings := []string{
-			"hello world",
-			"Hello, World!",
-			"user:password",
-			"Special chars: !@#$%^&*()",
-			"Unicode: こんにちは",
-			"",
-		}
-
-		for _, original := range testStrings {
-			t.Run("round trip: "+original, func(t *testing.T) {
-				// First encode
-				encodeResult, err := expr.Eval("encode_base64('"+original+"')", env)
-				if err != nil {
-					t.Errorf("encode error: %v", err)
-					return
-				}
-
-				encoded, ok := encodeResult.(string)
-				if !ok {
-					t.Errorf("encode result is not string: %T", encodeResult)
-					return
-				}
-
-				// Then decode
-				decodeResult, err := expr.Eval("decode_base64('"+encoded+"')", env)
-				if err != nil {
-					t.Errorf("decode error: %v", err)
-					return
-				}
-
-				decoded, ok := decodeResult.(string)
-				if !ok {
-					t.Errorf("decode result is not string: %T", decodeResult)
-					return
-				}
-
-				if decoded != original {
-					t.Errorf("round trip failed: original=%s, decoded=%s", original, decoded)
-				}
-			})
-		}
-	})
-
-	t.Run("parse_json", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			input     string
-			env       map[string]any
-			expected  any
-			expectErr bool
-		}{
-			{
-				name:     "parse object and access field",
-				input:    "parse_json(data).name",
-				env:      map[string]any{"data": `{"name": "test", "id": 123}`},
-				expected: "test",
-			},
-			{
-				name:     "parse object and access nested field",
-				input:    "parse_json(data).data.id",
-				env:      map[string]any{"data": `{"data": {"id": 456}}`},
-				expected: float64(456),
-			},
-			{
-				name:     "parse and use with match_json",
-				input:    "match_json(parse_json(data), expected)",
-				env:      map[string]any{"data": `{"name": "test"}`, "expected": map[string]any{"name": "test"}},
-				expected: true,
-			},
-			{
-				name:      "invalid json",
-				input:     "parse_json(data)",
-				env:       map[string]any{"data": "not json"},
-				expectErr: true,
-			},
-			{
-				name:      "non-string parameter",
-				input:     "parse_json(data)",
-				env:       map[string]any{"data": 123},
-				expectErr: true,
-			},
-			{
-				name:      "no parameters",
-				input:     "parse_json()",
-				env:       map[string]any{},
-				expectErr: true,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.Eval(tt.input, tt.env)
-				if tt.expectErr {
-					if err == nil {
-						t.Errorf("expected error but got none")
-					}
-					return
-				}
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-				if !reflect.DeepEqual(result, tt.expected) {
-					t.Errorf("expected %v (%T), got %v (%T)", tt.expected, tt.expected, result, result)
-				}
-			})
-		}
-	})
-
-	t.Run("parse_json in template", func(t *testing.T) {
-		result, err := expr.EvalTemplate("ID: {{parse_json(data).id}}", map[string]any{
-			"data": `{"id": 42, "name": "test"}`,
-		})
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-			return
-		}
-		if result != "ID: 42" {
-			t.Errorf("expected 'ID: 42', got %s", result)
-		}
-	})
-
-	t.Run("base64 functions in templates", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			template string
-			env      map[string]any
-			expected string
-		}{
-			{
-				name:     "encode_base64 in template",
-				template: "Authorization: Basic {{encode_base64('user:pass')}}",
-				env:      map[string]any{},
-				expected: "Authorization: Basic dXNlcjpwYXNz",
-			},
-			{
-				name:     "decode_base64 in template",
-				template: "Decoded: {{decode_base64('aGVsbG8=')}}",
-				env:      map[string]any{},
-				expected: "Decoded: hello",
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				result, err := expr.EvalTemplate(tt.template, tt.env)
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-
-				if result != tt.expected {
-					t.Errorf("template result: got %s, expected %s", result, tt.expected)
-				}
-			})
-		}
-	})
-}
-
 func TestFileFunction(t *testing.T) {
 	dir := t.TempDir()
 	body := filepath.Join(dir, "body.json")
@@ -1657,6 +1088,51 @@ func TestFileFunction(t *testing.T) {
 		if _, err := e.Eval(tt.input, env); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 			t.Errorf("Eval(%q) error = %v, want %q", tt.input, err, tt.wantErr)
 		}
+	}
+}
+
+func TestFileFunctionReadsUpToTheLimit(t *testing.T) {
+	full := filepath.Join(t.TempDir(), "full.txt")
+	if err := os.WriteFile(full, make([]byte, maxStringLength), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readFile(full)
+	if err != nil || len(got) != maxStringLength {
+		t.Errorf("readFile = %d bytes, %v, want %d bytes", len(got), err, maxStringLength)
+	}
+}
+
+// TestReadOpened gives readOpened what readFile found at a path before it
+// opened it, as if the path had come to hold something else in between.
+func TestReadOpened(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.txt")
+	second := filepath.Join(dir, "second.txt")
+	for _, p := range []string{first, second} {
+		if err := os.WriteFile(p, []byte(p), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	info, err := os.Stat(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := readOpened(first, info); err != nil || got != first {
+		t.Errorf("readOpened of the file found = %q, %v", got, err)
+	}
+	for _, tt := range []struct {
+		name, path, wantErr string
+	}{
+		{"another file", second, "file: " + second + " changed while it was opened"},
+		{"a directory", dir, "file: " + dir + " is a directory"},
+		{"nothing", filepath.Join(dir, "gone.txt"), "no such file or directory"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := readOpened(tt.path, info); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("readOpened(%q) error = %v, want %q", tt.path, err, tt.wantErr)
+			}
+		})
 	}
 }
 
