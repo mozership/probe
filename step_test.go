@@ -225,6 +225,71 @@ func TestStep_handleWait(t *testing.T) {
 	}
 }
 
+// A wait that cannot be evaluated, or is not a time, is told of, and the
+// step runs at once rather than fail.
+func TestStep_prepare_WaitThatIsNoTime(t *testing.T) {
+	tests := []struct {
+		name string
+		wait string
+		want string
+	}{
+		{name: "a template that cannot be evaluated", wait: "{{1 +}}s", want: "wait expression evaluation error: "},
+		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait format: soon"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			st := newStepRun(&Step{Name: "step", Wait: tt.wait}, nil)
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer}}
+
+			start := time.Now()
+			_, ok := st.prepare(jCtx)
+			if !ok {
+				t.Error("prepare() = false, want the step to run")
+			}
+			if d := time.Since(start); d > 500*time.Millisecond {
+				t.Errorf("prepare() took %v, want no wait", d)
+			}
+			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+				t.Errorf("output = %q, want %q", out, tt.want)
+			}
+			if st.templateErr != nil {
+				t.Errorf("templateErr = %v, want the wait to fail nothing", st.templateErr)
+			}
+		})
+	}
+}
+
+// A skipif that cannot be evaluated, or is not a boolean, is told of, and
+// the step runs rather than be skipped.
+func TestStep_shouldSkip_errorHandling(t *testing.T) {
+	tests := []struct {
+		name   string
+		skipIf string
+		want   string
+	}{
+		{name: "an expression that cannot be evaluated", skipIf: "invalid syntax ===", want: "skipif evaluation error: "},
+		{name: "not a boolean", skipIf: `"yes"`, want: "skipif expression must return boolean, got: string"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			st := newStepRun(&Step{Name: "step", SkipIf: tt.skipIf}, nil)
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: NewResult()}}
+
+			if st.shouldSkip(jCtx) {
+				t.Error("shouldSkip() = true, want the step to run")
+			}
+			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+				t.Errorf("output = %q, want %q", out, tt.want)
+			}
+			if _, ok := st.prepare(jCtx); !ok {
+				t.Error("prepare() = false, want the step to run")
+			}
+		})
+	}
+}
+
 func TestStep_SkipIfWithWaitTiming(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -2039,6 +2104,63 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	st.saveOutputs(jCtx)
 	if out := errOut.String(); out != "" {
 		t.Errorf("output = %q, want none for a step read through its id", out)
+	}
+}
+
+// An output that cannot be evaluated is told of and left out, and the
+// others of the step are saved.
+func TestSaveOutputs_SkipsOneThatCannotBeEvaluated(t *testing.T) {
+	printer := newBufferPrinter()
+	jCtx := &JobContext{runEnv: &runEnv{Printer: printer}, Outputs: NewOutputs()}
+	st := &stepRun{Step: &Step{ID: "login", Outputs: map[string]string{"bad": "nosuch(1)", "token": "res.v"}}, expr: &expr.Expr{}}
+	st.ctx = StepContext{Res: map[string]any{"v": "abc"}}
+
+	st.saveOutputs(jCtx)
+
+	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "output 'bad' evaluation error: ") {
+		t.Errorf("output = %q, want the error of the output", out)
+	}
+	got, ok := jCtx.Outputs.GetAll()["login"].(map[string]any)
+	if !ok {
+		t.Fatalf("outputs = %v, want the step's", jCtx.Outputs.GetAll())
+	}
+	if got["token"] != "abc" {
+		t.Errorf("token = %v, want abc", got["token"])
+	}
+	if _, ok := got["bad"]; ok {
+		t.Errorf("outputs = %v, want bad left out", got)
+	}
+}
+
+// The first attempt of a retry waits for its initial delay.
+func TestStep_executeActionWithRetry_InitialDelay(t *testing.T) {
+	callCount := 0
+	runner := &callCountingRunner{result: map[string]any{"res": map[string]any{"code": 0}}, callCount: &callCount}
+	delay := 50 * time.Millisecond
+	st := &stepRun{
+		Step: &Step{
+			Uses:  "test-action",
+			Test:  "true",
+			Retry: &StepRetry{MaxAttempts: 2, InitialDelay: Interval{Duration: delay}},
+		},
+		expr: &expr.Expr{},
+	}
+	printer := newBufferPrinter()
+	printer.verbose = true
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+
+	start := time.Now()
+	if _, err := st.executeActionWithRetry(runner, map[string]any{}, jCtx, "test"); err != nil {
+		t.Fatalf("executeActionWithRetry() error = %v", err)
+	}
+	if d := time.Since(start); d < delay {
+		t.Errorf("took %v, want at least the initial delay of %v", d, delay)
+	}
+	if callCount != 1 {
+		t.Errorf("calls = %d, want 1", callCount)
+	}
+	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "Initial delay before first attempt: 50ms") {
+		t.Errorf("output = %q, want the initial delay told of", out)
 	}
 }
 

@@ -254,6 +254,28 @@ func TestJob_shouldSkip(t *testing.T) {
 	}
 }
 
+// A list in the defaults is given to each step as a copy, so that a step
+// that changes its own, or a map in it, leaves the others' as they were.
+func TestMergeDefaults_ListsAreNotShared(t *testing.T) {
+	defaults := map[string]any{"args": []any{"-v", map[string]any{"name": "a"}, []any{1}}}
+	first, second := map[string]any{}, map[string]any{}
+	mergeDefaults(first, defaults)
+	mergeDefaults(second, defaults)
+
+	args := first["args"].([]any)
+	args[0] = "-q"
+	args[1].(map[string]any)["name"] = "b"
+	args[2].([]any)[0] = 2
+
+	want := []any{"-v", map[string]any{"name": "a"}, []any{1}}
+	if !reflect.DeepEqual(second["args"], want) {
+		t.Errorf("second args = %v, want %v", second["args"], want)
+	}
+	if !reflect.DeepEqual(defaults["args"], want) {
+		t.Errorf("defaults = %v, want %v", defaults["args"], want)
+	}
+}
+
 func TestJob_shouldSkip_errorHandling(t *testing.T) {
 	tests := []struct {
 		name     string
