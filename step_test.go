@@ -483,8 +483,9 @@ func TestStep_createSkippedStepResult(t *testing.T) {
 	if result.Index != 1 {
 		t.Errorf("Index = %v, want %v", result.Index, 1)
 	}
-	if result.Name != "Test Step (SKIPPED)" {
-		t.Errorf("Name = %v, want %v", result.Name, "Test Step (SKIPPED)")
+	// The result holds the name alone; the report marks it as skipped.
+	if result.Name != "Test Step" {
+		t.Errorf("Name = %v, want %v", result.Name, "Test Step")
 	}
 	if result.Status != StatusSkipped {
 		t.Errorf("Status = %v, want %v", result.Status, StatusSkipped)
@@ -3066,7 +3067,7 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
 
 		steps := result.Jobs["job"].StepResults
-		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped (SKIPPED)" {
+		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped" {
 			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
 		}
 	}

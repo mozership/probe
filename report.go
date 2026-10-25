@@ -89,9 +89,6 @@ func buildStepReport(sr StepResult) report.Step {
 		step.Status = report.Failed
 	case StatusSkipped:
 		step.Status = report.Skipped
-		// The terminal report marks a skipped step in its name; here the
-		// status already says so.
-		step.Name = strings.TrimSuffix(sr.Name, " (SKIPPED)")
 	default:
 		step.Status = report.Untested
 	}

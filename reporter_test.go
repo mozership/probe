@@ -279,6 +279,41 @@ func TestStreamReporter_ProgressGoesToStderr(t *testing.T) {
 	}
 }
 
+// The line of a step that is done tells its status by its icon, and a
+// skipped step is marked in its name as the report marks it.
+func TestStreamReporter_StepDoneLines(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	_, _, errOut, r := newTestStreamPrinter([]string{"first"})
+	r.StepDone("first", StepResult{Name: "get", Status: StatusSuccess, RT: "12ms"})
+	r.StepDone("first", StepResult{Name: "post", Status: StatusError})
+	r.StepDone("first", StepResult{Name: "sleep", Status: StatusWarning})
+	r.StepDone("first", StepResult{Name: "later", Status: StatusSkipped})
+	r.StepDone("first", StepResult{Name: "poll", Status: StatusSkipped, RepeatCounter: &StepRepeatCounter{Name: "poll", SkippedCount: 3, RepeatTotal: 3}})
+	r.StepDone("first", StepResult{Name: "odd", Status: StatusType(99)})
+
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
+	want := []string{
+		"[first] ✓ get (12ms)",
+		"[first] ✗ post",
+		"[first] △ sleep",
+		"[first] ⏭ later (SKIPPED)",
+		"[first] ⏭ poll (0/3 success)",
+		"[first] ? odd",
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("progress log lines = %d, want %d:\n%s", len(lines), len(want), errOut.String())
+	}
+	for i, line := range lines {
+		// The line starts with the time, which is left out.
+		_, rest, _ := strings.Cut(line, " ")
+		if rest != want[i] {
+			t.Errorf("line %d = %q, want %q", i, rest, want[i])
+		}
+	}
+}
+
 // TestStreamReporter_ProgressIsLabelledByJobName covers jobs running at
 // once, whose lines are told apart by the names of their jobs and line up.
 func TestStreamReporter_ProgressIsLabelledByJobName(t *testing.T) {

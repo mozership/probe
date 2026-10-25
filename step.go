@@ -1150,7 +1150,7 @@ func (st *stepRun) createSkippedStepResult(name string, jCtx *JobContext) StepRe
 	return StepResult{
 		Index:    st.idx,
 		ID:       st.repeatID(),
-		Name:     name + " (SKIPPED)",
+		Name:     name,
 		Status:   StatusSkipped,
 		RT:       "",
 		WaitTime: st.getWaitTimeForDisplay(),

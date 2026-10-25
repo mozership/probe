@@ -775,7 +775,7 @@ func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
 		{"failed", StepResult{Index: 2, Name: "post", Status: StatusError}, " 2. ✗  post\n"},
 		{"failed, with why", StepResult{Index: 2, Name: "post", Status: StatusError, TestOutput: "       res.code = 500"}, " 2. ✗  post\n       res.code = 500\n"},
 		{"untested", StepResult{Index: 3, Name: "sleep", Status: StatusWarning}, " 3. △  sleep\n"},
-		{"skipped", StepResult{Index: 4, Name: "later", Status: StatusSkipped}, " 4. ⏭  later\n"},
+		{"skipped", StepResult{Index: 4, Name: "later", Status: StatusSkipped}, " 4. ⏭  later (SKIPPED)\n"},
 		{"echoed", StepResult{Index: 5, Name: "echo", Status: StatusWarning, EchoOutput: "hello\n\n"}, " 5. △  echo\nhello\n"},
 	}
 	for _, tt := range tests {

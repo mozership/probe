@@ -379,7 +379,7 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 			case StatusWarning:
 				r.fprintf(&output, "%s %s %s%s%s\n", num, colorNoTest().Sprintf(IconTriangle), waitPrefix, stepResult.Name, ps)
 			case StatusSkipped:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorInfo().Sprintf(IconSkip), waitPrefix, colorDim().Sprintf("%s", stepResult.Name), ps)
+				r.fprintf(&output, "%s %s %s%s%s\n", num, colorInfo().Sprintf(IconSkip), waitPrefix, colorDim().Sprintf("%s", stepTitle(stepResult)), ps)
 			}
 
 			if stepResult.Report != "" {
@@ -400,6 +400,16 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 	}
 
 	return output.String()
+}
+
+// stepTitle returns how a step is named in the report and in the progress
+// of a run: by its name, marked as skipped when it was. A repeated step is
+// not marked, as its counts tell how many of its runs were skipped.
+func stepTitle(sr StepResult) string {
+	if sr.Status == StatusSkipped && sr.RepeatCounter == nil {
+		return sr.Name + " (SKIPPED)"
+	}
+	return sr.Name
 }
 
 // headerText returns the name and description of the workflow that head

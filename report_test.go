@@ -40,7 +40,7 @@ func newReportResult() (*Result, []string) {
 					Response: map[string]any{"code": 500, "body": "boom ``` ]]>"},
 				}},
 			{Index: 2, Name: "Connect", Status: StatusError, Failure: &StepFailure{Kind: FailureAction, Message: "connection refused"}},
-			{Index: 3, Name: "Cleanup (SKIPPED)", Status: StatusSkipped},
+			{Index: 3, Name: "Cleanup", Status: StatusSkipped},
 			{Index: 4, Name: "Note", Status: StatusWarning},
 		},
 	}
@@ -116,7 +116,7 @@ func TestBuildReport(t *testing.T) {
 		t.Errorf("Failure = %+v, want the response carried over", steps[1].Failure)
 	}
 	if steps[3].Name != "Cleanup" || steps[3].Status != report.Skipped {
-		t.Errorf("skipped step = %q/%q, want the SKIPPED marker removed from the name", steps[3].Name, steps[3].Status)
+		t.Errorf("skipped step = %q/%q, want the name as it is, the status skipped", steps[3].Name, steps[3].Status)
 	}
 	if steps[4].Status != report.Untested {
 		t.Errorf("step without a test = %q, want %q", steps[4].Status, report.Untested)

@@ -213,7 +213,7 @@ func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
 		suffix = colorDim().Sprintf(" (%s)", sr.RT)
 	}
 
-	r.progress(jobID, icon, sr.Name, suffix)
+	r.progress(jobID, icon, stepTitle(sr), suffix)
 }
 
 func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
