@@ -1870,10 +1870,10 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 }
 
 // A secret that a later step teaches the masker is hidden in what the
-// report shows of an earlier step that failed: the response under it is
-// masked as the report shows it, before it is cut short, so the report has
-// <redacted> where the secret was, not the part of it that the cut left,
-// which no masker finds.
+// report shows of an earlier step that failed: the response under it and
+// what the false condition compared. Both are masked as the report shows
+// them, before they are cut short, so the report has <redacted> where the
+// secret was, not the part of it that the cut left, which no masker finds.
 func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
 	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
 	tests := []struct {
@@ -1883,6 +1883,9 @@ func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
 	}{
 		// The response is cut after 512 bytes, inside the token.
 		{name: "in the response", body: strings.Repeat("x", 500) + token, test: "res.code == 200"},
+		// A value the condition compared is cut after 200 characters,
+		// inside the token.
+		{name: "in the false condition", body: strings.Repeat("x", 180) + token, test: `res.body == ""`},
 	}
 	for _, tt := range tests {
 		for _, mode := range []OutputMode{OutputModeSpinner, OutputModeStream} {

@@ -800,9 +800,10 @@ func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOpe
 			clause.Operands = nil
 		}
 		// The message is cut before the report masks it, so the secrets are
-		// hidden here, in the values themselves.
-		clause = maskClause(printer.Masker(), clause)
-		failure.Message += ": " + clauseSummary(clause)
+		// hidden here, in the values themselves. The clause is kept as it
+		// is: the report masks it as it shows it, with the secrets known by
+		// then, some of which a later step may have taught the masker.
+		failure.Message += ": " + clauseSummary(maskClause(printer.Masker(), clause))
 		failure.clause = &clause
 	}
 	return false, failure

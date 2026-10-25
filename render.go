@@ -162,7 +162,7 @@ func (r *reportRenderer) failureText(f *StepFailure, test string) string {
 	case FailureAssertion:
 		var b strings.Builder
 		if f.clause != nil {
-			b.WriteString(falseClauseDetail(*f.clause))
+			b.WriteString(falseClauseDetail(maskClause(r.masker, *f.clause)))
 		}
 		b.WriteString(exchangeDetail(r.masker, f.Request, f.Response))
 		return b.String()

@@ -974,3 +974,28 @@ func TestReportRenderer_failureText(t *testing.T) {
 		})
 	}
 }
+
+// The condition that is false is kept as it is, and masked as the report
+// shows it, by the masker of the renderer: what that knows by then is
+// hidden, also where the value is cut short.
+func TestReportRenderer_failureText_MasksTheClause(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	const secret = "s3cr3t-value-of-the-run"
+	m := mask.New([]string{"S"}, map[string]string{"S": secret})
+	r := newReportRenderer(nil, nil, m)
+	value := strings.Repeat("x", 190) + secret
+	f := &StepFailure{Kind: FailureAssertion, clause: &expr.Clause{
+		Expr:     `res.body == ""`,
+		Operands: []expr.Operand{{Expr: "res.body", Value: value}},
+	}}
+
+	got := r.failureText(f, `res.body == ""`)
+	if strings.Contains(got, secret[:6]) || !strings.Contains(got, "<") {
+		t.Errorf("failureText() = %q, want the secret hidden before the value is cut", got)
+	}
+	if f.clause.Operands[0].Value != value {
+		t.Error("failureText() changed the failure's clause, want it kept as it is")
+	}
+}

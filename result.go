@@ -124,7 +124,8 @@ type StepFailure struct {
 	// FailureRefused, so that why is read from it rather than the message.
 	refused *actionrpc.Refused
 	// clause is the condition of the test that is false, when Kind is
-	// FailureAssertion and it could be told, with the secrets hidden; got
+	// FailureAssertion and it could be told, as it is: the report hides the
+	// secrets in it as it shows it, as it does in Request and Response; got
 	// is what the test came to, when Kind is FailureTestType. The report
 	// shows them under the step.
 	clause *expr.Clause
