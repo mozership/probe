@@ -140,9 +140,12 @@ func TestMailboxCommands(t *testing.T) {
 			wantErr:  "failed to Unsubscribe from mailbox Nowhere",
 		},
 		{
-			// The failed command stops the run; the entry keeps what the
-			// command of the same name before it returned.
-			name:     "a failed command keeps the entry of the one before it",
+			// This pins behavior that has not changed: the failed command
+			// stops the run and leaves its entry with what the command of
+			// the same name before it returned. The Success: false answer
+			// a failure used to build was never stored, so dropping it
+			// makes no difference here.
+			name:     "a failed command leaves the entry of the one before it",
 			commands: []map[string]any{cmd("create", "mailbox", "Work"), cmd("create"), cmd("delete", "mailbox", "Work")},
 			wantErr:  "failed to execute command 2 (create): mailbox name is required",
 			entry:    "create",

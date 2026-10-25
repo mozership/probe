@@ -1763,3 +1763,28 @@ func TestRequestPortDefault(t *testing.T) {
 		t.Errorf("err = %v, want the action to connect to port 993, and fail to", err)
 	}
 }
+
+// TestFetch_UsesLatestSearch covers fetch without a sequence: it takes the
+// last search, and a select or examine after the search forgets it.
+func TestFetch_UsesLatestSearch(t *testing.T) {
+	host, port := plainIMAPServer(t, 3)
+	search := map[string]any{"name": "search", "criteria": map[string]any{"headers": map[string]any{"Subject": "message 2"}}}
+	fetch := map[string]any{"name": "fetch", "dataitem": "ENVELOPE"}
+
+	ret, err := runCommands(t, host, port, map[string]any{"name": "select", "mailbox": "INBOX"}, search, fetch)
+	require.NoError(t, err)
+	res := ret["res"].(map[string]any)
+	require.Equal(t, 0, res["code"], res["error"])
+	assert.Equal(t, []string{"message 2"}, fetchedSubjects(t, ret), "fetch without a sequence takes the search result")
+
+	ret, err = runCommands(t, host, port,
+		map[string]any{"name": "select", "mailbox": "INBOX"},
+		search,
+		map[string]any{"name": "examine", "mailbox": "INBOX"},
+		fetch,
+	)
+	require.NoError(t, err)
+	res = ret["res"].(map[string]any)
+	assert.Equal(t, 1, res["code"], "examine must forget the search")
+	assert.Contains(t, res["error"], "sequence is required for FETCH command")
+}
