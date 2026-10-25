@@ -32,6 +32,9 @@ func (c *checker) defaultsPath(jp, action string) string {
 func (c *checker) checkActions() {
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			path := fmt.Sprintf("jobs[%d].steps[%d].uses", i, j)
 			if actionref.IsExternal(st.Uses) {
 				if _, err := actionref.Parse(st.Uses); err != nil {
@@ -67,6 +70,9 @@ func (c *checker) checkEmbedded() {
 	}
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			line := c.line(fmt.Sprintf("jobs[%d].steps[%d].with.path", i, j))
 			eachEmbeddedStep(st, map[string]bool{}, func(file string, k int, es *Step) {
 				uses := es.Uses
@@ -131,6 +137,9 @@ func (c *checker) checkWith() {
 		c.checkDefaults(job.Defaults, jp, c.jobWhere(i))
 		defaults, _ := job.Defaults.(map[string]any)
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			sp := fmt.Sprintf("%s.steps[%d].with", jp, j)
 			// A key the step's with lacks comes from the defaults of its
 			// job or of the workflow, where it is checked. A key the step
@@ -210,6 +219,9 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 func (c *checker) checkRequired() {
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			groups := c.opts.Required[st.Uses]
 			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), expr.HasTemplate) {
 				continue

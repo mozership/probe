@@ -9,7 +9,7 @@ func jobWhere(jobs []Job, i int) string {
 
 // stepWhere names st, the step at index i of the job job names.
 func stepWhere(job string, i int, st *Step) string {
-	if st.Name == "" {
+	if st == nil || st.Name == "" {
 		return fmt.Sprintf("%s, step %d", job, i)
 	}
 	return fmt.Sprintf("%s, step %d %q", job, i, st.Name)

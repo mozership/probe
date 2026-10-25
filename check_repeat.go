@@ -19,6 +19,9 @@ func (c *checker) checkRepeatTests() {
 		}
 		ids := make([]string, 0, len(job.Steps))
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			ids = append(ids, st.idAt(j))
 		}
 		for _, t := range job.Repeat.tests() {

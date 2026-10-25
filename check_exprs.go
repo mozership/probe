@@ -43,6 +43,9 @@ func (c *checker) eachExpr(f func(exprAt)) {
 		e.input = job.SkipIf
 		f(e)
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
 			field := func(key string, late bool) exprAt {
 				return exprAt{path: sp + "." + key, where: c.stepWhere(i, j), field: key, job: i, step: j, late: late}
