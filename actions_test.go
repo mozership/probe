@@ -3,7 +3,6 @@ package probe
 import (
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mask"
 )
 
 func TestMockActionRunner(t *testing.T) {
@@ -145,110 +143,6 @@ func TestRunOptions_logLevel(t *testing.T) {
 				t.Errorf("RunOptions%+v.logLevel() = %v, want %v", tt.opts, got, tt.want)
 			}
 		})
-	}
-}
-
-// Outside a verbose run an action's error records are left out of its log,
-// as the step's result tells the error, while its warnings are kept.
-func TestActionLogExcludesErrorsOutsideAVerboseRun(t *testing.T) {
-	for _, verbose := range []bool{false, true} {
-		var buf strings.Builder
-		log := newActionLog("http", &buf, nil, hclog.Warn, verbose)
-		log.Warn("the widget is old")
-		log.Error("widget failed")
-		log.Named("stdio").Error("plugin process exited")
-
-		out := buf.String()
-		if !strings.Contains(out, "the widget is old") {
-			t.Errorf("verbose=%v: the warning should be kept, got:\n%s", verbose, out)
-		}
-		for _, msg := range []string{"widget failed", "plugin process exited"} {
-			if got := strings.Contains(out, msg); got != verbose {
-				t.Errorf("verbose=%v: the log has %q = %v, want %v:\n%s", verbose, msg, got, verbose, out)
-			}
-		}
-		if log.IsError() != verbose || !log.IsWarn() || log.IsInfo() {
-			t.Errorf("verbose=%v: IsError, IsWarn, IsInfo = %v, %v, %v", verbose, log.IsError(), log.IsWarn(), log.IsInfo())
-		}
-	}
-}
-
-// An action's records read as the rest of the verbose output does: the
-// level and the action first, then the fields as YAML-like lines, maps and
-// lists laid out, with no timestamp.
-func TestActionLogFormat(t *testing.T) {
-	var buf strings.Builder
-	log := newActionLog("./my-action", &buf, nil, hclog.Debug, true)
-	log.Debug("retrying the request",
-		"attempt", 2,
-		"headers", map[string]any{"Accept": "*/*"},
-		"hosts", []any{"a", "b"},
-		"error", errors.New("timed out"))
-	log.With("job", "j").Named("stdio").Warn("slow")
-	log.Trace("left out")
-	log.Info("odd", "lonely")
-
-	want := `[DEBUG] ./my-action: retrying the request
-[DEBUG]   attempt: 2
-[DEBUG]   error: timed out
-[DEBUG]   headers:
-[DEBUG]     Accept: */*
-[DEBUG]   hosts:
-[DEBUG]     - a
-[DEBUG]     - b
-[WARN] ./my-action.stdio: slow
-[WARN]   job: j
-[INFO] ./my-action: odd
-[INFO]   EXTRA_VALUE_AT_END: lonely
-`
-	if buf.String() != want {
-		t.Errorf("log =\n%s\nwant\n%s", buf.String(), want)
-	}
-}
-
-// What the masker knows is hidden in an action's records, in the message
-// and in the fields, credentials by their names as well.
-func TestActionLogHidesSecrets(t *testing.T) {
-	m := mask.New(nil, nil)
-	m.Learn(map[string]any{"password": "hunter2-secret"})
-	var buf strings.Builder
-	log := newActionLog("db", &buf, m, hclog.Debug, true)
-	log.Debug("connecting with hunter2-secret", "dsn", "app:hunter2-secret@db", "body", "line one\nhunter2-secret\n", "password", "other")
-
-	out := buf.String()
-	for _, secret := range []string{"hunter2-secret", "other"} {
-		if strings.Contains(out, secret) {
-			t.Errorf("the log holds %q:\n%s", secret, out)
-		}
-	}
-	if !strings.Contains(out, "[DEBUG] db: connecting with") {
-		t.Errorf("the log lost the record:\n%s", out)
-	}
-}
-
-// go-plugin skips the records of an action below the level of the logger
-// it logs them through, and the runner's level decides what is shown.
-func TestActionLogLevel(t *testing.T) {
-	tests := []struct {
-		verbose, trace bool
-		want           hclog.Level
-	}{
-		{false, false, hclog.Warn},
-		{false, true, hclog.Warn},
-		{true, false, hclog.Debug},
-		{true, true, hclog.Trace},
-	}
-	for _, tt := range tests {
-		if got := actionLogLevel(tt.verbose, tt.trace); got != tt.want {
-			t.Errorf("actionLogLevel(%v, %v) = %v, want %v", tt.verbose, tt.trace, got, tt.want)
-		}
-		log := newActionLog("a", io.Discard, nil, actionLogLevel(tt.verbose, tt.trace), tt.verbose)
-		if log.Named("a").GetLevel() != tt.want {
-			t.Errorf("a named log has level %v, want %v", log.Named("a").GetLevel(), tt.want)
-		}
-	}
-	if newActionLog("a", io.Discard, nil, hclog.Off, true).IsError() {
-		t.Error("an Off log should show nothing")
 	}
 }
 

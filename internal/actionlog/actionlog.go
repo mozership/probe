@@ -1,4 +1,7 @@
-package probe
+// Package actionlog shows the records of an action's process, those the
+// action logs and those go-plugin logs of running it, as the verbose output
+// of a step is laid out, with the secrets of the run hidden.
+package actionlog
 
 import (
 	"bufio"
@@ -14,7 +17,7 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-// actionLog is the log the records of an action's process are shown
+// Logger is the log the records of an action's process are shown
 // through: those the action logs, and those go-plugin logs of starting,
 // calling and stopping the process, which come at trace level. Each is
 // written as the verbose output of a step is, its level first and then the
@@ -27,7 +30,7 @@ import (
 //	[DEBUG]     Accept: */*
 //
 // Secrets are hidden in what it writes.
-type actionLog struct {
+type Logger struct {
 	// name is that of the action, as the step's uses writes it, and of the
 	// logger go-plugin names in it after it, as name.stdio.
 	name  string
@@ -43,17 +46,19 @@ type actionLog struct {
 	implied []any
 }
 
-// newActionLog returns the log of the action name, which writes the records
+var _ hclog.Logger = (*Logger)(nil)
+
+// New returns the log of the action name, which writes the records
 // at level and above to out, hiding the secrets masker knows. Records at
 // error level are written only when verbose is set.
-func newActionLog(name string, out io.Writer, masker *mask.Masker, level hclog.Level, verbose bool) *actionLog {
-	return &actionLog{name: name, level: level, verbose: verbose, masker: masker, out: out, mu: &sync.Mutex{}}
+func New(name string, out io.Writer, masker *mask.Masker, level hclog.Level, verbose bool) *Logger {
+	return &Logger{name: name, level: level, verbose: verbose, masker: masker, out: out, mu: &sync.Mutex{}}
 }
 
-// actionLogLevel returns the level an action's records are shown at: warn,
+// Level returns the level an action's records are shown at: warn,
 // debug in a verbose run, and trace in one that also shows how the runner
 // runs the action's process.
-func actionLogLevel(verbose, trace bool) hclog.Level {
+func Level(verbose, trace bool) hclog.Level {
 	switch {
 	case verbose && trace:
 		return hclog.Trace
@@ -65,7 +70,7 @@ func actionLogLevel(verbose, trace bool) hclog.Level {
 }
 
 // shows reports whether a record at level is written.
-func (l *actionLog) shows(level hclog.Level) bool {
+func (l *Logger) shows(level hclog.Level) bool {
 	if l.level == hclog.Off || level < l.level {
 		return false
 	}
@@ -77,7 +82,7 @@ func (l *actionLog) shows(level hclog.Level) bool {
 	return l.verbose || level < hclog.Error
 }
 
-func (l *actionLog) Log(level hclog.Level, msg string, args ...any) {
+func (l *Logger) Log(level hclog.Level, msg string, args ...any) {
 	if !l.shows(level) {
 		return
 	}
@@ -125,59 +130,59 @@ func fieldValue(v any) any {
 	return v
 }
 
-func (l *actionLog) Trace(msg string, args ...any) { l.Log(hclog.Trace, msg, args...) }
+func (l *Logger) Trace(msg string, args ...any) { l.Log(hclog.Trace, msg, args...) }
 
-func (l *actionLog) Debug(msg string, args ...any) { l.Log(hclog.Debug, msg, args...) }
+func (l *Logger) Debug(msg string, args ...any) { l.Log(hclog.Debug, msg, args...) }
 
-func (l *actionLog) Info(msg string, args ...any) { l.Log(hclog.Info, msg, args...) }
+func (l *Logger) Info(msg string, args ...any) { l.Log(hclog.Info, msg, args...) }
 
-func (l *actionLog) Warn(msg string, args ...any) { l.Log(hclog.Warn, msg, args...) }
+func (l *Logger) Warn(msg string, args ...any) { l.Log(hclog.Warn, msg, args...) }
 
-func (l *actionLog) Error(msg string, args ...any) { l.Log(hclog.Error, msg, args...) }
+func (l *Logger) Error(msg string, args ...any) { l.Log(hclog.Error, msg, args...) }
 
-func (l *actionLog) IsTrace() bool { return l.shows(hclog.Trace) }
+func (l *Logger) IsTrace() bool { return l.shows(hclog.Trace) }
 
-func (l *actionLog) IsDebug() bool { return l.shows(hclog.Debug) }
+func (l *Logger) IsDebug() bool { return l.shows(hclog.Debug) }
 
-func (l *actionLog) IsInfo() bool { return l.shows(hclog.Info) }
+func (l *Logger) IsInfo() bool { return l.shows(hclog.Info) }
 
-func (l *actionLog) IsWarn() bool { return l.shows(hclog.Warn) }
+func (l *Logger) IsWarn() bool { return l.shows(hclog.Warn) }
 
-func (l *actionLog) IsError() bool { return l.shows(hclog.Error) }
+func (l *Logger) IsError() bool { return l.shows(hclog.Error) }
 
-func (l *actionLog) ImpliedArgs() []any { return l.implied }
+func (l *Logger) ImpliedArgs() []any { return l.implied }
 
-func (l *actionLog) With(args ...any) hclog.Logger {
+func (l *Logger) With(args ...any) hclog.Logger {
 	with := *l
 	with.implied = append(append([]any{}, l.implied...), args...)
 	return &with
 }
 
-func (l *actionLog) Name() string { return l.name }
+func (l *Logger) Name() string { return l.name }
 
-func (l *actionLog) Named(name string) hclog.Logger {
+func (l *Logger) Named(name string) hclog.Logger {
 	named := *l
 	named.name = l.name + "." + name
 	return &named
 }
 
-func (l *actionLog) ResetNamed(name string) hclog.Logger {
+func (l *Logger) ResetNamed(name string) hclog.Logger {
 	named := *l
 	named.name = name
 	return &named
 }
 
-func (l *actionLog) SetLevel(level hclog.Level) { l.level = level }
+func (l *Logger) SetLevel(level hclog.Level) { l.level = level }
 
-func (l *actionLog) GetLevel() hclog.Level { return l.level }
+func (l *Logger) GetLevel() hclog.Level { return l.level }
 
-func (l *actionLog) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Logger {
+func (l *Logger) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Logger {
 	return log.New(l.StandardWriter(opts), "", 0)
 }
 
 // StandardWriter returns a writer that logs each line written to it, at
 // the level opts forces, or at info level.
-func (l *actionLog) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
+func (l *Logger) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
 	level := hclog.Info
 	if opts != nil && opts.ForceLevel != hclog.NoLevel {
 		level = opts.ForceLevel
