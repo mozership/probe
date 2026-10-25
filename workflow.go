@@ -13,7 +13,6 @@ import (
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
 )
 
@@ -155,29 +154,6 @@ func addToSchedule(s *schedule.Scheduler, job *Job) error {
 	return s.Add(schedule.Job{ID: job.ID, Needs: job.Needs, Always: job.Always})
 }
 
-// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
-// that is no job is not refused.
-func (w *Workflow) checkCycle() error {
-	scheduler, err := newScheduler(w.Jobs)
-	if err != nil {
-		return err
-	}
-	return scheduler.CheckCycle()
-}
-
-// validatedScheduler returns a scheduler of jobs, refusing them for a need
-// that is no job and for needs in a cycle.
-func validatedScheduler(jobs []Job) (*schedule.Scheduler, error) {
-	scheduler, err := newScheduler(jobs)
-	if err != nil {
-		return nil, err
-	}
-	if err := scheduler.Validate(); err != nil {
-		return nil, err
-	}
-	return scheduler, nil
-}
-
 // Env returns the workflow's own environment, which the vars of every run
 // read: the process's, as it was when Env was first called, unless the
 // workflow was given one. What a run is given in Config.Env is that run's
@@ -187,13 +163,6 @@ func (w *Workflow) Env() map[string]string {
 		w.env = envMap()
 	}
 	return w.env
-}
-
-// evalVars evaluates the vars of the workflow with its own environment
-// alone, as vareval.Eval does, for what is drawn of it before a run. A run
-// evaluates them with what it is given, in workflowRun.evalVars.
-func (w *Workflow) evalVars() (map[string]any, error) {
-	return vareval.Eval(w.Vars, nil, w.Env())
 }
 
 // maskedError shows err with the secrets masker knows hidden, and unwraps to

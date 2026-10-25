@@ -5,6 +5,7 @@ import (
 
 	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/vareval"
 )
 
 // graphBuilder resolves the files that embedded steps run, for Workflow.Graph.
@@ -16,12 +17,20 @@ type graphBuilder struct {
 // vars returns the workflow's evaluated vars, evaluating them on first use.
 func (b *graphBuilder) vars() map[string]any {
 	if b.evaluatedVars == nil {
-		vars, err := b.workflow.evalVars()
+		vars, err := b.workflow.varsWithOwnEnv()
 		if err == nil {
 			b.evaluatedVars = vars
 		}
 	}
 	return b.evaluatedVars
+}
+
+// varsWithOwnEnv evaluates the vars of the workflow with its own
+// environment and no vars given, as vareval.Eval does, for the graph drawn
+// of it before any run. A run evaluates them with what it is given, in
+// workflowRun.evalVars.
+func (w *Workflow) varsWithOwnEnv() (map[string]any, error) {
+	return vareval.Eval(w.Vars, nil, w.Env())
 }
 
 // expandPath expands template variables in the path using evaluated workflow vars

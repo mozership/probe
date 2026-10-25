@@ -1,6 +1,10 @@
 package probe
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/mozership/probe/internal/schedule"
+)
 
 // The workflow is refused for what keeps it from running at these points,
 // each in the order written here, and the first error stops it:
@@ -12,6 +16,8 @@ import "fmt"
 //     narrowed to some jobs; validatedScheduler; then resolveExternalActions.
 //   - Start, in workflowRun.execute, once the vars are evaluated:
 //     checkEmbeddedJobs, whose paths may read the vars.
+//   - probe dag, in Probe.loadGraph after Load: checkCycle, as there is no
+//     order to draw needs in a cycle in.
 //
 // What each of them checks is its own, and the error texts and their order
 // are what probe check and the tests pin.
@@ -117,4 +123,27 @@ func (w *Workflow) checkAllJobs(builtin []string) error {
 		}
 	}
 	return nil
+}
+
+// validatedScheduler returns a scheduler of jobs, refusing them for a need
+// that is no job and for needs in a cycle.
+func validatedScheduler(jobs []Job) (*schedule.Scheduler, error) {
+	scheduler, err := newScheduler(jobs)
+	if err != nil {
+		return nil, err
+	}
+	if err := scheduler.Validate(); err != nil {
+		return nil, err
+	}
+	return scheduler, nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
+// that is no job is not refused.
+func (w *Workflow) checkCycle() error {
+	scheduler, err := newScheduler(w.Jobs)
+	if err != nil {
+		return err
+	}
+	return scheduler.CheckCycle()
 }
