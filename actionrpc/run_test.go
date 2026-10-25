@@ -350,6 +350,109 @@ func TestCallsPastTheirDeadlineReturnTheDeadlineExceeded(t *testing.T) {
 	}
 }
 
+// expiringContext is a context that runs out of time when expire is called,
+// as one with a deadline does once the deadline comes. Its deadline is the
+// time it expired, and it has none before.
+type expiringContext struct {
+	context.Context
+	mu   sync.Mutex
+	at   time.Time
+	done chan struct{}
+}
+
+func newExpiringContext() *expiringContext {
+	return &expiringContext{Context: context.Background(), done: make(chan struct{})}
+}
+
+// expire has the context run out of time, unless it already has, and
+// returns when it did.
+func (c *expiringContext) expire() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.at.IsZero() {
+		c.at = time.Now()
+		close(c.done)
+	}
+	return c.at
+}
+
+func (c *expiringContext) Deadline() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.at, !c.at.IsZero()
+}
+
+func (c *expiringContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *expiringContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+// A cleanup that is still in its call when its time runs out is killed
+// where it is, without the SIGTERM and the grace the action of a step is
+// given, and the deadline exceeded is returned.
+func TestCleanupExecutableKillsAnActionThatHangs(t *testing.T) {
+	bin := testAction(t, "hang-action")
+	pidfile := filepath.Join(t.TempDir(), "pid")
+
+	// ctx runs out of time only once the action is in its cleanup, however
+	// long it took to start, so that it is the call that is given up on.
+	ctx := newExpiringContext()
+	returned := make(chan struct{})
+	expired := make(chan time.Time, 1)
+	go func() {
+		defer close(expired)
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(pidfile); err == nil && len(data) > 0 {
+				expired <- ctx.expire()
+				return
+			}
+			select {
+			case <-returned:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		ctx.expire()
+	}()
+	err := CleanupExecutable(ctx, bin, nil, CleanupCall{RunID: pidfile}, hclog.NewNullLogger())
+	stopped := time.Now()
+	close(returned)
+	at, ok := <-expired
+	if !ok {
+		t.Fatalf("the action did not reach its cleanup: CleanupExecutable() error = %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("CleanupExecutable() error = %v, want the deadline exceeded", err)
+	}
+	if took := stopped.Sub(at); took >= StopGrace {
+		t.Errorf("CleanupExecutable() returned %s after the deadline, want less than the grace of %s", took, StopGrace)
+	}
+
+	data, err := os.ReadFile(pidfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("the action is still running: kill(%d, 0) = %v", pid, err)
+	}
+	if _, err := os.Stat(pidfile + ".term"); err == nil {
+		t.Error("the action was sent SIGTERM, want it killed")
+	}
+}
+
 // An executable that does not serve an action is told not to have started,
 // with what it wrote of why.
 func TestRunExecutableTellsWhyAnActionDidNotStart(t *testing.T) {

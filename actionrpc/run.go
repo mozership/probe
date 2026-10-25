@@ -34,7 +34,7 @@ const StopGrace = 2 * time.Second
 // Once ctx is done, the action is sent SIGTERM, and killed if it has not
 // exited StopGrace later, and ctx's error is returned.
 func RunBuiltin(ctx context.Context, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	return run(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
+	return runStep(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
 }
 
 // RunExecutable starts the action served by the executable at path, calls it
@@ -42,7 +42,7 @@ func RunBuiltin(ctx context.Context, name string, call Call, log hclog.Logger) (
 // sum is not empty, the executable is started only if its SHA-256 digest is
 // sum.
 func RunExecutable(ctx context.Context, path string, sum []byte, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	return run(ctx, command(ctx, path), checksum(sum), call, log)
+	return runStep(ctx, command(ctx, path), checksum(sum), call, log)
 }
 
 // CleanupExecutable starts the action served by the executable at path, as
@@ -57,7 +57,7 @@ func CleanupExecutable(ctx context.Context, path string, sum []byte, call Cleanu
 	// out is left all the same, and a grace would only keep the end of the
 	// run waiting longer for each action that cleans up.
 	p := &process{cmd: exec.CommandContext(ctx, path)}
-	return p.call(ctx, checksum(sum), log, func(action *Client) error {
+	return p.once(ctx, checksum(sum), log, func(action *Client) error {
 		return action.Cleanup(ctx, call)
 	})
 }
@@ -82,10 +82,10 @@ func checksum(sum []byte) *plugin.SecureConfig {
 	return &plugin.SecureConfig{Checksum: sum, Hash: sha256.New()}
 }
 
-func run(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+func runStep(ctx context.Context, cmd *exec.Cmd, secure *plugin.SecureConfig, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
 	var result, newState map[string]any
 	p := &process{cmd: cmd}
-	err := p.call(ctx, secure, log, func(action *Client) error {
+	err := p.once(ctx, secure, log, func(action *Client) error {
 		var err error
 		result, newState, err = action.RunStep(ctx, call)
 		return err
@@ -141,10 +141,11 @@ func (p *process) start(ctx context.Context, secure *plugin.SecureConfig, log hc
 	return cl, raw.(*Client), nil
 }
 
-// call starts the process, has do call the action it serves once, and stops
-// it. Once ctx is done, the error is ctx's, whatever starting the process or
-// the call failed with; otherwise it is as start and callError tell it.
-func (p *process) call(ctx context.Context, secure *plugin.SecureConfig, log hclog.Logger, do func(*Client) error) error {
+// once starts the process, has do make the one call of the action it serves,
+// and stops it, for a step and for a cleanup alike. When ctx is done, the
+// error is ctx's, whatever starting the process or the call failed with;
+// otherwise it is as start and callError tell it.
+func (p *process) once(ctx context.Context, secure *plugin.SecureConfig, log hclog.Logger, do func(*Client) error) error {
 	cl, action, err := p.start(ctx, secure, log)
 	if err != nil {
 		if over(ctx) {
@@ -153,8 +154,10 @@ func (p *process) call(ctx context.Context, secure *plugin.SecureConfig, log hcl
 		return err
 	}
 	defer func() {
-		// Kill would have the action shut down without a signal, before the
-		// SIGTERM it is sent once ctx is done has reached it.
+		// Once ctx is done the process is already being stopped, sent
+		// SIGTERM for a step and killed for a cleanup. Kill would have the
+		// action of a step shut down without the signal, before SIGTERM has
+		// reached it; of a cleanup, it waits only for the exit to be seen.
 		if over(ctx) {
 			awaitExit(cl)
 		}
@@ -353,9 +356,11 @@ func (o *stderrOutput) reason() string {
 	return strings.Join(lines, "\n")
 }
 
-// awaitExit waits for the process that serves an action to exit, as one sent
-// SIGTERM by command does, by StopGrace or by being killed then. It gives up
-// a little later, for Kill to see to the process.
+// awaitExit waits for the process that serves an action to exit once ctx is
+// done: one that serves a step is sent SIGTERM by command, and exits by
+// StopGrace or is killed then, and one that cleans up is killed at once by
+// exec.CommandContext. It gives up a little after StopGrace, for Kill to see
+// to the process.
 func awaitExit(cl *plugin.Client) {
 	deadline := time.Now().Add(StopGrace + time.Second)
 	for !cl.Exited() && time.Now().Before(deadline) {
