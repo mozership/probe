@@ -64,11 +64,14 @@ func (j *Job) problems(jp, where string) []problem {
 		out = append(out, expressionProblems(jp+".repeat.baseline_test", where, "repeat.baseline_test", j.Repeat.BaselineTest)...)
 	}
 	for k, st := range j.Steps {
-		if st == nil {
-			continue
-		}
 		sp := fmt.Sprintf("%s.steps[%d]", jp, k)
 		sw := stepWhere(where, k, st)
+		// An item under steps that holds nothing is decoded as no step,
+		// which a run has nothing to run of.
+		if st == nil {
+			out = append(out, problem{path: sp, where: sw, err: errors.New("the step is empty")})
+			continue
+		}
 		out = append(out, templateProblems(sp+".name", sw, "name", st.Name)...)
 		out = append(out, templateProblems(sp+".with", sw, "with", st.With)...)
 		out = append(out, templateProblems(sp+".vars", sw, "vars", st.Vars)...)
@@ -91,7 +94,7 @@ func jobWhere(jobs []Job, i int) string {
 
 // stepWhere names st, the step at index i of the job job names.
 func stepWhere(job string, i int, st *Step) string {
-	if st.Name == "" {
+	if st == nil || st.Name == "" {
 		return fmt.Sprintf("%s, step %d", job, i)
 	}
 	return fmt.Sprintf("%s, step %d %q", job, i, st.Name)

@@ -359,7 +359,7 @@ func (p *Probe) validateIDs() error {
 
 		// Check for duplicate step IDs across all jobs
 		for stepIdx, step := range job.Steps {
-			if step.ID != "" {
+			if step != nil && step.ID != "" {
 				stepLocation := fmt.Sprintf("job[%d].step[%d]", jobIdx, stepIdx)
 				if existingLocation, exists := globalStepIDs[step.ID]; exists {
 					return NewConfigurationError("duplicate_step_id",

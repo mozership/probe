@@ -183,6 +183,9 @@ func (j *Job) validateRepeatIDs() error {
 	}
 	seen := make(map[string]int, len(j.Steps))
 	for i, st := range j.Steps {
+		if st == nil {
+			continue
+		}
 		id := st.ID
 		if id == "" {
 			id = defaultStepID(i)
@@ -272,7 +275,7 @@ func (j *Job) validateSteps() error {
 
 	for i, step := range j.Steps {
 		// Validate step ID format if provided
-		if step.ID != "" {
+		if step != nil && step.ID != "" {
 			if !isValidStepID(step.ID) {
 				return fmt.Errorf("step %d: invalid step ID '%s' - only [a-z0-9_-] characters are allowed", i, step.ID)
 			}

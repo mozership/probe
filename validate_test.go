@@ -56,6 +56,74 @@ jobs:
 	}
 }
 
+// An item under steps that holds nothing is refused as the workflow is
+// loaded, on its own and among other steps, rather than failed on.
+func TestProbe_Load_RefusesAnEmptyStep(t *testing.T) {
+	tests := []struct {
+		name     string
+		workflow string
+		refused  string
+	}{
+		{
+			name:     "the only step",
+			workflow: "name: e\njobs:\n- name: J\n  steps:\n  -\n",
+			refused:  `job 0 "J", step 0: the step is empty`,
+		},
+		{
+			name: "among other steps",
+			workflow: `name: e
+vars:
+  url: http://localhost
+jobs:
+- name: J
+  id: j
+  defaults:
+    http:
+      url: "{{ vars.url }}"
+  repeat:
+    count: 2
+    interval: 1s
+    test: steps.first.success_rate == 100
+  steps:
+  - name: first
+    id: first
+    uses: http
+    with:
+      get: /
+    retry:
+      max_attempts: 2
+    outputs:
+      code: res.code
+    test: res.code == 200
+  -
+  - name: last
+    uses: http
+    with:
+      get: /{{ outputs.first.code }}
+    echo: "{{ res.body }}"
+    test: res.code == 200
+  -
+- name: K
+  needs: [j]
+  steps:
+  - uses: shell
+    with:
+      cmd: echo {{ outputs.first.code }}
+    test: res.code == 0
+`,
+			refused: `job 0 "J", step 1: the step is empty`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := loadWorkflow(t, tt.workflow)
+			if err == nil || !strings.Contains(err.Error(), tt.refused) {
+				t.Errorf("Load() error = %v, want one saying %q", err, tt.refused)
+			}
+		})
+	}
+}
+
 // What a template gives is known only when the step runs, so a wait that is
 // a template is not checked as a time when the workflow is loaded.
 func TestProbe_Load_WaitOfATemplate(t *testing.T) {
