@@ -7,36 +7,32 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/mozership/probe/mapping"
 )
 
-func NewBulk(p map[string]any) (*Bulk, error) {
-	var b Bulk
-	if err := mapping.AssignStruct(p, &b); err != nil {
-		return nil, err
-	}
-	return &b, nil
-}
-
+// Bulk sends Message generated messages from From to To over Session SMTP
+// sessions at the same time. Req.Do builds it from the smtp action's
+// parameters once they are checked.
 type Bulk struct {
-	Addr       string `map:"addr" validate:"required"`
-	From       string `map:"from" validate:"required"`
-	To         string `map:"to" validate:"required"`
-	Subject    string `map:"subject"`
-	MyHostname string `map:"myhostname"`
-	Session    int    `map:"session"`
-	Message    int    `map:"message"`
-	Length     int    `map:"length"`
+	Addr       string
+	From       string
+	To         string
+	Subject    string
+	MyHostname string
+	Session    int
+	Message    int
+	Length     int
 
 	// StartTLS is off, auto or required, as the smtp action's starttls. It
 	// is off when empty, as Bulk always was.
 	StartTLS string
 	// InsecureSkipTLS accepts any certificate after STARTTLS.
 	InsecureSkipTLS bool
+	// Timeout is each session's Mail.Timeout. Zero means no limit.
+	Timeout time.Duration
 
-	mu    sync.Mutex
-	count int
+	mu       sync.Mutex
+	count    int
+	lastSent *SentMessage
 }
 
 type DeliveryResult struct {
@@ -48,6 +44,11 @@ type DeliveryResult struct {
 	// Rejected is set when a failed session got a reply from the server,
 	// such as a 550 to RCPT TO, rather than failing to reach it.
 	Rejected bool
+	// LastSent is the last message a server accepted, as it was sent, or
+	// nil when none was. The sessions run at the same time, so it is the
+	// last message of whichever session finished last, which need not be
+	// the message accepted last.
+	LastSent *SentMessage
 }
 
 func (b *Bulk) DeliverWithResult() DeliveryResult {
@@ -56,17 +57,21 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 		err   error
 	}
 
-	// Every delivery hands out the messages from the start.
+	// Every delivery hands out the messages from the start. The message is
+	// made once and shared by the sessions, which only read it, so that a
+	// step holds one body however many sessions it opens.
 	b.mu.Lock()
 	b.count = 0
+	b.lastSent = nil
 	b.mu.Unlock()
+	data := b.makeData()
 
 	var wg sync.WaitGroup
 	resultCh := make(chan sendResult, b.Session)
 
 	for i := 0; i < b.Session; i++ {
 		wg.Go(func() {
-			count, err := b.Send()
+			count, err := b.sendShare(data)
 			resultCh <- sendResult{count: count, err: err}
 		})
 	}
@@ -102,6 +107,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	// attempted.
 	b.mu.Lock()
 	attempted := b.count
+	lastSent := b.lastSent
 	b.mu.Unlock()
 
 	result := DeliveryResult{
@@ -111,6 +117,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 		Sessions: sessionsSuccess + sessionsFailed,
 		Error:    lastError,
 		Rejected: rejection != "",
+		LastSent: lastSent,
 	}
 	if rejection != "" {
 		result.Error = rejection
@@ -118,7 +125,10 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	return result
 }
 
-func (b *Bulk) Send() (int, error) {
+// sendShare takes this session's share of the messages and sends data as each
+// of them over one SMTP session, returning how many the server accepted.
+// data is only read, as the other sessions send it too.
+func (b *Bulk) sendShare(data []byte) (int, error) {
 	n := b.calcMessageNumEachSession()
 	if n == 0 {
 		return 0, nil
@@ -129,14 +139,20 @@ func (b *Bulk) Send() (int, error) {
 		LocalName:          b.MyHostname,
 		MailFrom:           b.From,
 		RcptTo:             splitRecipients(b.To),
-		Data:               b.makeData(),
+		Data:               data,
 		StartTLSDisabled:   b.StartTLS == "" || b.StartTLS == StartTLSOff,
 		StartTLSRequired:   b.StartTLS == StartTLSRequired,
 		InsecureSkipVerify: b.InsecureSkipTLS,
+		Timeout:            b.Timeout,
 		MessageCount:       n,
 	}
 
-	err := m.Send()
+	err := m.SendSession()
+	if m.LastSent != nil {
+		b.mu.Lock()
+		b.lastSent = m.LastSent
+		b.mu.Unlock()
+	}
 	if err != nil {
 		return m.Delivered, err
 	}
@@ -164,7 +180,12 @@ func (b *Bulk) calcMessageNumEachSession() int {
 	// sessions get what is left and those after them get none. Resetting the
 	// count once it ran out, as this used to, handed the messages out again
 	// to the sessions after an empty one.
-	n := (b.Message + b.Session - 1) / b.Session
+	// Rounding up by dividing first does not overflow, as adding Session
+	// to a Message near the largest int would.
+	n := b.Message / b.Session
+	if b.Message%b.Session != 0 {
+		n++
+	}
 	if left := b.Message - b.count; left < n {
 		n = left
 	}
@@ -172,36 +193,22 @@ func (b *Bulk) calcMessageNumEachSession() int {
 	return n
 }
 
+// makeData makes the message: its headers, and a body of a line of text
+// and Length asterisks broken into lines of 80. It writes them into one
+// slice of the size they need, as the body may be long.
 func (b *Bulk) makeData() []byte {
 	now := time.Now().Format("Mon, 02 Jan 2006 15:04:05 -0700")
-	appendingText := insertLF(strings.Repeat("*", b.Length), 80)
-	data := fmt.Sprintf(`From: %s
-To: %s
-Date: %s
-Subject: %s
-
-This is a test mail.
-
-%s
-`, b.From, b.To, now, b.Subject, appendingText)
-	return []byte(data)
-}
-
-func insertLF(s string, length int) string {
-	n := len(s)
-	if n <= length {
-		return s
-	}
-
-	var result strings.Builder
-	for i := 0; i < n; i += length {
-		if i+length < len(s) {
-			result.WriteString(s[i : i+length])
-			result.WriteByte('\n')
-		} else {
-			result.WriteString(s[i:])
+	head := fmt.Sprintf("From: %s\nTo: %s\nDate: %s\nSubject: %s\n\nThis is a test mail.\n\n", b.From, b.To, now, b.Subject)
+	const width = 80
+	data := make([]byte, 0, len(head)+b.Length+b.Length/width+1)
+	data = append(data, head...)
+	for i := 0; i < b.Length; i += width {
+		if i > 0 {
+			data = append(data, '\n')
+		}
+		for range min(width, b.Length-i) {
+			data = append(data, '*')
 		}
 	}
-
-	return result.String()
+	return append(data, '\n')
 }

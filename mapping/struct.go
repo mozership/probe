@@ -3,11 +3,14 @@
 package mapping
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -68,6 +71,239 @@ func fromAnySlice[T any](s []any) ([]T, error) {
 		res[i] = val
 	}
 	return res, nil
+}
+
+// boolParam reads a parameter for a bool field: a bool, a string that
+// strconv.ParseBool reads, such as "true" or "1", or a number equal to 0 or
+// 1, which reads as the same string would. Anything else is an error,
+// rather than false.
+func boolParam(v any, key string) (bool, error) {
+	switch val := v.(type) {
+	case bool:
+		return val, nil
+	case string:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return false, fmt.Errorf("cannot convert '%s' to bool for field '%s'", val, key)
+		}
+		return b, nil
+	}
+	n, ok := number(v)
+	if !ok {
+		return false, fmt.Errorf("cannot convert %T to bool for field '%s'", v, key)
+	}
+	switch {
+	case n.equals(0):
+		return false, nil
+	case n.equals(1):
+		return true, nil
+	}
+	return false, fmt.Errorf("cannot convert %v to bool for field '%s': use true or false", v, key)
+}
+
+// numeric is a number a parameter holds, kept as the kind it came as, so
+// that an int64 or a uint64 is compared and range checked exactly rather
+// than through a float64.
+type numeric struct {
+	kind reflect.Kind // reflect.Int64, reflect.Uint64 or reflect.Float64
+	i    int64
+	u    uint64
+	f    float64
+}
+
+// number reads v when it is of a numeric kind.
+func number(v any) (numeric, bool) {
+	if v == nil {
+		return numeric{}, false
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return numeric{kind: reflect.Int64, i: rv.Int()}, true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return numeric{kind: reflect.Uint64, u: rv.Uint()}, true
+	case reflect.Float32, reflect.Float64:
+		return numeric{kind: reflect.Float64, f: rv.Float()}, true
+	}
+	return numeric{}, false
+}
+
+// equals reports whether n is the small whole number m. A negative zero
+// equals 0.
+func (n numeric) equals(m int64) bool {
+	switch n.kind {
+	case reflect.Int64:
+		return n.i == m
+	case reflect.Uint64:
+		return m >= 0 && n.u == uint64(m)
+	default:
+		return n.f == float64(m)
+	}
+}
+
+// durationType is the type of a time.Duration field, which takes only a
+// time.Duration: a number has no unit, and reading it as nanoseconds, as a
+// plain conversion does, makes 30 thirty nanoseconds. An action reads a
+// duration it takes as text or seconds first, with ParseTimeout.
+var durationType = reflect.TypeFor[time.Duration]()
+
+// isDecimalFloat reports whether s is written as a decimal number, with an
+// optional sign, digits, a point and an exponent, and nothing else.
+func isDecimalFloat(s string) bool {
+	s = strings.TrimLeft(s, "+-")
+	if s == "" {
+		return false
+	}
+	digits := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits = true
+		case r == '.' || r == 'e' || r == 'E' || r == '+' || r == '-':
+		default:
+			return false
+		}
+	}
+	return digits
+}
+
+// isNumberKind reports whether a field of kind k is read by numberParam.
+func isNumberKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
+}
+
+// numberParam reads a parameter for a field of an int, uint or float kind
+// of type t: a number of any kind, as JSON and protobuf give a float64, or
+// a numeric string. A number that does not fit t is an error, rather than
+// cut down or wrapped round as a plain conversion does it: int64(2.5) is 2,
+// uint(-1) is the largest uint, and int32(1<<40) is 0. For an int or uint
+// that means a number that is not whole, or out of t's range; for a float,
+// one that is not finite, or beyond the largest float32 for a float32. A
+// string is read in base 10 for every kind: strconv.ParseFloat also reads
+// hexadecimal, underscores, "Inf" and "NaN", which an int field never took,
+// so a float field refuses them too.
+func numberParam(v any, t reflect.Type, key string) (reflect.Value, error) {
+	out := reflect.New(t).Elem()
+	if t == durationType {
+		if d, ok := v.(time.Duration); ok {
+			out.SetInt(int64(d))
+			return out, nil
+		}
+		return out, fmt.Errorf("cannot convert %T to %s for field '%s': give a time.Duration", v, t, key)
+	}
+	bits := t.Bits()
+	kind := t.Kind()
+	isInt := kind >= reflect.Int && kind <= reflect.Int64
+	isUint := kind >= reflect.Uint && kind <= reflect.Uint64
+
+	if s, ok := v.(string); ok {
+		var err error
+		switch {
+		case isInt:
+			var i int64
+			if i, err = strconv.ParseInt(s, 10, bits); err == nil {
+				out.SetInt(i)
+			}
+		case isUint:
+			var u uint64
+			if u, err = strconv.ParseUint(s, 10, bits); err == nil {
+				out.SetUint(u)
+			}
+		default:
+			var f float64
+			if !isDecimalFloat(s) {
+				err = strconv.ErrSyntax
+			} else if f, err = strconv.ParseFloat(s, bits); err == nil {
+				out.SetFloat(f)
+			}
+		}
+		if errors.Is(err, strconv.ErrRange) {
+			return out, fmt.Errorf("cannot convert '%s' to %s for field '%s': out of range", s, t, key)
+		}
+		if err != nil {
+			return out, fmt.Errorf("cannot convert '%s' to %s for field '%s'", s, t, key)
+		}
+		return out, nil
+	}
+
+	n, ok := number(v)
+	if !ok {
+		return out, fmt.Errorf("cannot convert %T to %s for field '%s'", v, t, key)
+	}
+	outOfRange := fmt.Errorf("cannot convert %v to %s for field '%s': out of range", v, t, key)
+
+	if !isInt && !isUint {
+		f := n.f
+		switch n.kind {
+		case reflect.Int64:
+			f = float64(n.i)
+		case reflect.Uint64:
+			f = float64(n.u)
+		}
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return out, fmt.Errorf("cannot convert %v to %s for field '%s': not a finite number", v, t, key)
+		}
+		if bits == 32 && math.Abs(f) > math.MaxFloat32 {
+			return out, outOfRange
+		}
+		out.SetFloat(f)
+		return out, nil
+	}
+
+	if n.kind == reflect.Float64 {
+		if math.IsNaN(n.f) || math.IsInf(n.f, 0) || n.f != math.Trunc(n.f) {
+			return out, fmt.Errorf("cannot convert %v to %s for field '%s': not a whole number", v, t, key)
+		}
+		// The bounds are powers of two, which a float64 holds exactly, and
+		// the upper one is exclusive, as float64 of the largest value
+		// rounds up to it.
+		limit := math.Ldexp(1, bits)
+		if isInt {
+			if n.f < -limit/2 || n.f >= limit/2 {
+				return out, outOfRange
+			}
+			out.SetInt(int64(n.f))
+		} else {
+			if n.f < 0 || n.f >= limit {
+				return out, outOfRange
+			}
+			out.SetUint(uint64(n.f))
+		}
+		return out, nil
+	}
+
+	if isInt {
+		lo, hi := int64(-1)<<(bits-1), int64(1)<<(bits-1)-1
+		switch {
+		case n.kind == reflect.Uint64 && n.u > uint64(hi):
+			return out, outOfRange
+		case n.kind == reflect.Uint64:
+			out.SetInt(int64(n.u))
+		case n.i < lo || n.i > hi:
+			return out, outOfRange
+		default:
+			out.SetInt(n.i)
+		}
+		return out, nil
+	}
+	hi := uint64(math.MaxUint64) >> (64 - bits)
+	switch {
+	case n.kind == reflect.Int64 && (n.i < 0 || uint64(n.i) > hi):
+		return out, outOfRange
+	case n.kind == reflect.Int64:
+		out.SetUint(uint64(n.i))
+	case n.u > hi:
+		return out, outOfRange
+	default:
+		out.SetUint(n.u)
+	}
+	return out, nil
 }
 
 // MapToStructByTags converts a map[string]any to a struct using struct tags.
@@ -207,39 +443,22 @@ func MapToStructByTags(params map[string]any, dest any) error {
 			if v, ok := params[mapTag]; ok {
 				// set a value for a field
 				if field.CanSet() {
-					// Special handling for bool fields to handle string "false"/"true" from YAML
-					if field.Kind() == reflect.Bool {
-						switch val := v.(type) {
-						case bool:
-							field.SetBool(val)
-						case string:
-							if boolVal, err := strconv.ParseBool(val); err == nil {
-								field.SetBool(boolVal)
-							} else {
-								return fmt.Errorf("cannot convert '%s' to bool for field '%s'", val, mapTag)
-							}
-						default:
-							return fmt.Errorf("cannot convert %T to bool for field '%s'", v, mapTag)
+					// A number goes through numberParam even of the field's own type,
+					// so that a NaN or an infinity is refused there.
+					if v != nil && reflect.TypeOf(v) == field.Type() && !isNumberKind(field.Kind()) {
+						field.Set(reflect.ValueOf(v))
+					} else if field.Kind() == reflect.Bool {
+						b, err := boolParam(v, mapTag)
+						if err != nil {
+							return err
 						}
-						// Special handling for int fields to handle float64 from YAML/JSON
-					} else if field.Kind() == reflect.Int {
-						switch val := v.(type) {
-						case int:
-							field.SetInt(int64(val))
-						case int64:
-							field.SetInt(val)
-						case float64:
-							// YAML/JSON numbers are parsed as float64, convert to int
-							field.SetInt(int64(val))
-						case string:
-							if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
-								field.SetInt(intVal)
-							} else {
-								return fmt.Errorf("cannot convert '%s' to int for field '%s'", val, mapTag)
-							}
-						default:
-							return fmt.Errorf("cannot convert %T to int for field '%s'", v, mapTag)
+						field.SetBool(b)
+					} else if isNumberKind(field.Kind()) {
+						n, err := numberParam(v, field.Type(), mapTag)
+						if err != nil {
+							return err
 						}
+						field.Set(n)
 					} else {
 						// Type-safe assignment based on field type
 						fieldType := field.Type()

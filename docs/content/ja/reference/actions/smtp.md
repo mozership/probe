@@ -32,15 +32,31 @@ steps:
 | `to` | String | 必須 | - | エンベロープの受信者。複数の受信者は`a@example.com, b@example.com`のようにカンマで区切る |
 | `subject` | String | 任意 | `""` | 件名 |
 | `myhostname` | String | 任意 | 実行マシンのホスト名。取得できなければ`localhost` | `EHLO` / `HELO`で名乗るホスト名。`localhost`を名乗るクライアントを拒否するサーバーが多いため、サーバーが受け付ける名前を指定する |
-| `session` | Integer | 任意 | `1` | 同時に開くSMTPセッション数 |
-| `message` | Integer | 任意 | `1` | 全セッション合計の送信通数。セッションに振り分けて送る |
-| `length` | Integer | 任意 | `0` | 生成する本文の末尾に付ける`*`の文字数 |
+| `session` | Integer | 任意 | `1` | 同時に開くSMTPセッション数。1から1000まで |
+| `message` | Integer | 任意 | `1` | 全セッション合計の送信通数。セッションに振り分けて送る。1以上 |
+| `length` | Integer | 任意 | `0` | 生成する本文の末尾に付ける`*`の文字数。104857600（100 MiB）まで |
 | `starttls` | String | 任意 | `auto` | `auto`はサーバーが提示していれば`STARTTLS`でTLSに切り替え、`required`は提示しないサーバーのセッションを失敗させ、`off`は使わない |
 | `insecure_skip_tls` | Boolean | 任意 | `false` | `STARTTLS`の後、自己署名などどんな証明書も受け入れる |
+| `timeout` | Duration | 任意 | `1m` | 接続と、サーバーとの読み書きでの1回ごとの待ち時間の上限。メッセージの終わりへの応答はその2倍まで待つ |
 
 `STARTTLS`の後はサーバーの証明書を`addr`のホストで検証するため、自己署名の証明書やホストの合わない証明書は、`insecure_skip_tls`を指定しない限りセッションを失敗させます。ポート465のように最初からTLSで始まる接続には対応していません。認証、CC/BCC、任意の本文やHTMLを指定するパラメータはありません。実行結果にレポートを出したい場合はステップの`echo`を使います。
 
-生成するメッセージには`From`、`To`、`Date`、`Subject`のヘッダーが付きます。本文は`This is a test mail.`の後に`length`個の`*`を続けたもので、80文字ごとに改行します。
+`timeout`には`10s`や`1m30s`のような時間の文字列か、秒数を書きます。時間でも数でもない値、0以下の値、`24h`を超える値はエラーになります。上限はセッション全体ではなく1回ごとの待ちに掛かるため、サーバーが応答し続ける限り、多くのメッセージを送るセッションは`timeout`より長くかかっても構いません。サーバーは応答の前にメッセージを検査することがあるため、メッセージの終わりへの応答は`timeout`の2倍（デフォルトでは2分）まで待ちます。この応答が時間切れになったメッセージは、サーバーが受け取っていても失敗として数えます。時間内に応答しないサーバーのセッションは失敗し、1通も配送できなかった場合は`mail delivery failed: tcp dial error: read tcp ...: i/o timeout (the server did not answer within 1m0s)`のようなエラーでステップが終わります。
+
+セッション全体の上限は、ステップ自体の`timeout`（デフォルトは5m）です。待ちがどう進んでもアクションはそこで止まり、テストできる`res`は残りません。`timeout`のデフォルトはこれより十分に短いため、応答しなくなったサーバーのセッションはその前に失敗し、ステップは全セッションの通数を返せます。RFC 5321（4.5.3.2節）は、クライアントがほとんどの応答を5分、メッセージの終わりへの応答を10分待つよう求めています。グレイリスティングをするサーバーや、メッセージごとに検査をするサーバーのような遅いサーバーに送る場合は、両方を延ばします。1回ごとの待ちは`with.timeout`で、ステップの`timeout`はセッション全体にかかりうる時間より長くします。
+
+```yaml
+- name: Deliver to a slow server
+  uses: smtp
+  timeout: 30m
+  with:
+    addr: "mx.example.com:25"
+    from: "sender@example.com"
+    to: "recipient@example.com"
+    timeout: 5m
+```
+
+生成するメッセージには`From`、`To`、`Date`、`Subject`のヘッダーが付きます。本文は`This is a test mail.`の後に`length`個の`*`を続けたもので、80文字ごとに改行します。送るときには、メッセージごとにこれらの前へ2つのヘッダーを足します。送信した時刻をUnixナノ秒で表す`X-Send-Timestamp-Ns`と、メッセージごとの`Message-ID`です。`Message-ID`の`@`より前の部分は、件名の末尾にも` - <id>`の形で付けます。メッセージは送り始めるときに一度だけ作るため、1つのステップのメッセージはすべて同じ`Date`を持ちます。各メッセージを送った時刻は`X-Send-Timestamp-Ns`に入ります。
 
 ## レスポンスオブジェクト
 
@@ -53,8 +69,7 @@ steps:
 | `res.failed` | Integer | 失敗したセッション数 |
 | `res.total` | Integer | 試行した通数。`message`と同じ値 |
 | `res.error` | String | 失敗時のエラーメッセージ |
-| `res.maildata` | String | 生成したメール（テキストの場合） |
-| `res.filepath` | String | 生成したメールのパス（バイナリの場合） |
+| `res.maildata` | String | サーバーが最後に受け付けたメール。`Message-ID`と送信時刻を含む、送ったままの内容。セッションが複数なら、最後に終わったセッションが最後に送ったメール。1通も受け付けられなければ空 |
 | `rt.duration` | String | 配送にかかった時間（例: `"3.4ms"`） |
 | `rt.sec` | Float | 配送にかかった時間（秒） |
 | `status` | Integer | `res.code`と同じ値 |

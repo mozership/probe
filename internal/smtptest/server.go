@@ -1,8 +1,13 @@
-package smtp
+// Package smtptest provides an SMTP server for trying the smtp action
+// against: it accepts every message, offers STARTTLS when it has a
+// certificate, and logs each line it reads and writes.
+package smtptest
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -19,12 +24,14 @@ const (
 	inserver  string = "-"
 )
 
+// TLS names the certificate and key the server answers STARTTLS with.
 type TLS struct {
 	CertPath string
 	KeyPath  string
 }
 
-type MockServer struct {
+// Server is an SMTP server that accepts every message.
+type Server struct {
 	Addr string
 	Name string
 	Log  *log.Logger
@@ -34,9 +41,9 @@ type MockServer struct {
 	tlsConfig *tls.Config
 }
 
-type MockServerSession struct {
+type session struct {
 	id                string
-	server            *MockServer
+	server            *Server
 	conn              net.Conn
 	reader            *bufio.Reader
 	writer            *bufio.Writer
@@ -45,7 +52,10 @@ type MockServerSession struct {
 	secure bool
 }
 
-func (s *MockServer) Serve() error {
+// Serve listens on Addr and serves each connection until the process ends.
+// Without TLS it reads keys/cert.pem and keys/key.pem, and offers no
+// STARTTLS when they cannot be read.
+func (s *Server) Serve() error {
 	if s.TLS == nil {
 		s.TLS = &TLS{
 			CertPath: "keys/cert.pem",
@@ -76,15 +86,15 @@ func (s *MockServer) Serve() error {
 			continue
 		}
 
-		sess := &MockServerSession{server: s}
+		sess := &session{server: s}
 		go sess.handle(conn)
 	}
 }
 
-func (s *MockServerSession) handle(conn net.Conn) {
+func (s *session) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	err := s.setOptimisticID()
+	err := s.setID()
 	if err != nil {
 		s.server.Log.Println("UID generating error:", err)
 		return
@@ -123,7 +133,7 @@ func (s *MockServerSession) handle(conn net.Conn) {
 	}
 }
 
-func (s *MockServerSession) handleCommand(cmd string) {
+func (s *session) handleCommand(cmd string) {
 	first := ""
 	second := ""
 	parts := strings.Fields(strings.TrimSpace(cmd))
@@ -189,20 +199,19 @@ func (s *MockServerSession) handleCommand(cmd string) {
 	}
 }
 
-func (s *MockServerSession) setOptimisticID() error {
-	uid, err := OptimisticUID()
-	if err != nil {
+// setID gives the session a random ID to tell its lines apart in the log.
+func (s *session) setID() error {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
 		return err
 	}
-	s.id = uid
+	s.id = hex.EncodeToString(b)
 	return nil
 }
 
 // startTLS switches the session to TLS. A failed handshake ends it, since
 // the connection is in no state to go on in plain text.
-//
-//nolint:unused // Reserved for future TLS support
-func (s *MockServerSession) startTLS() {
+func (s *session) startTLS() {
 	tlsConn := tls.Server(s.conn, s.server.tlsConfig)
 	if err := tlsConn.Handshake(); err != nil {
 		s.server.Log.Printf("%s %s TLS handshake error: %v", s.id, inserver, err)
@@ -214,7 +223,7 @@ func (s *MockServerSession) startTLS() {
 	s.writer = bufio.NewWriter(tlsConn)
 }
 
-func (s *MockServerSession) writeStringWithLog(str string) {
+func (s *session) writeStringWithLog(str string) {
 	_, err := s.writer.WriteString(str + crlf)
 	if err != nil {
 		s.server.Log.Printf("%s %s WriteString error: %#v", s.id, outgoing, err)
