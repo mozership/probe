@@ -1032,12 +1032,18 @@ func (st *stepRun) counterKey() int {
 // is written in the job when it has none, as a loaded workflow gives it.
 // Every entry of an iteration has the same.
 func (st *stepRun) repeatID() string {
-	if st.ID != "" {
-		return st.ID
-	}
 	pos := st.idx
 	if st.placed {
 		pos = st.pos
+	}
+	return st.idAt(pos)
+}
+
+// idAt is the id the step, written at pos in its job, is read by: its own,
+// or the one a loaded workflow gives a step without one.
+func (st *Step) idAt(pos int) string {
+	if st.ID != "" {
+		return st.ID
 	}
 	return defaultStepID(pos)
 }

@@ -20,10 +20,7 @@ func (c *checker) checkTests() {
 		}
 		for j, st := range job.Steps {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
-			id := st.ID
-			if id == "" {
-				id = defaultStepID(j)
-			}
+			id := st.idAt(j)
 			switch {
 			case strings.TrimSpace(st.Test) == "":
 				// A step of an action that does nothing that could go

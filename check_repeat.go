@@ -28,28 +28,17 @@ func (c *checker) checkRepeatTests() {
 		}
 		ids := make([]string, 0, len(job.Steps))
 		for j, st := range job.Steps {
-			id := st.ID
-			if id == "" {
-				id = defaultStepID(j)
-			}
-			ids = append(ids, id)
+			ids = append(ids, st.idAt(j))
 		}
-		for _, t := range []struct{ key, test string }{
-			{"test", job.Repeat.Test},
-			{"baseline_test", job.Repeat.BaselineTest},
-		} {
+		for _, t := range job.Repeat.tests() {
 			if strings.TrimSpace(t.test) == "" || expr.Parse(t.test) != nil {
 				continue
 			}
 			key := "repeat." + t.key
-			line := c.line(fmt.Sprintf("jobs[%d].%s", i, key))
-			// A chain is read with each of its prefixes, so the same finding
-			// comes from several of them.
-			seen := map[string]bool{}
+			path := fmt.Sprintf("jobs[%d].%s", i, key)
 			add := func(severity, msg string) {
-				if msg != "" && !seen[msg] {
-					seen[msg] = true
-					c.add(severity, line, c.jobWhere(i), "%s: %s", key, msg)
+				if msg != "" {
+					c.addOnce(severity, path, c.jobWhere(i), "%s: %s", key, msg)
 				}
 			}
 			for _, chain := range expr.Reads(t.test, "steps") {

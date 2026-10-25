@@ -197,6 +197,8 @@ type checker struct {
 	files []fileStart
 	// readManifests are the external actions whose action.yml was read.
 	readManifests map[string]bool
+	// reported are the findings addOnce added, by their path and message.
+	reported map[string]bool
 }
 
 // newChecker returns a checker for opts, with its own copy of what it adds
@@ -207,6 +209,7 @@ func newChecker(opts CheckOptions) *checker {
 		params:    maps.Clone(opts.Params),
 		resFields: maps.Clone(opts.ResFields),
 		lines:     map[string]int{},
+		reported:  map[string]bool{},
 	}
 	if c.params == nil {
 		c.params = map[string][]string{}
@@ -226,6 +229,20 @@ func (c *checker) add(severity string, line int, where, format string, args ...a
 		Where:    where,
 		Message:  fmt.Sprintf(format, args...),
 	})
+}
+
+// addOnce adds a finding at the line of path, unless one with the same
+// message was added there by addOnce already. A chain an expression reads
+// is read with each of its prefixes, and a template may be written more
+// than once in a value, so the same finding comes from several of them.
+func (c *checker) addOnce(severity, path, where, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	key := path + "\x00" + msg
+	if c.reported[key] {
+		return
+	}
+	c.reported[key] = true
+	c.add(severity, c.line(path), where, "%s", msg)
 }
 
 // sorted returns the findings by file and line, keeping the order they were

@@ -118,6 +118,20 @@ type Repeat struct {
 	BaselineTest string `yaml:"baseline_test,omitempty"`
 }
 
+// repeatTest is a test of a repeated job, by the key it is written under.
+type repeatTest struct {
+	key, test string
+}
+
+// tests returns the tests of the job, by their keys under repeat, given or
+// not.
+func (r *Repeat) tests() []repeatTest {
+	return []repeatTest{
+		{"test", r.Test},
+		{"baseline_test", r.BaselineTest},
+	}
+}
+
 // Runs returns the number of runs of the job, the warmup runs included.
 func (r *Repeat) Runs() int {
 	return r.Warmup + r.Count
