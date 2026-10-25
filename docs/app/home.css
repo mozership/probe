@@ -42,11 +42,6 @@
   --lp-kicker: color-mix(in srgb, var(--lp-accent) 60%, var(--lp-ink));
 }
 
-/* The landing page manages its own gutters and background. */
-:root:has(.lp) body {
-  background-color: var(--lp-paper);
-}
-
 :root:has(.lp) article {
   padding-inline: 0;
   padding-top: 0;
@@ -56,7 +51,8 @@
   --lp-measure: 66ch;
   --lp-gutter: clamp(1.25rem, 5vw, 4.5rem);
 
-  background-color: var(--lp-paper);
+  /* No background of its own: body paints the paper, and the stars show
+     through between it and the content. */
   color: var(--lp-ink);
   font-family: var(--lp-font-body);
   font-size: 1rem;
