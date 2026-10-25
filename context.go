@@ -59,6 +59,21 @@ type StepContext struct {
 	RepeatIndex int            `expr:"repeat_index"`
 }
 
+// testEnv is what a verbose run shows of the context of a step whose test
+// it evaluated in, by the names the test reads it by. The request and the
+// response are left out, as the step has just shown them, under Request
+// and Response.
+func (c StepContext) testEnv() map[string]any {
+	return map[string]any{
+		"vars":         c.Vars,
+		"outputs":      c.Outputs,
+		"status":       c.Status,
+		"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
+		"report":       c.Report,
+		"repeat_index": c.RepeatIndex,
+	}
+}
+
 // JobContext is what a run of a job runs with. It is copied for each run,
 // and holds by value only what is the run's own; what the jobs of the
 // workflow share is in runEnv, and what the runs of a repeated job share in

@@ -441,25 +441,6 @@ func writeEcho(b *strings.Builder, echo string) {
 	b.WriteString(colorInfo().Sprint(echo) + "\n")
 }
 
-// statusIcon returns the icon of a step of status, as the report and the
-// progress of a run show it, and its color. The icon ends with the space
-// that sets it apart in the report; the progress trims it. A status the
-// report does not know is shown by a question mark.
-func statusIcon(status StatusType) (string, *color.Color) {
-	switch status {
-	case StatusSuccess:
-		return IconSuccess, colorSuccess()
-	case StatusError:
-		return IconError, colorError()
-	case StatusWarning:
-		return IconTriangle, colorNoTest()
-	case StatusSkipped:
-		return IconSkip, colorInfo()
-	default:
-		return "?", colorWarning()
-	}
-}
-
 // stepTitle returns how a step is named in the report and in the progress
 // of a run: by its name, marked as skipped when it was. A repeated step is
 // not marked, as its counts tell how many of its runs were skipped.

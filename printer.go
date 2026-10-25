@@ -15,52 +15,6 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-// Color Functions
-// colorSuccess returns a *color.Color for success (RGB 0,175,0)
-func colorSuccess() *color.Color {
-	return color.RGB(0, 175, 0)
-}
-
-// colorError returns a *color.Color for errors (red)
-func colorError() *color.Color {
-	return color.New(color.FgRed)
-}
-
-// colorInfo returns a *color.Color for info messages (blue)
-func colorInfo() *color.Color {
-	return color.New(color.FgBlue)
-}
-
-// colorDim returns a *color.Color for subdued text
-func colorDim() *color.Color {
-	return color.New(color.FgHiBlack)
-}
-
-// colorWarning returns a *color.Color for warnings (yellow)
-func colorWarning() *color.Color {
-	return color.New(color.FgYellow)
-}
-
-// colorSkipped returns a *color.Color for skipped items (gray)
-func colorSkipped() *color.Color {
-	return color.New(color.FgHiBlack)
-}
-
-func colorNoTest() *color.Color {
-	return color.RGB(0, 102, 204)
-}
-
-// Icon constants
-const (
-	IconSuccess  = "✓ "
-	IconError    = "✗ "
-	IconTriangle = "△ "
-	IconCircle   = "⏺"
-	IconWait     = "🕐︎"
-	IconSkip     = "⏭ "
-	IconRetry    = "⟳"
-)
-
 // Printer implements PrintWriter for console print
 type Printer struct {
 	verbose   bool
@@ -252,28 +206,20 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 	}
 	var b debugBlock
 	b.line("Test: %s (input: %s)", resultStr, testExpr)
-	if env := testEnv(context); env != nil {
+	if env := testEnvOf(context); env != nil {
 		b.line("Env:")
 		b.mapData(p.masker.Map(env))
 	}
 	p.logDebugBlock(&b)
 }
 
-// testEnv is what PrintTestResult shows of the context a test was evaluated
-// in, by the names the test reads it by. Of a step's, the request and the
-// response are left out, as the step has just shown them, under Request and
-// Response.
-func testEnv(context any) map[string]any {
+// testEnvOf is what PrintTestResult shows of the context a test was
+// evaluated in: that of a step as StepContext.testEnv tells it, and a map as
+// it is.
+func testEnvOf(context any) map[string]any {
 	switch c := context.(type) {
 	case StepContext:
-		return map[string]any{
-			"vars":         c.Vars,
-			"outputs":      c.Outputs,
-			"status":       c.Status,
-			"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
-			"report":       c.Report,
-			"repeat_index": c.RepeatIndex,
-		}
+		return c.testEnv()
 	case map[string]any:
 		return c
 	default:
