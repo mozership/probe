@@ -1719,6 +1719,34 @@ func TestWorkflow_Start_TwiceSelectsFromEveryJob(t *testing.T) {
 	}
 }
 
+// The environment a run is given in Config.Env is that run's alone, under
+// what the workflow's own environment has, in a later run on the same
+// workflow as in the first.
+func TestWorkflow_Start_TwiceTakesEachRunsEnv(t *testing.T) {
+	runner := &recordingRunner{result: map[string]any{}}
+	w := &Workflow{
+		Name: "rerun",
+		env:  map[string]string{"OWN": "workflow"},
+		Vars: map[string]any{"given": "{{GIVEN}}", "own": "{{OWN}}"},
+		Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{
+			Name:         "read",
+			Uses:         "hello",
+			With:         map[string]any{"given": "{{vars.given}}", "own": "{{vars.own}}"},
+			actionRunner: runner,
+		}}}},
+	}
+
+	for _, given := range []string{"first", "second"} {
+		startCapturingWith(t, w, Config{Output: OutputModeStream, Env: map[string]string{"GIVEN": given, "OWN": given}})
+		if got := runner.with["given"]; got != given {
+			t.Errorf("GIVEN = %v, want %q", got, given)
+		}
+		if got := runner.with["own"]; got != "workflow" {
+			t.Errorf("OWN = %v, want the workflow's own %q", got, "workflow")
+		}
+	}
+}
+
 // stripDurations removes the measured times so that two runs of the same
 // workflow can be compared.
 func stripDurations(report string) string {

@@ -45,6 +45,9 @@ type Workflow struct {
 	// atomic.Bool because a Workflow is copied by value when it is decoded.
 	failed int32
 	env    map[string]string
+	// ownEnv is the workflow's own env, as the first Start found it, for
+	// every run to give Config.Env under afresh
+	ownEnv map[string]string
 	// basePath is the directory containing the workflow file (used for resolving relative paths)
 	basePath string
 	// named are the names the workflow gives its external actions, as a job
@@ -144,9 +147,14 @@ func (w *Workflow) Start(c Config) error {
 	// The variables read from files are those of the environment the
 	// vars read, and a secret may be among them, so they are in place
 	// before the masker is made. What the environment has comes first.
+	// That of an earlier run is not kept: each is given its own.
+	if w.ownEnv == nil {
+		w.ownEnv = w.Env()
+	}
+	w.env = w.ownEnv
 	if len(c.Env) > 0 {
 		env := maps.Clone(c.Env)
-		maps.Copy(env, w.Env())
+		maps.Copy(env, w.ownEnv)
 		w.env = env
 	}
 
