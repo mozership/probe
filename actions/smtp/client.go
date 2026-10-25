@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/binary"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -39,8 +38,8 @@ type Res struct {
 	Failed   int    `map:"failed"`
 	Total    int    `map:"total"`
 	Error    string `map:"error"`
-	MailData string `map:"maildata"` // For text mail data
-	FilePath string `map:"filepath"` // For binary mail data files
+	// MailData is the last message the server accepted, as it was sent.
+	MailData string `map:"maildata"`
 }
 
 type Result struct {
@@ -105,23 +104,13 @@ func (r *Req) Do() (*Result, error) {
 		status = 0 // success if no failures and at least one sent
 	}
 
-	// Get mail data for processing
-	mailData := bulk.makeData()
-
-	// Process mail data (check if it's text or binary)
-	bodyString, filePath, err := binary.ProcessHttpBody(mailData, "text/plain")
-	if err != nil {
-		return result, fmt.Errorf("failed to process mail data: %w", err)
-	}
-
 	result.Res = Res{
 		Code:     status,
 		Sent:     deliveryResult.Sent,
 		Failed:   deliveryResult.Failed,
 		Total:    deliveryResult.Total,
 		Error:    deliveryResult.Error,
-		MailData: bodyString,
-		FilePath: filePath,
+		MailData: string(deliveryResult.LastSent),
 	}
 	result.Status = status
 

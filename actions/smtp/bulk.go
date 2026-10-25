@@ -28,8 +28,9 @@ type Bulk struct {
 	// InsecureSkipTLS accepts any certificate after STARTTLS.
 	InsecureSkipTLS bool
 
-	mu    sync.Mutex
-	count int
+	mu       sync.Mutex
+	count    int
+	lastSent []byte
 }
 
 type DeliveryResult struct {
@@ -41,6 +42,10 @@ type DeliveryResult struct {
 	// Rejected is set when a failed session got a reply from the server,
 	// such as a 550 to RCPT TO, rather than failing to reach it.
 	Rejected bool
+	// LastSent is the last message a server accepted, as it was sent, or
+	// nil when none was. The sessions run at the same time, so it is from
+	// whichever got its message accepted last.
+	LastSent []byte
 }
 
 func (b *Bulk) DeliverWithResult() DeliveryResult {
@@ -52,6 +57,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	// Every delivery hands out the messages from the start.
 	b.mu.Lock()
 	b.count = 0
+	b.lastSent = nil
 	b.mu.Unlock()
 
 	var wg sync.WaitGroup
@@ -95,6 +101,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	// attempted.
 	b.mu.Lock()
 	attempted := b.count
+	lastSent := b.lastSent
 	b.mu.Unlock()
 
 	result := DeliveryResult{
@@ -104,6 +111,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 		Sessions: sessionsSuccess + sessionsFailed,
 		Error:    lastError,
 		Rejected: rejection != "",
+		LastSent: lastSent,
 	}
 	if rejection != "" {
 		result.Error = rejection
@@ -132,6 +140,11 @@ func (b *Bulk) sendShare() (int, error) {
 	}
 
 	err := m.SendSession()
+	if m.LastSent != nil {
+		b.mu.Lock()
+		b.lastSent = m.LastSent
+		b.mu.Unlock()
+	}
 	if err != nil {
 		return m.Delivered, err
 	}

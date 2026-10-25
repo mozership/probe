@@ -30,6 +30,10 @@ type Mail struct {
 	// SendSession. Each message is committed on its own, so a session that
 	// fails part way has still delivered the ones before.
 	Delivered int
+	// LastSent is the last message the server accepted in the last
+	// SendSession, as it was written to DATA, with its Message-ID and send
+	// time. It is nil when none was accepted.
+	LastSent []byte
 }
 
 // localName returns the name to greet the server with. Many servers refuse
@@ -52,6 +56,7 @@ var osHostname = os.Hostname
 // Data in it, each stamped with its own Message-ID and send time.
 func (m *Mail) SendSession() error {
 	m.Delivered = 0
+	m.LastSent = nil
 	if err := validateLine(m.MailFrom); err != nil {
 		return err
 	}
@@ -98,7 +103,8 @@ func (m *Mail) SendSession() error {
 			return fmt.Errorf("smtp data error: %w", err)
 		}
 
-		_, err = w.Write(stamp(m.Data))
+		data := stamp(m.Data)
+		_, err = w.Write(data)
 		if err != nil {
 			return fmt.Errorf("smtp data write error: %w", err)
 		}
@@ -107,6 +113,7 @@ func (m *Mail) SendSession() error {
 			return fmt.Errorf("smtp data close error: %w", err)
 		}
 		m.Delivered++
+		m.LastSent = data
 	}
 
 	return c.Quit()

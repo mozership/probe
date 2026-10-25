@@ -40,7 +40,7 @@ The fields below describe the delivery. All of them accept template expressions.
 
 After `STARTTLS` the server's certificate is verified against the host in `addr`, so a self-signed or mismatched one fails the session unless `insecure_skip_tls` is set. A connection that starts in TLS, as on port 465, is not supported. There are no parameters for authentication, CC/BCC, a custom body or HTML. To include a report in the run output, use the step's `echo`.
 
-The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80.
+The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80. Each message is sent with two more headers before these, `X-Send-Timestamp-Ns`, the time it was sent in Unix nanoseconds, and a `Message-ID` of its own, whose part before `@` is also added to the end of the subject as ` - <id>`.
 
 ## Response Object
 
@@ -53,8 +53,7 @@ After the step, `res` reports how much was delivered.
 | `res.failed` | Integer | Sessions that failed |
 | `res.total` | Integer | Messages attempted, which is `message` |
 | `res.error` | String | Error message, when delivery failed |
-| `res.maildata` | String | The generated message, when it is text |
-| `res.filepath` | String | Path to the generated message, when it is binary |
+| `res.maildata` | String | The last message the server accepted, as it was sent with its `Message-ID` and send time. Empty when none was accepted |
 | `rt.duration` | String | Time the delivery took, such as `"3.4ms"` |
 | `rt.sec` | Float | Time the delivery took in seconds |
 | `status` | Integer | Same as `res.code` |

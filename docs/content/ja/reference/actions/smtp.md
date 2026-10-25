@@ -40,7 +40,7 @@ steps:
 
 `STARTTLS`の後はサーバーの証明書を`addr`のホストで検証するため、自己署名の証明書やホストの合わない証明書は、`insecure_skip_tls`を指定しない限りセッションを失敗させます。ポート465のように最初からTLSで始まる接続には対応していません。認証、CC/BCC、任意の本文やHTMLを指定するパラメータはありません。実行結果にレポートを出したい場合はステップの`echo`を使います。
 
-生成するメッセージには`From`、`To`、`Date`、`Subject`のヘッダーが付きます。本文は`This is a test mail.`の後に`length`個の`*`を続けたもので、80文字ごとに改行します。
+生成するメッセージには`From`、`To`、`Date`、`Subject`のヘッダーが付きます。本文は`This is a test mail.`の後に`length`個の`*`を続けたもので、80文字ごとに改行します。送るときには、メッセージごとにこれらの前へ2つのヘッダーを足します。送信した時刻をUnixナノ秒で表す`X-Send-Timestamp-Ns`と、メッセージごとの`Message-ID`です。`Message-ID`の`@`より前の部分は、件名の末尾にも` - <id>`の形で付けます。
 
 ## レスポンスオブジェクト
 
@@ -53,8 +53,7 @@ steps:
 | `res.failed` | Integer | 失敗したセッション数 |
 | `res.total` | Integer | 試行した通数。`message`と同じ値 |
 | `res.error` | String | 失敗時のエラーメッセージ |
-| `res.maildata` | String | 生成したメール（テキストの場合） |
-| `res.filepath` | String | 生成したメールのパス（バイナリの場合） |
+| `res.maildata` | String | サーバーが最後に受け付けたメール。`Message-ID`と送信時刻を含む、送ったままの内容。1通も受け付けられなければ空 |
 | `rt.duration` | String | 配送にかかった時間（例: `"3.4ms"`） |
 | `rt.sec` | Float | 配送にかかった時間（秒） |
 | `status` | Integer | `res.code`と同じ値 |

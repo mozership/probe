@@ -624,3 +624,91 @@ func TestDeliverStopsOnUnreadableParameter(t *testing.T) {
 		t.Errorf("the server got %d connections, want none", n)
 	}
 }
+
+// startDataRecorder runs an SMTP server that accepts every message and
+// sends what it read from DATA, after the dot-stuffing, to the channel.
+func startDataRecorder(t *testing.T) (string, <-chan []byte) {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+	got := make(chan []byte, 16)
+
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer func() { _ = conn.Close() }()
+				text := textproto.NewConn(conn)
+				_ = text.PrintfLine("220 test ESMTP")
+				for {
+					line, err := text.ReadLine()
+					if err != nil {
+						return
+					}
+					switch strings.ToUpper(strings.SplitN(line, " ", 2)[0]) {
+					case "DATA":
+						_ = text.PrintfLine("354 go ahead")
+						data, err := text.ReadDotBytes()
+						if err != nil {
+							return
+						}
+						got <- data
+						_ = text.PrintfLine("250 queued")
+					case "QUIT":
+						_ = text.PrintfLine("221 bye")
+						return
+					default:
+						_ = text.PrintfLine("250 ok")
+					}
+				}
+			}(conn)
+		}
+	}()
+
+	return lis.Addr().String(), got
+}
+
+func TestDeliverReturnsTheMailItSent(t *testing.T) {
+	// res.maildata is the last message the server took, with the
+	// Message-ID and send time it was sent with, rather than a message made
+	// again after sending.
+	addr, got := startDataRecorder(t)
+	ret, err := Deliver(map[string]any{
+		"addr": addr, "from": "from@example.com", "to": "to@example.com",
+		"subject": "hi", "message": 2, "length": 100,
+	})
+	if err != nil {
+		t.Fatalf("Deliver() error: %v", err)
+	}
+	first, second := <-got, <-got
+	res, _ := ret["res"].(map[string]any)
+	maildata, _ := res["maildata"].(string)
+	if maildata != string(second) {
+		t.Errorf("maildata = %q, want the last message the server read, %q", maildata, second)
+	}
+	for _, want := range []string{"X-Send-Timestamp-Ns: ", "Message-ID: <", "Subject: hi - ", "From: from@example.com\n"} {
+		if !strings.Contains(maildata, want) {
+			t.Errorf("maildata = %q, want it to hold %q", maildata, want)
+		}
+	}
+	if string(first) == string(second) {
+		t.Error("both messages were the same, want each with its own Message-ID")
+	}
+}
+
+func TestDeliverReturnsNoMailWhenNoneWasTaken(t *testing.T) {
+	ret, err := Deliver(map[string]any{"addr": startRejectingServer(t), "from": "from@example.com", "to": "to@example.com"})
+	if err != nil {
+		t.Fatalf("Deliver() error: %v", err)
+	}
+	res, _ := ret["res"].(map[string]any)
+	if res["maildata"] != "" {
+		t.Errorf("maildata = %q, want none, as the server refused the mail", res["maildata"])
+	}
+}
