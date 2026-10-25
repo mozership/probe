@@ -721,13 +721,17 @@ Two kinds of value in a workflow file have their own syntax: durations, and the 
 
 ### Duration
 
-A duration is either a Go duration string or a plain number of seconds.
+A duration is either a Go duration string or a number of seconds, which may have a fraction. A number may be written bare or quoted, and is read the same way in a step's `timeout` and `wait`, a repeat's `interval`, and a retry's `interval` and `initial_delay`.
 
 ```yaml
 timeout: "30s"
 timeout: "5m"
 interval: 10        # 10 seconds
+interval: 1.5       # 1.5 seconds
+wait: "0.5"         # 500 milliseconds
 ```
+
+A duration cannot be negative, longer than about 292 years, or above zero and shorter than a nanosecond; such a value is an error, as is one that is not a duration at all. Zero is a duration: it waits for nothing, and leaves a step's `timeout` at its default. An action's `timeout` takes the same forms, but must be above zero unless the action's reference says otherwise.
 
 ### Expressions and Templates
 

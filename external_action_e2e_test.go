@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net"
@@ -231,7 +232,7 @@ func TestEndToEndExternalActionChecksumAtStart(t *testing.T) {
 	sum := sha256.Sum256(data)
 	log := hclog.NewNullLogger()
 
-	res, err := actionrpc.RunExecutable(bin, sum[:], map[string]any{"name": "probe"}, log)
+	res, _, err := actionrpc.RunExecutable(context.Background(), bin, sum[:], actionrpc.Call{With: map[string]any{"name": "probe"}}, log)
 	if err != nil {
 		t.Fatalf("RunExecutable() error = %v", err)
 	}
@@ -240,7 +241,7 @@ func TestEndToEndExternalActionChecksumAtStart(t *testing.T) {
 	}
 
 	other := sha256.Sum256([]byte("something else"))
-	if _, err := actionrpc.RunExecutable(bin, other[:], nil, log); err == nil || !strings.Contains(err.Error(), "checksums did not match") {
+	if _, _, err := actionrpc.RunExecutable(context.Background(), bin, other[:], actionrpc.Call{}, log); err == nil || !strings.Contains(err.Error(), "checksums did not match") {
 		t.Errorf("RunExecutable() with a wrong digest error = %v, want a checksum mismatch", err)
 	}
 }

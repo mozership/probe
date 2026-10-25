@@ -8,25 +8,17 @@ import (
 type ErrorType string
 
 const (
-	ErrorTypeValidation    ErrorType = "validation"
 	ErrorTypeExecution     ErrorType = "execution"
 	ErrorTypeConfiguration ErrorType = "configuration"
-	ErrorTypeNetwork       ErrorType = "network"
 	ErrorTypeFile          ErrorType = "file"
-	// Deprecated: a step whose action failed keeps the action's error as
-	// it is, not wrapped in a ProbeError, so that what the action said is
-	// what is shown.
-	ErrorTypeAction     ErrorType = "action"
-	ErrorTypeDependency ErrorType = "dependency"
 )
 
-// ProbeError is the base error type with context information
+// ProbeError is the base error type, telling the operation that failed
 type ProbeError struct {
 	Type      ErrorType
 	Operation string
 	Message   string
 	Cause     error
-	Context   map[string]any
 }
 
 func (e *ProbeError) Error() string {
@@ -54,14 +46,7 @@ func NewProbeError(errorType ErrorType, operation, message string, cause error) 
 		Operation: operation,
 		Message:   message,
 		Cause:     cause,
-		Context:   make(map[string]any),
 	}
-}
-
-// WithContext adds context information to the error
-func (e *ProbeError) WithContext(key string, value any) *ProbeError {
-	e.Context[key] = value
-	return e
 }
 
 // Convenience functions for creating specific error types
@@ -76,13 +61,4 @@ func NewConfigurationError(operation, message string, cause error) *ProbeError {
 
 func NewFileError(operation, message string, cause error) *ProbeError {
 	return NewProbeError(ErrorTypeFile, operation, message, cause)
-}
-
-// NewActionError creates a ProbeError of an action.
-//
-// Deprecated: a step whose action failed keeps the action's error as it
-// is, not wrapped in a ProbeError, so that what the action said is what is
-// shown.
-func NewActionError(operation, message string, cause error) *ProbeError {
-	return NewProbeError(ErrorTypeAction, operation, message, cause)
 }

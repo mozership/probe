@@ -21,7 +21,7 @@ key:
 
 code:
 	#@which buf || brew install bufbuild/buf/buf
-	buf generate
+	buf generate --path internal/pb/actions.proto
 
 http_server:
 	go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@latest -host 127.0.0.1 -port 8080

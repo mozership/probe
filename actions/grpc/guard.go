@@ -1,11 +1,11 @@
 package grpc
 
 import (
-	"net"
 	"net/url"
 	"strings"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/hostport"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -47,19 +47,11 @@ func grpcHosts(addr string) ([]string, bool) {
 	if endpoint == "" {
 		return nil, false
 	}
-	hosts := []string{withPort(endpoint, "443")}
+	hosts := []string{hostport.WithPort(endpoint, "443")}
 	if dnsServer != "" {
-		hosts = append(hosts, withPort(dnsServer, "53"))
+		hosts = append(hosts, hostport.WithPort(dnsServer, "53"))
 	}
 	return hosts, true
-}
-
-// withPort returns hostport with port when it names none.
-func withPort(hostport, port string) string {
-	if _, _, err := net.SplitHostPort(hostport); err == nil {
-		return hostport
-	}
-	return net.JoinHostPort(strings.Trim(hostport, "[]"), port)
 }
 
 // checkGRPCHost returns a Refused error when the guard of the run does not
@@ -91,15 +83,7 @@ func (r *Req) checkConnectHost(base string) error {
 	if err != nil {
 		return err
 	}
-	host := u.Host
-	if u.Port() == "" {
-		port := "80"
-		if u.Scheme == "https" {
-			port = "443"
-		}
-		host = net.JoinHostPort(u.Hostname(), port)
-	}
-	return r.guard.CheckHost(host)
+	return r.guard.CheckHost(hostport.OfURL(u))
 }
 
 // checkReadOnly returns a Refused error when the run is read-only and the

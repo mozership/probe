@@ -10,14 +10,15 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/mattn/go-isatty"
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/actions"
-	"github.com/mozership/probe/actions/grpc"
-	"github.com/mozership/probe/envfile"
+	"github.com/mozership/probe/internal/envfile"
+	"github.com/mozership/probe/internal/oas"
+	"github.com/mozership/probe/internal/protocoverage"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/oas"
 	"github.com/mozership/probe/report"
 )
 
@@ -27,9 +28,22 @@ var (
 )
 
 func main() {
+	exportTTY(os.Stdout)
 	c := newCmd()
 	if c != nil {
 		os.Exit(c.start(os.Args))
+	}
+}
+
+// exportTTY sets PROBE_TTY to 1 when out is a terminal. The actions run in
+// processes of their own, which have the environment of this one but not
+// its terminal, and the printer of an embedded job reads PROBE_TTY to color
+// what it writes, which the run prints, as this process colors its own.
+// A process that serves an action, whose standard output is no terminal,
+// keeps what it was given.
+func exportTTY(out *os.File) {
+	if isatty.IsTerminal(out.Fd()) {
+		_ = os.Setenv("PROBE_TTY", "1")
 	}
 }
 
@@ -138,6 +152,16 @@ func (c *Cmd) parseArgs(args []string) error {
 				return fmt.Errorf("unknown flag: %s", arg)
 			}
 
+			// A flag that takes a value has it after =, as --report=junit,
+			// or as the next argument, as --report junit.
+			if takesValue(flagName) && !hasValue {
+				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+					return fmt.Errorf("flag needs an argument: %s", arg)
+				}
+				flagValue = args[i+1]
+				skipNext = true
+			}
+
 			// Set the appropriate flag
 			switch flagName {
 			case "help", "h":
@@ -162,14 +186,6 @@ func (c *Cmd) parseArgs(args []string) error {
 			case "check":
 				c.FmtCheck = true
 			case "output":
-				// Accept both --output=stream and --output stream
-				if !hasValue {
-					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-						return fmt.Errorf("flag needs an argument: %s", arg)
-					}
-					flagValue = args[i+1]
-					skipNext = true
-				}
 				if _, err := probe.ParseOutputMode(flagValue); err != nil {
 					return err
 				}
@@ -187,13 +203,6 @@ func (c *Cmd) parseArgs(args []string) error {
 				}
 				c.markGuardFlag(flagName)
 			case "allow-host", "allow-action":
-				if !hasValue {
-					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-						return fmt.Errorf("flag needs an argument: %s", arg)
-					}
-					flagValue = args[i+1]
-					skipNext = true
-				}
 				if flagName == "allow-host" {
 					c.AllowHosts = flagValue
 				} else {
@@ -202,13 +211,6 @@ func (c *Cmd) parseArgs(args []string) error {
 				c.markGuardFlag(flagName)
 			case "var", "env-file", "job":
 				// Each can be given more than once.
-				if !hasValue {
-					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-						return fmt.Errorf("flag needs an argument: %s", arg)
-					}
-					flagValue = args[i+1]
-					skipNext = true
-				}
 				if flagName == "env-file" || flagName == "job" {
 					items := splitList(flagValue)
 					if len(items) == 0 {
@@ -226,26 +228,11 @@ func (c *Cmd) parseArgs(args []string) error {
 				}
 				c.Vars = append(c.Vars, flagValue)
 			case "report":
-				// Accept both --report=junit and --report junit
-				if !hasValue {
-					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-						return fmt.Errorf("flag needs an argument: %s", arg)
-					}
-					flagValue = args[i+1]
-					skipNext = true
-				}
 				if _, err := report.ParseTargets(flagValue); err != nil {
 					return err
 				}
 				c.Report = flagValue
 			case "baseline":
-				if !hasValue {
-					if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-						return fmt.Errorf("flag needs an argument: %s", arg)
-					}
-					flagValue = args[i+1]
-					skipNext = true
-				}
 				c.Baseline = flagValue
 			}
 		} else {
@@ -267,6 +254,15 @@ func (c *Cmd) parseArgs(args []string) error {
 	}
 
 	return nil
+}
+
+// takesValue reports whether the flag of name takes a value.
+func takesValue(name string) bool {
+	switch name {
+	case "output", "report", "baseline", "allow-host", "allow-action", "var", "env-file", "job":
+		return true
+	}
+	return false
 }
 
 var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest"}
@@ -402,6 +398,34 @@ func (c *Cmd) printOptions() {
 	}
 }
 
+// The usages written after an error in how the command is used, each ending
+// in a newline. fmtUsage is with the fmt subcommand.
+const (
+	tryHelp           = "try --help to know more\n"
+	genUsage          = "Usage: probe gen <openapi-file>\n"
+	dagUsage          = "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n"
+	jobUsage          = "Usage: probe --job <job> <workflow-file>...\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n"
+	checkUsage        = "Usage: probe check <workflow-file>...\n"
+	coverageUsage     = "Usage: probe coverage <openapi-file|proto-file> <report-file>\n"
+	guideUsage        = "Usage: probe guide [topic]\n"
+	skillUsage        = "Usage: probe skill [install [dir]]\n"
+	manifestInitUsage = "Usage: probe manifest init <owner>/<repo>\n"
+	manifestUsage     = manifestInitUsage + "       probe manifest <tag> <checksums-file> [action-file]\n"
+)
+
+// errorf writes an error to the error writer, as a line that starts with
+// [ERROR].
+func (c *Cmd) errorf(format string, a ...any) {
+	_, _ = fmt.Fprintf(c.errWriter, "[ERROR] "+format+"\n", a...)
+}
+
+// usageError writes an error, as errorf does, and then usage, which tells
+// how the command is used.
+func (c *Cmd) usageError(usage, format string, a ...any) {
+	c.errorf(format, a...)
+	_, _ = fmt.Fprint(c.errWriter, usage)
+}
+
 func (c *Cmd) start(args []string) int {
 	if len(args) >= 3 && args[1] == actionrpc.BuiltinCmd {
 		c.runBuiltinActions(args[2])
@@ -410,7 +434,7 @@ func (c *Cmd) start(args []string) int {
 
 	// Parse arguments manually to allow options after arguments
 	if err := c.parseArgs(args[1:]); err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\ntry --help to know more\n", err)
+		c.usageError(tryHelp, "%v", err)
 		return probe.ExitConfigError
 	}
 
@@ -427,30 +451,26 @@ func (c *Cmd) start(args []string) int {
 		return 0
 
 	case mistyped != "":
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown command %q; did you mean %q?\n", c.firstFile, mistyped)
-		_, _ = fmt.Fprintf(c.errWriter, "try --help to know more\n")
+		c.usageError(tryHelp, "unknown command %q; did you mean %q?", c.firstFile, mistyped)
 		return probe.ExitConfigError
 
 	case c.FmtCheck && c.SubCommand != "fmt":
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --check can only be used with the fmt subcommand\n")
-		_, _ = fmt.Fprint(c.errWriter, fmtUsage)
+		c.usageError(fmtUsage, "--check can only be used with the fmt subcommand")
 		return probe.ExitConfigError
 
 	case len(c.Jobs) > 0 && c.SubCommand != "" && c.SubCommand != "dag":
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --job can only be used to run a workflow or with the dag subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe --job <job> <workflow-file>...\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
+		c.usageError(jobUsage, "--job can only be used to run a workflow or with the dag subcommand")
 		return probe.ExitConfigError
 
 	case c.SubCommand != "":
 		return c.runSubCommand()
 
 	case c.DagMermaid:
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --mermaid can only be used with the dag subcommand\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
+		c.usageError(dagUsage, "--mermaid can only be used with the dag subcommand")
 		return probe.ExitConfigError
 
 	case c.WorkflowPath == "":
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow is required\n")
+		c.errorf("workflow is required")
 		return probe.ExitConfigError
 
 	default:
@@ -480,26 +500,24 @@ func (c *Cmd) runSubCommand() int {
 	case "manifest":
 		return c.runManifest()
 	default:
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown subcommand: %s\n", c.SubCommand)
+		c.errorf("unknown subcommand: %s", c.SubCommand)
 		return probe.ExitConfigError
 	}
 }
 
 func (c *Cmd) runGen() int {
 	if len(c.SubCommandArgs) == 0 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] OpenAPI spec file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
+		c.usageError(genUsage, "OpenAPI spec file is required")
 		return probe.ExitConfigError
 	}
 	if len(c.SubCommandArgs) > 1 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] gen takes one OpenAPI spec file, not %d\n", len(c.SubCommandArgs))
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe gen <openapi-file>\n")
+		c.usageError(genUsage, "gen takes one OpenAPI spec file, not %d", len(c.SubCommandArgs))
 		return probe.ExitConfigError
 	}
 
 	output, err := oas.Generate(c.SubCommandArgs[0])
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 
@@ -508,10 +526,8 @@ func (c *Cmd) runGen() int {
 }
 
 func (c *Cmd) runProbe() int {
-	p := probe.New(c.WorkflowPath, c.Verbose)
+	p := c.newProbe(c.WorkflowPath)
 	p.Config.Trace = c.Trace
-	p.Config.Actions = actions.Names()
-	p.Config.Warn = c.errWriter
 	if c.Timing {
 		p.Config.Timing = true
 	}
@@ -523,7 +539,7 @@ func (c *Cmd) runProbe() int {
 	}
 	mode, err := probe.ParseOutputMode(outputMode)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	p.Config.Output = mode
@@ -535,7 +551,7 @@ func (c *Cmd) runProbe() int {
 	}
 	reports, err := report.ParseTargets(spec)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	p.Config.Reports = reports
@@ -547,14 +563,9 @@ func (c *Cmd) runProbe() int {
 		baseline = os.Getenv("PROBE_BASELINE")
 	}
 	if baseline != "" {
-		r, err := report.Read(baseline)
-		if err == nil && r.StartedAt.IsZero() {
-			// Any JSON object parses as a report; one of a run says when
-			// the run started.
-			err = fmt.Errorf("%s is not a report of a run, written by --report json", baseline)
-		}
+		r, err := report.ReadBaseline(baseline)
 		if err != nil {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --baseline: %v\n", err)
+			c.errorf("--baseline: %v", err)
 			return probe.ExitConfigError
 		}
 		p.Config.Baseline = r
@@ -562,7 +573,7 @@ func (c *Cmd) runProbe() int {
 
 	guard, err := c.guard()
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	p.Config.Guard = guard
@@ -571,24 +582,33 @@ func (c *Cmd) runProbe() int {
 	// they read the environment.
 	env, err := loadEnvFiles(c.EnvFiles)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] --env-file: %v\n", err)
+		c.errorf("--env-file: %v", err)
 		return probe.ExitConfigError
 	}
 	p.Config.Env = env
 	p.Config.Vars = c.vars()
-	p.Config.Jobs = c.Jobs
 
 	if err := p.Do(); err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	return p.ExitStatus()
 }
 
+// newProbe returns the Probe of the workflow at path, with the built-in
+// actions, and the jobs the --job flags select, which writes its warnings to
+// the error writer.
+func (c *Cmd) newProbe(path string) *probe.Probe {
+	p := probe.New(path, c.Verbose)
+	actions.Configure(&p.Config)
+	p.Config.Warn = c.errWriter
+	p.Config.Jobs = c.Jobs
+	return p
+}
+
 func (c *Cmd) runDag() int {
 	if len(c.SubCommandArgs) == 0 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe dag [--mermaid] [--job <job>] <workflow-file>...\n")
+		c.usageError(dagUsage, "workflow file is required")
 		return probe.ExitConfigError
 	}
 
@@ -596,10 +616,7 @@ func (c *Cmd) runDag() int {
 		return 0
 	}
 
-	p := probe.New(strings.Join(c.SubCommandArgs, ","), c.Verbose)
-	p.Config.Actions = actions.Names()
-	p.Config.Warn = c.errWriter
-	p.Config.Jobs = c.Jobs
+	p := c.newProbe(strings.Join(c.SubCommandArgs, ","))
 	var graph string
 	var err error
 	if c.DagMermaid {
@@ -608,7 +625,7 @@ func (c *Cmd) runDag() int {
 		graph, err = p.DagAscii()
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	_, _ = fmt.Fprint(c.outWriter, graph)
@@ -730,14 +747,15 @@ func splitList(s string) []string {
 // warnings or nothing.
 func (c *Cmd) runCheck() int {
 	if len(c.SubCommandArgs) == 0 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] workflow file is required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe check <workflow-file>...\n")
+		c.usageError(checkUsage, "workflow file is required")
 		return probe.ExitConfigError
 	}
 
-	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), ReqTypes: actions.AllReqTypes(), ResTypes: actions.AllResTypes(), WithFields: actions.WithFields(), Required: actions.AllRequired(), Manifest: actionref.ReadManifest})
+	opts := actions.CheckOptions()
+	opts.Manifest = actionref.ReadManifest
+	findings, err := probe.Check(strings.Join(c.SubCommandArgs, ","), opts)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 
@@ -773,14 +791,13 @@ func plural(n int, word string) string {
 // JSON report records them.
 func (c *Cmd) runCoverage() int {
 	if len(c.SubCommandArgs) != 2 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] an OpenAPI spec file or a .proto file, and a report file, are required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe coverage <openapi-file|proto-file> <report-file>\n")
+		c.usageError(coverageUsage, "an OpenAPI spec file or a .proto file, and a report file, are required")
 		return probe.ExitConfigError
 	}
 
 	r, err := oas.ReadReport(c.SubCommandArgs[1])
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	// The steps of the jobs a run narrowed with --job left out are not in
@@ -792,15 +809,15 @@ func (c *Cmd) runCoverage() int {
 	// OpenAPI document of the http action.
 	newCoverage := oas.NewCoverage
 	if strings.HasSuffix(c.SubCommandArgs[0], ".proto") {
-		newCoverage = grpc.NewCoverage
+		newCoverage = protocoverage.New
 	}
 	cov, err := newCoverage(c.SubCommandArgs[0], r)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	if err := cov.Write(c.outWriter); err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	return 0
@@ -813,14 +830,13 @@ func (c *Cmd) runGuide() int {
 		return 0
 	}
 	if len(c.SubCommandArgs) > 1 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] guide takes one topic, not %d\n", len(c.SubCommandArgs))
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe guide [topic]\n")
+		c.usageError(guideUsage, "guide takes one topic, not %d", len(c.SubCommandArgs))
 		return probe.ExitConfigError
 	}
 
 	page, err := probe.Guide(c.SubCommandArgs[0])
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	_, _ = fmt.Fprint(c.outWriter, page)
@@ -844,19 +860,17 @@ func (c *Cmd) runSkill() int {
 		}
 		path, err := probe.InstallSkill(dir)
 		if err != nil {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+			c.errorf("%v", err)
 			return probe.ExitConfigError
 		}
 		_, _ = fmt.Fprintf(c.outWriter, "Wrote %s\n", path)
 		return 0
 	default:
 		if s := suggest.Closest(args[0], []string{"install"}); s != "" && s != args[0] {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill argument %q; did you mean %q?\n", args[0], s)
-			_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
+			c.usageError(skillUsage, "unknown skill argument %q; did you mean %q?", args[0], s)
 			return probe.ExitConfigError
 		}
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown skill arguments: %s\n", strings.Join(args, " "))
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe skill [install [dir]]\n")
+		c.usageError(skillUsage, "unknown skill arguments: %s", strings.Join(args, " "))
 		return probe.ExitConfigError
 	}
 }
@@ -880,29 +894,24 @@ func (c *Cmd) runManifest() int {
 	// After a tag comes a checksums file, and after init a repository, so
 	// init is suggested only when the next argument names no file.
 	if len(args) > 0 && args[0] != "init" && suggest.Closest(args[0], []string{"init"}) != "" && !fileExists(args[1:]) {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] unknown manifest argument %q; did you mean %q?\n", args[0], "init")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
-		_, _ = fmt.Fprintf(c.errWriter, "       probe manifest <tag> <checksums-file> [action-file]\n")
+		c.usageError(manifestUsage, "unknown manifest argument %q; did you mean %q?", args[0], "init")
 		return probe.ExitConfigError
 	}
 	if len(args) > 0 && args[0] == "init" {
 		if len(args) != 2 {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] a repository is required\n")
-			_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
+			c.usageError(manifestInitUsage, "a repository is required")
 			return probe.ExitConfigError
 		}
 		out, err := actionref.Scaffold(args[1])
 		if err != nil {
-			_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+			c.errorf("%v", err)
 			return probe.ExitConfigError
 		}
 		_, _ = c.outWriter.Write(out)
 		return 0
 	}
 	if len(args) < 2 || len(args) > 3 {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] a tag and a checksums file are required\n")
-		_, _ = fmt.Fprintf(c.errWriter, "Usage: probe manifest init <owner>/<repo>\n")
-		_, _ = fmt.Fprintf(c.errWriter, "       probe manifest <tag> <checksums-file> [action-file]\n")
+		c.usageError(manifestUsage, "a tag and a checksums file are required")
 		return probe.ExitConfigError
 	}
 	actionFile := actionref.ManifestFile
@@ -912,19 +921,19 @@ func (c *Cmd) runManifest() int {
 
 	manifest, err := os.ReadFile(actionFile)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	checksums, err := os.Open(args[1])
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	defer func() { _ = checksums.Close() }()
 
 	out, err := actionref.Release(manifest, args[0], checksums)
 	if err != nil {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] %v\n", err)
+		c.errorf("%v", err)
 		return probe.ExitConfigError
 	}
 	_, _ = c.outWriter.Write(out)
@@ -938,7 +947,7 @@ func (c *Cmd) printVersion() {
 func (c *Cmd) runBuiltinActions(name string) {
 	serve, ok := actions.Lookup(name)
 	if !ok {
-		_, _ = fmt.Fprintf(c.errWriter, "[ERROR] not supported plugin: %s\n", name)
+		c.errorf("not supported plugin: %s", name)
 		return
 	}
 

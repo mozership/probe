@@ -6,68 +6,9 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 )
-
-func TestEchoDetail(t *testing.T) {
-	// Disable color output for consistent testing
-	defer func(was bool) { color.NoColor = was }(color.NoColor)
-	color.NoColor = true
-
-	tests := []struct {
-		name     string
-		content  string
-		err      error
-		expected string
-	}{
-		{
-			name:     "single line content",
-			content:  "Hello World",
-			err:      nil,
-			expected: "       Hello World\n",
-		},
-		{
-			name:     "multi-line content with explicit newlines",
-			content:  "Line 1\nLine 2\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       Line 2\n       Line 3\n",
-		},
-		{
-			name:     "complex multiline with indentation",
-			content:  "Header\n  Indented\n    More indented\nBack to left",
-			err:      nil,
-			expected: "       Header\n         Indented\n           More indented\n       Back to left\n",
-		},
-		{
-			name:     "empty line handling",
-			content:  "Line 1\n\nLine 3",
-			err:      nil,
-			expected: "       Line 1\n       \n       Line 3\n",
-		},
-		{
-			name:     "error case",
-			content:  "",
-			err:      fmt.Errorf("template error"),
-			expected: "       error: template error\n",
-		},
-		{
-			name:     "empty content",
-			content:  "",
-			err:      nil,
-			expected: "       \n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := echoDetail(tt.content, tt.err)
-			if result != tt.expected {
-				t.Errorf("echoDetail() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
 
 func TestExchangeDetail(t *testing.T) {
 	// Disable color output for consistent testing
@@ -182,7 +123,7 @@ func TestTestErrorDetail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := testErrorDetail(tt.err)
+			result := testErrorDetail(tt.err.Error())
 			if result != tt.expected {
 				t.Errorf("testErrorDetail() = %q, want %q", result, tt.expected)
 			}
@@ -315,5 +256,70 @@ func TestMaskClauseHidesURLCredentialsBeforeCutting(t *testing.T) {
 		if strings.Contains(out, "hun") {
 			t.Errorf("a part of a URL's password is shown: %q", out)
 		}
+	}
+}
+
+func TestIndentDetail(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"one line", "connection refused", "       connection refused\n"},
+		{"several lines", "with.cmd: {{x.y}}: cannot fetch y\n | x.y\n | ..^", "       with.cmd: {{x.y}}: cannot fetch y\n        | x.y\n        | ..^\n"},
+		{"surrounding newlines", "\nmessage\n", "       message\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := indentDetail(tt.in); got != tt.want {
+				t.Errorf("indentDetail() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOperandText(t *testing.T) {
+	tests := []struct {
+		name    string
+		operand expr.Operand
+		want    string
+	}{
+		{"nil", expr.Operand{Expr: "res.body.id", Value: nil}, "res.body.id = nil"},
+		{"a string is quoted", expr.Operand{Expr: "res.stdout", Value: "ok\n"}, `res.stdout = "ok\n"`},
+		{"an empty string", expr.Operand{Expr: "vars.name", Value: ""}, `vars.name = ""`},
+		{"a number", expr.Operand{Expr: "rt.sec", Value: 0.25}, "rt.sec = 0.25"},
+		{"a bool", expr.Operand{Expr: "res.complete", Value: false}, "res.complete = false"},
+		{"a list", expr.Operand{Expr: "res.values", Value: []any{"a", 1}}, `res.values = ["a",1]`},
+		{"a map", expr.Operand{Expr: "res.body", Value: map[string]any{"ok": true}}, `res.body = {"ok":true}`},
+		{"a long value is cut", expr.Operand{Expr: "res.body", Value: strings.Repeat("x", 300)}, `res.body = "` + strings.Repeat("x", maxOperandLength-1) + "..."},
+		{"a value JSON cannot hold", expr.Operand{Expr: "f", Value: func() {}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := operandText(tt.operand)
+			if tt.want == "" {
+				if !strings.HasPrefix(got, "f = 0x") {
+					t.Errorf("operandText() = %q, want the value as %%v writes it", got)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("operandText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClauseSummary(t *testing.T) {
+	got := clauseSummary(expr.Clause{Expr: `res.body.name == vars.name`, Operands: []expr.Operand{
+		{Expr: "res.body.name", Value: "alice"},
+		{Expr: "vars.name", Value: "bob"},
+	}})
+	if want := `res.body.name == vars.name (res.body.name = "alice", vars.name = "bob")`; got != want {
+		t.Errorf("clauseSummary() = %q, want %q", got, want)
+	}
+	if got := clauseSummary(expr.Clause{Expr: "1 == 2"}); got != "1 == 2" {
+		t.Errorf("clauseSummary() = %q, want the condition alone", got)
 	}
 }

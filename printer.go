@@ -15,69 +15,12 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-// Color Functions
-// colorSuccess returns a *color.Color for success (RGB 0,175,0)
-func colorSuccess() *color.Color {
-	return color.RGB(0, 175, 0)
-}
-
-// colorError returns a *color.Color for errors (red)
-func colorError() *color.Color {
-	return color.New(color.FgRed)
-}
-
-// colorInfo returns a *color.Color for info messages (blue)
-func colorInfo() *color.Color {
-	return color.New(color.FgBlue)
-}
-
-// colorDim returns a *color.Color for subdued text
-func colorDim() *color.Color {
-	return color.New(color.FgHiBlack)
-}
-
-// colorWarning returns a *color.Color for warnings (yellow)
-func colorWarning() *color.Color {
-	return color.New(color.FgYellow)
-}
-
-// colorSkipped returns a *color.Color for skipped items (gray)
-func colorSkipped() *color.Color {
-	return color.New(color.FgHiBlack)
-}
-
-func colorNoTest() *color.Color {
-	return color.RGB(0, 102, 204)
-}
-
-// Icon constants
-const (
-	IconSuccess  = "✓ "
-	IconError    = "✗ "
-	IconTriangle = "△ "
-	IconCircle   = "⏺"
-	IconWait     = "🕐︎"
-	IconSkip     = "⏭ "
-	IconRetry    = "⟳"
-)
-
-// LogLevel defines different logging levels
-type LogLevel int
-
-const (
-	LogLevelDebug LogLevel = iota
-	LogLevelInfo
-	LogLevelWarn
-	LogLevelError
-)
-
 // Printer implements PrintWriter for console print
 type Printer struct {
 	verbose   bool
 	spinner   *spinner.Spinner
 	outWriter io.Writer
 	errWriter io.Writer
-	reporter  Reporter
 	// writeMu serializes writes to outWriter and errWriter. Jobs run
 	// concurrently and report errors as they happen, so without it two
 	// messages could interleave, and a buffer writer would race.
@@ -101,7 +44,11 @@ func (p *Printer) Masker() *mask.Masker {
 	return p.masker
 }
 
-// NewPrinter creates a new console print writer
+// NewPrinter creates a new console print writer. Its output is colored
+// whatever it is written to when FORCE_COLOR or PROBE_TTY is 1: the CLI sets
+// PROBE_TTY when its standard output is a terminal, for the printer of an
+// embedded job: that one runs in the process of an action, whose standard
+// output is not the terminal, and what it writes is printed by the run.
 func NewPrinter(verbose bool) *Printer {
 	if os.Getenv("FORCE_COLOR") == "1" || os.Getenv("PROBE_TTY") == "1" {
 		color.NoColor = false
@@ -124,26 +71,6 @@ func newBufferPrinter() *Printer {
 	// helpers no-op.
 	pr.spinner = nil
 	return pr
-}
-
-// SetReporter installs the output strategy used for this run.
-func (p *Printer) SetReporter(r Reporter) {
-	p.reporter = r
-}
-
-// Reporter returns the installed output strategy, or nil when none was set.
-func (p *Printer) Reporter() Reporter {
-	return p.reporter
-}
-
-// StepStart announces that a step began. The buffered reporter turns this into
-// the spinner suffix, the stream reporter into a stderr progress line.
-func (p *Printer) StepStart(jobID, stepName string) {
-	if p.reporter != nil {
-		p.reporter.StepStart(jobID, stepName)
-		return
-	}
-	p.AddSpinnerSuffix(stepName)
 }
 
 func (p *Printer) StartSpinner() {
@@ -182,19 +109,19 @@ func (p *Printer) write(w io.Writer, s string) error {
 
 func (p *Printer) Fprint(w io.Writer, a ...any) {
 	if err := p.write(w, fmt.Sprint(a...)); err != nil {
-		fmt.Printf("Fprint: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprint: %v\n", err)
 	}
 }
 
 func (p *Printer) Fprintf(w io.Writer, f string, a ...any) {
 	if err := p.write(w, fmt.Sprintf(f, a...)); err != nil {
-		fmt.Printf("Fprintf: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprintf: %v\n", err)
 	}
 }
 
 func (p *Printer) Fprintln(w io.Writer, a ...any) {
 	if err := p.write(w, fmt.Sprintln(a...)); err != nil {
-		fmt.Printf("Fprintln: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprintln: %v\n", err)
 	}
 }
 
@@ -244,22 +171,28 @@ func (p *Printer) generateLogError(format string, args ...any) string {
 	return fmt.Sprintf("%s\n", colorError().Sprintf("[ERROR] %s", fmt.Sprintf(format, args...)))
 }
 
-// LogError prints error messages to stderr
+// LogError prints error messages to the error writer
 func (p *Printer) LogError(format string, args ...any) {
-	p.Fprint(os.Stderr, p.generateLogError(format, args...))
+	p.Fprint(p.errWriter, p.generateLogError(format, args...))
 }
 
 // LogWarn prints a warning to the error writer: something the user should
 // know about that does not make the run fail.
 func (p *Printer) LogWarn(format string, args ...any) {
-	p.Fprint(p.errWriter, colorWarning().Sprintf("[WARN] %s", fmt.Sprintf(format, args...))+"\n")
+	p.Fprint(p.errWriter, warnLine(fmt.Sprintf(format, args...)))
+}
+
+// warnLine returns msg as a line of warning, as LogWarn writes it, for what
+// warns without a Printer, such as Load.
+func warnLine(msg string) string {
+	return colorWarning().Sprintf("[WARN] %s", msg) + "\n"
 }
 
 // logTestError logs, in verbose mode, the error a test could not be
 // evaluated for.
 func (p *Printer) logTestError(testExpr string, err error) {
 	if p.verbose {
-		p.Fprint(os.Stderr, p.generateLogError("Test Error: %s", err)+p.generateLogError("Input: %s", testExpr))
+		p.Fprint(p.errWriter, p.generateLogError("Test Error: %s", err)+p.generateLogError("Input: %s", testExpr))
 	}
 }
 
@@ -273,28 +206,20 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 	}
 	var b debugBlock
 	b.line("Test: %s (input: %s)", resultStr, testExpr)
-	if env := testEnv(context); env != nil {
+	if env := testEnvOf(context); env != nil {
 		b.line("Env:")
 		b.mapData(p.masker.Map(env))
 	}
 	p.logDebugBlock(&b)
 }
 
-// testEnv is what PrintTestResult shows of the context a test was evaluated
-// in, by the names the test reads it by. Of a step's, the request and the
-// response are left out, as the step has just shown them, under Request and
-// Response.
-func testEnv(context any) map[string]any {
+// testEnvOf is what PrintTestResult shows of the context a test was
+// evaluated in: that of a step as StepContext.testEnv tells it, and a map as
+// it is.
+func testEnvOf(context any) map[string]any {
 	switch c := context.(type) {
 	case StepContext:
-		return map[string]any{
-			"vars":         c.Vars,
-			"outputs":      c.Outputs,
-			"status":       c.Status,
-			"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
-			"report":       c.Report,
-			"repeat_index": c.RepeatIndex,
-		}
+		return c.testEnv()
 	case map[string]any:
 		return c
 	default:

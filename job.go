@@ -2,13 +2,11 @@ package probe
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 )
 
 type Job struct {
@@ -25,23 +23,6 @@ type Job struct {
 	Repeat   *Repeat `yaml:"repeat"`
 	Defaults any     `yaml:"defaults"`
 	SkipIf   string  `yaml:"skipif,omitempty"`
-}
-
-func (j *Job) Start(ctx JobContext) error {
-	failed, err := j.run(ctx)
-	if err != nil {
-		return err
-	}
-	if failed {
-		return errStepsFailed(j.Name)
-	}
-	return nil
-}
-
-// errStepsFailed is the error Start returns when a step of the job failed.
-func errStepsFailed(jobName string) error {
-	return NewExecutionError("job_start", "job execution failed", nil).
-		WithContext("job_name", jobName)
 }
 
 // run runs the job. It reports whether a step failed separately from the
@@ -186,10 +167,7 @@ func (j *Job) validateRepeatIDs() error {
 		if st == nil {
 			continue
 		}
-		id := st.ID
-		if id == "" {
-			id = defaultStepID(i)
-		}
+		id := st.idAt(i)
 		if k, ok := seen[id]; ok {
 			return fmt.Errorf("steps %d and %d are both read as steps.%s by the tests over the runs; give one of them another id", k, i, id)
 		}
@@ -224,12 +202,12 @@ func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 func (j *Job) executeStep(st *stepRun, idx *int, ctx *JobContext, vars map[string]any) {
 	st.idx = *idx
 	*idx++
-	st.SetCtx(*ctx, vars)
+	st.bindContext(*ctx, vars)
 	if j.FailFast && ctx.Failed {
 		st.skipAfterFailure(ctx)
 		return
 	}
-	st.Do(ctx)
+	st.run(ctx)
 }
 
 // executeStepWithIterations executes a step multiple times with different
@@ -253,7 +231,7 @@ func (j *Job) executeStepWithIterationExpr(place func(ordinal int) *stepRun, idx
 		return
 	}
 
-	st.SetCtx(*ctx, nil)
+	st.bindContext(*ctx, nil)
 	entries, err := st.iterationEntries()
 	if err == nil && len(entries) > 0 {
 		j.executeStepWithIterations(place, entries, idx, ctx)
@@ -316,7 +294,7 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 		return false
 	}
 
-	// Create a step context for evaluation - same as SetCtx in step.go
+	// Create a step context for evaluation - same as stepRun.bindContext
 	var outputs map[string]any
 	if ctx.Outputs != nil {
 		outputs = ctx.Outputs.GetAll()
@@ -385,18 +363,6 @@ type JobRun struct {
 	Duration time.Duration
 }
 
-// RunStandalone runs the job outside a workflow, as an embedded job is run.
-// A local action is resolved relative to baseDir, the directory of the file
-// the job comes from, or to the working directory when baseDir is empty.
-func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, opts ...StandaloneOption) JobRun {
-	cfg := standaloneConfig{}
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	run, _ := j.runStandalone(vars, printer, jobID, baseDir, cfg, true)
-	return run
-}
-
 // StandaloneOption changes how RunStandalone runs a job.
 type StandaloneOption func(*standaloneConfig)
 
@@ -407,6 +373,27 @@ type standaloneConfig struct {
 	builtin []string
 	// cleanups are those of the run the job is part of.
 	cleanups *actionrpc.Cleanups
+	// needsNoCheck are the actions whose steps pass without a test.
+	needsNoCheck []string
+	// runner runs the actions of the job's steps; nil for the default.
+	runner ActionRunner
+}
+
+// WithNeedsNoCheck tells the job the names of the actions whose steps pass
+// without a test, as Config.NeedsNoCheck tells a workflow. Without it, a
+// step that nothing checks is counted as untested whatever its action.
+func WithNeedsNoCheck(names []string) StandaloneOption {
+	return func(c *standaloneConfig) {
+		c.needsNoCheck = names
+	}
+}
+
+// WithActionRunner runs the actions of the job's steps with r, as
+// Config.ActionRunner does those of a workflow.
+func WithActionRunner(r ActionRunner) StandaloneOption {
+	return func(c *standaloneConfig) {
+		c.runner = r
+	}
 }
 
 // WithCleanups runs the job as part of a run that cleans up once it is over,
@@ -457,24 +444,6 @@ func WithBuiltinActions(names []string) StandaloneOption {
 	}
 }
 
-// RunIndependently executes a job independently with its own context and result tracking
-// Returns success/failure status, outputs, report, error message, and duration
-//
-// Unlike RunStandalone, it resolves an external action only when a step runs
-// it, as it did before RunStandalone existed: a skipped job or step does not
-// need its action, and one that cannot be resolved fails its step.
-func (j *Job) RunIndependently(vars map[string]any, printer *Printer, jobID string) (bool, map[string]any, string, string, time.Duration) {
-	run, failed := j.runStandalone(vars, printer, jobID, "", standaloneConfig{}, false)
-	errorMsg := ""
-	switch {
-	case run.Err != nil:
-		errorMsg = run.Err.Error()
-	case failed:
-		errorMsg = errStepsFailed(j.Name).Error()
-	}
-	return run.Success, run.Outputs, run.Report, errorMsg, run.Duration
-}
-
 // firstRefusal returns why the guard refused the first step of jr it
 // refused, or nil when it refused none.
 func firstRefusal(jr *JobResult) *actionrpc.Refused {
@@ -483,17 +452,21 @@ func firstRefusal(jr *JobResult) *actionrpc.Refused {
 		if sr.RepeatCounter != nil {
 			f = sr.RepeatCounter.Failure
 		}
-		if f != nil && f.Kind == FailureRefused {
-			reason := strings.TrimPrefix(f.Message, "refused: ")
-			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, reason)}
+		if f != nil && f.refused != nil {
+			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.refused.Reason)}
 		}
 	}
 	return nil
 }
 
-// runStandalone is RunStandalone, also reporting whether a step failed.
-// resolveFirst resolves the job's external actions before any step runs.
-func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, cfg standaloneConfig, resolveFirst bool) (JobRun, bool) {
+// RunStandalone runs the job outside a workflow, as an embedded job is run.
+// A local action is resolved relative to baseDir, the directory of the file
+// the job comes from, or to the working directory when baseDir is empty.
+func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, opts ...StandaloneOption) JobRun {
+	cfg := standaloneConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	start := time.Now()
 	j.ID = jobID
 	runID := cfg.runID
@@ -517,12 +490,14 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config: Config{
-				Verbose: printer.verbose,
-				Guard:   cfg.guard,
+				Verbose:      printer.verbose,
+				Guard:        cfg.guard,
+				NeedsNoCheck: cfg.needsNoCheck,
+				ActionRunner: cfg.runner,
 			},
 			Printer:    printer,
 			Result:     result,
-			background: procgroup.NewTracker(),
+			background: newBackground(),
 			cleanups:   newCleanups(runID, printer, false),
 			baseDir:    baseDir,
 			runID:      runID,
@@ -553,7 +528,7 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 		ctx.Result.recordFailure(failureConfig)
 		ctx.Printer.PrintError("%v", err)
 	}
-	if err == nil && resolveFirst {
+	if err == nil {
 		ctx.Guard, err = resolveExternalActions([]*Job{j}, baseDir, ctx.Guard, cfg.builtin)
 	}
 	if err == nil {
@@ -573,7 +548,7 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	run.Duration = time.Since(start)
 	jr.EndTime = jr.StartTime.Add(run.Duration)
 	run.Outputs = ctx.Outputs.GetAll()
-	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).GenerateReportOnlySteps(result)
+	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).stepsText(result)
 
-	return run, failed
+	return run
 }

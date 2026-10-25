@@ -33,6 +33,21 @@ func Read(path string) (*Report, error) {
 	return &r, nil
 }
 
+// ReadBaseline reads the report of an earlier run, to compare a run to, as
+// Read does. Any JSON object parses as a report, so one that does not say
+// when its run started, as each written of a run does, is refused as no
+// report of a run.
+func ReadBaseline(path string) (*Report, error) {
+	r, err := Read(path)
+	if err != nil {
+		return nil, err
+	}
+	if r.StartedAt.IsZero() {
+		return nil, fmt.Errorf("%s is not a report of a run, written by --report json", path)
+	}
+	return r, nil
+}
+
 // Compare gives each repeated step whose response times were measured the
 // outcome of the step of the same id, in the job of the same id, in base,
 // the report of an earlier run. When a job has several steps of an id, as

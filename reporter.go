@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 // OutputMode selects how a workflow run delivers its report.
@@ -118,7 +119,7 @@ func (r *BufferedReporter) JobDone(jobID string, jr *JobResult) {}
 
 func (r *BufferedReporter) Finish(rs *Result) {
 	r.printer.StopSpinner()
-	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(r.name, r.description)+r.render.GenerateReport(rs))
+	r.printer.Fprint(r.printer.outWriter, r.render.headerText(r.name, r.description)+r.render.reportText(rs))
 }
 
 // StreamReporter prints the report incrementally.
@@ -134,14 +135,13 @@ type StreamReporter struct {
 	order   []string
 	index   map[string]int
 
-	mu            sync.Mutex
-	labels        map[string]string
-	labelWidth    int
-	cursor        int
-	ready         map[string]*JobResult
-	succeeded     int
-	earliestStart time.Time
-	latestEnd     time.Time
+	mu         sync.Mutex
+	labels     map[string]string
+	labelWidth int
+	cursor     int
+	ready      map[string]*JobResult
+	// totals are those of the jobs printed so far, for the footer.
+	totals reportTotals
 }
 
 // newStreamReporter creates a reporter that flushes job blocks, which render
@@ -174,7 +174,7 @@ func (r *StreamReporter) labelJobs(name func(id string) string) {
 	})
 	w := 0
 	for _, l := range labels {
-		w = max(w, displayWidth(l))
+		w = max(w, textwidth.Width(l))
 	}
 
 	r.mu.Lock()
@@ -183,7 +183,7 @@ func (r *StreamReporter) labelJobs(name func(id string) string) {
 }
 
 func (r *StreamReporter) Start(name, description string) {
-	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(name, description))
+	r.printer.Fprint(r.printer.outWriter, r.render.headerText(name, description))
 }
 
 func (r *StreamReporter) StepStart(jobID, stepName string) {
@@ -191,19 +191,7 @@ func (r *StreamReporter) StepStart(jobID, stepName string) {
 }
 
 func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
-	var icon string
-	switch sr.Status {
-	case StatusSuccess:
-		icon = colorSuccess().Sprint(strings.TrimSpace(IconSuccess))
-	case StatusError:
-		icon = colorError().Sprint(strings.TrimSpace(IconError))
-	case StatusWarning:
-		icon = colorNoTest().Sprint(strings.TrimSpace(IconTriangle))
-	case StatusSkipped:
-		icon = colorInfo().Sprint(strings.TrimSpace(IconSkip))
-	default:
-		icon = colorWarning().Sprint("?")
-	}
+	icon, c := statusIcon(sr.Status)
 
 	suffix := ""
 	if sr.RepeatCounter != nil {
@@ -213,7 +201,7 @@ func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
 		suffix = colorDim().Sprintf(" (%s)", sr.RT)
 	}
 
-	r.progress(jobID, icon, sr.Name, suffix)
+	r.progress(jobID, c.Sprint(strings.TrimSpace(icon)), stepTitle(sr), suffix)
 }
 
 func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
@@ -253,13 +241,8 @@ func (r *StreamReporter) Finish(rs *Result) {
 	}
 	r.flushLocked()
 
-	var totalTime float64
-	if !r.earliestStart.IsZero() && !r.latestEnd.IsZero() {
-		totalTime = r.latestEnd.Sub(r.earliestStart).Seconds()
-	}
-
 	var output strings.Builder
-	r.render.generateFooter(totalTime, r.succeeded, len(rs.Jobs), &output)
+	r.render.writeFooter(&output, r.totals, len(rs.Jobs))
 	r.printer.Fprint(r.printer.outWriter, output.String())
 }
 
@@ -281,17 +264,7 @@ func (r *StreamReporter) flushLocked() {
 // writeJobLocked renders one job block and folds it into the footer totals.
 // Callers must hold r.mu.
 func (r *StreamReporter) writeJobLocked(jr *JobResult) {
-	block, succeeded, start, end := r.render.generateJobReport(jr)
-	if succeeded {
-		r.succeeded++
-	}
-	if r.earliestStart.IsZero() || start.Before(r.earliestStart) {
-		r.earliestStart = start
-	}
-	if r.latestEnd.IsZero() || end.After(r.latestEnd) {
-		r.latestEnd = end
-	}
-	r.printer.Fprint(r.printer.outWriter, block)
+	r.printer.Fprint(r.printer.outWriter, r.render.jobText(jr, &r.totals))
 }
 
 // progress writes one live line to stderr. The report on stdout only grows a
@@ -308,7 +281,7 @@ func (r *StreamReporter) progress(jobID, icon, text, suffix string) {
 		label = jobID
 	}
 	job := colorDim().Sprintf("[%s]", label)
-	if pad := r.labelWidth - displayWidth(label); pad > 0 {
+	if pad := r.labelWidth - textwidth.Width(label); pad > 0 {
 		job += strings.Repeat(" ", pad)
 	}
 	r.printer.Fprintf(r.printer.errWriter, "%s %s %s %s%s\n", ts, job, icon, text, suffix)

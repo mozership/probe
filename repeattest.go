@@ -4,9 +4,54 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/report"
 )
+
+// The fields of a step that the tests of a repeated job read under steps, as
+// repeatRuns and baselineRuns gather them and probe check knows them.
+const (
+	runFieldRuns        = "runs"
+	runFieldSuccess     = "success"
+	runFieldFailure     = "failure"
+	runFieldSkipped     = "skipped"
+	runFieldSuccessRate = "success_rate"
+	runFieldRT          = "rt"
+)
+
+// The fields of the rt of a step, as repeatTimes and baselineRuns give them.
+const (
+	rtFieldMin  = "min"
+	rtFieldMean = "mean"
+	rtFieldP50  = "p50"
+	rtFieldP90  = "p90"
+	rtFieldP95  = "p95"
+	rtFieldP99  = "p99"
+	rtFieldMax  = "max"
+)
+
+// The fields of a step that the tests of a repeated job read under steps,
+// those that the test against the run compared to reads under
+// baseline.steps, and those of their rt, in the order probe check lists
+// them in.
+var (
+	repeatRunFields   = []string{runFieldRuns, runFieldSuccess, runFieldFailure, runFieldSkipped, runFieldSuccessRate, runFieldRT}
+	baselineRunFields = []string{runFieldRuns, runFieldSuccess, runFieldSuccessRate, runFieldRT}
+	repeatRTFields    = []string{rtFieldMin, rtFieldMean, rtFieldP50, rtFieldP90, rtFieldP95, rtFieldP99, rtFieldMax}
+)
+
+// rtFields is the rt of a step, its times in seconds, as a test reads it.
+func rtFields(minimum, mean, p50, p90, p95, p99, maximum float64) map[string]any {
+	return map[string]any{
+		rtFieldMin:  minimum,
+		rtFieldMean: mean,
+		rtFieldP50:  p50,
+		rtFieldP90:  p90,
+		rtFieldP95:  p95,
+		rtFieldP99:  p99,
+		rtFieldMax:  maximum,
+	}
+}
 
 // repeatTestEnv is what the tests of a repeated job read: the vars of the
 // workflow, and under steps the runs of each step by its id. The test
@@ -54,12 +99,12 @@ func repeatRuns(counters []StepRepeatCounter) map[string]any {
 			rate = float64(r.success) / float64(total)
 		}
 		steps[id] = map[string]any{
-			"runs":         total,
-			"success":      r.success,
-			"failure":      r.failure,
-			"skipped":      r.skipped,
-			"success_rate": rate,
-			"rt":           repeatTimes(r.rts),
+			runFieldRuns:        total,
+			runFieldSuccess:     r.success,
+			runFieldFailure:     r.failure,
+			runFieldSkipped:     r.skipped,
+			runFieldSuccessRate: rate,
+			runFieldRT:          repeatTimes(r.rts),
 		}
 	}
 	return steps
@@ -102,21 +147,13 @@ func baselineRuns(base *report.Report, jobID string) map[string]any {
 		}
 		var rt map[string]any
 		if l := runs[0].Latency; len(runs) == 1 && l != nil {
-			rt = map[string]any{
-				"min":  l.MinMs / 1000,
-				"mean": l.MeanMs / 1000,
-				"p50":  l.P50Ms / 1000,
-				"p90":  l.P90Ms / 1000,
-				"p95":  l.P95Ms / 1000,
-				"p99":  l.P99Ms / 1000,
-				"max":  l.MaxMs / 1000,
-			}
+			rt = rtFields(l.MinMs/1000, l.MeanMs/1000, l.P50Ms/1000, l.P90Ms/1000, l.P95Ms/1000, l.P99Ms/1000, l.MaxMs/1000)
 		}
 		steps[id] = map[string]any{
-			"runs":         total,
-			"success":      success,
-			"success_rate": rate,
-			"rt":           rt,
+			runFieldRuns:        total,
+			runFieldSuccess:     success,
+			runFieldSuccessRate: rate,
+			runFieldRT:          rt,
 		}
 	}
 	return steps
@@ -147,7 +184,7 @@ func baselineMissing(test string, steps map[string]any) string {
 		if !ok {
 			return fmt.Sprintf("the baseline has no step %s", id)
 		}
-		if rt, _ := st["rt"].(map[string]any); len(chain) > 2 && chain[2] == "rt" && rt == nil {
+		if rt, _ := st[runFieldRT].(map[string]any); len(chain) > 2 && chain[2] == runFieldRT && rt == nil {
 			return fmt.Sprintf("the baseline has no times of step %s", id)
 		}
 	}
@@ -169,15 +206,15 @@ func repeatTimes(secs []float64) map[string]any {
 	for _, s := range sorted {
 		sum += s
 	}
-	return map[string]any{
-		"min":  sorted[0],
-		"mean": sum / float64(len(sorted)),
-		"p50":  report.NearestRank(sorted, 50),
-		"p90":  report.NearestRank(sorted, 90),
-		"p95":  report.NearestRank(sorted, 95),
-		"p99":  report.NearestRank(sorted, 99),
-		"max":  sorted[len(sorted)-1],
-	}
+	return rtFields(
+		sorted[0],
+		sum/float64(len(sorted)),
+		report.NearestRank(sorted, 50),
+		report.NearestRank(sorted, 90),
+		report.NearestRank(sorted, 95),
+		report.NearestRank(sorted, 99),
+		sorted[len(sorted)-1],
+	)
 }
 
 // skipped reports whether the job was skipped by its skipif, which leaves
@@ -228,33 +265,8 @@ func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounte
 
 // evalRepeatTest evaluates test, a test of a repeated job, against env.
 func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestResult {
-	ev := &expr.Expr{}
-	res := &RepeatTestResult{Test: test}
-
-	out, err := ev.Eval(test, env)
-	if err != nil {
-		res.Failure = &StepFailure{Kind: FailureTestError, Message: err.Error()}
-		ctx.Printer.logTestError(test, err)
-		res.Output = testErrorDetail(err)
-	} else if passed, ok := out.(bool); !ok {
-		res.Failure = &StepFailure{
-			Kind:    FailureTestType,
-			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", out, out),
-		}
-		ctx.Printer.LogDebug("%s", typeMismatchText(test, out))
-		res.Output = typeMismatchDetail(test, out)
-	} else if !passed {
-		message := "test evaluated to false"
-		if clause, ok := ev.FalseClause(test, env); ok {
-			clause = maskClause(ctx.Printer.Masker(), clause)
-			message += ": " + clauseSummary(clause)
-			res.Output = falseClauseDetail(clause)
-		}
-		res.Failure = &StepFailure{Kind: FailureAssertion, Message: message}
-	} else {
-		res.Passed = true
-	}
-	return res
+	passed, failure := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
+	return &RepeatTestResult{Test: test, Passed: passed, Failure: failure}
 }
 
 // recordRepeatTest records res, the outcome of a test of a repeated job, by

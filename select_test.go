@@ -3,9 +3,11 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,6 +27,44 @@ func selectionJobs() []Job {
 		{ID: "notify", Name: "Notify", Needs: []string{"cleanup"}, Always: true},
 		{ID: "lint_cleanup", Name: "Lint cleanup", Needs: []string{"lint"}, Always: true},
 		{ID: "job_7", Name: "Tests"},
+	}
+}
+
+// TestNeededJobs follows needs however far down, from one job or several,
+// leaving out a need that is no job's, and coming back to a job of from
+// only through a cycle.
+func TestNeededJobs(t *testing.T) {
+	jobs := []Job{
+		{ID: "a"},
+		{ID: "b", Needs: []string{"a"}},
+		{ID: "c", Needs: []string{"b", "missing"}},
+		{ID: "d", Needs: []string{"a"}},
+		{ID: "e", Needs: []string{"f"}},
+		{ID: "f", Needs: []string{"e"}},
+	}
+	byID := map[string]int{}
+	for i, j := range jobs {
+		byID[j.ID] = i
+	}
+	tests := []struct {
+		name string
+		from []int
+		want []int
+	}{
+		{"a job that needs none", []int{0}, nil},
+		{"one need", []int{1}, []int{0}},
+		{"needs of needs", []int{2}, []int{0, 1}},
+		{"several jobs", []int{2, 3}, []int{0, 1}},
+		{"a cycle", []int{4}, []int{4, 5}},
+		{"no job", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := slices.Sorted(maps.Keys(neededJobs(jobs, byID, tt.from...)))
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("neededJobs(%v) = %v, want %v", tt.from, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -127,12 +167,17 @@ func TestSelectJobs_Errors(t *testing.T) {
 		{"a name of another case", []string{"setup", "notify", "TESTS"}, `no job has the id or name "TESTS"; did you mean "tests"?`},
 		{"a name several jobs have", []string{"Tests"}, `2 jobs are named "Tests"; select one by its id: tests, job_7`},
 		{"a name a template makes", []string{"Lint staging"}, `no job has the id or name "Lint staging"; a job whose name has a template is selected by its id`},
+		{"a name with an unclosed opener", []string{"Lint staging"}, `no job has the id or name "Lint staging"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jobs := selectionJobs()
-			if strings.Contains(tt.name, "template") {
+			switch {
+			case strings.Contains(tt.name, "template"):
 				jobs[3].Name = "Lint {{vars.env}}"
+			case strings.Contains(tt.name, "unclosed"):
+				// Not a template: it is the name as written.
+				jobs[3].Name = "Lint {{ vars.env"
 			}
 			_, _, err := selectJobs(jobs, tt.names)
 			if err == nil || err.Error() != tt.want {
@@ -146,11 +191,11 @@ func TestSelectJobs_Errors(t *testing.T) {
 // are not in the report, the exit status is theirs, and a job that cleans
 // up after a selected one runs.
 func TestWorkflow_Start_SelectedJobs(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	setup := NewMockActionRunner()
-	cleanup := NewMockActionRunner()
-	other := NewMockActionRunner()
+	setup := newMockRunner()
+	cleanup := newMockRunner()
+	other := newMockRunner()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "report.json")
@@ -159,16 +204,19 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 		Name: "Selected",
 		Vars: map[string]any{"env": "stg"},
 		Jobs: []Job{
-			{ID: "setup", Name: "Setup {{vars.env}}", Steps: []*Step{{Name: "Prepares", Uses: "hello", actionRunner: setup}}},
-			{ID: "tests", Name: "Tests", Needs: []string{"setup"}, Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
-			{Name: "Other", Steps: []*Step{{Name: "Not run", Uses: "hello", actionRunner: other}}},
-			{Name: "Cleanup", Needs: []string{"setup", "tests"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
+			{ID: "setup", Name: "Setup {{vars.env}}", Steps: []*Step{{Name: "Prepares", Uses: "hello"}}},
+			{ID: "tests", Name: "Tests", Needs: []string{"setup"}, Steps: []*Step{{Name: "Fails", Uses: "hello"}}},
+			{Name: "Other", Steps: []*Step{{Name: "Not run", Uses: "hello"}}},
+			{Name: "Cleanup", Needs: []string{"setup", "tests"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello"}}},
 		},
 	}
 	out := startCapturingWith(t, w, Config{
 		Output:  OutputModeSpinner,
 		Jobs:    []string{"Tests"},
 		Reports: []report.Target{{Format: report.JSON, Path: path}, {Format: report.Markdown, Path: md}},
+		ActionRunner: stepRunners{byName: map[string]ActionRunner{
+			"Prepares": setup, "Fails": failing, "Not run": other, "Removes": cleanup,
+		}},
 	})
 
 	if len(setup.Calls["hello"]) != 1 || len(cleanup.Calls["hello"]) != 1 {
@@ -220,8 +268,8 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 // A run of every job records no selection.
 func TestWorkflow_Start_NoSelection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "report.json")
-	w := &Workflow{Name: "All", Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: NewMockActionRunner()}}}}}
-	startCapturingWith(t, w, Config{Output: OutputModeSpinner, Reports: []report.Target{{Format: report.JSON, Path: path}}})
+	w := &Workflow{Name: "All", Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "Runs", Uses: "hello"}}}}}
+	startCapturingWith(t, w, Config{Output: OutputModeSpinner, ActionRunner: newMockRunner(), Reports: []report.Target{{Format: report.JSON, Path: path}}})
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -236,12 +284,12 @@ func TestWorkflow_Start_NoSelection(t *testing.T) {
 
 // A job that cannot be found fails the run before any job runs.
 func TestWorkflow_Start_UnknownJob(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name: "Unknown",
-		Jobs: []Job{{ID: "tests", Name: "Tests", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: runner}}}},
+		Jobs: []Job{{ID: "tests", Name: "Tests", Steps: []*Step{{Name: "Runs", Uses: "hello"}}}},
 	}
-	err := w.Start(Config{Jobs: []string{"test"}})
+	err := w.Start(Config{Jobs: []string{"test"}, ActionRunner: runner})
 	if want := `no job has the id or name "test"; did you mean "tests"?`; err == nil || err.Error() != want {
 		t.Errorf("Start() = %v, want %q", err, want)
 	}

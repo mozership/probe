@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mozership/probe/jsonutil"
+	"github.com/mozership/probe/internal/jsonutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"

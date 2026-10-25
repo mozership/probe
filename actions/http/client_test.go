@@ -481,6 +481,76 @@ func TestRequestBodyJSONConversion(t *testing.T) {
 	}
 }
 
+func TestJoinHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header hp.Header
+		want   map[string]string
+	}{
+		{"none", hp.Header{}, map[string]string{}},
+		{"one value", hp.Header{"Content-Type": {"text/plain"}}, map[string]string{"Content-Type": "text/plain"}},
+		{
+			"values joined",
+			hp.Header{"Accept": {"text/html", "application/xml;q=0.9"}, "Set-Cookie": {"a=1; Path=/", "b=2"}},
+			map[string]string{"Accept": "text/html, application/xml;q=0.9", "Set-Cookie": "a=1; Path=/, b=2"},
+		},
+		{"no values", hp.Header{"X-Empty": {}}, map[string]string{"X-Empty": ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := joinHeader(tt.header); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("joinHeader() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header map[string]string
+		key    string
+		want   bool
+	}{
+		{"nil", nil, "authorization", false},
+		{"same case", map[string]string{"authorization": "x"}, "authorization", true},
+		{"other case", map[string]string{"Authorization": "x"}, "authorization", true},
+		{"other header", map[string]string{"X-Auth": "x"}, "authorization", false},
+		{"empty value counts", map[string]string{"X-Trace": ""}, "x-trace", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasHeader(tt.header, tt.key); got != tt.want {
+				t.Errorf("hasHeader(%v, %q) = %v, want %v", tt.header, tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header map[string]string
+		want   map[string]string
+	}{
+		{"nil is made", nil, map[string]string{"content-type": "text/csv"}},
+		{"added", map[string]string{"Accept": "*/*"}, map[string]string{"Accept": "*/*", "content-type": "text/csv"}},
+		{"same case replaced", map[string]string{"content-type": "application/json"}, map[string]string{"content-type": "text/csv"}},
+		{
+			"every other case replaced",
+			map[string]string{"Content-Type": "application/json", "CONTENT-TYPE": "text/plain", "Accept": "*/*"},
+			map[string]string{"content-type": "text/csv", "Accept": "*/*"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := setHeader(tt.header, "content-type", "text/csv"); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("setHeader() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMergeHeaders(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -610,6 +680,9 @@ func TestParseTimeout(t *testing.T) {
 		{"surrounding spaces are ignored", " 5s ", 5 * time.Second, false},
 		{"zero disables the limit", "0", 0, false},
 		{"zero duration disables the limit", "0s", 0, false},
+		{"fractional zero disables the limit", "0.0", 0, false},
+		{"below a nanosecond is rejected", "0.0000000001", 0, true},
+		{"too many seconds for a duration is rejected", "18446744074", 0, true},
 		{"negative duration is rejected", "-1s", 0, true},
 		{"negative number is rejected", "-1", 0, true},
 		{"unparsable value is rejected", "soon", 0, true},
@@ -716,6 +789,13 @@ func TestDoReadsStructuredSyntaxBodiesAsText(t *testing.T) {
 				t.Errorf("expected no file, got %q", got.Res.FilePath)
 			}
 		})
+	}
+}
+
+func TestParseTimeoutSaysWhyItRefuses(t *testing.T) {
+	_, err := parseTimeout("-1s")
+	if err == nil || err.Error() != "invalid timeout -1s: a duration cannot be below zero" {
+		t.Errorf("parseTimeout(-1s) error = %v, want it to say the timeout is below zero", err)
 	}
 }
 
@@ -997,4 +1077,39 @@ func TestCheckGuardTakesTheSchemePort(t *testing.T) {
 // srvURL is the address the request r was sent to.
 func srvURL(r *hp.Request) string {
 	return "http://" + r.Host
+}
+
+// TestRequestHeaderValues checks a header written as a number is sent as
+// its text and one written with nothing after it as an empty header, and
+// that a list, which has no text, is refused with the header named.
+func TestRequestHeaderValues(t *testing.T) {
+	var got hp.Header
+	srv := httptest.NewServer(hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
+		got = r.Header.Clone()
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := Request(map[string]any{
+		"url":     srv.URL,
+		"get":     "/",
+		"headers": map[string]any{"x-retry": 3, "x-empty": nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := got.Get("X-Retry"); v != "3" {
+		t.Errorf("X-Retry = %q, want %q", v, "3")
+	}
+	if v, ok := got["X-Empty"]; !ok || len(v) != 1 || v[0] != "" {
+		t.Errorf("X-Empty = %q (sent %v), want one empty value", v, ok)
+	}
+
+	_, err = Request(map[string]any{
+		"url":     srv.URL,
+		"get":     "/",
+		"headers": map[string]any{"x-list": []any{"a", "b"}},
+	})
+	if want := "cannot convert a list to a string for 'x-list' in field 'headers'"; err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
 }

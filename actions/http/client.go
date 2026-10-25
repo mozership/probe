@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	hp "net/http"
 	"net/url"
 	"path"
@@ -18,8 +17,11 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/binary"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/body"
+	"github.com/mozership/probe/internal/contractcheck"
+	"github.com/mozership/probe/internal/duration"
+	"github.com/mozership/probe/internal/hostport"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // DefaultTimeout bounds a request when the step does not set `timeout`. The
@@ -83,30 +85,54 @@ func NewReq() *Req {
 	}
 }
 
-// parseTimeout turns the request's timeout field into a duration. It accepts a
-// Go duration string ("10s", "1m30s") and, like the workflow-level interval
-// fields, a bare number of seconds. An empty value falls back to
-// DefaultTimeout, and zero disables the limit.
+// parseTimeout turns the request's timeout field into a duration. It reads
+// it as mapping.ParseTimeout does, as a duration string ("10s", "1m30s") or a
+// number of seconds, except that an empty value falls back to DefaultTimeout
+// and a zero, which ParseTimeout refuses, disables the limit.
 func parseTimeout(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return DefaultTimeout, nil
 	}
+	if d, err := duration.Parse(s); err == nil && d == 0 {
+		return 0, nil
+	}
+	return mapping.ParseTimeout(s)
+}
 
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		sec, ferr := strconv.ParseFloat(s, 64)
-		if ferr != nil {
-			return 0, fmt.Errorf("invalid timeout: %q", s)
+// joinHeader returns h with the values of each header joined, as the result
+// shows them, such as Accept: text/html, application/xml;q=0.9.
+func joinHeader(h hp.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[k] = strings.Join(v, ", ")
+	}
+	return out
+}
+
+// hasHeader reports whether h holds the header name, in any case.
+func hasHeader(h map[string]string, name string) bool {
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			return true
 		}
-		d = time.Duration(sec * float64(time.Second))
 	}
+	return false
+}
 
-	if d < 0 {
-		return 0, fmt.Errorf("timeout must not be negative: %q", s)
+// setHeader sets the header name of h to value, in place of any it holds in
+// another case, and returns h, made when it is nil.
+func setHeader(h map[string]string, name, value string) map[string]string {
+	if h == nil {
+		h = make(map[string]string)
 	}
-
-	return d, nil
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			delete(h, k)
+		}
+	}
+	h[name] = value
+	return h
 }
 
 // mergeHeaders merges custom headers with default headers, handling case-insensitive duplicates
@@ -232,35 +258,28 @@ func (r *Req) Do() (*Result, error) {
 	}
 	result.Status = status
 
-	body, err := io.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return result, err
 	}
 
-	// Process body based on Content-Type
+	// A textual body is kept as text, and any other is written to a file.
 	contentType := res.Header.Get("Content-Type")
-	bodyString, filePath, err := binary.ProcessHttpBody(body, contentType)
+	bodyString, filePath, err := body.TextOrFile(resBody, contentType)
 	if err != nil {
 		return result, err
 	}
 	result.Res.Body = bodyString
 	result.Res.FilePath = filePath
 
-	header := make(map[string]string)
-	for k, v := range res.Header {
-		// examples:
-		//   Set-Cookie: sessionid=abc123; Path=/; HttpOnly
-		//   Accept: text/html, application/xhtml+xml, application/xml;q=0.9
-		header[k] = strings.Join(v, ", ")
-	}
-	result.Res.Header = header
+	result.Res.Header = joinHeader(res.Header)
 
 	if r.contract != nil {
 		sentBody := []byte(r.Body)
 		if r.payload != nil {
 			sentBody = r.payload
 		}
-		result.violations, result.matched = r.contract.check(sent, sentBody, res, body)
+		result.violations, result.matched = r.contract.check(sent, sentBody, res, resBody)
 	}
 
 	return result, nil
@@ -280,15 +299,7 @@ func (r *Req) checkGuard(req *hp.Request) error {
 	if r.guard.ReadOnly && !slices.Contains(readMethods, req.Method) {
 		return actionrpc.Refuse("%s %s may write, and the run is read-only; only GET, HEAD and OPTIONS are sent", req.Method, req.URL.Redacted())
 	}
-	host := req.URL.Host
-	if req.URL.Port() == "" {
-		port := "80"
-		if req.URL.Scheme == "https" {
-			port = "443"
-		}
-		host = net.JoinHostPort(req.URL.Hostname(), port)
-	}
-	return r.guard.CheckHost(host)
+	return r.guard.CheckHost(hostport.OfURL(req.URL))
 }
 
 type Option func(*Callback)
@@ -371,7 +382,7 @@ func ResolveMethodAndURL(data map[string]any) error {
 func hasJSONContentType(headers any) bool {
 	checkHeader := func(k string, v any) bool {
 		s, ok := v.(string)
-		return ok && strings.EqualFold(k, "content-type") && binary.IsJSONMediaType(s)
+		return ok && strings.EqualFold(k, "content-type") && body.IsJSON(s)
 	}
 
 	switch h := headers.(type) {
@@ -468,8 +479,6 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	// Handle body conversion for JSON content-type
 	MarshalBodyIfJSON(call.With, m)
 
-	m = mapping.HeaderToStringValue(m)
-
 	// Extract custom headers and merge with defaults before MapToStructByTags
 	var customHeaders map[string]string
 	if headersInterface, exists := m["headers"]; exists {
@@ -477,12 +486,10 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 			// A copy, since basic_auth, form and multipart change it.
 			customHeaders = maps.Clone(headers)
 		} else if headersInterfaceMap, ok := headersInterface.(map[string]any); ok {
-			// Convert map[string]interface{} to map[string]string
-			customHeaders = make(map[string]string)
-			for k, v := range headersInterfaceMap {
-				if strVal, ok := v.(string); ok {
-					customHeaders[k] = strVal
-				}
+			// A number such as Content-Length: 1024 is sent as its text.
+			customHeaders, err = mapping.StringMap(headersInterfaceMap)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%w in field 'headers'", err)
 			}
 		}
 	}
@@ -494,42 +501,24 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 		if err != nil {
 			return nil, nil, err
 		}
-		for k := range customHeaders {
-			if strings.EqualFold(k, "authorization") {
-				return nil, nil, errors.New("basic_auth and an authorization header cannot be given together")
-			}
+		if hasHeader(customHeaders, "authorization") {
+			return nil, nil, errors.New("basic_auth and an authorization header cannot be given together")
 		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders["authorization"] = value
+		customHeaders = setHeader(customHeaders, "authorization", value)
 	}
 
 	// The body built from form or multipart is sent with its own Content-Type,
 	// which replaces one set for the job's other requests, such as JSON in
 	// defaults; a multipart one also carries the boundary only it knows.
 	if contentType != "" {
-		for k := range customHeaders {
-			if strings.EqualFold(k, "content-type") {
-				delete(customHeaders, k)
-			}
-		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders["content-type"] = contentType
+		customHeaders = setHeader(customHeaders, "content-type", contentType)
 	}
 
 	if traceHeader != "" {
-		for k := range customHeaders {
-			if strings.EqualFold(k, traceHeader) {
-				return nil, nil, fmt.Errorf("trace_header and a %s header cannot be given together", traceHeader)
-			}
+		if hasHeader(customHeaders, traceHeader) {
+			return nil, nil, fmt.Errorf("trace_header and a %s header cannot be given together", traceHeader)
 		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders[traceHeader] = traceValue(call.Step)
+		customHeaders = setHeader(customHeaders, traceHeader, traceValue(call.Step))
 	}
 
 	// Create new request with merged headers
@@ -574,17 +563,7 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	// The violations, and what the response was matched to, are told to
 	// the runner, which takes them as the step's test, and are in res, for
 	// the step's own test to read.
-	if ret.violations != nil {
-		call.Contract.Report(actionrpc.ContractCheckOf(ret.violations, ret.matched))
-	}
-	if res, ok := mapRet["res"].(map[string]any); ok {
-		if ret.violations != nil {
-			res["violations"] = ret.violations
-		}
-		if ret.matched != nil {
-			res["contract"] = ret.matched
-		}
-	}
+	contractcheck.Report(call.Contract, mapRet, ret.violations, ret.matched)
 
 	// A multipart request shows what was written in place of the body sent.
 	if multipartSpec != nil {

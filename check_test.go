@@ -1,8 +1,11 @@
 package probe
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,8 +48,9 @@ func checkFindings(t *testing.T, findings []Finding, wants []want) {
 }
 
 var checkActions = CheckOptions{
-	Actions:   []string{"embedded", "grpc", "hello", "http", "shell"},
-	Contracts: map[string][]string{"grpc": {"proto"}, "http": {"openapi"}},
+	Actions:      []string{"embedded", "grpc", "hello", "http", "shell"},
+	Contracts:    map[string][]string{"grpc": {"proto"}, "http": {"openapi"}},
+	NeedsNoCheck: []string{"hello"},
 }
 
 func TestCheck(t *testing.T) {
@@ -265,7 +269,7 @@ vars:
   wait: 1s
 `,
 			want: []want{
-				{SeverityError, 7, "wait: invalid wait format: soon"},
+				{SeverityError, 7, "wait: invalid wait soon: use a duration"},
 				{SeverityError, 15, "wait: template {{ vars. }}"},
 			},
 		},
@@ -801,6 +805,34 @@ func TestCheck_FilesReadTogether(t *testing.T) {
 	}
 }
 
+// TestCheck_ReadsEachFileOnce reads each file of the workflow once, so that
+// the text whose lines are told as lines of the files is the text loaded.
+// It replaces readFile, and so does not run in parallel.
+func TestCheck_ReadsEachFileOnce(t *testing.T) {
+	dir := t.TempDir()
+	base := writeWorkflow(t, dir, "base.yml", "name: once\n")
+	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: shell\n    tset: res.code == 0\n")
+
+	reads := map[string]int{}
+	t.Cleanup(func() { readFile = os.ReadFile })
+	readFile = func(name string) ([]byte, error) {
+		reads[name]++
+		return os.ReadFile(name)
+	}
+
+	findings, err := Check(base+","+jobs, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]int{base: 1, jobs: 1}; !maps.Equal(reads, want) {
+		t.Errorf("reads = %v, want %v", reads, want)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 4, "nothing checks this step"},
+		{SeverityError, 5, `unknown key "tset"`},
+	})
+}
+
 // TestCheck_JobsReplaced warns of a file whose jobs replace those of an
 // earlier file, which a run of them does not run, and not of other keys.
 func TestCheck_JobsReplaced(t *testing.T) {
@@ -1305,6 +1337,49 @@ jobs:
 		t.Fatal(err)
 	}
 	checkFindings(t, findings, nil)
+}
+
+// TestNewChecker gives the checker maps of its own to add the params and
+// the fields of res of external actions to, with or without those of opts.
+func TestNewChecker(t *testing.T) {
+	params := map[string][]string{"http": {"url"}}
+	fields := map[string][]string{"http": {"code"}}
+	c := newChecker(CheckOptions{Params: params, ResFields: fields})
+	c.params["./a"] = []string{"x"}
+	c.resFields["./a"] = []string{"y"}
+	if len(params) != 1 || len(fields) != 1 {
+		t.Errorf("the maps of opts were added to: %v, %v", params, fields)
+	}
+	if len(c.params) != 2 || len(c.resFields) != 2 {
+		t.Errorf("params = %v, resFields = %v, want those of opts and ./a", c.params, c.resFields)
+	}
+
+	c = newChecker(CheckOptions{})
+	c.params["./a"] = []string{"x"}
+	c.resFields["./a"] = []string{"y"}
+	if len(c.params) != 1 || len(c.resFields) != 1 {
+		t.Errorf("params = %v, resFields = %v, want those of ./a", c.params, c.resFields)
+	}
+}
+
+// TestCheckerAddOnce adds a finding once for a path and a message, at the
+// line of the path, while another path or message is added again.
+func TestCheckerAddOnce(t *testing.T) {
+	c := newChecker(CheckOptions{})
+	c.lines = map[string]int{"jobs[0].steps[0]": 4, "jobs[0].steps[1]": 7}
+	c.files = []fileStart{{name: "w.yml", line: 1}}
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "b")
+	c.addOnce(SeverityWarning, "jobs[0].steps[1].test", "s", "%s: %s", "test", "a")
+	var got []string
+	for _, f := range c.findings {
+		got = append(got, fmt.Sprintf("%s %d %s", f.Severity, f.Line, f.Message))
+	}
+	want := []string{"error 4 test: a", "error 4 test: b", "warning 7 test: a"}
+	if !slices.Equal(got, want) {
+		t.Errorf("findings = %q, want %q", got, want)
+	}
 }
 
 // The fields of the built-in actions the checks of res and req are tested

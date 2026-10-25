@@ -2,7 +2,6 @@ package probe
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,11 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 
 	"github.com/fatih/color"
-	"github.com/mozership/probe/expr"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 func TestWorkflowExecutor_DependencyManagement(t *testing.T) {
@@ -334,38 +333,6 @@ func TestWorkflowExecutor_ErrorHandling(t *testing.T) {
 	})
 }
 
-func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
-	t.Run("print detailed results functionality", func(t *testing.T) {
-		workflow := &Workflow{
-			Name: "detailed-results-test",
-			Jobs: []Job{
-				{
-					ID:    "test-job",
-					Name:  "test-job",
-					Steps: []*Step{},
-				},
-			},
-			printer: newBufferPrinter(),
-		}
-
-		// Create workflow buffer
-		result := NewResult()
-		jobResult := &JobResult{
-			JobName:   "test-job",
-			JobID:     "test-job",
-			Status:    StatusSuccess,
-			StartTime: time.Now().Add(-100 * time.Millisecond),
-			EndTime:   time.Now(),
-		}
-		result.Jobs["test-job"] = jobResult
-
-		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).GenerateReport(result)
-		if !strings.Contains(got, "test-job") {
-			t.Errorf("GenerateReport() should have the job, got:\n%s", got)
-		}
-	})
-}
-
 func TestParallelExecution_EdgeCases(t *testing.T) {
 	t.Run("empty workflow", func(t *testing.T) {
 		workflow := &Workflow{
@@ -666,809 +633,14 @@ func TestEnv(t *testing.T) {
 	}
 }
 
-func Test_evalVars(t *testing.T) {
-	tests := []struct {
-		name     string
-		wf       *Workflow
-		expected map[string]any
-		err      error
-	}{
-		{
-			name: "use expr",
-			wf: &Workflow{
-				Name: "Test",
-				Vars: map[string]any{
-					"host":  "{{HOST ?? 'http://localhost:3000'}}",
-					"token": "{{TOKEN}}",
-				},
-				env: map[string]string{
-					"TOKEN": "secrets",
-				},
-			},
-			expected: map[string]any{
-				"host":  "http://localhost:3000",
-				"token": "secrets",
-			},
-			err: nil,
-		},
-		{
-			name: "not exists environment",
-			wf: &Workflow{
-				Name: "Test",
-				Vars: map[string]any{
-					"host":  "{{HOST}}",
-					"token": "{{TOKEN}}",
-				},
-				env: map[string]string{
-					"TOKEN": "secrets",
-				},
-			},
-			expected: map[string]any{
-				"host":  "<nil>",
-				"token": "secrets",
-			},
-			err: fmt.Errorf("environment(HOST) is nil"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			actual, err := tt.wf.evalVars()
-			if err != nil && err.Error() != tt.err.Error() {
-				t.Errorf("expected error %+v, got %+v", tt.err, err)
-			}
-			if !reflect.DeepEqual(tt.expected, actual) {
-				t.Errorf("expected %#v, got %#v", tt.expected, actual)
-			}
-		})
-	}
-}
-
-func Test_evalVarsReadsOtherVars(t *testing.T) {
-	tests := []struct {
-		name     string
-		vars     map[string]any
-		env      map[string]string
-		expected map[string]any
-	}{
-		{
-			name: "a var defined after the one that reads it",
-			vars: map[string]any{
-				"base": "http://localhost:{{vars.port}}",
-				"port": "{{PORT ?? '18080'}}",
-			},
-			env: map[string]string{"PORT": "9000"},
-			expected: map[string]any{
-				"base": "http://localhost:9000",
-				"port": "9000",
-			},
-		},
-		{
-			name: "a chain of vars",
-			vars: map[string]any{
-				"a": "{{vars.b}}-a",
-				"b": "{{vars.c}}-b",
-				"c": "c",
-			},
-			expected: map[string]any{
-				"a": "c-b-a",
-				"b": "c-b",
-				"c": "c",
-			},
-		},
-		{
-			name: "a map var reading a string var",
-			vars: map[string]any{
-				"domain": "example.test",
-				"alice": map[string]any{
-					"user": "alice@{{vars.domain}}",
-					"tags": []any{"{{vars.domain}}"},
-				},
-			},
-			expected: map[string]any{
-				"domain": "example.test",
-				"alice": map[string]any{
-					"user": "alice@example.test",
-					"tags": []any{"example.test"},
-				},
-			},
-		},
-		{
-			name: "a string var reading a field of a map var",
-			vars: map[string]any{
-				"auth": map[string]any{"user": "admin", "password": "{{PASSWORD}}"},
-				"pair": "{{vars.auth.user + ':' + vars.auth.password}}",
-			},
-			env: map[string]string{"PASSWORD": "secret"},
-			expected: map[string]any{
-				"auth": map[string]any{"user": "admin", "password": "secret"},
-				"pair": "admin:secret",
-			},
-		},
-		{
-			name: "a var that is not defined falls back",
-			vars: map[string]any{
-				"port": "{{vars.missing ?? '8080'}}",
-			},
-			expected: map[string]any{
-				"port": "8080",
-			},
-		},
-		{
-			name: "a var read by a key known only at run time",
-			vars: map[string]any{
-				"picked": "{{vars[WHICH]}}",
-				"x":      "{{vars.y}}!",
-				"y":      "why",
-			},
-			env: map[string]string{"WHICH": "x"},
-			expected: map[string]any{
-				"picked": "why!",
-				"x":      "why!",
-				"y":      "why",
-			},
-		},
-		{
-			name: "an array at the top level",
-			vars: map[string]any{
-				"port":  "8080",
-				"list":  []any{"{{vars.port}}", map[string]any{"p": "{{vars.port}}"}},
-				"label": "{{vars.list[0]}}",
-			},
-			expected: map[string]any{
-				"port":  "8080",
-				"list":  []any{"8080", map[string]any{"p": "8080"}},
-				"label": "8080",
-			},
-		},
-		{
-			name: "a value that is not a string",
-			vars: map[string]any{
-				"retries": 3,
-				"label":   "{{vars.retries * 2}}",
-			},
-			expected: map[string]any{
-				"retries": 3,
-				"label":   "6",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env := tt.env
-			if env == nil {
-				// A non-empty env keeps Env from reading the process's own.
-				env = map[string]string{"UNUSED": ""}
-			}
-			wf := &Workflow{Name: "Test", Vars: tt.vars, env: env}
-			actual, err := wf.evalVars()
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(tt.expected, actual) {
-				t.Errorf("expected %#v, got %#v", tt.expected, actual)
-			}
-		})
-	}
-}
-
-func Test_evalVarsReadsOneRandomValue(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"password": "{{random_str(24)}}",
-			"auth":     "alice:{{vars.password}}",
-			"header":   "Basic {{encode_base64(vars.auth)}}",
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	for range 20 {
-		actual, err := wf.evalVars()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		password := actual["password"].(string)
-		if actual["auth"] != "alice:"+password {
-			t.Fatalf("auth = %q, want it built from password %q", actual["auth"], password)
-		}
-		want := "Basic " + base64.StdEncoding.EncodeToString([]byte("alice:"+password))
-		if actual["header"] != want {
-			t.Fatalf("header = %q, want %q", actual["header"], want)
-		}
-	}
-}
-
-func Test_evalVarsReadsVarsAsAWhole(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"name":     "probe",
-			"snapshot": map[string]any{"all": "{{vars}}"},
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := map[string]any{
-		"name":     "probe",
-		"snapshot": map[string]any{"all": map[string]any{"name": "probe"}},
-	}
-	if !reflect.DeepEqual(expected, actual) {
-		t.Errorf("expected %#v, got %#v", expected, actual)
-	}
-	// A var holding the map being filled in would make it cyclic, which JSON
-	// cannot encode.
-	if _, err := json.Marshal(actual); err != nil {
-		t.Errorf("vars cannot be encoded as JSON: %v", err)
-	}
-}
-
-// Test_evalVarsWithTemplatesFromFiles checks that a var that expands a
-// template comes after the vars that do not, since what the template reads
-// is known only once it runs, and that two such vars do not make a cycle.
-func Test_evalVarsWithTemplatesFromFiles(t *testing.T) {
-	dir := t.TempDir()
-	body := filepath.Join(dir, "body.tmpl")
-	if err := os.WriteFile(body, []byte("{{ vars.zone }}-{{ vars.yes }}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	other := filepath.Join(dir, "other.tmpl")
-	if err := os.WriteFile(other, []byte("other {{ vars.zone }}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"a":    "{{ template(file('" + body + "')) }}",
-			"b":    "{{ template(file('" + other + "')) }} and {{ vars.a }}",
-			"yes":  true,
-			"zone": "{{ ZONE }}",
-		},
-		env: map[string]string{"ZONE": "tokyo"},
-	}
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := map[string]any{
-		"a":    "tokyo-true",
-		"b":    "other tokyo and tokyo-true",
-		"yes":  true,
-		"zone": "tokyo",
-	}
-	if !reflect.DeepEqual(expected, actual) {
-		t.Errorf("expected %#v, got %#v", expected, actual)
-	}
-}
-
-// Test_evalVarsTemplateReadsALaterTemplateVar checks that a var whose
-// template reads another var that expands a template, and would come first
-// by name, is evaluated after it, and that a cycle between them is reported.
-func Test_evalVarsTemplateReadsALaterTemplateVar(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, content string) string {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-	first := write("a.tmpl", "a sees {{ vars.z }}")
-	last := write("z.tmpl", "z is {{ vars.n }}-{{ random_str(8) }}")
-
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"a": "{{ template(file('" + first + "')) }}",
-			"n": 1,
-			"z": "{{ template(file('" + last + "')) }}",
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	z, _ := actual["z"].(string)
-	if !strings.HasPrefix(z, "z is 1-") || actual["a"] != "a sees "+z {
-		t.Errorf("a should see the value z holds, got a = %q, z = %q", actual["a"], z)
-	}
-
-	cyclic := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"a": "{{ template(file('" + write("ca.tmpl", "{{ vars.b }}") + "')) }}",
-			"b": "{{ template(file('" + write("cb.tmpl", "{{ vars.a }}") + "')) }}",
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	if _, err := cyclic.evalVars(); err == nil || !strings.Contains(err.Error(), "vars: circular reference: a -> b -> a") {
-		t.Errorf("error = %v, want the cycle", err)
-	}
-}
-
-// Test_evalVarsTemplateReadsVarsByAKeyKnownWhenItRuns checks that a template
-// reading vars by a key known only when it runs waits for every other var.
-func Test_evalVarsTemplateReadsVarsByAKeyKnownWhenItRuns(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, content string) string {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"a": "{{ template(file('" + write("a.tmpl", "a sees {{ vars[WHICH] }}") + "')) }}",
-			"z": "{{ template(file('" + write("z.tmpl", "z") + "')) }}",
-		},
-		env: map[string]string{"WHICH": "z"},
-	}
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if actual["a"] != "a sees z" {
-		t.Errorf("a = %q, want it to see z", actual["a"])
-	}
-}
-
-// Test_evalVarsKeyReadsAVar checks that a var whose key reads another var is
-// evaluated after it, as one whose value reads it is.
-func Test_evalVarsKeyReadsAVar(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"body":   map[string]any{"{{ vars.tenant }}": map[string]any{"active": true}},
-			"tenant": "{{ TENANT }}",
-		},
-		env: map[string]string{"TENANT": "acme"},
-	}
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := map[string]any{"acme": map[string]any{"active": true}}
-	if !reflect.DeepEqual(actual["body"], want) {
-		t.Errorf("body = %#v, want %#v", actual["body"], want)
-	}
-}
-
-// Test_evalVarsListNamedLikeATemplate checks that a list var is evaluated
-// whatever its name holds, now that the keys of a map are templates too.
-func Test_evalVarsListNamedLikeATemplate(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"odd{{name}}": []any{"{{ 1 + 1 }}"},
-			"bad":         []any{"ok", map[string]any{"x": "{{ nosuch() }}"}},
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	_, err := wf.evalVars()
-	if err == nil || !strings.Contains(err.Error(), "vars.bad[1].x: ") {
-		t.Errorf("error = %v, want one naming vars.bad[1].x", err)
-	}
-
-	delete(wf.Vars, "bad")
-	actual, err := wf.evalVars()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(actual["odd{{name}}"], []any{2}) {
-		t.Errorf("odd{{name}} = %#v, want the list evaluated", actual["odd{{name}}"])
-	}
-}
-
-func Test_evalVarsCycleIsReproducible(t *testing.T) {
-	// a reads b and c through the values of a map, and both read a back, so
-	// the cycle reported depends on which of them is visited first.
-	vars := map[string]any{
-		"a": map[string]any{"x": "{{vars.c}}", "y": "{{vars.b}}", "z": "{{vars.c}}"},
-		"b": "{{vars.a.y}}",
-		"c": "{{vars.a.x}}",
-	}
-	for i := range 50 {
-		wf := &Workflow{Name: "Test", Vars: vars, env: map[string]string{"UNUSED": ""}}
-		_, err := wf.evalVars()
-		if err == nil || err.Error() != "vars: circular reference: a -> c -> a" {
-			t.Fatalf("run %d: error = %v, want the cycle through c", i, err)
-		}
-	}
-}
-
-func Test_evalVarsCircularReference(t *testing.T) {
-	tests := []struct {
-		name string
-		vars map[string]any
-		want string
-	}{
-		{
-			name: "itself",
-			vars: map[string]any{"a": "{{vars.a}}"},
-			want: "vars: circular reference: a -> a",
-		},
-		{
-			name: "two vars",
-			vars: map[string]any{"a": "{{vars.b}}", "b": "{{vars.a}}"},
-			want: "vars: circular reference: a -> b -> a",
-		},
-		{
-			name: "through a map var",
-			vars: map[string]any{
-				"a": map[string]any{"x": "{{vars.c}}"},
-				"b": "{{vars.a.x}}",
-				"c": "{{vars.b}}",
-			},
-			want: "vars: circular reference: a -> c -> b -> a",
-		},
-		{
-			name: "itself by name, along with a read of vars as a whole",
-			vars: map[string]any{
-				"a": "{{vars.a ?? 'fallback'}} {{toJSON(vars)}}",
-				"b": "b",
-			},
-			want: "vars: circular reference: a -> a",
-		},
-		{
-			name: "through an array var",
-			vars: map[string]any{"a": []any{"{{vars.b}}"}, "b": "{{vars.a[0]}}"},
-			want: "vars: circular reference: a -> b -> a",
-		},
-		{
-			name: "two vars read by keys known only at run time",
-			vars: map[string]any{"a": "{{vars[K]}}", "b": "{{toJSON(vars)}}"},
-			want: "vars: circular reference: a -> b -> a",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wf := &Workflow{Name: "Test", Vars: tt.vars, env: map[string]string{"UNUSED": ""}}
-			_, err := wf.evalVars()
-			if err == nil || err.Error() != tt.want {
-				t.Errorf("error = %v, want %q", err, tt.want)
-			}
-		})
-	}
-}
-
-func TestStepRepeatCounter(t *testing.T) {
-	tests := []struct {
-		name         string
-		successCount int
-		failureCount int
-		expected     string
-	}{
-		{
-			name:         "all success",
-			successCount: 100,
-			failureCount: 0,
-			expected:     "100/100 success (100.0%)",
-		},
-		{
-			name:         "partial success",
-			successCount: 80,
-			failureCount: 20,
-			expected:     "80/100 success (80.0%)",
-		},
-		{
-			name:         "all failure",
-			successCount: 0,
-			failureCount: 100,
-			expected:     "0/100 success (0.0%)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			counter := StepRepeatCounter{
-				SuccessCount: tt.successCount,
-				FailureCount: tt.failureCount,
-				Name:         "Test Step",
-			}
-
-			totalCount := counter.SuccessCount + counter.FailureCount
-			successRate := float64(counter.SuccessCount) / float64(totalCount) * 100
-			actual := fmt.Sprintf("%d/%d success (%.1f%%)",
-				counter.SuccessCount, totalCount, successRate)
-
-			if actual != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, actual)
-			}
-		})
-	}
-}
-
-func TestJobContextRepeatTracking(t *testing.T) {
-	ctx := JobContext{
-		runEnv: &runEnv{
-			Printer: newBufferPrinter(),
-		},
-		repeat: &jobRepeat{
-			total:    10,
-			counters: make(map[int]StepRepeatCounter),
-		},
-		RepeatCurrent: 5,
-	}
-
-	// Test initial state
-	if !ctx.repeating() {
-		t.Error("expected the runs to be counted")
-	}
-
-	if ctx.RepeatCurrent != 5 {
-		t.Errorf("expected RepeatCurrent to be 5, got %d", ctx.RepeatCurrent)
-	}
-
-	if ctx.repeat.total != 10 {
-		t.Errorf("expected the total to be 10, got %d", ctx.repeat.total)
-	}
-
-	// Test step counter initialization
-	counter := StepRepeatCounter{
-		SuccessCount: 3,
-		FailureCount: 2,
-		Name:         "Test Step",
-		LastResult:   true,
-	}
-
-	ctx.repeat.counters[0] = counter
-
-	if len(ctx.repeat.counters) != 1 {
-		t.Errorf("expected 1 step counter, got %d", len(ctx.repeat.counters))
-	}
-
-	if ctx.repeat.counters[0].SuccessCount != 3 {
-		t.Errorf("expected SuccessCount to be 3, got %d", ctx.repeat.counters[0].SuccessCount)
-	}
-}
-
-func TestStepRepeatCounterUpdate(t *testing.T) {
-	// Test counter update logic
-	jCtx := &JobContext{
-		runEnv: &runEnv{
-			Printer: newBufferPrinter(),
-		},
-		repeat: &jobRepeat{
-			total:    10,
-			counters: make(map[int]StepRepeatCounter),
-		},
-		RepeatCurrent: 3,
-	}
-
-	step := &stepRun{
-		Step: &Step{
-			Name: "Test Step",
-			Test: "true", // Always success
-		},
-		idx:  0,
-		expr: &expr.Expr{},
-	}
-
-	// Capture stdout to avoid test output noise
-	oldStdout := os.Stdout
-	os.Stdout, _ = os.Open(os.DevNull)
-	defer func() { os.Stdout = oldStdout }()
-
-	// Execute multiple times
-	for i := 1; i <= 3; i++ {
-		jCtx.RepeatCurrent = i
-		step.handleRepeatExecution(jCtx, "Test Step", false) // false = no error
-	}
-
-	// Check final counter state
-	counter := jCtx.repeat.counters[0]
-	if counter.SuccessCount != 3 {
-		t.Errorf("Expected SuccessCount to be 3, got %d", counter.SuccessCount)
-	}
-	if counter.FailureCount != 0 {
-		t.Errorf("Expected FailureCount to be 0, got %d", counter.FailureCount)
-	}
-	if counter.Name != "Test Step" {
-		t.Errorf("Expected Name to be 'Test Step', got %s", counter.Name)
-	}
-}
-
-func TestStepRepeatDisplayConditions(t *testing.T) {
-	tests := []struct {
-		name          string
-		repeatCurrent int
-		repeatTotal   int
-		shouldDisplay bool
-		description   string
-	}{
-		{
-			name:          "first execution",
-			repeatCurrent: 1,
-			repeatTotal:   10,
-			shouldDisplay: true,
-			description:   "should show initial message",
-		},
-		{
-			name:          "middle execution",
-			repeatCurrent: 5,
-			repeatTotal:   10,
-			shouldDisplay: false,
-			description:   "should not display in middle",
-		},
-		{
-			name:          "final execution",
-			repeatCurrent: 10,
-			repeatTotal:   10,
-			shouldDisplay: true,
-			description:   "should show final result",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test the display condition logic
-			totalCount := tt.repeatCurrent // Simulate counter state
-			isFirstExecution := totalCount == 1
-			isFinalExecution := tt.repeatCurrent == tt.repeatTotal
-
-			shouldDisplay := isFirstExecution || isFinalExecution
-
-			if shouldDisplay != tt.shouldDisplay {
-				t.Errorf("%s: expected shouldDisplay to be %v, got %v",
-					tt.description, tt.shouldDisplay, shouldDisplay)
-			}
-		})
-	}
-}
-
-// WorkflowBuffer tests
-func TestWorkflowBuffer_AddStepResult(t *testing.T) {
-	wb := NewResult()
-	jobID := "test-job"
-
-	// Add a job buffer first
-	wb.Jobs[jobID] = &JobResult{
-		JobID:       jobID,
-		JobName:     "Test Job",
-		StartTime:   time.Now(),
-		StepResults: []StepResult{},
-	}
-
-	// Create test step results
-	stepResult1 := StepResult{
-		Index:  0,
-		Name:   "Step 1",
-		Status: StatusSuccess,
-	}
-
-	stepResult2 := StepResult{
-		Index:  1,
-		Name:   "Step 2",
-		Status: StatusError,
-		RepeatCounter: &StepRepeatCounter{
-			SuccessCount: 3,
-			FailureCount: 1,
-		},
-	}
-
-	// Add step results
-	wb.AddStepResult(jobID, stepResult1)
-	wb.AddStepResult(jobID, stepResult2)
-
-	// Verify step results were added
-	jobResult, exists := wb.Jobs[jobID]
-	if !exists {
-		t.Fatal("Job buffer should exist")
-	}
-	if len(jobResult.StepResults) != 2 {
-		t.Errorf("Expected 2 step results, got %d", len(jobResult.StepResults))
-	}
-
-	if jobResult.StepResults[0].Name != "Step 1" {
-		t.Errorf("Expected first step name 'Step 1', got '%s'", jobResult.StepResults[0].Name)
-	}
-
-	if jobResult.StepResults[1].Name != "Step 2" {
-		t.Errorf("Expected second step name 'Step 2', got '%s'", jobResult.StepResults[1].Name)
-	}
-
-	if jobResult.StepResults[1].RepeatCounter == nil {
-		t.Error("Expected RepeatCounter to be set for second step")
-	} else if jobResult.StepResults[1].RepeatCounter.SuccessCount != 3 {
-		t.Errorf("Expected RepeatCounter.SuccessCount = 3, got %d", jobResult.StepResults[1].RepeatCounter.SuccessCount)
-	}
-}
-
-func TestWorkflowBuffer_AddStepResult_NonExistentJob(t *testing.T) {
-	wb := NewResult()
-
-	stepResult := StepResult{
-		Index:  0,
-		Name:   "Step 1",
-		Status: StatusSuccess,
-	}
-
-	// This should not panic even if job doesn't exist
-	wb.AddStepResult("non-existent-job", stepResult)
-
-	// Verify no job buffer was created
-	if _, exists := wb.Jobs["non-existent-job"]; exists {
-		t.Error("Job buffer should not be created for non-existent job")
-	}
-}
-
-func TestWorkflowBuffer_ConcurrentAccess(t *testing.T) {
-	wb := NewResult()
-	jobID := "test-job"
-
-	// Add a job buffer first
-	wb.Jobs[jobID] = &JobResult{
-		JobID:       jobID,
-		JobName:     "Test Job",
-		StartTime:   time.Now(),
-		StepResults: []StepResult{},
-	}
-
-	// Test concurrent add and get operations
-	done := make(chan bool, 2)
-
-	// Goroutine 1: Add step results
-	go func() {
-		for i := range 10 {
-			stepResult := StepResult{
-				Index:  i,
-				Name:   "Step " + string(rune('0'+i)),
-				Status: StatusSuccess,
-			}
-			wb.AddStepResult(jobID, stepResult)
-		}
-		done <- true
-	}()
-
-	// Goroutine 2: Read job buffer.
-	// AddStepResult writes StepResults under JobResult.mutex, so readers
-	// must take the same lock — see printer.go where reports do exactly
-	// this. Reading without the lock races with the writer goroutine.
-	go func() {
-		for range 5 {
-			jobResult := wb.Jobs[jobID]
-			if jobResult != nil {
-				jobResult.mutex.Lock()
-				_ = len(jobResult.StepResults)
-				jobResult.mutex.Unlock()
-			}
-		}
-		done <- true
-	}()
-
-	// Wait for both goroutines to complete
-	<-done
-	<-done
-
-	// Verify final state
-	jobResult, exists := wb.Jobs[jobID]
-	if !exists {
-		t.Fatal("Job buffer should exist after concurrent operations")
-	}
-	jobResult.mutex.Lock()
-	stepCount := len(jobResult.StepResults)
-	jobResult.mutex.Unlock()
-	if stepCount != 10 {
-		t.Errorf("Expected 10 step results after concurrent operations, got %d", stepCount)
-	}
-}
-
-// newOrderTestWorkflow builds a workflow of independent jobs whose actions are
-// mocked, so that Start can be driven from a test. withIDs selects whether the
+// newOrderTestWorkflow builds a workflow of independent jobs, whose actions a
+// mock runner is to run, so that Start can be driven from a test. withIDs selects whether the
 // jobs declare an ID or leave it to the scheduler.
 func newOrderTestWorkflow(withIDs bool) *Workflow {
 	mk := func(id, name string) Job {
 		job := Job{
 			Name:  name,
-			Steps: []*Step{{Name: name + " step", Uses: "hello", actionRunner: NewMockActionRunner()}},
+			Steps: []*Step{{Name: name + " step", Uses: "hello"}},
 		}
 		if withIDs {
 			job.ID = id
@@ -1482,11 +654,11 @@ func newOrderTestWorkflow(withIDs bool) *Workflow {
 	}
 }
 
-// startCapturing runs the workflow with a printer writing into a buffer and
-// returns what reached stdout.
-func startCapturing(t *testing.T, w *Workflow, mode OutputMode) string {
+// startCapturing runs the workflow, its actions run by runner, with a
+// printer writing into a buffer and returns what reached stdout.
+func startCapturing(t *testing.T, w *Workflow, mode OutputMode, runner ActionRunner) string {
 	t.Helper()
-	return startCapturingWith(t, w, Config{Output: mode})
+	return startCapturingWith(t, w, Config{Output: mode, ActionRunner: runner})
 }
 
 // startCapturingWith is startCapturing with the whole of the configuration
@@ -1517,7 +689,7 @@ func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
 func TestWorkflow_Start_ReportsJobsWithGeneratedIDs(t *testing.T) {
 	for _, mode := range []OutputMode{OutputModeSpinner, OutputModeStream} {
 		t.Run(mode.String(), func(t *testing.T) {
-			report := startCapturing(t, newOrderTestWorkflow(false), mode)
+			report := startCapturing(t, newOrderTestWorkflow(false), mode, newMockRunner())
 
 			alphaAt := strings.Index(report, "Alpha")
 			bravoAt := strings.Index(report, "Bravo")
@@ -1548,7 +720,7 @@ func TestWorkflow_Start_StreamLabelsJobsByName(t *testing.T) {
 	p.errWriter = errOut
 	w.printer = p
 
-	startCapturing(t, w, OutputModeStream)
+	startCapturing(t, w, OutputModeStream, newMockRunner())
 
 	progress := errOut.String()
 	for _, want := range []string{"[Alpha]", "[Bravo staging]", "[Charlie]"} {
@@ -1581,7 +753,7 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 	p.errWriter = errOut
 	w.printer = p
 
-	startCapturing(t, w, OutputModeStream)
+	startCapturing(t, w, OutputModeStream, newMockRunner())
 
 	progress := errOut.String()
 	if strings.Contains(progress, "abcd") {
@@ -1595,7 +767,7 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 		// The step's icon comes after the label and its padding.
 		end := strings.Index(line, "]") + 1
 		pad := len(line[end:]) - len(strings.TrimLeft(line[end:], " "))
-		at := displayWidth(line[:end+pad])
+		at := textwidth.Width(line[:end+pad])
 		if column >= 0 && at != column {
 			t.Errorf("steps should line up, got:\n%s", progress)
 			break
@@ -1614,8 +786,8 @@ func TestWorkflow_Start_StreamAndSpinnerAgree(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			spinner := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeSpinner)
-			stream := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeStream)
+			spinner := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeSpinner, newMockRunner())
+			stream := startCapturing(t, newOrderTestWorkflow(withIDs), OutputModeStream, newMockRunner())
 
 			if stripDurations(spinner) != stripDurations(stream) {
 				t.Errorf("reports differ\nspinner:\n%s\nstream:\n%s", spinner, stream)
@@ -1631,8 +803,8 @@ func TestWorkflow_Start_TwiceReportsBothRuns(t *testing.T) {
 		t.Run(mode.String(), func(t *testing.T) {
 			w := newOrderTestWorkflow(true)
 
-			first := startCapturing(t, w, mode)
-			second := startCapturing(t, w, mode)
+			first := startCapturing(t, w, mode, newMockRunner())
+			second := startCapturing(t, w, mode, newMockRunner())
 
 			if stripDurations(first) != stripDurations(second) {
 				t.Errorf("a second run should report the same jobs\nfirst:\n%s\nsecond:\n%s", first, second)
@@ -1644,20 +816,22 @@ func TestWorkflow_Start_TwiceReportsBothRuns(t *testing.T) {
 // A run that passes after one that failed, on the same workflow, has the exit
 // status of a run that passed.
 func TestWorkflow_Start_TwiceAfterFailure(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetError("hello", errors.New("boom"))
 	w := &Workflow{
 		Name: "rerun",
-		Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "greet", Uses: "hello", actionRunner: runner}}}},
+		Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "greet", Uses: "hello"}}}},
 	}
 
-	first := startCapturing(t, w, OutputModeStream)
+	first := startCapturing(t, w, OutputModeStream, runner)
 	if w.exitStatus == 0 {
 		t.Fatalf("exit status of the first run = 0, want it failed:\n%s", first)
 	}
 
+	runner.mu.Lock()
 	delete(runner.Errors, "hello")
-	second := startCapturing(t, w, OutputModeStream)
+	runner.mu.Unlock()
+	second := startCapturing(t, w, OutputModeStream, runner)
 	if w.exitStatus != 0 {
 		t.Errorf("exit status of the second run = %d, want 0:\n%s", w.exitStatus, second)
 	}
@@ -1666,31 +840,29 @@ func TestWorkflow_Start_TwiceAfterFailure(t *testing.T) {
 // The outputs a run published are not there for a later run on the same
 // workflow to read.
 func TestWorkflow_Start_TwiceDoesNotShareOutputs(t *testing.T) {
-	writer := NewMockActionRunner()
+	writer := newMockRunner()
 	writer.SetResult("hello", map[string]any{"res": map[string]any{"tok": "first"}, "status": 0})
 	w := &Workflow{
 		Name: "rerun",
 		Jobs: []Job{{ID: "writer", Name: "Writer", Steps: []*Step{{
-			Name:         "publish",
-			Uses:         "hello",
-			Outputs:      map[string]string{"tok": "res.tok"},
-			actionRunner: writer,
+			Name:    "publish",
+			Uses:    "hello",
+			Outputs: map[string]string{"tok": "res.tok"},
 		}}}},
 	}
-	first := startCapturing(t, w, OutputModeStream)
+	first := startCapturing(t, w, OutputModeStream, writer)
 	if w.exitStatus != 0 {
 		t.Fatalf("exit status of the first run = %d, want 0:\n%s", w.exitStatus, first)
 	}
 
 	// The second run has only a job that runs unless outputs.tok is set.
-	reader := NewMockActionRunner()
+	reader := newMockRunner()
 	w.Jobs = []Job{{ID: "reader", Name: "Reader", Steps: []*Step{{
-		Name:         "read",
-		Uses:         "hello",
-		SkipIf:       "outputs.tok != nil",
-		actionRunner: reader,
+		Name:   "read",
+		Uses:   "hello",
+		SkipIf: "outputs.tok != nil",
 	}}}}
-	second := startCapturing(t, w, OutputModeStream)
+	second := startCapturing(t, w, OutputModeStream, reader)
 	if len(reader.Calls["hello"]) != 1 {
 		t.Errorf("the reader was skipped, as outputs.tok was set by the first run:\n%s", second)
 	}
@@ -1729,15 +901,14 @@ func TestWorkflow_Start_TwiceTakesEachRunsEnv(t *testing.T) {
 		env:  map[string]string{"OWN": "workflow"},
 		Vars: map[string]any{"given": "{{GIVEN}}", "own": "{{OWN}}"},
 		Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{
-			Name:         "read",
-			Uses:         "hello",
-			With:         map[string]any{"given": "{{vars.given}}", "own": "{{vars.own}}"},
-			actionRunner: runner,
+			Name: "read",
+			Uses: "hello",
+			With: map[string]any{"given": "{{vars.given}}", "own": "{{vars.own}}"},
 		}}}},
 	}
 
 	for _, given := range []string{"first", "second"} {
-		startCapturingWith(t, w, Config{Output: OutputModeStream, Env: map[string]string{"GIVEN": given, "OWN": given}})
+		startCapturingWith(t, w, Config{Output: OutputModeStream, ActionRunner: runner, Env: map[string]string{"GIVEN": given, "OWN": given}})
 		if got := runner.with["given"]; got != given {
 			t.Errorf("GIVEN = %v, want %q", got, given)
 		}
@@ -1782,9 +953,8 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 					"url":     "http://api.test/?key={{vars.key}}",
 					"headers": map[string]any{"authorization": "Bearer runtime-tok"},
 				},
-				Test:         "res.code == 200",
-				Echo:         "body was {{res.body}}",
-				actionRunner: runner,
+				Test: "res.code == 200",
+				Echo: "body was {{res.body}}",
 			}},
 		}},
 		printer: newBufferPrinter(),
@@ -1792,7 +962,7 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 	w.printer.verbose = true
 
 	path := filepath.Join(t.TempDir(), "report.json")
-	if err := w.Start(Config{Verbose: true, Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner, Verbose: true, Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -1829,31 +999,33 @@ type recordingRunner struct {
 	opts   RunOptions
 }
 
-func (r *recordingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *recordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.with = with
+	r.with = call.With
 	r.opts = opts
-	return r.result, nil
+	return r.result, nil, nil
 }
 
 // A job that always runs does so after a job it needs failed, where a job
 // that does not is skipped, and the run still fails.
 func TestWorkflow_Start_AlwaysJob(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	cleanup := NewMockActionRunner()
-	skipped := NewMockActionRunner()
+	cleanup := newMockRunner()
+	skipped := newMockRunner()
 
 	w := &Workflow{
 		Name: "Always",
 		Jobs: []Job{
-			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello", actionRunner: failing}}},
-			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello", actionRunner: skipped}}},
-			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello", actionRunner: cleanup}}},
+			{ID: "work", Name: "Work", Steps: []*Step{{Name: "Fails", Uses: "hello"}}},
+			{ID: "report", Name: "Report", Needs: []string{"work"}, Steps: []*Step{{Name: "Never runs", Uses: "hello"}}},
+			{ID: "cleanup", Name: "Cleanup", Needs: []string{"work", "report"}, Always: true, Steps: []*Step{{Name: "Removes", Uses: "hello"}}},
 		},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{
+		"Fails": failing, "Never runs": skipped, "Removes": cleanup,
+	}})
 
 	if len(cleanup.Calls["hello"]) != 1 {
 		t.Errorf("the job that always runs ran %d times, want once:\n%s", len(cleanup.Calls["hello"]), report)
@@ -1874,26 +1046,28 @@ func TestWorkflow_Start_AlwaysJob(t *testing.T) {
 func TestWorkflow_Start_FailFast(t *testing.T) {
 	for _, failFast := range []bool{true, false} {
 		t.Run(fmt.Sprintf("fail_fast %v", failFast), func(t *testing.T) {
-			before := NewMockActionRunner()
-			failing := NewMockActionRunner()
+			before := newMockRunner()
+			failing := newMockRunner()
 			failing.SetError("hello", errors.New("boom"))
-			after := NewMockActionRunner()
-			other := NewMockActionRunner()
+			after := newMockRunner()
+			other := newMockRunner()
 
 			w := &Workflow{
 				Name: "Fail fast",
 				Jobs: []Job{
 					{ID: "work", Name: "Work", FailFast: failFast, Steps: []*Step{
-						{Name: "Before", Uses: "hello", actionRunner: before},
-						{Name: "Fails", Uses: "hello", actionRunner: failing},
-						{Name: "After {{vars.n}}", Uses: "hello", actionRunner: after, Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
-						{Name: "Last", Uses: "hello", actionRunner: after, Wait: "10ms"},
+						{Name: "Before", Uses: "hello"},
+						{Name: "Fails", Uses: "hello"},
+						{Name: "After {{vars.n}}", Uses: "hello", Iteration: Iteration{Entries: []map[string]any{{"n": 1}, {"n": 2}}}},
+						{Name: "Last", Uses: "hello", Wait: "10ms"},
 					}},
 					// Another job is not held back by it.
-					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello", actionRunner: other}}},
+					{ID: "other", Name: "Other", Steps: []*Step{{Name: "Runs", Uses: "hello"}}},
 				},
 			}
-			report := startCapturing(t, w, OutputModeSpinner)
+			report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{
+				"Before": before, "Fails": failing, "Runs": other,
+			}, fallback: after})
 
 			if len(before.Calls["hello"]) != 1 || len(other.Calls["hello"]) != 1 {
 				t.Errorf("the step before the failure and the other job should run:\n%s", report)
@@ -1918,110 +1092,19 @@ func TestWorkflow_Start_FailFast(t *testing.T) {
 	}
 }
 
-// Each run of a repeated job with fail_fast starts over: a failure in one
-// run does not skip the steps of the next.
-func TestJob_FailFastStartsOverEachRun(t *testing.T) {
-	failing := NewMockActionRunner()
-	failing.SetError("hello", errors.New("boom"))
-	after := NewMockActionRunner()
-	job := &Job{ID: "work", Name: "Work", FailFast: true, Steps: []*Step{
-		{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 1"},
-		{Name: "After", Uses: "hello", actionRunner: after},
-	}}
-
-	for i := range 2 {
-		printer := newBufferPrinter()
-		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
-		failed, err := job.run(JobContext{
-			runEnv: &runEnv{
-				Printer: printer,
-				Result:  result,
-			},
-			Outputs:       NewOutputs(),
-			RepeatCurrent: i,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := i == 0; failed != want {
-			t.Errorf("run %d: failed = %v, want %v", i, failed, want)
-		}
-	}
-	if got := len(after.Calls["hello"]); got != 1 {
-		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
-	}
-}
-
-// A var the person running the workflow gave is the text given, in place of
-// what the workflow writes for it, and the other vars read that text.
-func Test_evalVarsGiven(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"host":    "{{HOST ?? 'localhost'}}",
-			"url":     "http://{{vars.host}}:{{vars.port}}",
-			"port":    8080,
-			"nested":  map[string]any{"a": 1},
-			"literal": "kept",
-		},
-		env: map[string]string{"HOST": "from-env"},
-		given: map[string]string{
-			"host":     "given.example.com",
-			"nested":   "flat",
-			"template": "{{ 1 + 1 }}",
-			"new":      "",
-		},
-	}
-	got, err := wf.evalVars()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]any{
-		"host":    "given.example.com",
-		"url":     "http://given.example.com:8080",
-		"port":    8080,
-		"nested":  "flat",
-		"literal": "kept",
-		// A template in what is given is text: it is not evaluated.
-		"template": "{{ 1 + 1 }}",
-		// A var the workflow does not write is defined by being given.
-		"new": "",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("evalVars() = %#v, want %#v", got, want)
-	}
-	if _, ok := wf.Vars["new"]; ok || wf.Vars["host"] != "{{HOST ?? 'localhost'}}" {
-		t.Errorf("the vars of the workflow were changed: %#v", wf.Vars)
-	}
-
-	// A workflow that writes no vars takes those given.
-	bare := &Workflow{Name: "Test", given: map[string]string{"a": "1"}}
-	if got, err := bare.evalVars(); err != nil || !reflect.DeepEqual(got, map[string]any{"a": "1"}) {
-		t.Errorf("evalVars() = %#v, %v, want the var given", got, err)
-	}
-
-	// A var that read itself no longer does once it is given.
-	cyclic := &Workflow{Name: "Test", Vars: map[string]any{"a": "{{vars.b}}", "b": "{{vars.a}}"}, given: map[string]string{"a": "x"}}
-	if got, err := cyclic.evalVars(); err != nil || got["b"] != "x" {
-		t.Errorf("evalVars() = %#v, %v, want b to read the var given", got, err)
-	}
-}
-
 func TestWorkflow_Start_GivenVars(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name: "Given",
 		Vars: map[string]any{"url": "http://localhost"},
-		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", actionRunner: runner, With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
 	}
 	p := NewPrinter(false)
 	p.spinner = nil
 	p.outWriter = new(bytes.Buffer)
 	p.errWriter = new(bytes.Buffer)
 	w.printer = p
-	if err := w.Start(Config{Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner, Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := runner.Calls["hello"][0].With["url"]; got != "http://given/health" {
@@ -2032,7 +1115,7 @@ func TestWorkflow_Start_GivenVars(t *testing.T) {
 // The variables read from files are read by the vars as the environment
 // is, which comes before them, and a secret among them is hidden.
 func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	w := &Workflow{
 		Name:    "Env",
 		Secrets: []string{"FILE_TOKEN"},
@@ -2043,12 +1126,12 @@ func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
 		},
 		env: map[string]string{"BOTH": "from the environment"},
 		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
-			Name: "S", Uses: "hello", actionRunner: runner,
+			Name: "S", Uses: "hello",
 			With: map[string]any{"url": "{{vars.url}}", "both": "{{vars.both}}"},
 			Echo: "token is {{vars.token}}",
 		}}}},
 	}
-	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, Env: map[string]string{
+	report := startCapturingWith(t, w, Config{Output: OutputModeSpinner, ActionRunner: runner, Env: map[string]string{
 		"FILE_URL":   "http://from-a-file",
 		"BOTH":       "from a file",
 		"FILE_TOKEN": "s3cr3t-from-a-file",
@@ -2070,101 +1153,27 @@ func TestWorkflow_Start_EnvFromFiles(t *testing.T) {
 // neither a success nor a failure of the step: it is counted on its own,
 // and a step that was never run is reported as skipped.
 func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	after := NewMockActionRunner()
+	after := newMockRunner()
 	w := &Workflow{
 		Name: "Fail fast",
 		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 3}, Steps: []*Step{
 			// Fails in the first two runs, and is skipped in the last.
-			{Name: "Fails", Uses: "hello", actionRunner: failing, SkipIf: "repeat_index == 2"},
-			{Name: "Sometimes", Uses: "hello", actionRunner: after, Test: "true"},
+			{Name: "Fails", Uses: "hello", SkipIf: "repeat_index == 2"},
+			{Name: "Sometimes", Uses: "hello", Test: "true"},
 			// Reached in the last run alone, where its own skipif skips it,
 			// which is a success of it.
-			{Name: "Own skipif", Uses: "hello", actionRunner: after, SkipIf: "repeat_index == 2", Test: "true"},
+			{Name: "Own skipif", Uses: "hello", SkipIf: "repeat_index == 2", Test: "true"},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{"Fails": failing}, fallback: after})
 
 	if got := len(after.Calls["hello"]); got != 1 {
 		t.Errorf("the steps after the failure ran %d times, want once, in the run without it:\n%s", got, report)
 	}
 	if got := strings.Count(report, "1/3 success (33.3%), 2 skipped"); got != 2 {
 		t.Errorf("%d steps are reported as run once and skipped twice, want both after the failure:\n%s", got, report)
-	}
-}
-
-func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
-	// The colors are put back as they were, for the tests after this one.
-	noColor := color.NoColor
-	color.NoColor = true
-	defer func() { color.NoColor = noColor }()
-	printer := newReportRenderer(nil, nil, nil)
-
-	tests := []struct {
-		name    string
-		counter StepRepeatCounter
-		hasTest bool
-		want    string
-	}{
-		{"never run", StepRepeatCounter{SkippedCount: 3, RepeatTotal: 3}, true, "skipped in 3/3 runs"},
-		{"run in some", StepRepeatCounter{SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3}, true, "1/3 success (33.3%), 2 skipped"},
-		{"without a test", StepRepeatCounter{SuccessCount: 2, SkippedCount: 1, RepeatTotal: 3}, false, "2/3 completed (no test), 1 skipped"},
-		{"none skipped", StepRepeatCounter{SuccessCount: 3, RepeatTotal: 3}, true, "3/3 success (100.0%)\n"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out strings.Builder
-			printer.printStepRepeatResult(&tt.counter, tt.hasTest, &out)
-			if !strings.Contains(out.String(), tt.want) {
-				t.Errorf("printStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
-			}
-		})
-	}
-}
-
-func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
-	job := &Job{ID: "work", Name: "Work", Steps: []*Step{{Name: "Never run", Test: "true"}, {Name: "Run once", Test: "true"}}}
-	result := NewResult()
-	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
-	ctx := &JobContext{
-		runEnv: &runEnv{
-			Result: result,
-		},
-		repeat: &jobRepeat{
-			total: 3,
-			counters: map[int]StepRepeatCounter{
-				0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
-				1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
-			},
-		},
-	}
-	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
-
-	steps := result.Jobs[job.ID].StepResults
-	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
-		t.Fatalf("statuses = %+v, want skipped then success", steps)
-	}
-
-	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
-	got := r.Jobs[0].Steps
-	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
-		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)
-	}
-	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
-		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
-	}
-	// The message of a failure counts the runs the step was not run in
-	// among the runs, as the count of the report does.
-	failed := NewResult()
-	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
-	ctx.Result = failed
-	ctx.repeat.counters = map[int]StepRepeatCounter{
-		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
-	}
-	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
-	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {
-		t.Errorf("message = %q, want the three runs counted", got)
 	}
 }
 
@@ -2177,18 +1186,18 @@ func TestWorkflow_Start_RepeatWithIteration(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
 
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	ok := NewMockActionRunner()
+	ok := newMockRunner()
 	w := &Workflow{
 		Name: "Repeat",
 		Jobs: []Job{{ID: "work", Name: "Work", FailFast: true, Repeat: &Repeat{Count: 2}, Steps: []*Step{
-			{Name: "Each {{vars.n}}", Uses: "hello", actionRunner: ok, Test: "true", Iteration: Iteration{Entries: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}}},
-			{Name: "Fails", Uses: "hello", actionRunner: failing},
-			{Name: "After", Uses: "hello", actionRunner: ok, Test: "true"},
+			{Name: "Each {{vars.n}}", Uses: "hello", Test: "true", Iteration: Iteration{Entries: []map[string]any{{"n": "a"}, {"n": "b"}, {"n": "c"}}}},
+			{Name: "Fails", Uses: "hello"},
+			{Name: "After", Uses: "hello", Test: "true"},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{"Fails": failing}, fallback: ok})
 
 	for _, want := range []string{
 		" 0. Each a (repeating 2 times)",
@@ -2215,7 +1224,8 @@ type timingRunner struct {
 	ended map[string]time.Time
 }
 
-func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *timingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	with := call.With
 	key, _ := with["key"].(string)
 	r.mu.Lock()
 	r.begun[key] = time.Now()
@@ -2227,7 +1237,7 @@ func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOpti
 	r.mu.Lock()
 	r.ended[key] = time.Now()
 	r.mu.Unlock()
-	return map[string]any{"status": 0, "res": map[string]any{"code": 200}}, nil
+	return map[string]any{"status": 0, "res": map[string]any{"code": 200}}, nil, nil
 }
 
 // A job starts once the jobs it needs are done, and does not wait for one
@@ -2235,7 +1245,7 @@ func (r *timingRunner) RunActions(name string, with map[string]any, opts RunOpti
 func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 	runner := &timingRunner{begun: map[string]time.Time{}, ended: map[string]time.Time{}}
 	step := func(key, take string) []*Step {
-		return []*Step{{Name: key, Uses: "hello", Test: "res.code == 200", actionRunner: runner, With: map[string]any{"key": key, "take": take}}}
+		return []*Step{{Name: key, Uses: "hello", Test: "res.code == 200", With: map[string]any{"key": key, "take": take}}}
 	}
 	w := &Workflow{Name: "needs", Jobs: []Job{
 		{ID: "slow", Name: "Slow", Steps: step("slow", "1s")},
@@ -2243,7 +1253,7 @@ func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 		{ID: "after", Name: "After", Needs: []string{"fast"}, Steps: step("after", "0s")},
 		{ID: "last", Name: "Last", Needs: []string{"slow", "after"}, Steps: step("last", "0s")},
 	}}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, runner)
 
 	if w.exitStatus != 0 {
 		t.Fatalf("exit status = %d, want 0:\n%s", w.exitStatus, report)
@@ -2253,34 +1263,6 @@ func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 	}
 	if runner.begun["last"].Before(runner.ended["slow"]) || runner.begun["last"].Before(runner.ended["after"]) {
 		t.Errorf("last began before the jobs it needs were done")
-	}
-}
-
-// A job whose dependency can no longer be done fails the run rather than be
-// waited for for ever.
-func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) {
-	w := &Workflow{Name: "stuck", Jobs: []Job{
-		{ID: "a", Name: "A", Steps: []*Step{{Uses: "hello"}}},
-		{ID: "b", Name: "B", Needs: []string{"a"}, Steps: []*Step{{Uses: "hello"}}},
-	}}
-	w.printer = newBufferPrinter()
-	w.outputs = NewOutputs()
-	scheduler, err := w.initJobScheduler()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// a is taken for running, but nothing runs it.
-	scheduler.StartJob("a")
-
-	errc := make(chan error, 1)
-	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler)) }()
-	select {
-	case err := <-errc:
-		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {
-			t.Errorf("startJobsWithDependencies() error = %v, want that b cannot run", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("startJobsWithDependencies() waited for a job that nothing runs")
 	}
 }
 
@@ -2370,15 +1352,14 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 			ID:   "job",
 			Name: "job",
 			Steps: []*Step{{
-				Name:         "reads probe.StepContext",
-				Uses:         "http",
-				With:         map[string]any{"url": "http://api.test/"},
-				actionRunner: &recordingRunner{result: map[string]any{"res": map[string]any{"code": 200}}},
+				Name: "reads probe.StepContext",
+				Uses: "http",
+				With: map[string]any{"url": "http://api.test/"},
 			}},
 		}},
 		printer: newBufferPrinter(),
 	}
-	if err := w.Start(Config{}); err != nil {
+	if err := w.Start(Config{ActionRunner: &recordingRunner{result: map[string]any{"res": map[string]any{"code": 200}}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -2393,5 +1374,55 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 	}
 	if strings.Contains(stderr, "API_KEY") {
 		t.Errorf("a secret long enough to mask should not be warned about:\n%s", stderr)
+	}
+}
+
+// A secret that a later step teaches the masker is hidden in what the
+// report shows of an earlier step that failed: the response under it and
+// what the false condition compared. Both are masked as the report shows
+// them, before they are cut short, so the report has <redacted> where the
+// secret was, not the part of it that the cut left, which no masker finds.
+func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	tests := []struct {
+		name string
+		body string
+		test string
+	}{
+		// The response is cut after 512 bytes, inside the token.
+		{name: "in the response", body: strings.Repeat("x", 500) + token, test: "res.code == 200"},
+		// A value the condition compared is cut after 200 characters,
+		// inside the token.
+		{name: "in the false condition", body: strings.Repeat("x", 180) + token, test: `res.body == ""`},
+	}
+	for _, tt := range tests {
+		for _, mode := range []OutputMode{OutputModeSpinner, OutputModeStream} {
+			t.Run(tt.name+"/"+mode.String(), func(t *testing.T) {
+				defer func(was bool) { color.NoColor = was }(color.NoColor)
+				color.NoColor = true
+
+				leaks := newMockRunner()
+				leaks.SetResult("http", map[string]any{"res": map[string]any{"code": 500, "body": tt.body}, "status": 0})
+				w := &Workflow{
+					Name: "Leak",
+					Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{
+						{Name: "Leaks", Uses: "http", Test: tt.test},
+						// The token is a credential of this step, which
+						// teaches the masker it.
+						{Name: "Uses", Uses: "http", With: map[string]any{"headers": map[string]any{"authorization": token}}},
+					}}},
+				}
+				report := startCapturing(t, w, mode, stepRunners{byName: map[string]ActionRunner{"Leaks": leaks}, fallback: newMockRunner()})
+
+				if !strings.Contains(report, "Leaks") || !strings.Contains(report, "<redacted>") {
+					t.Fatalf("the report should show the failed step with the token hidden:\n%s", report)
+				}
+				for _, part := range []string{token, token[:9], token[:12]} {
+					if strings.Contains(report, part) {
+						t.Errorf("the report shows %q of the token:\n%s", part, report)
+					}
+				}
+			})
+		}
 	}
 }

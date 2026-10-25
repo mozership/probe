@@ -3,18 +3,15 @@ package probe
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/mozership/probe/report"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/mask"
 )
 
 // newReportResult builds a Result covering every status a report has to map.
@@ -29,7 +26,7 @@ func newReportResult() (*Result, []string) {
 		StartTime: start,
 		EndTime:   start.Add(1500 * time.Millisecond),
 		StepResults: []StepResult{
-			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, EchoOutput: "       line 1\n       line 2\n"},
+			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, Echo: "line 1\nline 2\n", HasEcho: true},
 			{Index: 1, Name: "Create", Status: StatusError, Test: "res.code == 201", Elapsed: 80 * time.Millisecond,
 				RetryAttempt: 3, RetryMax: 3,
 				Failure: &StepFailure{
@@ -39,7 +36,7 @@ func newReportResult() (*Result, []string) {
 					Response: map[string]any{"code": 500, "body": "boom ``` ]]>"},
 				}},
 			{Index: 2, Name: "Connect", Status: StatusError, Failure: &StepFailure{Kind: FailureAction, Message: "connection refused"}},
-			{Index: 3, Name: "Cleanup (SKIPPED)", Status: StatusSkipped},
+			{Index: 3, Name: "Cleanup", Status: StatusSkipped},
 			{Index: 4, Name: "Note", Status: StatusWarning},
 		},
 	}
@@ -103,7 +100,7 @@ func TestBuildReport(t *testing.T) {
 
 	steps := r.Jobs[0].Steps
 	if steps[0].Echo != "line 1\nline 2" {
-		t.Errorf("echo = %q, want the terminal indentation removed", steps[0].Echo)
+		t.Errorf("echo = %q, want it without the white space around it", steps[0].Echo)
 	}
 	if steps[0].DurationMs != 120 {
 		t.Errorf("DurationMs = %d, want 120", steps[0].DurationMs)
@@ -115,7 +112,7 @@ func TestBuildReport(t *testing.T) {
 		t.Errorf("Failure = %+v, want the response carried over", steps[1].Failure)
 	}
 	if steps[3].Name != "Cleanup" || steps[3].Status != report.Skipped {
-		t.Errorf("skipped step = %q/%q, want the SKIPPED marker removed from the name", steps[3].Name, steps[3].Status)
+		t.Errorf("skipped step = %q/%q, want the name as it is, the status skipped", steps[3].Name, steps[3].Status)
 	}
 	if steps[4].Status != report.Untested {
 		t.Errorf("step without a test = %q, want %q", steps[4].Status, report.Untested)
@@ -147,7 +144,7 @@ func TestBuildReport_StatusMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildStepReport(tt.sr).Status; got != tt.want {
+			if got := buildStepReport(tt.sr, nil).Status; got != tt.want {
 				t.Errorf("status = %q, want %q", got, tt.want)
 			}
 		})
@@ -156,7 +153,7 @@ func TestBuildReport_StatusMapping(t *testing.T) {
 
 func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
 	sr := StepResult{Status: StatusSuccess, Failure: &StepFailure{Kind: FailureAssertion}}
-	if got := buildStepReport(sr).Failure; got != nil {
+	if got := buildStepReport(sr, nil).Failure; got != nil {
 		t.Errorf("Failure = %+v, want nil for a passing step", got)
 	}
 }
@@ -164,9 +161,92 @@ func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
 func TestBuildReport_FailureCarriesViolations(t *testing.T) {
 	vs := []report.Violation{{In: "response", Field: "$.id", Message: "body failed"}}
 	sr := StepResult{Status: StatusError, Failure: &StepFailure{Kind: FailureContractResponse, Violations: vs}}
-	got := buildStepReport(sr).Failure
+	got := buildStepReport(sr, nil).Failure
 	if got == nil || !reflect.DeepEqual(got.Violations, vs) {
 		t.Errorf("Failure = %+v, want the violations carried over", got)
+	}
+}
+
+// The message of a failure in the report files is told anew as they are
+// written, but it is the message the failure was made with when the masker
+// has learned nothing since: of a test that is false, with its operands
+// shown or hidden and a secret the masker knew in one cut short, of one that
+// could not be evaluated or did not come to a boolean, of an action's error
+// and of a broken contract, alone or as the first of the runs of a repeated
+// step that failed.
+func TestBuildReport_KeepsTheMessageOfAFailure(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	m := mask.New(nil, nil)
+	m.Learn(map[string]any{"headers": map[string]any{"authorization": token}})
+	printer := newBufferPrinter()
+	printer.SetMasker(m)
+	env := StepContext{Res: map[string]any{"code": 500, "body": strings.Repeat("x", 180) + token}}
+
+	failed := func(test string, hideOperands bool) *StepFailure {
+		t.Helper()
+		passed, f := evaluateTest(&expr.Expr{}, test, env, printer, hideOperands)
+		if passed {
+			t.Fatalf("%s held, want it to fail", test)
+		}
+		return f
+	}
+	tests := []struct {
+		name    string
+		failure *StepFailure
+		want    string
+	}{
+		{name: "a test that is false", failure: failed("res.code == 200", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
+		{name: "a test that is false, its operands hidden", failure: failed("res.code == 200", true), want: "test evaluated to false: res.code == 200"},
+		{name: "a test that is false, a known secret cut short", failure: failed(`res.body == ""`, false), want: `test evaluated to false: res.body == "" (res.body = "` + strings.Repeat("x", 180) + `<redacted>")`},
+		{name: "a test that is false of two values", failure: failed("res.code == 200 && res.body != ''", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
+		{name: "a test that cannot be evaluated", failure: failed("nosuch(1)", false)},
+		{name: "a test that is not a boolean", failure: failed("res.code", false), want: "test evaluated to 500 (int), not a boolean"},
+		{name: "an action's error", failure: &StepFailure{Kind: FailureAction, Message: "dial tcp 127.0.0.1:1: connect: connection refused"}, want: "dial tcp 127.0.0.1:1: connect: connection refused"},
+		{name: "a broken contract", failure: &StepFailure{Kind: FailureContractResponse, Message: "the response breaks its contract in 1 place"}, want: "the response breaks its contract in 1 place"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.want != "" && tt.failure.Message != tt.want {
+				t.Fatalf("Message = %q, want %q", tt.failure.Message, tt.want)
+			}
+			if got := buildStepReport(StepResult{Status: StatusError, Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+				t.Errorf("step: message = %q, want %q", got, tt.failure.Message)
+			}
+			if got := buildRepeatTestReport(&RepeatTestResult{Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+				t.Errorf("test of a repeated job: message = %q, want %q", got, tt.failure.Message)
+			}
+			repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: tt.failure}, false)
+			if got := buildStepReport(repeated, m).Failure.Message; got != repeated.Failure.Message {
+				t.Errorf("repeated step: message = %q, want %q", got, repeated.Failure.Message)
+			}
+		})
+	}
+}
+
+// What a false condition compared is masked in the message of the report
+// files with what the masker knows as they are written, before it is cut, so
+// a secret it learned after the test was checked is hidden whole.
+func TestBuildReport_MasksTheMessageWithWhatTheMaskerLearnedSince(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	m := mask.New(nil, nil)
+	printer := newBufferPrinter()
+	printer.SetMasker(m)
+	env := StepContext{Res: map[string]any{"body": strings.Repeat("x", 180) + token}}
+	_, f := evaluateTest(&expr.Expr{}, `res.body == ""`, env, printer, false)
+	if f == nil || !strings.Contains(f.Message, token[:12]) {
+		t.Fatalf("failure = %+v, want the message to have the start of the token cut short", f)
+	}
+
+	m.Learn(map[string]any{"headers": map[string]any{"authorization": token}})
+	want := `test evaluated to false: res.body == "" (res.body = "` + strings.Repeat("x", 180) + `<redacted>")`
+	if got := buildStepReport(StepResult{Status: StatusError, Failure: f}, m).Failure.Message; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+	// A repeated step keeps the count of the runs it failed in before the
+	// message of the first of them.
+	repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: f}, false)
+	if got, want := buildStepReport(repeated, m).Failure.Message, "2 of 3 iterations failed; the first: "+want; got != want {
+		t.Errorf("repeated step: message = %q, want %q", got, want)
 	}
 }
 
@@ -177,7 +257,7 @@ func TestBuildReport_StepCarriesContract(t *testing.T) {
 		{Status: StatusError, Contract: c},
 		{Status: StatusSuccess, Contract: c, RepeatCounter: &StepRepeatCounter{SuccessCount: 1, Checked: true}},
 	} {
-		if got := buildStepReport(sr).Contract; got != c {
+		if got := buildStepReport(sr, nil).Contract; got != c {
 			t.Errorf("Contract = %+v, want %+v", got, c)
 		}
 	}
@@ -222,598 +302,5 @@ func TestJSONSafeMap(t *testing.T) {
 	}
 	if jsonSafeMap(nil) != nil {
 		t.Error("nil should stay nil")
-	}
-}
-
-// TestWorkflow_StartWritesReports runs a workflow end to end and checks the
-// report files reflect what each step did.
-func TestWorkflow_StartWritesReports(t *testing.T) {
-	runner := NewMockActionRunner()
-	runner.SetResult("ok", map[string]any{
-		"req": map[string]any{"path": "/ok"},
-		"res": map[string]any{"code": 200},
-	})
-	runner.SetResult("secret", map[string]any{
-		"req": map[string]any{"token": "hunter2"},
-		"res": map[string]any{"code": 500, "dump": false},
-	})
-	runner.SetError("down", errors.New("connection refused"))
-
-	workflow := &Workflow{
-		Name: "Report Run",
-		Jobs: []Job{
-			{
-				ID:   "checks",
-				Name: "Checks",
-				Steps: []*Step{
-					{Name: "Passes", Uses: "ok", Test: "res.code == 200", actionRunner: runner},
-					{Name: "Fails", Uses: "ok", Test: "res.code == 201", actionRunner: runner},
-					{Name: "Hidden", Uses: "secret", Test: "res.code == 200", actionRunner: runner},
-					{Name: "Errors", Uses: "down", actionRunner: runner},
-				},
-			},
-			{
-				ID:    "later",
-				Name:  "Later",
-				Needs: []string{"checks"},
-				Steps: []*Step{{Name: "Never", Uses: "ok", actionRunner: runner}},
-			},
-		},
-		printer: newBufferPrinter(),
-	}
-
-	dir := t.TempDir()
-	jsonPath := filepath.Join(dir, "report.json")
-	junitPath := filepath.Join(dir, "junit.xml")
-	mdPath := filepath.Join(dir, "report.md")
-
-	err := workflow.Start(Config{Reports: []report.Target{
-		{Format: report.JSON, Path: jsonPath},
-		{Format: report.JUnit, Path: junitPath},
-		{Format: report.Markdown, Path: mdPath},
-	}})
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-
-	if r.Name != "Report Run" || r.Status != report.Failed {
-		t.Errorf("report = %q/%q, want Report Run/failed", r.Name, r.Status)
-	}
-	if r.RunID == "" || r.RunID != workflow.RunID() {
-		t.Errorf("run_id = %q, want the run, %q", r.RunID, workflow.RunID())
-	}
-	if len(r.Jobs) != 2 || r.Jobs[0].ID != "checks" || r.Jobs[1].Status != report.Skipped {
-		t.Fatalf("jobs = %+v, want checks then a skipped later", r.Jobs)
-	}
-
-	steps := r.Jobs[0].Steps
-	if len(steps) != 4 {
-		t.Fatalf("steps = %d, want 4", len(steps))
-	}
-	if steps[0].Status != report.Passed || steps[0].Test != "res.code == 200" {
-		t.Errorf("step 0 = %+v, want a passed step with its test", steps[0])
-	}
-
-	fails := steps[1].Failure
-	if fails == nil || fails.Kind != FailureAssertion || fails.Request["path"] != "/ok" {
-		t.Errorf("step 1 failure = %+v, want an assertion with the request", fails)
-	}
-
-	hidden := steps[2].Failure
-	if hidden == nil || hidden.Request != nil || hidden.Response != nil {
-		t.Errorf("step 2 failure = %+v, want no request or response when dump is false", hidden)
-	}
-	if strings.Contains(string(data), "hunter2") {
-		t.Error("a response marked dump: false must not reach the report")
-	}
-
-	errored := steps[3].Failure
-	if errored == nil || errored.Kind != FailureAction || !strings.Contains(errored.Message, "connection refused") {
-		t.Errorf("step 3 failure = %+v, want the action error", errored)
-	}
-
-	for _, p := range []string{junitPath, mdPath} {
-		if info, err := os.Stat(p); err != nil || info.Size() == 0 {
-			t.Errorf("%s was not written: %v", p, err)
-		}
-	}
-}
-
-func TestWorkflow_StartReportsWriteError(t *testing.T) {
-	workflow := &Workflow{
-		Name:    "Unwritable",
-		Jobs:    []Job{{Name: "job", Steps: []*Step{}}},
-		printer: newBufferPrinter(),
-	}
-
-	dir := t.TempDir()
-	good := filepath.Join(dir, "report.md")
-
-	err := workflow.Start(Config{Reports: []report.Target{
-		{Format: report.JSON, Path: dir}, // a directory, so the file cannot be created
-		{Format: report.Markdown, Path: good},
-	}})
-	if err == nil || !strings.Contains(err.Error(), "json report") {
-		t.Errorf("error = %v, want the json report failure", err)
-	}
-	if _, statErr := os.Stat(good); statErr != nil {
-		t.Errorf("a failing report should not stop the others: %v", statErr)
-	}
-}
-
-func TestStep_DoTestRecordsFailure(t *testing.T) {
-	tests := []struct {
-		name     string
-		test     string
-		wantKind string
-		wantMsg  string
-	}{
-		{"passes", "res.code == 200", "", ""},
-		{"false", "res.code == 201", FailureAssertion, "test evaluated to false: res.code == 201 (res.code = 200)"},
-		{"not a boolean", "res.code", FailureTestType, "test evaluated to 200 (int), not a boolean"},
-		{"cannot evaluate", "res.code ==", FailureTestError, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			st := &stepRun{
-				Step: &Step{
-					Test: tt.test,
-				},
-				expr: &expr.Expr{},
-				ctx: StepContext{
-					Req: map[string]any{"path": "/"},
-					Res: map[string]any{"code": 200},
-				},
-				// A failure left over from an earlier evaluation must not leak.
-				failure: &StepFailure{Kind: "stale"},
-			}
-
-			st.DoTest(newBufferPrinter())
-
-			if tt.wantKind == "" {
-				if st.failure != nil {
-					t.Errorf("failure = %+v, want nil", st.failure)
-				}
-				return
-			}
-			if st.failure == nil || st.failure.Kind != tt.wantKind {
-				t.Fatalf("failure = %+v, want kind %q", st.failure, tt.wantKind)
-			}
-			if tt.wantMsg != "" && st.failure.Message != tt.wantMsg {
-				t.Errorf("message = %q, want %q", st.failure.Message, tt.wantMsg)
-			}
-			if tt.wantMsg == "" && st.failure.Message == "" {
-				t.Error("message should explain the failure")
-			}
-		})
-	}
-}
-
-// TestWorkflow_GitHubSummaryOutsideActions checks that asking for a job
-// summary where there is none warns but neither fails the run nor stops the
-// other reports.
-func TestWorkflow_GitHubSummaryOutsideActions(t *testing.T) {
-	t.Setenv("GITHUB_STEP_SUMMARY", "")
-
-	w := &Workflow{
-		Name:    "summary",
-		Jobs:    []Job{{Name: "job", Steps: []*Step{}}},
-		printer: newBufferPrinter(),
-	}
-	md := filepath.Join(t.TempDir(), "report.md")
-
-	err := w.Start(Config{Reports: []report.Target{
-		{Format: report.GitHubSummary},
-		{Format: report.Markdown, Path: md},
-	}})
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if w.exitStatus != ExitOK {
-		t.Errorf("exit status = %d, want %d", w.exitStatus, ExitOK)
-	}
-	if _, err := os.Stat(md); err != nil {
-		t.Errorf("the markdown report should still be written: %v", err)
-	}
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
-	if !strings.Contains(stderr, "[WARN] GITHUB_STEP_SUMMARY is not set") {
-		t.Errorf("expected a warning, got:\n%s", stderr)
-	}
-}
-
-func TestWorkflow_GitHubSummaryFull(t *testing.T) {
-	// Fill the summary up to GitHub's 1 MiB limit.
-	path := filepath.Join(t.TempDir(), "summary.md")
-	if err := os.WriteFile(path, bytes.Repeat([]byte("x"), 1024*1024), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	w := &Workflow{
-		Name:    "full",
-		Jobs:    []Job{{Name: "job", Steps: []*Step{}}},
-		printer: newBufferPrinter(),
-	}
-	if err := w.Start(Config{Reports: []report.Target{{Format: report.GitHubSummary, Path: path}}}); err != nil {
-		t.Fatalf("a full summary should not fail the run: %v", err)
-	}
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
-	if !strings.Contains(stderr, "[WARN] the job summary has no room left") {
-		t.Errorf("expected a warning, got:\n%s", stderr)
-	}
-}
-
-// timedRunner answers the n-th call with the n-th of its answers, an error
-// when the answer has none to give.
-type timedRunner struct {
-	mu      sync.Mutex
-	calls   int
-	answers []map[string]any
-}
-
-func (r *timedRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	a := r.answers[r.calls]
-	r.calls++
-	if a == nil {
-		return nil, errors.New("connection refused")
-	}
-	return a, nil
-}
-
-// TestWorkflow_RepeatReportsLatency repeats a step whose action takes another
-// time in each run: the run whose test fails is part of the distribution, as
-// a slow run is no less a sample for failing a limit, and the run whose
-// action failed returns no time and is not.
-func TestWorkflow_RepeatReportsLatency(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		{"res": map[string]any{"code": 200}, "rt": "10ms"},
-		{"res": map[string]any{"code": 200}, "rt": "20ms"},
-		{"res": map[string]any{"code": 500}, "rt": "300ms"},
-		nil,
-	}}
-	workflow := &Workflow{
-		Name: "Latency",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 4},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
-		}},
-		printer: newBufferPrinter(),
-	}
-
-	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	st := r.Jobs[0].Steps[0]
-	if st.Repeat == nil || st.Repeat.Latency == nil {
-		t.Fatalf("step = %+v, want the latency of its runs", st)
-	}
-	want := report.Latency{Count: 3, MinMs: 10, MeanMs: 110, P50Ms: 20, P90Ms: 300, P95Ms: 300, P99Ms: 300, MaxMs: 300}
-	if *st.Repeat.Latency != want {
-		t.Errorf("latency = %+v, want %+v", *st.Repeat.Latency, want)
-	}
-	if st.Repeat.Success != 2 || st.Repeat.Failure != 2 {
-		t.Errorf("repeat = %+v, want 2 successes and 2 failures", st.Repeat)
-	}
-
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
-	if !strings.Contains(out, "min 10.0ms, p50 20.0ms, p90 300ms, p95 300ms, p99 300ms, max 300ms") {
-		t.Errorf("terminal should show the latency, got:\n%s", out)
-	}
-}
-
-// TestWorkflow_RepeatComparesToBaseline runs a repeated job with the report
-// of an earlier run as the baseline: each step is reported with its id, or
-// step_ and where it is written when it has none, and found by it in the
-// baseline.
-func TestWorkflow_RepeatComparesToBaseline(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		{"res": map[string]any{"code": 200}, "rt": "10ms"},
-		{"res": map[string]any{"code": 200}, "rt": "20ms"},
-		{"res": map[string]any{"code": 200}, "rt": "30ms"},
-		{"res": map[string]any{"code": 200}, "rt": "40ms"},
-	}}
-	workflow := &Workflow{
-		Name: "Latency",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 2},
-			Steps: []*Step{
-				{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200", actionRunner: runner},
-				{Name: "Again", Uses: "http", Test: "res.code == 200", actionRunner: runner},
-			},
-		}},
-		printer: newBufferPrinter(),
-	}
-	started := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
-	baseline := &report.Report{
-		RunID: "run-1", StartedAt: started,
-		Jobs: []report.Job{{ID: "search", Steps: []report.Step{
-			{Index: 0, ID: "query", Repeat: &report.Repeat{Total: 5, Success: 5, Latency: &report.Latency{Count: 5, P50Ms: 7}}},
-			{Index: 1, ID: "step_1", Repeat: &report.Repeat{Total: 5, Success: 4, Latency: &report.Latency{Count: 5, P50Ms: 9}}},
-		}}},
-	}
-
-	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	cfg := Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}, Baseline: baseline}
-	if err := workflow.Start(cfg); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	r, err := report.Read(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.Baseline == nil || r.Baseline.RunID != "run-1" || !r.Baseline.StartedAt.Equal(started) {
-		t.Errorf("Baseline = %+v, want the run compared to", r.Baseline)
-	}
-	for i, want := range []struct {
-		id    string
-		p50Ms float64
-	}{{"query", 7}, {"step_1", 9}} {
-		st := r.Jobs[0].Steps[i]
-		if st.ID != want.id {
-			t.Errorf("step %d id = %q, want %q", i, st.ID, want.id)
-		}
-		if st.Repeat == nil || st.Repeat.Baseline == nil || st.Repeat.Baseline.Latency.P50Ms != want.p50Ms {
-			t.Errorf("step %d repeat = %+v, want a baseline with p50 %vms", i, st.Repeat, want.p50Ms)
-		}
-	}
-}
-
-// TestWorkflow_RepeatLatencyLeavesOutRetriedError retries a step whose first
-// attempt returns a time and fails its test, and whose last attempt fails to
-// run: the run returned no time, so it adds none, rather than that of the
-// attempt before.
-func TestWorkflow_RepeatLatencyLeavesOutRetriedError(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		{"res": map[string]any{"code": 500}, "rt": "50ms"},
-		nil,
-		{"res": map[string]any{"code": 200}, "rt": "10ms"},
-	}}
-	workflow := &Workflow{
-		Name: "Latency",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 2},
-			Steps: []*Step{{
-				Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner,
-				Retry: &StepRetry{MaxAttempts: 2},
-			}},
-		}},
-		printer: newBufferPrinter(),
-	}
-
-	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	l := r.Jobs[0].Steps[0].Repeat.Latency
-	if l == nil || l.Count != 1 || l.MaxMs != 10 {
-		t.Errorf("latency = %+v, want the one time of the second run", l)
-	}
-}
-
-// TestWorkflow_RepeatLeavesOutWarmup repeats a step after two warmup runs,
-// one whose action failed and one whose test did: neither fails the job or
-// sets the exit status, and the counts and the times are of the runs after
-// them.
-func TestWorkflow_RepeatLeavesOutWarmup(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		nil,
-		{"res": map[string]any{"code": 500}, "rt": "900ms"},
-		{"res": map[string]any{"code": 200}, "rt": "10ms"},
-		{"res": map[string]any{"code": 200}, "rt": "20ms"},
-		{"res": map[string]any{"code": 200}, "rt": "30ms"},
-	}}
-	workflow := &Workflow{
-		Name: "Warmup",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 3, Warmup: 2},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
-		}},
-		printer: newBufferPrinter(),
-	}
-
-	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if workflow.exitStatus != ExitOK {
-		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
-	}
-
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if r.Status != report.Passed {
-		t.Errorf("status = %q, want %q", r.Status, report.Passed)
-	}
-	st := r.Jobs[0].Steps[0]
-	if st.Repeat == nil {
-		t.Fatalf("step = %+v, want its repeat", st)
-	}
-	if st.Repeat.Total != 3 || st.Repeat.Success != 3 || st.Repeat.Failure != 0 || st.Repeat.Warmup != 2 {
-		t.Errorf("repeat = %+v, want 3 successes after 2 warmup runs", st.Repeat)
-	}
-	if l := st.Repeat.Latency; l == nil || l.Count != 3 || l.MinMs != 10 || l.MaxMs != 30 {
-		t.Errorf("latency = %+v, want the times of the 3 runs after the warmup", l)
-	}
-}
-
-// TestWorkflow_RepeatWarmupLeavesExitStatus fails a run after an action error
-// in a warmup run: the exit status is that of the failed test, as the action
-// error is counted in nothing.
-func TestWorkflow_RepeatWarmupLeavesExitStatus(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		nil,
-		{"res": map[string]any{"code": 500}, "rt": "10ms"},
-	}}
-	workflow := &Workflow{
-		Name: "Warmup",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 1, Warmup: 1},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
-		}},
-		printer: newBufferPrinter(),
-	}
-
-	if err := workflow.Start(Config{}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if workflow.exitStatus != ExitTestFailed {
-		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
-	}
-}
-
-// TestWorkflow_RepeatOnlyWarmup runs a job whose one run is a warmup run: it
-// fails its test, and the job passes with no run counted.
-func TestWorkflow_RepeatOnlyWarmup(t *testing.T) {
-	runner := &timedRunner{answers: []map[string]any{
-		{"res": map[string]any{"code": 500}, "rt": "10ms"},
-	}}
-	workflow := &Workflow{
-		Name: "Warmup",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 0, Warmup: 1},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
-		}},
-		printer: newBufferPrinter(),
-	}
-
-	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if runner.calls != 1 {
-		t.Errorf("action called %d times, want 1", runner.calls)
-	}
-	if workflow.exitStatus != ExitOK {
-		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
-	}
-	data, err := os.ReadFile(jsonPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r report.Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if r.Status != report.Passed || len(r.Jobs[0].Steps) != 0 {
-		t.Errorf("report = %+v, want a passed job with no step counted", r)
-	}
-}
-
-// TestWorkflow_RepeatTellsWhyItsActionFailed repeats a step whose action
-// fails: the error is told once, under the step's count, rather than once
-// for each run as it happens.
-func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
-	runner := NewMockActionRunner()
-	runner.SetError("http", errors.New(`Get "http://127.0.0.1:1/x": connection refused`))
-	workflow := &Workflow{
-		Name: "Repeat",
-		Jobs: []Job{{
-			ID:     "search",
-			Name:   "Search",
-			Repeat: &Repeat{Count: 3},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
-		}},
-		printer: newBufferPrinter(),
-	}
-	if err := workflow.Start(Config{}); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
-	lines := strings.Split(out, "\n")
-	told := false
-	for i, line := range lines[:len(lines)-1] {
-		if strings.HasSuffix(line, "0/3 success (0.0%)") {
-			told = strings.TrimSpace(lines[i+1]) == `Get "http://127.0.0.1:1/x": connection refused`
-		}
-	}
-	if !told {
-		t.Errorf("terminal should tell the error under the count, got:\n%s", out)
-	}
-	if n := strings.Count(out, "connection refused"); n != 1 {
-		t.Errorf("terminal tells the error %d times, want once:\n%s", n, out)
-	}
-	if errOut := workflow.printer.errWriter.(*bytes.Buffer).String(); strings.Contains(errOut, "connection refused") {
-		t.Errorf("the error should not be told as it happens outside a verbose run, got:\n%s", errOut)
-	}
-}
-
-// TestWorkflow_HelloPassesWithoutTest passes a hello step without a test,
-// once and repeated, as it does nothing that could fail, while a step of
-// another action without a test is untested.
-func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
-	answer := map[string]any{"res": map[string]any{"status": 0}, "rt": "1ms"}
-	for _, count := range []int{0, 2} {
-		runner := &timedRunner{answers: []map[string]any{answer, answer, answer, answer}}
-		job := Job{
-			ID:   "report",
-			Name: "Report",
-			Steps: []*Step{
-				{Name: "Echo", Uses: "hello", Echo: "done", actionRunner: runner},
-				{Name: "Unchecked", Uses: "http", actionRunner: runner},
-			},
-		}
-		if count > 0 {
-			job.Repeat = &Repeat{Count: count}
-		}
-		workflow := &Workflow{Name: "Hello", Jobs: []Job{job}, printer: newBufferPrinter()}
-
-		r := startWithReport(t, workflow)
-		steps := r.Jobs[0].Steps
-		if steps[0].Status != report.Passed {
-			t.Errorf("count %d: hello step = %q, want %q", count, steps[0].Status, report.Passed)
-		}
-		if steps[1].Status != report.Untested {
-			t.Errorf("count %d: http step = %q, want %q", count, steps[1].Status, report.Untested)
-		}
 	}
 }

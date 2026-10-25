@@ -7,8 +7,9 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 type Action struct {
@@ -55,39 +56,37 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	return ret, newState, err
 }
 
-func Serve() {
+func serve() {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log}
 	})
 }
 
-// joinHeader returns h with the values of each header joined, as the result
-// shows them.
-func joinHeader(h hp.Header) map[string]any {
-	out := make(map[string]any, len(h))
-	for k, v := range h {
-		out[k] = strings.Join(v, ", ")
+// Spec declares the http action. It keeps to every kind of guard: it sends
+// only GET, HEAD and OPTIONS under read-only, and connects only to a host
+// the guard allows, redirects included. openapi, an OpenAPI document, asks
+// it to check a step against the document. Its req holds, besides the
+// fields of Req, multipart, for a request that sends one, which may hold
+// anything; its res holds, besides the fields of Res, violations and
+// contract, for a response checked against an OpenAPI document.
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    params(),
+		Contracts: []string{"openapi"},
+		ReqFields: append(mapping.FieldTags(Req{}), "multipart"),
+		ResFields: append(mapping.FieldTags(Res{}), "contract", "violations"),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  resTypes(),
+		Required:  required(),
 	}
-	return out
 }
 
-// Keeps returns the kinds of guard the http action keeps to: it sends only
-// GET, HEAD and OPTIONS under read-only, and connects only to a host the
-// guard allows, redirects included.
-func Keeps() []string {
-	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-}
-
-// Contracts returns the keys of with that ask the action to check a step
-// against a contract: openapi, an OpenAPI document.
-func Contracts() []string {
-	return []string{"openapi"}
-}
-
-// Params returns the keys the http action takes in with: those of Req,
-// the method shorthands, such as get and post, and those it reads apart
-// from Req.
-func Params() []string {
+// params returns the keys the action takes in with: those of Req, the
+// method shorthands, such as get and post, and those it reads apart from
+// Req.
+func params() []string {
 	params := mapping.FieldTags(Req{})
 	for _, m := range httpMethods {
 		params = append(params, strings.ToLower(m))
@@ -95,42 +94,19 @@ func Params() []string {
 	return append(params, "basic_auth", "cookies", "form", "keep_cookies", "multipart", "openapi", "trace_header")
 }
 
-// ReqFields returns the fields of the req the http action returns: those of
-// Req, and multipart, for a request that sends one. ResFields returns those
-// of its res: those of Res, and violations and contract, for a response
-// checked against an OpenAPI document.
-func ReqFields() []string {
-	return append(mapping.FieldTags(Req{}), "multipart")
-}
-
-// ResFields returns the fields of the res the http action returns; see
-// ReqFields.
-func ResFields() []string {
-	return append(mapping.FieldTags(Res{}), "contract", "violations")
-}
-
-// ReqTypes returns the kinds of the fields of the req the http action
-// returns, those of Req, and ResTypes those of its res, those of Res and of
-// the fields it adds, for probe check to report an expression that does
-// with a field what its kind does not allow. multipart, which shows what
-// was written, may hold anything.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the http action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
+// resTypes returns the kinds of the fields of Res and of those the action
+// adds to its res.
+func resTypes() map[string]string {
 	types := kind.Fields(Res{})
 	types["contract"] = kind.Map
 	types["violations"] = kind.List
 	return types
 }
 
-// Required returns the keys of with the http action cannot run without, each
-// as the keys that stand for it: the URL, which url or a method shorthand,
-// such as get, gives, and the method, which method or a shorthand gives.
-func Required() [][]string {
+// required returns the keys of with the action cannot run without, each as
+// the keys that stand for it: the URL, which url or a method shorthand, such
+// as get, gives, and the method, which method or a shorthand gives.
+func required() [][]string {
 	var shorthands []string
 	for _, m := range httpMethods {
 		shorthands = append(shorthands, strings.ToLower(m))

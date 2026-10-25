@@ -137,7 +137,20 @@ func TestParseParams(t *testing.T) {
 				Timeout:  "invalid",
 			},
 			wantError: true,
-			errorMsg:  "invalid timeout format: invalid",
+			errorMsg:  "invalid timeout invalid: use a duration such as 30s, or a number of seconds",
+		},
+		{
+			name: "zero timeout",
+			req: &Req{
+				Host:     "example.com",
+				Port:     22,
+				User:     "testuser",
+				Cmd:      "ls -la",
+				Password: "testpass",
+				Timeout:  "0",
+			},
+			wantError: true,
+			errorMsg:  "invalid timeout 0: a timeout must be above zero",
 		},
 	}
 
@@ -187,6 +200,46 @@ func TestValidateKeyFile(t *testing.T) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // what os.UserHomeDir reads on Windows
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"~/.ssh/id_ed25519", filepath.Join(home, ".ssh", "id_ed25519")},
+		{"~/known_hosts", filepath.Join(home, "known_hosts")},
+		{"/etc/ssh/ssh_known_hosts", "/etc/ssh/ssh_known_hosts"},
+		{"keys/id_rsa", "keys/id_rsa"},
+		{"~", "~"},
+		{"~user/.ssh/id_rsa", "~user/.ssh/id_rsa"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got, err := expandHome(tt.path)
+		if err != nil {
+			t.Fatalf("expandHome(%q) error = %v", tt.path, err)
+		}
+		if got != tt.want {
+			t.Errorf("expandHome(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestExpandHomeWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+
+	if _, err := expandHome("~/.ssh/id_ed25519"); err == nil || !strings.Contains(err.Error(), "home directory") {
+		t.Errorf("expandHome() error = %v, want one saying the home directory cannot be found", err)
+	}
+	if got, err := expandHome("/etc/ssh/ssh_known_hosts"); err != nil || got != "/etc/ssh/ssh_known_hosts" {
+		t.Errorf("expandHome() = %q, %v, want the path as it is", got, err)
 	}
 }
 

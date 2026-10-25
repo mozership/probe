@@ -13,7 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/internal/body"
+	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/pb33f/libopenapi"
 	validator "github.com/pb33f/libopenapi-validator"
 	"github.com/pb33f/libopenapi-validator/config"
@@ -69,11 +70,11 @@ func takeOpenAPI(m map[string]any) (*contract, error) {
 		if !ok || path == "" {
 			return nil, errors.New("openapi.spec must be the path of an OpenAPI document")
 		}
-		request, err := openAPIFlag(o, "request", true)
+		request, err := contractcheck.Flag(o, "openapi", "request", true)
 		if err != nil {
 			return nil, err
 		}
-		strict, err := openAPIFlag(o, "strict", false)
+		strict, err := contractcheck.Flag(o, "openapi", "strict", false)
 		if err != nil {
 			return nil, err
 		}
@@ -86,19 +87,6 @@ func takeOpenAPI(m map[string]any) (*contract, error) {
 	default:
 		return nil, errors.New("openapi must be a map with spec, or false")
 	}
-}
-
-// openAPIFlag returns the boolean key of openapi, or def when it is missing.
-func openAPIFlag(o map[string]any, key string, def bool) (bool, error) {
-	v, ok := o[key]
-	if !ok {
-		return def, nil
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return false, fmt.Errorf("openapi.%s must be true or false", key)
-	}
-	return b, nil
 }
 
 // loadContract reads the OpenAPI document at path. When strict is true, a
@@ -271,10 +259,10 @@ func emptyOrNull(content *orderedmap.Map[string, *v3.MediaType], contentType str
 	switch strings.TrimSpace(string(body)) {
 	case "":
 		mediaType, _, _ := mime.ParseMediaType(contentType)
-		return []any{violation("response", "response body is empty", "the response declares a schema for "+mediaType, "")}
+		return []any{contractcheck.Violation("response", "response body is empty", "the response declares a schema for "+mediaType, "")}
 	case "null":
 		if !allowsNull(schema, 0) {
-			return []any{violation("response", "response body is null", "the schema does not allow null", "")}
+			return []any{contractcheck.Violation("response", "response body is null", "the schema does not allow null", "")}
 		}
 	}
 	return nil
@@ -377,7 +365,7 @@ func responseOf(op *v3.Operation, code int) (string, *v3.Response) {
 // mediaSchema returns the schema content declares for contentType, when it
 // is JSON, or nil.
 func mediaSchema(content *orderedmap.Map[string, *v3.MediaType], contentType string) *base.Schema {
-	if content == nil || !binary.IsJSONMediaType(contentType) {
+	if content == nil || !body.IsJSON(contentType) {
 		return nil
 	}
 	want, _, _ := mime.ParseMediaType(contentType)
@@ -406,27 +394,12 @@ func violations(in string, errs []*verrors.ValidationError) []any {
 	out := []any{}
 	for _, e := range errs {
 		if len(e.SchemaValidationErrors) == 0 {
-			out = append(out, violation(in, e.Message, e.Reason, ""))
+			out = append(out, contractcheck.Violation(in, e.Message, e.Reason, ""))
 			continue
 		}
 		for _, se := range e.SchemaValidationErrors {
-			out = append(out, violation(in, e.Message, se.Reason, se.FieldPath))
+			out = append(out, contractcheck.Violation(in, e.Message, se.Reason, se.FieldPath))
 		}
 	}
 	return out
-}
-
-// violation is one violation, found in the request or the response.
-func violation(in, message, reason, field string) map[string]any {
-	v := map[string]any{
-		"in":      in,
-		"message": message,
-	}
-	if reason != "" {
-		v["reason"] = reason
-	}
-	if field != "" {
-		v["field"] = field
-	}
-	return v
 }

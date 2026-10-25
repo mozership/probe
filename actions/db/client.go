@@ -8,12 +8,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -85,23 +84,11 @@ func ParseRequest(with map[string]any) (*Req, string, time.Duration, error) {
 	// Parse timeout
 	timeout := 30 * time.Second // Default timeout
 	if req.Timeout != "" {
-		if parsedTimeout, err := time.ParseDuration(req.Timeout); err == nil {
-			timeout = parsedTimeout
-		} else if _, errInt := strconv.Atoi(req.Timeout); errInt == nil {
-			// Parsed as a duration of seconds, so that a number too large
-			// for one is an error rather than wrapping around to a short,
-			// positive limit.
-			parsedTimeout, err := time.ParseDuration(req.Timeout + "s")
-			if err != nil {
-				return nil, "", 0, fmt.Errorf("invalid timeout: %s (%w)", req.Timeout, err)
-			}
-			timeout = parsedTimeout
-		} else {
-			return nil, "", 0, fmt.Errorf("invalid timeout format: %s (use duration string like '30s' or integer seconds)", req.Timeout)
+		parsed, err := mapping.ParseTimeout(req.Timeout)
+		if err != nil {
+			return nil, "", 0, err
 		}
-		if timeout <= 0 {
-			return nil, "", 0, fmt.Errorf("invalid timeout: %s (must be above zero)", req.Timeout)
-		}
+		timeout = parsed
 	}
 	req.Timeout = timeout.String()
 

@@ -48,7 +48,7 @@ The rest tune the connection and fall back to the defaults below when omitted.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `port` | int | 22 | SSH port number |
-| `timeout` | string | "30s" | Limit for connecting and for running the command, as a Go duration such as `"30s"` or `"5m"` (a plain number is rejected). See below for a command that runs past it |
+| `timeout` | string | "30s" | Limit for connecting and for running the command, as a duration such as `"30s"` or `"5m"`, or a number of seconds such as `30`. A value that is neither, or not above zero, is rejected. See below for a command that runs past it |
 | `workdir` | string | - | Working directory on remote server |
 | `strict_host_check` | bool | true | Strict host key verification |
 | `known_hosts` | string | `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts` | Known hosts file path. By default both files are read, as many of them as exist; with neither, a strict host check fails |

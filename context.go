@@ -3,38 +3,23 @@ package probe
 import (
 	"sync"
 
-	"github.com/mozership/probe/procgroup"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/procgroup"
+	"github.com/mozership/probe/internal/schedule"
 )
+
+// newBackground returns the tracker of the processes a run's steps leave in
+// the background. Its Stop waits for a step that timed out as long as its
+// action can take to return, so that a process the action reports late is
+// stopped with the others.
+func newBackground() *procgroup.Tracker {
+	return procgroup.NewTracker(actionrpc.ExitWait)
+}
 
 // ResponseTime provides response time information for expressions
 type ResponseTime struct {
 	Duration string  `expr:"duration"`
 	Sec      float64 `expr:"sec"`
-}
-
-// ExitStatus represents the unified status across all actions
-type ExitStatus int
-
-const (
-	ExitStatusSuccess ExitStatus = 0 // Action succeeded
-	ExitStatusFailure ExitStatus = 1 // Action failed
-)
-
-// Int returns the ExitStatus as an int for comparison
-func (e ExitStatus) Int() int {
-	return int(e)
-}
-
-// String returns the ExitStatus as a string
-func (e ExitStatus) String() string {
-	switch e {
-	case ExitStatusSuccess:
-		return "success"
-	case ExitStatusFailure:
-		return "failure"
-	default:
-		return "unknown"
-	}
 }
 
 // StepContext provides context data for step expression evaluation
@@ -47,6 +32,21 @@ type StepContext struct {
 	Outputs     map[string]any `expr:"outputs"`
 	Status      int            `expr:"status"`
 	RepeatIndex int            `expr:"repeat_index"`
+}
+
+// testEnv is what a verbose run shows of the context of a step whose test
+// it evaluated in, by the names the test reads it by. The request and the
+// response are left out, as the step has just shown them, under Request
+// and Response.
+func (c StepContext) testEnv() map[string]any {
+	return map[string]any{
+		"vars":         c.Vars,
+		"outputs":      c.Outputs,
+		"status":       c.Status,
+		"rt":           map[string]any{"duration": c.RT.Duration, "sec": c.RT.Sec},
+		"report":       c.Report,
+		"repeat_index": c.RepeatIndex,
+	}
 }
 
 // JobContext is what a run of a job runs with. It is copied for each run,
@@ -84,8 +84,8 @@ type runEnv struct {
 	Printer *Printer
 	// Result for managing job-level output
 	Result *Result
-	// Job scheduler for managing job dependencies and execution
-	JobScheduler *JobScheduler
+	// scheduler tells which jobs can start, and is told when each is over
+	scheduler *schedule.Scheduler
 	// Processes that steps left running in the background, stopped once the
 	// workflow is over
 	background *procgroup.Tracker
@@ -99,6 +99,15 @@ type runEnv struct {
 	// The names the workflow gives its external actions, which an action
 	// that runs steps of its own is told
 	actions map[string]string
+}
+
+// runner returns the ActionRunner the steps of the run run their actions
+// with: the one the run was given, or a PluginActionRunner.
+func (e *runEnv) runner() ActionRunner {
+	if e.ActionRunner == nil {
+		return &PluginActionRunner{}
+	}
+	return e.ActionRunner
 }
 
 // jobRepeat is what the runs of a repeated job share: how they are counted,
@@ -154,6 +163,14 @@ func (j *JobContext) warmingUp() bool {
 // its runs decides whether it passed.
 func (j *JobContext) countedOnly() bool {
 	return j.warmingUp() || (j.repeat != nil && j.repeat.tested)
+}
+
+// failStep marks the job failed by a step that failed with a failure of
+// kind, and records the kind for the exit code of the run as recordFailure
+// does. Every failure of a step goes through it.
+func (j *JobContext) failStep(kind string) {
+	j.SetFailed()
+	j.recordFailure(kind)
 }
 
 // recordFailure notes the kind of a failure of a step for the exit code of

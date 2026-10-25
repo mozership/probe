@@ -1,46 +1,11 @@
 package smtp
 
 import (
-	"io"
-	"log"
-	"net"
+	"math"
 	"reflect"
+	"strings"
 	"testing"
-	"time"
 )
-
-// setupMockServer creates and starts a mock SMTP server for testing
-func setupMockServer(t *testing.T) (*MockServer, string) {
-	t.Helper()
-
-	mockServer := &MockServer{
-		Addr: "localhost:0",
-		Name: "test.example.com",
-		Log:  log.New(io.Discard, "", 0), // Disable logging for tests
-	}
-
-	// Get available port
-	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to get available port: %v", err)
-	}
-	addr := listener.Addr().String()
-	_ = listener.Close()
-
-	mockServer.Addr = addr
-
-	// Start server in goroutine
-	go func() {
-		if err := mockServer.Serve(); err != nil {
-			t.Logf("mock server error: %v", err)
-		}
-	}()
-
-	// Wait a bit for server to start
-	time.Sleep(100 * time.Millisecond)
-
-	return mockServer, addr
-}
 
 func TestBulkDeliverWithResult(t *testing.T) {
 	tests := []struct {
@@ -83,7 +48,7 @@ func TestBulkDeliverWithResult(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Start mock SMTP server
-			_, addr := setupMockServer(t)
+			addr := startMockServer(t, false)
 
 			bulk := &Bulk{
 				Addr:       addr,
@@ -126,7 +91,7 @@ func TestBulkDeliverWithResult(t *testing.T) {
 	}
 }
 
-func TestBulkSend(t *testing.T) {
+func TestBulkSendShare(t *testing.T) {
 	tests := []struct {
 		name          string
 		session       int
@@ -162,7 +127,7 @@ func TestBulkSend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Start mock SMTP server
-			_, addr := setupMockServer(t)
+			addr := startMockServer(t, false)
 
 			bulk := &Bulk{
 				Addr:       addr,
@@ -175,7 +140,7 @@ func TestBulkSend(t *testing.T) {
 				Length:     100,
 			}
 
-			count, err := bulk.Send()
+			count, err := bulk.sendShare(bulk.makeData())
 
 			// Verify no error
 			if err != nil {
@@ -184,7 +149,7 @@ func TestBulkSend(t *testing.T) {
 
 			// Verify count is within expected range
 			// For the first goroutine, it should return the expected count
-			// Note: This test only verifies a single Send() call
+			// Note: This test only verifies a single sendShare() call
 			if count < 1 || count > tt.expectedCount {
 				t.Errorf("Expected count between 1 and %d, got %d", tt.expectedCount, count)
 			}
@@ -205,6 +170,8 @@ func TestCalcMessageNumEachSessionTotal(t *testing.T) {
 		{session: 2, message: 3, want: []int{2, 1}},
 		{session: 3, message: 3, want: []int{1, 1, 1}},
 		{session: 2, message: 0, want: []int{0, 0}},
+		// Rounding up does not overflow.
+		{session: 3, message: math.MaxInt, want: []int{math.MaxInt/3 + 1, math.MaxInt/3 + 1, math.MaxInt - 2*(math.MaxInt/3+1)}},
 	}
 
 	for _, tt := range tests {
@@ -230,6 +197,30 @@ func TestSplitRecipients(t *testing.T) {
 	for in, want := range tests {
 		if got := splitRecipients(in); !reflect.DeepEqual(got, want) {
 			t.Errorf("splitRecipients(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestMakeData(t *testing.T) {
+	// The body is a line of text and length asterisks in lines of 80.
+	for length, want := range map[int]string{
+		0:   "\n",
+		3:   "***\n",
+		80:  strings.Repeat("*", 80) + "\n",
+		81:  strings.Repeat("*", 80) + "\n*\n",
+		160: strings.Repeat("*", 80) + "\n" + strings.Repeat("*", 80) + "\n",
+	} {
+		b := &Bulk{From: "f@example.com", To: "t@example.com", Subject: "hi", Length: length}
+		got := string(b.makeData())
+		head, body, ok := strings.Cut(got, "\n\nThis is a test mail.\n\n")
+		if !ok {
+			t.Fatalf("length %d: makeData() = %q, want the line of text after the headers", length, got)
+		}
+		if !strings.HasPrefix(head, "From: f@example.com\nTo: t@example.com\nDate: ") || !strings.HasSuffix(head, "\nSubject: hi") {
+			t.Errorf("length %d: headers = %q", length, head)
+		}
+		if body != want {
+			t.Errorf("length %d: body = %q, want %q", length, body, want)
 		}
 	}
 }

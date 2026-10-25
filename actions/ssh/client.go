@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // NOTE: SSH config file support is intentionally not implemented to maintain
@@ -135,9 +135,9 @@ func parseParams(req *Req) (*sshParams, error) {
 	if timeoutStr == "" {
 		timeoutStr = "30s"
 	}
-	timeout, err := time.ParseDuration(timeoutStr)
+	timeout, err := mapping.ParseTimeout(timeoutStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timeout format: %s", timeoutStr)
+		return nil, err
 	}
 	params.timeout = timeout
 
@@ -163,14 +163,24 @@ func parseParams(req *Req) (*sshParams, error) {
 	return params, nil
 }
 
+// expandHome returns path with a leading ~/ taken as the home directory of
+// the user, as a shell reads it. Any other path is returned as it is.
+func expandHome(path string) (string, error) {
+	rest, ok := strings.CutPrefix(path, "~/")
+	if !ok {
+		return path, nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(homeDir, rest), nil
+}
+
 func validateKeyFile(keyFile string) error {
-	// Expand tilde if present
-	if strings.HasPrefix(keyFile, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		keyFile = filepath.Join(homeDir, keyFile[2:])
+	keyFile, err := expandHome(keyFile)
+	if err != nil {
+		return err
 	}
 
 	// Check if key file exists and is readable
@@ -182,13 +192,9 @@ func validateKeyFile(keyFile string) error {
 }
 
 func validateKnownHostsFile(knownHostsFile string) error {
-	// Expand tilde if present
-	if strings.HasPrefix(knownHostsFile, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		knownHostsFile = filepath.Join(homeDir, knownHostsFile[2:])
+	knownHostsFile, err := expandHome(knownHostsFile)
+	if err != nil {
+		return err
 	}
 
 	// Check if known hosts file exists and is readable
@@ -236,14 +242,9 @@ func createSSHConfig(params *sshParams) (*ssh.ClientConfig, error) {
 
 	// Key-based authentication
 	if params.keyFile != "" {
-		// Expand tilde if present
-		keyFile := params.keyFile
-		if strings.HasPrefix(keyFile, "~/") {
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get home directory: %w", err)
-			}
-			keyFile = filepath.Join(homeDir, keyFile[2:])
+		keyFile, err := expandHome(params.keyFile)
+		if err != nil {
+			return nil, err
 		}
 
 		key, err := os.ReadFile(keyFile)
@@ -270,13 +271,9 @@ func createSSHConfig(params *sshParams) (*ssh.ClientConfig, error) {
 	if params.strictHostCheck {
 		if params.knownHosts != "" {
 			// Use custom known hosts file
-			knownHostsFile := params.knownHosts
-			if strings.HasPrefix(knownHostsFile, "~/") {
-				homeDir, err := os.UserHomeDir()
-				if err != nil {
-					return nil, fmt.Errorf("failed to get home directory: %w", err)
-				}
-				knownHostsFile = filepath.Join(homeDir, knownHostsFile[2:])
+			knownHostsFile, err := expandHome(params.knownHosts)
+			if err != nil {
+				return nil, err
 			}
 
 			hostKeyCallback, err := knownhosts.New(knownHostsFile)
@@ -502,7 +499,7 @@ func (r *Req) Do() (re *Result, er error) {
 
 func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 	// EnvToStringValue copies data, so the caller's map is left as it was.
-	m := mapping.HeaderToStringValue(mapping.EnvToStringValue(data))
+	m := mapping.EnvToStringValue(data)
 
 	// Manually handle type conversions BEFORE MapToStructByTags to prevent reflection panics
 	if portInput, exists := m["port"]; exists {

@@ -15,7 +15,8 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/hostport"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 const (
@@ -177,18 +178,9 @@ func (r *Req) normalize() (dns.Question, time.Duration, error) {
 
 	timeout := defaultTimeout
 	if r.Timeout != "" {
-		parsed, err := time.ParseDuration(r.Timeout)
+		parsed, err := mapping.ParseTimeout(r.Timeout)
 		if err != nil {
-			// A number alone is taken as seconds.
-			if _, errInt := strconv.Atoi(r.Timeout); errInt != nil {
-				return dns.Question{}, 0, fmt.Errorf("invalid timeout format: %s (use duration string like '5s' or integer seconds)", r.Timeout)
-			}
-			if parsed, err = time.ParseDuration(r.Timeout + "s"); err != nil {
-				return dns.Question{}, 0, fmt.Errorf("invalid timeout: %s (%w)", r.Timeout, err)
-			}
-		}
-		if parsed <= 0 {
-			return dns.Question{}, 0, fmt.Errorf("invalid timeout: %s (must be above zero)", r.Timeout)
+			return dns.Question{}, 0, err
 		}
 		timeout = parsed
 	}
@@ -219,7 +211,7 @@ func (r *Req) servers() ([]string, error) {
 		port = defaultTLSPort
 	}
 	if r.Server != "" {
-		return []string{withPort(r.Server, port)}, nil
+		return []string{hostport.WithPort(r.Server, port)}, nil
 	}
 
 	conf, err := dns.ClientConfigFromFile(r.resolvConf)
@@ -238,15 +230,6 @@ func (r *Req) servers() ([]string, error) {
 		servers[i] = net.JoinHostPort(server, port)
 	}
 	return servers, nil
-}
-
-// withPort returns hostport with port when it names none. An IPv6 address
-// may be given bare or in brackets.
-func withPort(hostport, port string) string {
-	if _, _, err := net.SplitHostPort(hostport); err == nil {
-		return hostport
-	}
-	return net.JoinHostPort(strings.Trim(hostport, "[]"), port)
 }
 
 // exchange asks each server in turn until one answers, and returns the

@@ -3,13 +3,12 @@ package embedded
 import (
 	"errors"
 	"fmt"
-	"github.com/mozership/probe/actionrpc"
-	"maps"
 	"path/filepath"
 	"time"
 
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 type Req struct {
@@ -47,6 +46,8 @@ type Callback struct {
 	actions map[string]string
 	// builtin are the names of the actions of Probe.
 	builtin []string
+	// needsNoCheck are the actions whose steps pass without a test.
+	needsNoCheck []string
 	// cleanups are those of the run the job is part of, or nil for a job
 	// that cleans up after itself.
 	cleanups *actionrpc.Cleanups
@@ -94,7 +95,7 @@ func (r *Req) Do() (*Result, error) {
 		opts = append(opts, probe.WithRunID(r.cb.runID))
 	}
 	if r.cb != nil {
-		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithCleanups(r.cb.cleanups))
+		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithNeedsNoCheck(r.cb.needsNoCheck), probe.WithCleanups(r.cb.cleanups))
 	}
 	run := job.RunStandalone(r.Vars, printer, jobID, filepath.Dir(absPath), opts...)
 
@@ -145,12 +146,6 @@ func (r *Req) Do() (*Result, error) {
 }
 
 func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
-	// Create a copy to avoid modifying the original data
-	dataCopy := make(map[string]any)
-	maps.Copy(dataCopy, data)
-
-	m := mapping.HeaderToStringValue(dataCopy)
-
 	r := NewReq()
 
 	cb := &Callback{}
@@ -159,7 +154,7 @@ func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 	}
 	r.cb = cb
 
-	if err := mapping.MapToStructByTags(m, r); err != nil {
+	if err := mapping.MapToStructByTags(data, r); err != nil {
 		return map[string]any{}, err
 	}
 
@@ -216,6 +211,15 @@ func WithActions(names map[string]string) Option {
 func WithBuiltinActions(names []string) Option {
 	return func(c *Callback) {
 		c.builtin = names
+	}
+}
+
+// WithNeedsNoCheck tells the job the names of the actions whose steps pass
+// without a test, so that a step of one that has none is not counted as
+// untested.
+func WithNeedsNoCheck(names []string) Option {
+	return func(c *Callback) {
+		c.needsNoCheck = names
 	}
 }
 

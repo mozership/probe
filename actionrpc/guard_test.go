@@ -1,6 +1,7 @@
 package actionrpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -178,14 +179,14 @@ func TestClientRunStepTellsTheGuard(t *testing.T) {
 	a := &guardedAction{}
 	c := &Client{client: directClient{&Server{Impl: a}}}
 	guard := Guard{ReadOnly: true, AllowHosts: []string{"localhost"}, AllowActions: []string{"shell"}, Keeps: map[string][]string{"http": {KindReadOnly, KindAllowHost}}}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}, Guard: guard}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Guard: guard}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !reflect.DeepEqual(a.guard, guard) {
 		t.Errorf("the action was told %+v, want %+v", a.guard, guard)
 	}
 
-	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if a.guard.Active() {
@@ -195,7 +196,7 @@ func TestClientRunStepTellsTheGuard(t *testing.T) {
 
 func TestClientRunStepCarriesARefusal(t *testing.T) {
 	c := &Client{client: directClient{&Server{Impl: &guardedAction{refuse: true}}}}
-	_, _, err := c.RunStep(Call{With: map[string]any{}, Guard: Guard{ReadOnly: true}})
+	_, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Guard: Guard{ReadOnly: true}})
 	var r *Refused
 	if !errors.As(err, &r) {
 		t.Fatalf("err = %v (%T), want a refusal", err, err)
@@ -207,7 +208,7 @@ func TestClientRunStepCarriesARefusal(t *testing.T) {
 	// Any other error stays one of the action.
 	failing := &MockActions{RunFunc: func(map[string]any) (map[string]any, error) { return nil, errors.New("boom") }}
 	c = &Client{client: directClient{&Server{Impl: failing}}}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err == nil || IsRefused(err) {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}}); err == nil || IsRefused(err) {
 		t.Errorf("err = %v, want an error that is not a refusal", err)
 	}
 }
@@ -220,7 +221,7 @@ func TestClientRunStepKeepsAPermissionDeniedOfTheAction(t *testing.T) {
 		return nil, fmt.Errorf("reflection: %w", status.Error(codes.PermissionDenied, "denied by the server"))
 	}}
 	c := &Client{client: directClient{&Server{Impl: denied}}}
-	_, _, err := c.RunStep(Call{With: map[string]any{}})
+	_, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}})
 	if err == nil || IsRefused(err) {
 		t.Fatalf("err = %v, want an error of the action, not a refusal", err)
 	}

@@ -8,15 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 type Req struct {
@@ -109,9 +107,9 @@ func parseParams(req *Req) (*shellParams, error) {
 	if timeoutStr == "" {
 		timeoutStr = "30s"
 	}
-	timeout, err := parseTimeout(timeoutStr)
+	timeout, err := mapping.ParseTimeout(timeoutStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timeout format: %s", timeoutStr)
+		return nil, err
 	}
 	params.timeout = timeout
 
@@ -179,18 +177,6 @@ func validateWorkdir(workdir string) error {
 	}
 
 	return nil
-}
-
-func parseTimeout(timeoutStr string) (time.Duration, error) {
-	// Check if it's a plain number (treat as seconds)
-	if matched, _ := regexp.MatchString(`^\d+$`, timeoutStr); matched {
-		if seconds, err := strconv.Atoi(timeoutStr); err == nil {
-			return time.Duration(seconds) * time.Second, nil
-		}
-	}
-
-	// Parse as duration string (e.g., "30s", "5m", "1h")
-	return time.ParseDuration(timeoutStr)
 }
 
 func (r *Req) Do() (*Result, error) {

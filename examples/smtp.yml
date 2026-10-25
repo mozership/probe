@@ -43,7 +43,6 @@ jobs:
     echo: |
       Custom email sent!
       Mail data length: {{len(res.maildata)}} characters
-      File path: {{res.filepath}}
   - name: Send bulk emails
     uses: smtp
     with:

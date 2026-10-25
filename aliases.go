@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // aliasName is a name a workflow can give an external action: one that
@@ -36,10 +36,10 @@ func (a aliasProblem) Error() string {
 	return a.msg
 }
 
-// checkAliases returns what is wrong with the names the workflow's actions
+// aliasProblems returns what is wrong with the names the workflow's actions
 // give, in the order of the names. builtin are the names of the actions of
 // Probe, which a name must not be; when it is empty, that is not checked.
-func (w *Workflow) checkAliases(builtin []string) []aliasProblem {
+func (w *Workflow) aliasProblems(builtin []string) []aliasProblem {
 	var problems []aliasProblem
 	for _, name := range slices.Sorted(maps.Keys(w.Actions)) {
 		ref := w.Actions[name]
@@ -53,7 +53,7 @@ func (w *Workflow) checkAliases(builtin []string) []aliasProblem {
 			msg = fmt.Sprintf("actions: %s must name an external action, as github.com/<owner>/<repo>@<commit SHA> or a local path starting with ./, not %q", name, ref)
 		// A local path is taken as it is written, so a template in one would
 		// name a directory with braces in its name.
-		case len(expr.TemplateExprs(ref)) > 0:
+		case expr.HasTemplate(ref):
 			msg = fmt.Sprintf("actions: %s must name an external action as it is, not by a template: %q", name, ref)
 		default:
 			if _, err := actionref.Parse(ref); err != nil {
@@ -73,7 +73,7 @@ func (w *Workflow) checkAliases(builtin []string) []aliasProblem {
 // sees the action as if the workflow had named it in full, so that a name
 // lets nothing run that the action it stands for would not.
 //
-// A name that is wrong, as checkAliases tells, is left as it is written. It
+// A name that is wrong, as aliasProblems tells, is left as it is written. It
 // returns the defaults that are written for an action twice, once by its
 // name and once in full.
 func (w *Workflow) resolveAliases(wrong []aliasProblem) []aliasProblem {

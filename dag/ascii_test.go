@@ -11,6 +11,7 @@ The golden tests cover comprehensive DAG patterns for ASCII rendering:
 	                      | embedded_action          | Jobs with embedded actions (↗ bullet)
 	                      | embedded_expanded        | Embedded action with path expands steps
 	                      | truncated_long_names     | Long names truncated with ellipsis (…)
+	                      | wide_names               | Names of wide characters and emoji, by columns
 	                      | linear_two               | A → B
 	                      | linear_three             | A → B → C
 	Divergence            | divergence_two           | A → [B, C]
@@ -47,6 +48,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 func TestASCII_Render_EmptyWorkflow(t *testing.T) {
@@ -312,62 +315,6 @@ func TestASCII_Render_Empty(t *testing.T) {
 	}
 }
 
-func TestTruncateWithEllipsis(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		maxLen   int
-		expected string
-	}{
-		{
-			name:     "short string unchanged",
-			input:    "Hello",
-			maxLen:   10,
-			expected: "Hello",
-		},
-		{
-			name:     "exact length unchanged",
-			input:    "Hello",
-			maxLen:   5,
-			expected: "Hello",
-		},
-		{
-			name:     "long string truncated",
-			input:    "Hello World",
-			maxLen:   8,
-			expected: "Hello W…",
-		},
-		{
-			name:     "very short maxLen",
-			input:    "Hello",
-			maxLen:   1,
-			expected: "H",
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			maxLen:   10,
-			expected: "",
-		},
-		{
-			name:     "Japanese text truncated",
-			input:    "こんにちは世界",
-			maxLen:   5,
-			expected: "こんにち…",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := truncateWithEllipsis(tt.input, tt.maxLen)
-			if result != tt.expected {
-				t.Errorf("truncateWithEllipsis(%q, %d) = %q, want %q",
-					tt.input, tt.maxLen, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestASCII_FixedBoxWidth(t *testing.T) {
 	// Test that all boxes have the same fixed width
 	g := Graph{
@@ -431,8 +378,8 @@ func TestASCII_RenderNode(t *testing.T) {
 
 	// Check all lines have same width
 	for i, line := range lines {
-		if runeWidth(line) != fixedNodeWidth {
-			t.Errorf("line %d has width %d, expected %d: %s", i, runeWidth(line), fixedNodeWidth, line)
+		if textwidth.Width(line) != fixedNodeWidth {
+			t.Errorf("line %d has width %d, expected %d: %s", i, textwidth.Width(line), fixedNodeWidth, line)
 		}
 	}
 }
@@ -470,6 +417,32 @@ func TestASCII_RenderNode_EmbeddedAction(t *testing.T) {
 	// Check embedded step uses ↗
 	if !strings.Contains(lines[4], "↗") {
 		t.Errorf("expected embedded step to have ↗ bullet: %s", lines[4])
+	}
+}
+
+// TestASCII_RenderNode_WideNames pads and cuts names of wide characters and
+// emoji by the columns they take, so that the box is as wide as one of
+// narrow names.
+func TestASCII_RenderNode_WideNames(t *testing.T) {
+	job := &Job{
+		Name: "結合テスト",
+		Steps: []Step{
+			{Name: "ログイン"},
+			{Name: "⚠\ufe0f ❤\ufe0f ✔\ufe0f 👍\U0001F3FD ✅ 🚀 で始まる長いステップ"},
+			{Name: "ステージングの API を順に呼んで確かめる"},
+			{Name: "埋め込み", Embedded: true, EmbeddedFile: "共通ジョブ定義ファイル.yml", EmbeddedSteps: []string{"準備", "とても長い名前の埋め込まれたステップ"}},
+		},
+	}
+	renderer := newASCIIRenderer(Graph{Jobs: []Job{*job}})
+	lines := renderer.renderNode(&asciiNode{Job: job, JobID: "test", Width: fixedNodeWidth})
+	for i, line := range lines {
+		line = strings.NewReplacer(ansiDim, "", ansiReset, "").Replace(line)
+		if w := textwidth.Width(line); w != fixedNodeWidth {
+			t.Errorf("line %d is %d columns wide, want %d: %s", i, w, fixedNodeWidth, line)
+		}
+	}
+	if !strings.Contains(lines[5], "ステージングの API …│") {
+		t.Errorf("a long wide step name should be cut by columns: %s", lines[5])
 	}
 }
 
@@ -529,6 +502,20 @@ func asciiGoldenCases() []asciiGoldenCase {
 				{ID: "test", Name: "Run Integration Tests", Needs: []string{"build"}, Steps: []Step{
 					{Name: "Setup test database connection"},
 					{Name: "Execute integration test suite"},
+				}},
+			}},
+		},
+		{
+			name: "wide_names",
+			graph: Graph{Jobs: []Job{
+				{ID: "build", Name: "ビルド", Steps: []Step{
+					{Name: "ソースをコンパイルする"},
+				}},
+				{ID: "test", Name: "結合テストを全部実行する", Needs: []string{"build"}, Steps: []Step{
+					{Name: "ステージングの API を順に呼んで確かめる"},
+				}},
+				{ID: "cleanup", Name: "⚠\ufe0f cleanup", Needs: []string{"test"}, Steps: []Step{
+					{Name: "✅ remove the 🚀 stack 👍\U0001F3FD"},
 				}},
 			}},
 		},

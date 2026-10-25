@@ -354,7 +354,7 @@ The IMAP action provides a `res` object with the following structure:
 
 The top-level `status` is the same as `res.code`, and `rt.duration` (such as `"12ms"`) and `rt.sec` give how long the whole session took, from connecting to logging out. A connection, login or timeout failure is not a `res.code`: it fails the step as an action error.
 
-`res.data` has one entry per command, named after it. A command that did not run leaves its entry at zero values. `uid search`, `uid fetch`, `uid store` and `uid copy` share the entry of the command without `uid`.
+`res.data` has one entry per command, named after it. A command that did not run leaves its entry at zero values, so `success` is `false` only then: a command that fails stops the run with `res.code` `1` instead. `uid search`, `uid fetch`, `uid store` and `uid copy` share the entry of the command without `uid`.
 
 | Entry | Fields |
 |-------|--------|

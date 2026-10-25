@@ -134,6 +134,59 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadBaseline(t *testing.T) {
+	dir := t.TempDir()
+	run := filepath.Join(dir, "run.json")
+	want := &Report{Name: "Demo", Status: Passed, StartedAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}
+	f, err := os.Create(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := want.WriteJSON(f); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	empty := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(empty, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	broken := filepath.Join(dir, "broken.json")
+	if err := os.WriteFile(broken, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ReadBaseline(run)
+	if err != nil {
+		t.Fatalf("ReadBaseline() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ReadBaseline() = %+v, want %+v", got, want)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"JSON that is no report of a run", empty, empty + " is not a report of a run, written by --report json"},
+		{"a broken file", broken, "failed to parse report"},
+		{"a missing file", filepath.Join(dir, "none.json"), "failed to read report"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := ReadBaseline(tt.path)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("ReadBaseline() error = %v, want one with %q", err, tt.want)
+			}
+			if r != nil {
+				t.Errorf("ReadBaseline() = %+v, want nil", r)
+			}
+		})
+	}
+}
+
 func TestReport_WriteMarkdown_Baseline(t *testing.T) {
 	r := &Report{
 		Name: "Latency", Status: Passed,

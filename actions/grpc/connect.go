@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mozership/probe/internal/contractcheck"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -203,7 +204,7 @@ func (r *Req) invokeConnect(ctx context.Context, client *http.Client, base, code
 	if r.contract != nil {
 		violations = []any{}
 		if spec == nil {
-			violations = append(violations, violation("response", fmt.Sprintf("the .proto files declare no method %s in %s", r.Method, r.Service), "", ""))
+			violations = append(violations, contractcheck.Violation("response", fmt.Sprintf("the .proto files declare no method %s in %s", r.Method, r.Service), "", ""))
 		} else {
 			violations = append(violations, r.contract.checkRequests(spec, bodies, clientStream)...)
 		}

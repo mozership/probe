@@ -26,7 +26,7 @@ func loadWorkflow(t *testing.T, content string, more ...string) (*Probe, error) 
 	for i, c := range more {
 		paths = append(paths, writeWorkflow(t, dir, fmt.Sprintf("more%d.yml", i), c))
 	}
-	p := &Probe{FilePath: strings.Join(paths, ","), Config: Config{Log: os.Stdout, Actions: builtinNames}}
+	p := &Probe{FilePath: strings.Join(paths, ","), Config: Config{Actions: builtinNames}}
 	return p, p.Load()
 }
 
@@ -138,7 +138,7 @@ func TestLoad_ActionNamesRefused(t *testing.T) {
 func TestLoad_ActionNamesWithoutBuiltin(t *testing.T) {
 	dir := t.TempDir()
 	path := writeWorkflow(t, dir, "workflow.yml", "name: n\nactions:\n  http: ./greet\njobs:\n- name: J\n  steps:\n  - uses: http\n")
-	p := &Probe{FilePath: path, Config: Config{Log: os.Stdout}}
+	p := &Probe{FilePath: path, Config: Config{}}
 	if err := p.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -216,12 +216,9 @@ jobs:
 // under actions, and is refused, under a guard, by the action in full.
 func TestLoad_NamesForEmbeddedJobs(t *testing.T) {
 	redis := "github.com/mozership/probe-redis@" + aliasSHA
-	p := &Probe{Config: Config{Log: os.Stdout, Actions: builtinNames}}
-	// Problems are collected, as probe check does, so that the wrong name
-	// does not end the load.
-	p.aliasProblems = &[]aliasProblem{}
+	p := &Probe{Config: Config{Actions: builtinNames}}
 	dir := t.TempDir()
-	p.FilePath = writeWorkflow(t, dir, "workflow.yml", `name: names
+	path := writeWorkflow(t, dir, "workflow.yml", `name: names
 actions:
   redis: `+redis+`
   greet: ./greet
@@ -235,8 +232,18 @@ jobs:
     with:
       path: job.yml
 `)
-	if err := p.Load(); err != nil {
+	// The problems are returned, as probe check has them, so that the
+	// wrong name does not end the load.
+	data, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
+	}
+	aliases, _, err := p.load([]string{path}, string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aliases) != 1 || aliases[0].name != "http" {
+		t.Errorf("aliases = %v, want the one of http", aliases)
 	}
 	// t.TempDir is a symbolic link on macOS, and the workflow is found by
 	// the path it was given.
@@ -436,7 +443,7 @@ jobs:
 				t.Fatal(err)
 			}
 			vars := map[string]any{"bad": bad}
-			err = p.workflow.checkEmbeddedJobs(builtinNames, vars)
+			err = checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, builtinNames, vars)
 			switch {
 			case tt.wantErr == "" && err != nil:
 				t.Errorf("err = %v, want none", err)
@@ -446,11 +453,11 @@ jobs:
 			// The vars are those it is given, which the run evaluated: with
 			// another file under the same var, that file is the one read.
 			if tt.path == "{{vars.bad}}" {
-				if err := p.workflow.checkEmbeddedJobs(builtinNames, map[string]any{"bad": good}); err != nil {
+				if err := checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, builtinNames, map[string]any{"bad": good}); err != nil {
 					t.Errorf("err = %v, want the file the vars name read", err)
 				}
 			}
-			if err := p.workflow.checkEmbeddedJobs(nil, vars); err != nil {
+			if err := checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, nil, vars); err != nil {
 				t.Errorf("err = %v, want none without the names of the actions of Probe", err)
 			}
 		})

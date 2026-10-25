@@ -1,36 +1,19 @@
 package actions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 )
-
-func TestKeepingAreBuiltin(t *testing.T) {
-	names := Names()
-	for _, name := range Keeping() {
-		if !slices.Contains(names, name) {
-			t.Errorf("%s keeps to the guard but is not a built-in action", name)
-		}
-	}
-	if !slices.IsSorted(Keeping()) {
-		t.Errorf("Keeping() = %v, want it sorted", Keeping())
-	}
-}
-
-func TestKeepingIsACopy(t *testing.T) {
-	k := Keeping()
-	k[0] = "shell"
-	if slices.Contains(Keeping(), "shell") {
-		t.Error("changing what Keeping returns should not change the actions that keep to the guard")
-	}
-}
 
 func TestKeeps(t *testing.T) {
 	names := Names()
@@ -51,8 +34,13 @@ func TestKeeps(t *testing.T) {
 			t.Errorf("%s should keep to no guard", name)
 		}
 	}
-	if want := []string{"db", "dns", "embedded", "grpc", "hello", "http"}; !slices.Equal(Keeping(), want) {
-		t.Errorf("Keeping() = %v, want %v", Keeping(), want)
+	// The others keep to every kind.
+	for _, name := range []string{"db", "dns", "embedded", "grpc", "hello", "http"} {
+		for _, k := range known {
+			if !slices.Contains(Keeps()[name], k) {
+				t.Errorf("%s should keep to %q, got %v", name, k, Keeps()[name])
+			}
+		}
 	}
 	k := Keeps()
 	k["http"][0] = "changed"
@@ -63,7 +51,7 @@ func TestKeeps(t *testing.T) {
 
 func TestParams(t *testing.T) {
 	for _, name := range Names() {
-		params, ok := Params(name)
+		params, ok := AllParams()[name]
 		if name == "hello" {
 			if ok {
 				t.Errorf("hello takes any key, want no params, got %v", params)
@@ -71,13 +59,13 @@ func TestParams(t *testing.T) {
 			continue
 		}
 		if !ok || len(params) == 0 {
-			t.Errorf("Params(%s) = %v, %v; want the keys it takes", name, params, ok)
+			t.Errorf("AllParams()[%s] = %v, %v; want the keys it takes", name, params, ok)
 		}
 	}
-	if _, ok := Params("no-such-action"); ok {
+	if _, ok := AllParams()["no-such-action"]; ok {
 		t.Error("an action that is not built in should have no params")
 	}
-	http, _ := Params("http")
+	http := AllParams()["http"]
 	for _, key := range []string{"url", "headers", "body", "get", "post", "form", "multipart", "openapi", "trace_header"} {
 		if !slices.Contains(http, key) {
 			t.Errorf("http params %v lack %s", http, key)
@@ -102,7 +90,7 @@ func TestContracts(t *testing.T) {
 		}
 	}
 	for name, keys := range got {
-		params, _ := Params(name)
+		params := AllParams()[name]
 		for _, key := range keys {
 			if !slices.Contains(params, key) {
 				t.Errorf("%s checks against a contract by %q, which is not among its params %v", name, key, params)
@@ -111,8 +99,22 @@ func TestContracts(t *testing.T) {
 	}
 }
 
+// TestNeedsNoCheck checks that the actions whose steps need no test are
+// built in, and that hello, which does nothing that could fail, is one.
+func TestNeedsNoCheck(t *testing.T) {
+	names := Names()
+	for _, name := range NeedsNoCheck() {
+		if !slices.Contains(names, name) {
+			t.Errorf("%s needs no check but is not a built-in action", name)
+		}
+	}
+	if !slices.Equal(NeedsNoCheck(), []string{"hello"}) {
+		t.Errorf("NeedsNoCheck() = %v, want [hello]", NeedsNoCheck())
+	}
+}
+
 // TestParamsCoverTheDocs checks that each key the reference page of an
-// action lists in its parameters is one Params gives, so that probe check
+// action lists in its parameters is one AllParams gives, so that probe check
 // does not refuse a key the action takes. Keys of a map nested in with,
 // which the pages list too, are left out.
 func TestParamsCoverTheDocs(t *testing.T) {
@@ -139,7 +141,7 @@ func TestParamsCoverTheDocs(t *testing.T) {
 		}
 		for _, m := range row.FindAllStringSubmatch(section, -1) {
 			if !slices.Contains(keys, m[1]) && !slices.Contains(nested[name], m[1]) {
-				t.Errorf("the %s page lists %s, which Params does not give", name, m[1])
+				t.Errorf("the %s page lists %s, which AllParams does not give", name, m[1])
 			}
 		}
 	}
@@ -155,7 +157,7 @@ func TestFieldsAndRequired(t *testing.T) {
 		if _, ok := req[name]; !ok || len(res[name]) == 0 {
 			t.Errorf("%s declares no fields of req or of res: %v, %v", name, req[name], res[name])
 		}
-		params, takesAny := Params(name)
+		params, takesAny := AllParams()[name]
 		if name == "hello" {
 			if _, ok := required[name]; ok || takesAny {
 				t.Errorf("hello needs no key of with, want none required")
@@ -280,5 +282,113 @@ func TestTypesMatchTheDocs(t *testing.T) {
 	}
 	if rows == 0 {
 		t.Error("no page gives the type of a field, so nothing was checked")
+	}
+}
+
+// Each name Names gives is served, the embedded action as well, which init
+// adds.
+func TestLookup(t *testing.T) {
+	if !slices.Contains(Names(), "embedded") {
+		t.Errorf("Names() = %v, want embedded among them", Names())
+	}
+	for _, name := range Names() {
+		if serve, ok := Lookup(name); !ok || serve == nil {
+			t.Errorf("Lookup(%s) gave no serve function", name)
+		}
+	}
+	if _, ok := Lookup("no-such-action"); ok {
+		t.Error("Lookup() found an action that is not built in")
+	}
+}
+
+// Each built-in action declares every field of its spec, an action that has
+// none of something saying so, so that one that forgets a field, such as the
+// guards it keeps to, is told apart from one that keeps to none.
+func TestSpecsDeclareEveryField(t *testing.T) {
+	for _, name := range Names() {
+		if missing := specs[name]().Undeclared(); len(missing) > 0 {
+			t.Errorf("%s leaves %v undeclared", name, missing)
+		}
+	}
+}
+
+// spoil changes each element of the lists and maps in v, a value of what the
+// registry or a spec gives, so that a test can tell whether any of them is
+// held by what gives it.
+func spoil(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			e := v.MapIndex(k)
+			if e.Kind() == reflect.String {
+				v.SetMapIndex(k, reflect.ValueOf("spoiled"))
+				continue
+			}
+			spoil(e)
+		}
+	case reflect.Slice:
+		for i := range v.Len() {
+			spoil(v.Index(i))
+		}
+	case reflect.String:
+		v.SetString("spoiled")
+	case reflect.Struct:
+		for _, field := range v.Fields() {
+			if field.Kind() != reflect.String {
+				spoil(field)
+			}
+		}
+	}
+}
+
+// specString formats s, but for its serve function, as what a test compares
+// copies none of the lists and maps of s.
+func specString(s actionspec.Spec) string {
+	s.Serve = nil
+	return fmt.Sprintf("%+v", s)
+}
+
+// What the spec of each built-in action gives is built afresh on each call,
+// so that changing it changes no later call.
+func TestSpecsAreFresh(t *testing.T) {
+	for _, name := range Names() {
+		want := specString(specs[name]())
+		got := specs[name]()
+		spoil(reflect.ValueOf(&got).Elem())
+		if again := specString(specs[name]()); again != want {
+			t.Errorf("changing the spec of %s changed what it gives next: %s, want %s", name, again, want)
+		}
+	}
+}
+
+// Each function of the registry returns what nothing else holds, so that
+// what a caller does with it changes no later call, and so what a guard
+// keeps to under --read-only and --allow-host.
+func TestRegistryReturnsCopies(t *testing.T) {
+	for name, get := range map[string]func() any{
+		"Keeps":        func() any { return Keeps() },
+		"Contracts":    func() any { return Contracts() },
+		"AllParams":    func() any { return AllParams() },
+		"AllReqFields": func() any { return AllReqFields() },
+		"AllResFields": func() any { return AllResFields() },
+		"AllReqTypes":  func() any { return AllReqTypes() },
+		"AllResTypes":  func() any { return AllResTypes() },
+		"AllRequired":  func() any { return AllRequired() },
+		"WithFields":   func() any { return WithFields() },
+		"Names":        func() any { return Names() },
+	} {
+		want := fmt.Sprint(get())
+		spoil(reflect.ValueOf(get()))
+		if got := fmt.Sprint(get()); got != want {
+			t.Errorf("changing what %s returns changed what it returns next: %v, want %v", name, got, want)
+		}
+	}
+}
+
+// WithFields gives the actions that declare their req and res hold the keys
+// of with: hello alone.
+func TestWithFields(t *testing.T) {
+	if got := WithFields(); !slices.Equal(got, []string{"hello"}) {
+		t.Errorf("WithFields() = %v, want [hello]", got)
 	}
 }

@@ -1,153 +1,149 @@
 package probe
 
 import (
-	"errors"
 	"fmt"
-	"maps"
-	"slices"
-	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/schedule"
 )
 
-// problem is what keeps a job from running as it is written. It is found as
-// the workflow is loaded, so that the run is refused before any job starts,
-// rather than when the job or the step it is in is reached.
-type problem struct {
-	// path is the key the problem is at, such as jobs[0].steps[1].test, by
-	// which probe check finds its line.
-	path string
-	// where names the job and the step it is in, such as job 0 "Login",
-	// step 1; empty when it is in neither.
-	where string
-	err   error
+// The workflow is refused for what keeps it from running at these points,
+// each in the order written here, and the first error stops it:
+//
+//   - Load: validateIDs, then validate. What validate returns as problems,
+//     probe check tells one by one and Load refuses the workflow for.
+//   - Start, in Workflow.prepare: validate, which a workflow made in code
+//     has not been through; checkAllJobs and selectJobs when the run is
+//     narrowed to some jobs; validatedScheduler; then resolveExternalActions.
+//   - Start, in workflowRun.execute, once the vars are evaluated:
+//     checkEmbeddedJobs, whose paths may read the vars.
+//   - probe dag, in Probe.loadGraph after Load: checkCycle, as there is no
+//     order to draw needs in a cycle in.
+//
+// What each of them checks is its own, and the error texts and their order
+// are what probe check and the tests pin.
+
+// validate refuses the workflow for its repeat and retry settings and for a
+// job whose ID it cannot be given, giving each job without an ID its own,
+// and returns what keeps a job from running as it is written, as problems.
+// Load and Start both go through it, in this order.
+func (w *Workflow) validate() ([]problem, error) {
+	if err := w.validateRepeatLimits(); err != nil {
+		return nil, err
+	}
+	// The result, the report order and the scheduler all index jobs by ID,
+	// so every job has one before anything keys off them. A loaded workflow
+	// has them already; one made in code is given them here. A step
+	// without an ID is left without one, so that what needs one, such as
+	// its outputs, is refused: it is read as defaultStepID where it is read
+	// by where it is written.
+	if err := w.assignJobIDs(); err != nil {
+		return nil, err
+	}
+	return w.problems(), nil
 }
 
-func (p problem) Error() string {
-	if p.where == "" {
-		return p.err.Error()
-	}
-	return p.where + ": " + p.err.Error()
-}
+// validateIDs refuses the workflow for a job ID that two jobs have, and for
+// a step ID that two steps have, in the same job or not. Load checks it
+// before validate gives the jobs without an ID theirs.
+func (w *Workflow) validateIDs() error {
+	jobIDs := make(map[string]int)           // jobID -> jobIndex
+	globalStepIDs := make(map[string]string) // stepID -> "job[index].step[index]"
 
-// problemsError joins problems into the error a run is refused with.
-func problemsError(problems []problem) error {
-	errs := make([]error, len(problems))
-	for i, p := range problems {
-		errs[i] = p
-	}
-	return NewConfigurationError("invalid_workflow", "the workflow cannot run as it is written", errors.Join(errs...))
-}
-
-// problems returns what keeps the jobs of w from running as they are
-// written, in the order they are written. The vars of the workflow are left
-// out: a var the person running it gives replaces what it writes.
-func (w *Workflow) problems() []problem {
-	var out []problem
-	for i := range w.Jobs {
-		out = append(out, w.Jobs[i].problems(fmt.Sprintf("jobs[%d]", i), jobWhere(w.Jobs, i))...)
-	}
-	return out
-}
-
-// problems returns what keeps j from running as it is written, with each
-// path under jp, the path of the job, and named after where, which names it.
-func (j *Job) problems(jp, where string) []problem {
-	var out []problem
-	if err := j.validateSteps(); err != nil {
-		out = append(out, problem{path: jp + ".steps", where: where, err: err})
-	}
-	out = append(out, templateProblems(jp+".name", where, "name", j.Name)...)
-	out = append(out, expressionProblems(jp+".skipif", where, "skipif", j.SkipIf)...)
-	if j.Repeat != nil {
-		out = append(out, expressionProblems(jp+".repeat.test", where, "repeat.test", j.Repeat.Test)...)
-		out = append(out, expressionProblems(jp+".repeat.baseline_test", where, "repeat.baseline_test", j.Repeat.BaselineTest)...)
-	}
-	for k, st := range j.Steps {
-		sp := fmt.Sprintf("%s.steps[%d]", jp, k)
-		sw := stepWhere(where, k, st)
-		// An item under steps that holds nothing is decoded as no step,
-		// which a run has nothing to run of.
-		if st == nil {
-			out = append(out, problem{path: sp, where: sw, err: errors.New("the step is empty")})
-			continue
+	for jobIdx, job := range w.Jobs {
+		// Check for duplicate job IDs
+		if job.ID != "" {
+			if existingIdx, exists := jobIDs[job.ID]; exists {
+				return NewConfigurationError("duplicate_job_id",
+					fmt.Sprintf("duplicate job ID '%s' found in job %d (already used in job %d)",
+						job.ID, jobIdx, existingIdx), nil)
+			}
+			jobIDs[job.ID] = jobIdx
 		}
-		out = append(out, templateProblems(sp+".name", sw, "name", st.Name)...)
-		out = append(out, templateProblems(sp+".with", sw, "with", st.With)...)
-		out = append(out, templateProblems(sp+".vars", sw, "vars", st.Vars)...)
-		out = append(out, templateProblems(sp+".echo", sw, "echo", st.Echo)...)
-		out = append(out, templateProblems(sp+".iteration", sw, "iteration", st.Iteration.Expr)...)
-		out = append(out, waitProblems(sp+".wait", sw, st.Wait)...)
-		out = append(out, expressionProblems(sp+".test", sw, "test", st.Test)...)
-		out = append(out, expressionProblems(sp+".skipif", sw, "skipif", st.SkipIf)...)
-		for _, key := range slices.Sorted(maps.Keys(st.Outputs)) {
-			out = append(out, expressionProblems(sp+".outputs."+key, sw, "outputs."+key, st.Outputs[key])...)
-		}
-	}
-	return out
-}
 
-// jobWhere names the job at index i of jobs.
-func jobWhere(jobs []Job, i int) string {
-	return fmt.Sprintf("job %d %q", i, jobs[i].Name)
-}
-
-// stepWhere names st, the step at index i of the job job names.
-func stepWhere(job string, i int, st *Step) string {
-	if st == nil || st.Name == "" {
-		return fmt.Sprintf("%s, step %d", job, i)
-	}
-	return fmt.Sprintf("%s, step %d %q", job, i, st.Name)
-}
-
-// expressionProblems returns the problem of input, the expression field
-// is, when it does not parse.
-func expressionProblems(path, where, field, input string) []problem {
-	if strings.TrimSpace(input) == "" {
-		return nil
-	}
-	if err := expr.Parse(input); err != nil {
-		return []problem{{path: path, where: where, err: fmt.Errorf("%s: %w", field, err)}}
-	}
-	return nil
-}
-
-// templateProblems returns the problems of the templates in v, a string or
-// a map or list of them at any depth, keys too, that do not parse.
-func templateProblems(path, where, field string, v any) []problem {
-	var out []problem
-	switch v := v.(type) {
-	case string:
-		for _, e := range expr.TemplateExprs(v) {
-			if err := expr.Parse(e); err != nil {
-				out = append(out, problem{path: path, where: where, err: fmt.Errorf("%s: template {{%s}}: %w", field, e, err)})
+		// Check for duplicate step IDs across all jobs
+		for stepIdx, step := range job.Steps {
+			if step != nil && step.ID != "" {
+				stepLocation := fmt.Sprintf("job[%d].step[%d]", jobIdx, stepIdx)
+				if existingLocation, exists := globalStepIDs[step.ID]; exists {
+					return NewConfigurationError("duplicate_step_id",
+						fmt.Sprintf("duplicate step ID '%s' found in %s (already used in %s)",
+							step.ID, stepLocation, existingLocation), nil)
+				}
+				globalStepIDs[step.ID] = stepLocation
 			}
 		}
-	case map[string]any:
-		for _, k := range slices.Sorted(maps.Keys(v)) {
-			out = append(out, templateProblems(path+"."+k, where, field+"."+k, k)...)
-			out = append(out, templateProblems(path+"."+k, where, field+"."+k, v[k])...)
-		}
-	case []any:
-		for i, e := range v {
-			out = append(out, templateProblems(fmt.Sprintf("%s[%d]", path, i), where, fmt.Sprintf("%s[%d]", field, i), e)...)
-		}
 	}
-	return out
+
+	return nil
 }
 
-// waitProblems returns the problem of wait when it is not a time to wait,
-// or when its templates do not parse. A wait a template gives is known only
-// when the step runs.
-func waitProblems(path, where, wait string) []problem {
-	if len(expr.TemplateExprs(wait)) > 0 {
-		return templateProblems(path, where, "wait", wait)
-	}
-	if wait == "" {
-		return nil
-	}
-	if _, err := parseWaitDuration(wait); err != nil {
-		return []problem{{path: path, where: where, err: fmt.Errorf("wait: %w", err)}}
+// validateRepeatLimits validates repeat count and max_attempts against configured limits
+//
+// Start checks them as well, for a workflow made in code rather than loaded,
+// since an async repeat without an interval cannot run.
+func (w *Workflow) validateRepeatLimits() error {
+	for jobIdx, job := range w.Jobs {
+		// Validate repeat configuration
+		if job.Repeat != nil {
+			if err := job.Repeat.Validate(); err != nil {
+				return NewConfigurationError("invalid_repeat",
+					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
+			}
+			if err := job.validateRepeatIDs(); err != nil {
+				return NewConfigurationError("invalid_repeat",
+					fmt.Sprintf("job %d (%s): %v", jobIdx, job.Name, err), nil)
+			}
+		}
+
+		// Validate retry configuration for each step
+		for stepIdx, step := range job.Steps {
+			if step != nil && step.Retry != nil {
+				if err := step.Retry.Validate(); err != nil {
+					return NewConfigurationError("invalid_retry",
+						fmt.Sprintf("job %d (%s), step %d: %v", jobIdx, job.Name, stepIdx, err), nil)
+				}
+			}
+		}
 	}
 	return nil
+}
+
+// checkAllJobs refuses the jobs for what a run of them all would refuse
+// them for before any runs, and a run of some of them would not see in the
+// jobs it leaves out: a need that is no job, needs in a cycle, and a uses
+// that names no action of Probe or external one. The external actions are
+// not fetched, which a run does for the jobs that run alone.
+func (w *Workflow) checkAllJobs(builtin []string) error {
+	if _, err := validatedScheduler(w.Jobs); err != nil {
+		return err
+	}
+	for i := range w.Jobs {
+		if err := checkBuiltinUses(&w.Jobs[i], builtin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validatedScheduler returns a scheduler of jobs, refusing them for a need
+// that is no job and for needs in a cycle.
+func validatedScheduler(jobs []Job) (*schedule.Scheduler, error) {
+	scheduler, err := newScheduler(jobs)
+	if err != nil {
+		return nil, err
+	}
+	if err := scheduler.Validate(); err != nil {
+		return nil, err
+	}
+	return scheduler, nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
+// that is no job is not refused.
+func (w *Workflow) checkCycle() error {
+	scheduler, err := newScheduler(w.Jobs)
+	if err != nil {
+		return err
+	}
+	return scheduler.CheckCycle()
 }

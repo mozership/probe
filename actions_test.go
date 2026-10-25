@@ -3,7 +3,6 @@ package probe
 import (
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -11,14 +10,13 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mask"
 )
 
-func TestMockActionRunner(t *testing.T) {
-	mock := NewMockActionRunner()
+func TestMockRunner(t *testing.T) {
+	mock := newMockRunner()
 
 	// Test default behavior
-	result, err := mock.RunActions("test", map[string]any{"key": "value"}, RunOptions{})
+	result, _, err := mock.Run("test", actionrpc.Call{With: map[string]any{"key": "value"}}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -36,7 +34,7 @@ func TestMockActionRunner(t *testing.T) {
 	}
 	mock.SetResult("http", customResult)
 
-	result, err = mock.RunActions("http", map[string]any{}, RunOptions{})
+	result, _, err = mock.Run("http", actionrpc.Call{}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -48,7 +46,7 @@ func TestMockActionRunner(t *testing.T) {
 	testErr := errors.New("test error")
 	mock.SetError("failing-action", testErr)
 
-	result, err = mock.RunActions("failing-action", map[string]any{}, RunOptions{})
+	result, _, err = mock.Run("failing-action", actionrpc.Call{}, RunOptions{})
 	if err != testErr {
 		t.Errorf("Expected test error, got %v", err)
 	}
@@ -66,7 +64,7 @@ func TestStepWithMockRunner(t *testing.T) {
 	}, nil)
 
 	// Set up mock runner
-	mock := NewMockActionRunner()
+	mock := newMockRunner()
 	mock.SetResult("http", map[string]any{
 		"status": 0,
 		"res": map[string]any{
@@ -75,13 +73,11 @@ func TestStepWithMockRunner(t *testing.T) {
 		},
 	})
 
-	// Set the mock runner directly on the step
-	step.actionRunner = mock
-
-	// Create minimal job context for testing
+	// Create minimal job context for testing, which runs the actions of
+	// its steps with the mock
 	jCtx := &JobContext{
 		runEnv: &runEnv{
-			Config: Config{Verbose: false},
+			Config: Config{Verbose: false, ActionRunner: mock},
 		},
 	}
 
@@ -148,111 +144,7 @@ func TestRunOptions_logLevel(t *testing.T) {
 	}
 }
 
-// Outside a verbose run an action's error records are left out of its log,
-// as the step's result tells the error, while its warnings are kept.
-func TestActionLogExcludesErrorsOutsideAVerboseRun(t *testing.T) {
-	for _, verbose := range []bool{false, true} {
-		var buf strings.Builder
-		log := newActionLog("http", &buf, nil, hclog.Warn, verbose)
-		log.Warn("the widget is old")
-		log.Error("widget failed")
-		log.Named("stdio").Error("plugin process exited")
-
-		out := buf.String()
-		if !strings.Contains(out, "the widget is old") {
-			t.Errorf("verbose=%v: the warning should be kept, got:\n%s", verbose, out)
-		}
-		for _, msg := range []string{"widget failed", "plugin process exited"} {
-			if got := strings.Contains(out, msg); got != verbose {
-				t.Errorf("verbose=%v: the log has %q = %v, want %v:\n%s", verbose, msg, got, verbose, out)
-			}
-		}
-		if log.IsError() != verbose || !log.IsWarn() || log.IsInfo() {
-			t.Errorf("verbose=%v: IsError, IsWarn, IsInfo = %v, %v, %v", verbose, log.IsError(), log.IsWarn(), log.IsInfo())
-		}
-	}
-}
-
-// An action's records read as the rest of the verbose output does: the
-// level and the action first, then the fields as YAML-like lines, maps and
-// lists laid out, with no timestamp.
-func TestActionLogFormat(t *testing.T) {
-	var buf strings.Builder
-	log := newActionLog("./my-action", &buf, nil, hclog.Debug, true)
-	log.Debug("retrying the request",
-		"attempt", 2,
-		"headers", map[string]any{"Accept": "*/*"},
-		"hosts", []any{"a", "b"},
-		"error", errors.New("timed out"))
-	log.With("job", "j").Named("stdio").Warn("slow")
-	log.Trace("left out")
-	log.Info("odd", "lonely")
-
-	want := `[DEBUG] ./my-action: retrying the request
-[DEBUG]   attempt: 2
-[DEBUG]   error: timed out
-[DEBUG]   headers:
-[DEBUG]     Accept: */*
-[DEBUG]   hosts:
-[DEBUG]     - a
-[DEBUG]     - b
-[WARN] ./my-action.stdio: slow
-[WARN]   job: j
-[INFO] ./my-action: odd
-[INFO]   EXTRA_VALUE_AT_END: lonely
-`
-	if buf.String() != want {
-		t.Errorf("log =\n%s\nwant\n%s", buf.String(), want)
-	}
-}
-
-// What the masker knows is hidden in an action's records, in the message
-// and in the fields, credentials by their names as well.
-func TestActionLogHidesSecrets(t *testing.T) {
-	m := mask.New(nil, nil)
-	m.Learn(map[string]any{"password": "hunter2-secret"})
-	var buf strings.Builder
-	log := newActionLog("db", &buf, m, hclog.Debug, true)
-	log.Debug("connecting with hunter2-secret", "dsn", "app:hunter2-secret@db", "body", "line one\nhunter2-secret\n", "password", "other")
-
-	out := buf.String()
-	for _, secret := range []string{"hunter2-secret", "other"} {
-		if strings.Contains(out, secret) {
-			t.Errorf("the log holds %q:\n%s", secret, out)
-		}
-	}
-	if !strings.Contains(out, "[DEBUG] db: connecting with") {
-		t.Errorf("the log lost the record:\n%s", out)
-	}
-}
-
-// go-plugin skips the records of an action below the level of the logger
-// it logs them through, and the runner's level decides what is shown.
-func TestActionLogLevel(t *testing.T) {
-	tests := []struct {
-		verbose, trace bool
-		want           hclog.Level
-	}{
-		{false, false, hclog.Warn},
-		{false, true, hclog.Warn},
-		{true, false, hclog.Debug},
-		{true, true, hclog.Trace},
-	}
-	for _, tt := range tests {
-		if got := actionLogLevel(tt.verbose, tt.trace); got != tt.want {
-			t.Errorf("actionLogLevel(%v, %v) = %v, want %v", tt.verbose, tt.trace, got, tt.want)
-		}
-		log := newActionLog("a", io.Discard, nil, actionLogLevel(tt.verbose, tt.trace), tt.verbose)
-		if log.Named("a").GetLevel() != tt.want {
-			t.Errorf("a named log has level %v, want %v", log.Named("a").GetLevel(), tt.want)
-		}
-	}
-	if newActionLog("a", io.Discard, nil, hclog.Off, true).IsError() {
-		t.Error("an Off log should show nothing")
-	}
-}
-
-// countingRunner is a StepActionRunner whose actions count their calls
+// countingRunner is an ActionRunner whose actions count their calls
 // in the state they keep. It records the count each call was given, or "-"
 // for no state. A call with fail fails, and one with keep leaves no state.
 type countingRunner struct {
@@ -260,12 +152,7 @@ type countingRunner struct {
 	received []string
 }
 
-func (r *countingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *countingRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *countingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -287,7 +174,7 @@ func (r *countingRunner) RunStep(name string, call actionrpc.Call, opts RunOptio
 func TestActionStateIsKeptInARunOfAJob(t *testing.T) {
 	runner := &countingRunner{}
 	step := func(uses string, with map[string]any) *Step {
-		return &Step{Name: uses, Uses: uses, With: with, actionRunner: runner}
+		return &Step{Name: uses, Uses: uses, With: with}
 	}
 
 	workflow := &Workflow{
@@ -308,7 +195,7 @@ func TestActionStateIsKeptInARunOfAJob(t *testing.T) {
 		},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// A failed call and one that leaves no state keep the state as it was,
 	// each action keeps its own, and the second run starts over.
@@ -325,7 +212,7 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 		return Job{
 			Name:  id,
 			ID:    id,
-			Steps: []*Step{{Name: "a", Uses: "counter", actionRunner: runner}, {Name: "b", Uses: "counter", actionRunner: runner}},
+			Steps: []*Step{{Name: "a", Uses: "counter"}, {Name: "b", Uses: "counter"}},
 		}
 	}
 	second := job("second")
@@ -335,7 +222,7 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 		Jobs:    []Job{job("first"), second},
 		printer: newBufferPrinter(),
 	}
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("workflow failed: %v", err)
 	}
 
@@ -345,16 +232,11 @@ func TestActionStateIsNotSharedBetweenJobs(t *testing.T) {
 	}
 }
 
-func TestMockActionRunnerCarriesState(t *testing.T) {
-	m := NewMockActionRunner()
+func TestMockRunnerCarriesState(t *testing.T) {
+	m := newMockRunner()
 	m.States["counter"] = map[string]any{"n": 1}
 
-	var r ActionRunner = m
-	sr, ok := r.(StepActionRunner)
-	if !ok {
-		t.Fatal("MockActionRunner should carry state")
-	}
-	_, state, err := sr.RunStep("counter", actionrpc.Call{State: map[string]any{"n": 0}}, RunOptions{})
+	_, state, err := m.Run("counter", actionrpc.Call{State: map[string]any{"n": 0}}, RunOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,12 +254,7 @@ type mutatingRunner struct {
 	got []any
 }
 
-func (r *mutatingRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *mutatingRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *mutatingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	list, _ := state["list"].([]any)
 	r.got = append(r.got, fmt.Sprint(list))
@@ -395,7 +272,7 @@ func (r *mutatingRunner) RunStep(name string, call actionrpc.Call, opts RunOptio
 func TestActionStateIsNotChangedByTheRunner(t *testing.T) {
 	runner := &mutatingRunner{}
 	step := func(with map[string]any) *Step {
-		return &Step{Name: "s", Uses: "mutating", With: with, actionRunner: runner}
+		return &Step{Name: "s", Uses: "mutating", With: with}
 	}
 	workflow := &Workflow{
 		Name: "state",
@@ -406,7 +283,7 @@ func TestActionStateIsNotChangedByTheRunner(t *testing.T) {
 		}},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// The failed step changed what it was given, which is not what the job
 	// keeps, and the state kept is not what the first step went on to hold.
@@ -424,12 +301,7 @@ type typedStateRunner struct {
 	got  []string
 }
 
-func (r *typedStateRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	ret, _, err := r.RunStep(name, actionrpc.Call{With: with}, opts)
-	return ret, err
-}
-
-func (r *typedStateRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *typedStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.got = append(r.got, fmt.Sprint(call.State))
 	if r.kept != nil {
 		r.kept["tags"].([]string)[0] = "changed"
@@ -442,17 +314,17 @@ func (r *typedStateRunner) RunStep(name string, call actionrpc.Call, opts RunOpt
 
 func TestActionStateOfOtherTypesIsNotChangedByTheRunner(t *testing.T) {
 	runner := &typedStateRunner{}
-	step := &Step{Name: "s", Uses: "typed", actionRunner: runner}
+	step := &Step{Name: "s", Uses: "typed"}
 	workflow := &Workflow{
 		Name: "state",
 		Jobs: []Job{{
 			Name:  "typed",
 			ID:    "typed",
-			Steps: []*Step{step, {Name: "s", Uses: "typed", actionRunner: runner}, {Name: "s", Uses: "typed", actionRunner: runner}},
+			Steps: []*Step{step, {Name: "s", Uses: "typed"}, {Name: "s", Uses: "typed"}},
 		}},
 		printer: newBufferPrinter(),
 	}
-	_ = workflow.Start(Config{})
+	_ = workflow.Start(Config{ActionRunner: runner})
 
 	// The state is given in the form the protocol carries, and keeps what
 	// was returned, not what the runner changed it to afterwards.
@@ -465,11 +337,7 @@ func TestActionStateOfOtherTypesIsNotChangedByTheRunner(t *testing.T) {
 // unsendableStateRunner leaves a state that cannot be sent.
 type unsendableStateRunner struct{}
 
-func (unsendableStateRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	return map[string]any{"status": 0}, nil
-}
-
-func (unsendableStateRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (unsendableStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	return map[string]any{"status": 0}, map[string]any{"bad": map[struct{}]int{{}: 1}}, nil
 }
 

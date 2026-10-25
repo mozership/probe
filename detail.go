@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/dump"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 )
 
@@ -15,14 +15,6 @@ import (
 // why it failed or what it echoed. They are text for the report, and hide
 // the secrets they are given a masker for in the data, before it is laid
 // out.
-
-// echoDetail formats echo output with proper indentation
-func echoDetail(content string, err error) string {
-	if err != nil {
-		content = fmt.Sprintf("error: %v", err)
-	}
-	return indentDetail(content)
-}
 
 // indentDetail indents every line of s, including those after a newline in
 // it, to the column of a step's name, where the details printed under a step
@@ -192,9 +184,10 @@ func contractDetail(m *mask.Masker, f *StepFailure) string {
 	return b.String()
 }
 
-// testErrorDetail formats the error a test could not be evaluated for.
-func testErrorDetail(err error) string {
-	return indentDetail(fmt.Sprintf("test error: %v", err))
+// testErrorDetail formats the error a test could not be evaluated for, by
+// its message.
+func testErrorDetail(message string) string {
+	return indentDetail("test error: " + message)
 }
 
 // typeMismatchText is what a test that did not evaluate to a boolean is

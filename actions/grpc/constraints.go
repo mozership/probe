@@ -7,6 +7,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
+	"github.com/mozership/probe/internal/contractcheck"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -32,23 +33,23 @@ func (c *contract) constraints(in string, msg protoreflect.Message) []any {
 		if err := c.validator.Validate(msg.Interface()); errors.As(err, &ve) {
 			for _, v := range ve.Violations {
 				p := v.Proto
-				out = append(out, violation(in,
+				out = append(out, contractcheck.Violation(in,
 					fmt.Sprintf("%s body breaks the rule %s of buf.validate", in, p.GetRuleId()),
 					p.GetMessage(),
 					fieldPath(protovalidate.FieldPathString(p.GetField()))))
 			}
 		} else if err != nil {
-			out = append(out, violation(in, fmt.Sprintf("%s body cannot be checked against buf.validate", in), err.Error(), ""))
+			out = append(out, contractcheck.Violation(in, fmt.Sprintf("%s body cannot be checked against buf.validate", in), err.Error(), ""))
 		}
 	}
 	switch in {
 	case "request":
 		out = append(out, behaviors(msg, "$", annotations.FieldBehavior_REQUIRED, false, func(f protoreflect.FieldDescriptor, path string) any {
-			return violation(in, fmt.Sprintf("request body lacks the field %s, which is REQUIRED", f.Name()), "google.api.field_behavior says a request must hold it", path)
+			return contractcheck.Violation(in, fmt.Sprintf("request body lacks the field %s, which is REQUIRED", f.Name()), "google.api.field_behavior says a request must hold it", path)
 		})...)
 	case "response":
 		out = append(out, behaviors(msg, "$", annotations.FieldBehavior_INPUT_ONLY, true, func(f protoreflect.FieldDescriptor, path string) any {
-			return violation(in, fmt.Sprintf("response body holds the field %s, which is INPUT_ONLY", f.Name()), "google.api.field_behavior says a response must not hold it", path)
+			return contractcheck.Violation(in, fmt.Sprintf("response body holds the field %s, which is INPUT_ONLY", f.Name()), "google.api.field_behavior says a response must not hold it", path)
 		})...)
 	}
 	return out
