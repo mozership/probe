@@ -1,4 +1,7 @@
-package grpc
+// Package protocoverage counts which methods of a .proto file the steps of
+// a run called, for probe coverage; the grpc action names its calls the
+// same way.
+package protocoverage
 
 import (
 	"fmt"
@@ -10,12 +13,12 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-// NewCoverage counts the steps of r that called each method the .proto
-// file at path declares, as proto.files names the file. The file is parsed
-// on its own, without its imports, as its services and methods are all
-// that is counted. A .proto file declares no statuses its methods end
-// with, so that its coverage is told by methods alone.
-func NewCoverage(path string, r *report.Report) (*oas.Coverage, error) {
+// New counts the steps of r that called each method the .proto file at
+// path declares, as the grpc action's proto.files names the file. The file
+// is parsed on its own, without its imports, as its services and methods
+// are all that is counted. A .proto file declares no statuses its methods
+// end with, so that its coverage is told by methods alone.
+func New(path string, r *report.Report) (*oas.Coverage, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read .proto file: %w", err)

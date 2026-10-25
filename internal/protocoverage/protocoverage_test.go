@@ -1,4 +1,4 @@
-package grpc
+package protocoverage
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-func TestNewCoverage(t *testing.T) {
+func TestNew(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "users.proto")
 	// The imports are not at hand: the file is parsed on its own.
@@ -35,7 +35,7 @@ service AdminService {
 		{Contract: &report.Contract{Spec: path, Operation: "users.v1.AdminService/Ban"}},
 	}}}}
 
-	cov, err := NewCoverage(path, r)
+	cov, err := New(path, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ service AdminService {
 	}
 }
 
-func TestNewCoverageErrors(t *testing.T) {
+func TestNewErrors(t *testing.T) {
 	dir := t.TempDir()
 	broken := filepath.Join(dir, "broken.proto")
 	if err := os.WriteFile(broken, []byte("service {"), 0o600); err != nil {
@@ -68,8 +68,8 @@ func TestNewCoverageErrors(t *testing.T) {
 		filepath.Join(dir, "none.proto"): "failed to read .proto file",
 		broken:                           "failed to parse .proto file",
 	} {
-		if _, err := NewCoverage(path, r); err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("NewCoverage(%s) = %v, want %q", path, err, want)
+		if _, err := New(path, r); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("New(%s) = %v, want %q", path, err, want)
 		}
 	}
 }

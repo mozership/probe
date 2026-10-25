@@ -15,9 +15,9 @@ import (
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/actions"
-	"github.com/mozership/probe/actions/grpc"
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"
+	"github.com/mozership/probe/internal/protocoverage"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/report"
 )
@@ -809,7 +809,7 @@ func (c *Cmd) runCoverage() int {
 	// OpenAPI document of the http action.
 	newCoverage := oas.NewCoverage
 	if strings.HasSuffix(c.SubCommandArgs[0], ".proto") {
-		newCoverage = grpc.NewCoverage
+		newCoverage = protocoverage.New
 	}
 	cov, err := newCoverage(c.SubCommandArgs[0], r)
 	if err != nil {
