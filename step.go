@@ -497,7 +497,8 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext, status Status
 	}
 
 	if st.Echo != "" {
-		result.EchoOutput = st.getEchoOutput()
+		result.Echo = st.evalEcho()
+		result.HasEcho = true
 	}
 
 	return result
@@ -542,10 +543,19 @@ func (st *stepRun) baseResult(name string, jCtx *JobContext) StepResult {
 	return result
 }
 
-// getEchoOutput returns the echo output as string
-func (st *stepRun) getEchoOutput() string {
+// evalEcho returns what the step's echo comes to; see echoText.
+func (st *stepRun) evalEcho() string {
 	exprOut, err := st.expr.EvalTemplate(st.Echo, st.ctx)
-	return echoDetail(exprOut, err)
+	return echoText(exprOut, err)
+}
+
+// echoText is what an echo came to: the text its template was evaluated
+// to, or why it could not be, when err is not nil.
+func echoText(content string, err error) string {
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	return content
 }
 
 func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError bool) {
@@ -577,13 +587,12 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 		failure = st.failure
 	}
 
-	// Evaluate echo before taking the lock so we can store the formatted
-	// output on the counter alongside the success/failure increment.
-	var echoRaw, echoFormatted string
+	// Evaluate echo before taking the lock so we can store what it came to
+	// on the counter alongside the success/failure increment.
+	var echoRaw string
 	var echoErr error
 	if st.Echo != "" {
 		echoRaw, echoErr = st.expr.EvalTemplate(st.Echo, st.ctx)
-		echoFormatted = echoDetail(echoRaw, echoErr)
 	}
 
 	// Update counter atomically with lock held throughout
@@ -621,7 +630,7 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	}
 
 	if st.Echo != "" {
-		counter.EchoOutputs = append(counter.EchoOutputs, echoFormatted)
+		counter.Echoes = append(counter.Echoes, echoText(echoRaw, echoErr))
 	}
 
 	// Store updated counter back to map. The step's result is made from the

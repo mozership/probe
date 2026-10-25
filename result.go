@@ -37,8 +37,9 @@ type StepRepeatCounter struct {
 	// step's result needs of the step is kept here.
 	Test        string
 	LastResult  bool
-	RepeatTotal int      // Total number of times the step should be repeated
-	EchoOutputs []string // Formatted echo output captured per iteration
+	RepeatTotal int // Total number of times the step should be repeated
+	// Echoes are what the step's echo came to in each run, as it is.
+	Echoes []string
 	// RTs is the time in seconds the action took in each run that it
 	// returned one in, whether or not the step's test held.
 	RTs []float64
@@ -66,15 +67,19 @@ type StepResult struct {
 	Index int
 	// ID is the id of the step, or step_ and where it is written in the job
 	// when it has none; see Step.repeatID.
-	ID            string
-	Name          string
-	Status        StatusType
-	StartedAt     time.Time
-	RT            string
-	RTSec         float64
-	WaitTime      string
-	TestOutput    string
-	EchoOutput    string
+	ID         string
+	Name       string
+	Status     StatusType
+	StartedAt  time.Time
+	RT         string
+	RTSec      float64
+	WaitTime   string
+	TestOutput string
+	// Echo is what the step's echo came to, as it is: the report indents
+	// and colors it. HasEcho is whether the step has an echo, which may
+	// come to nothing.
+	Echo          string
+	HasEcho       bool
 	Report        string
 	HasTest       bool
 	RetryAttempt  int                // Number of attempts made (0 = retry not performed, 1 = succeeded first try)

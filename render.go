@@ -327,12 +327,12 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 			r.writeStepRepeatResult(&output, stepResult.RepeatCounter, stepResult.HasTest)
 			r.writeStepRepeatError(&output, stepResult.RepeatCounter)
 			r.writeStepBaseline(&output, stepResult.RepeatCounter, baseline.Next(stepResult.ID))
-			for _, echo := range stepResult.RepeatCounter.EchoOutputs {
-				echo = strings.TrimRight(echo, " \n\t\r")
-				if echo == "" {
+			for _, echo := range stepResult.RepeatCounter.Echoes {
+				// A run that echoed nothing but white space is left out.
+				if strings.TrimSpace(echo) == "" {
 					continue
 				}
-				output.WriteString(colorInfo().Sprint(echo) + "\n")
+				writeEcho(&output, echo)
 			}
 		} else {
 			num := colorDim().Sprintf("%2d.", stepResult.Index)
@@ -389,17 +389,23 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 				output.WriteString(a5space + re + "\n")
 			}
 
-			if stepResult.EchoOutput != "" {
-				// NOTE:
-				// If you apply an ANSI reset code to a string that contains line breaks, the Trim methods will no longer work as expected.
-				// Therefore, remove the trailing line breaks first, then apply the color settings and finally add the line break.
-				echo := strings.TrimRight(stepResult.EchoOutput, " \n\t\r")
-				output.WriteString(colorInfo().Sprint(echo) + "\n")
+			if stepResult.HasEcho {
+				writeEcho(&output, stepResult.Echo)
 			}
 		}
 	}
 
 	return output.String()
+}
+
+// writeEcho writes what a step echoed under it, each line indented to the
+// column of its name, in the color of info.
+func writeEcho(b *strings.Builder, echo string) {
+	// An ANSI reset code after a line break would keep the Trim methods
+	// from seeing it, so the trailing white space is removed before the
+	// color is put on, and the line break is added after.
+	echo = strings.TrimRight(indentDetail(echo), " \n\t\r")
+	b.WriteString(colorInfo().Sprint(echo) + "\n")
 }
 
 // stepTitle returns how a step is named in the report and in the progress

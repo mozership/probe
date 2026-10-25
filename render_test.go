@@ -619,10 +619,10 @@ func TestReportRenderer_stepResultsText_RepeatEchoOutputs(t *testing.T) {
 			SuccessCount: 3,
 			FailureCount: 0,
 			RepeatTotal:  3,
-			EchoOutputs: []string{
-				"       iteration 1\n",
-				"       iteration 2\n",
-				"       iteration 3\n",
+			Echoes: []string{
+				"iteration 1\n",
+				"iteration 2\n",
+				"iteration 3\n",
 			},
 		},
 	}
@@ -776,7 +776,8 @@ func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
 		{"failed, with why", StepResult{Index: 2, Name: "post", Status: StatusError, TestOutput: "       res.code = 500"}, " 2. ✗  post\n       res.code = 500\n"},
 		{"untested", StepResult{Index: 3, Name: "sleep", Status: StatusWarning}, " 3. △  sleep\n"},
 		{"skipped", StepResult{Index: 4, Name: "later", Status: StatusSkipped}, " 4. ⏭  later (SKIPPED)\n"},
-		{"echoed", StepResult{Index: 5, Name: "echo", Status: StatusWarning, EchoOutput: "hello\n\n"}, " 5. △  echo\nhello\n"},
+		{"echoed", StepResult{Index: 5, Name: "echo", Status: StatusWarning, Echo: "hello\n\n", HasEcho: true}, " 5. △  echo\n       hello\n"},
+		{"echoed nothing", StepResult{Index: 5, Name: "echo", Status: StatusWarning, HasEcho: true}, " 5. △  echo\n\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -817,9 +818,9 @@ func TestReportRenderer_stepResultsText_RepeatEchoSkipsBlank(t *testing.T) {
 
 	got := r.stepResultsText("", []StepResult{{
 		Index: 1, Name: "echo", Status: StatusWarning,
-		RepeatCounter: &StepRepeatCounter{Name: "echo", SuccessCount: 3, RepeatTotal: 3, EchoOutputs: []string{"first\n", " \n\t", "third"}},
+		RepeatCounter: &StepRepeatCounter{Name: "echo", SuccessCount: 3, RepeatTotal: 3, Echoes: []string{"first\n", " \n\t", "third"}},
 	}})
-	if want := "    △  3/3 completed (no test)\nfirst\nthird\n"; !strings.HasSuffix(got, want) {
+	if want := "    △  3/3 completed (no test)\n       first\n       third\n"; !strings.HasSuffix(got, want) {
 		t.Errorf("stepResultsText() = %q, want it to end with %q", got, want)
 	}
 }
@@ -861,5 +862,67 @@ func TestReportRenderer_NilResult(t *testing.T) {
 	}
 	if got := r.stepsText(nil); got != "" {
 		t.Errorf("stepsText(nil) = %q, want nothing", got)
+	}
+}
+
+// What a step echoed is written under it, each line indented to the column
+// of its name; an echo that could not be evaluated, by its error.
+func TestWriteEcho(t *testing.T) {
+	// Disable color output for consistent testing
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	tests := []struct {
+		name     string
+		content  string
+		err      error
+		expected string
+	}{
+		{
+			name:     "single line content",
+			content:  "Hello World",
+			err:      nil,
+			expected: "       Hello World\n",
+		},
+		{
+			name:     "multi-line content with explicit newlines",
+			content:  "Line 1\nLine 2\nLine 3",
+			err:      nil,
+			expected: "       Line 1\n       Line 2\n       Line 3\n",
+		},
+		{
+			name:     "complex multiline with indentation",
+			content:  "Header\n  Indented\n    More indented\nBack to left",
+			err:      nil,
+			expected: "       Header\n         Indented\n           More indented\n       Back to left\n",
+		},
+		{
+			name:     "empty line handling",
+			content:  "Line 1\n\nLine 3",
+			err:      nil,
+			expected: "       Line 1\n       \n       Line 3\n",
+		},
+		{
+			name:     "error case",
+			content:  "",
+			err:      fmt.Errorf("template error"),
+			expected: "       error: template error\n",
+		},
+		{
+			name:     "empty content",
+			content:  "",
+			err:      nil,
+			expected: "\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			writeEcho(&b, echoText(tt.content, tt.err))
+			if got := b.String(); got != tt.expected {
+				t.Errorf("writeEcho() = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }

@@ -121,7 +121,8 @@ func buildStepReport(sr StepResult) report.Step {
 			step.Status = report.Untested
 		}
 	} else {
-		step.Echo = unindentEcho(sr.EchoOutput)
+		// The report files hold the echo without the white space around it.
+		step.Echo = strings.TrimSpace(sr.Echo)
 	}
 
 	step.Contract = sr.Contract
@@ -137,15 +138,6 @@ func buildStepReport(sr StepResult) report.Step {
 	}
 
 	return step
-}
-
-// unindentEcho strips the indentation the terminal report puts on echo lines.
-func unindentEcho(s string) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimPrefix(line, "       ")
-	}
-	return strings.Join(lines, "\n")
 }
 
 // jsonSafeMap returns m unchanged when it encodes as JSON, and otherwise a

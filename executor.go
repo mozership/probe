@@ -245,7 +245,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter 
 // counted, the warmup runs and whether the job is tested over its runs.
 //
 // The copy is shallow: its fields can be set apart from the stored counter,
-// but its Failure, Contract, RTs and EchoOutputs are the stored counter's,
+// but its Failure, Contract, RTs and Echoes are the stored counter's,
 // so what they point to is not to be changed through it.
 func (r *jobRepeat) snapshotCounters() []StepRepeatCounter {
 	r.mu.Lock()

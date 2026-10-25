@@ -534,8 +534,8 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 	if result.RTSec != 0.25 {
 		t.Errorf("RTSec = %v, want %v", result.RTSec, 0.25)
 	}
-	if !strings.Contains(result.EchoOutput, "Hello World") {
-		t.Errorf("EchoOutput = %q, want the echo", result.EchoOutput)
+	if result.Echo != "Hello World" || !result.HasEcho {
+		t.Errorf("Echo = %q (HasEcho %v), want the echo as it is", result.Echo, result.HasEcho)
 	}
 	if result.RepeatCounter != nil {
 		t.Errorf("RepeatCounter = %v, want nil", result.RepeatCounter)
@@ -1298,12 +1298,7 @@ func TestSleepWithMessage(t *testing.T) {
 	}
 }
 
-func TestStep_getEchoOutput(t *testing.T) {
-	// Enable color output for testing
-	originalNoColor := color.NoColor
-	color.NoColor = false
-	defer func() { color.NoColor = originalNoColor }()
-
+func TestStep_evalEcho(t *testing.T) {
 	tests := []struct {
 		name        string
 		echo        string
@@ -1315,42 +1310,42 @@ func TestStep_getEchoOutput(t *testing.T) {
 			name:        "single line echo",
 			echo:        "Hello World",
 			context:     StepContext{},
-			expected:    "       Hello World\n",
+			expected:    "Hello World",
 			expectError: false,
 		},
 		{
 			name:        "multi-line echo with explicit newlines",
 			echo:        "Line 1\nLine 2\nLine 3",
 			context:     StepContext{},
-			expected:    "       Line 1\n       Line 2\n       Line 3\n",
+			expected:    "Line 1\nLine 2\nLine 3",
 			expectError: false,
 		},
 		{
 			name:        "complex multiline with indentation",
 			echo:        "Header\n  Indented\n    More indented\nBack to left",
 			context:     StepContext{},
-			expected:    "       Header\n         Indented\n           More indented\n       Back to left\n",
+			expected:    "Header\n  Indented\n    More indented\nBack to left",
 			expectError: false,
 		},
 		{
 			name:        "empty line handling",
 			echo:        "Line 1\n\nLine 3",
 			context:     StepContext{},
-			expected:    "       Line 1\n       \n       Line 3\n",
+			expected:    "Line 1\n\nLine 3",
 			expectError: false,
 		},
 		{
 			name:        "template expression",
 			echo:        "Status: {{vars.status}}",
 			context:     StepContext{Vars: map[string]any{"status": "OK"}},
-			expected:    "       Status: OK\n",
+			expected:    "Status: OK",
 			expectError: false,
 		},
 		{
 			name:        "multiline template expression",
 			echo:        "Status: {{vars.status}}\nCode: {{vars.code}}",
 			context:     StepContext{Vars: map[string]any{"status": "OK", "code": "200"}},
-			expected:    "       Status: OK\n       Code: 200\n",
+			expected:    "Status: OK\nCode: 200",
 			expectError: false,
 		},
 	}
@@ -1365,16 +1360,16 @@ func TestStep_getEchoOutput(t *testing.T) {
 				expr: &expr.Expr{},
 			}
 
-			result := step.getEchoOutput()
+			result := step.evalEcho()
 
 			if result != tt.expected {
-				t.Errorf("getEchoOutput() = %q, want %q", result, tt.expected)
+				t.Errorf("evalEcho() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestStep_getEchoOutput_Error(t *testing.T) {
+func TestStep_evalEcho_Error(t *testing.T) {
 	step := &stepRun{
 		Step: &Step{
 			Echo: "{{invalid_expression + }}", // Invalid syntax that will cause template error
@@ -1383,19 +1378,11 @@ func TestStep_getEchoOutput_Error(t *testing.T) {
 		expr: &expr.Expr{},
 	}
 
-	result := step.getEchoOutput()
+	result := step.evalEcho()
 
-	// Should contain error indication when template evaluation fails
-	if !strings.Contains(result, "error: {{invalid_expression + }}: ") {
-		t.Errorf("getEchoOutput() with invalid expression should return error message, got %q", result)
-	}
-
-	// Verify indentation is applied even to error messages
-	lines := strings.SplitSeq(strings.TrimSuffix(result, "\n"), "\n")
-	for line := range lines {
-		if !strings.HasPrefix(line, "       ") {
-			t.Errorf("getEchoOutput() should indent all lines including errors, line without indent: %q", line)
-		}
+	// An echo that cannot be evaluated comes to its error.
+	if !strings.HasPrefix(result, "error: {{invalid_expression + }}: ") {
+		t.Errorf("evalEcho() with invalid expression should return error message, got %q", result)
 	}
 }
 
@@ -1792,7 +1779,7 @@ func TestStep_DefaultStepTimeout_Value(t *testing.T) {
 	}
 }
 
-func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
+func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 	step := &stepRun{
 		Step: &Step{
 			Echo: "iteration {{vars.i}}",
@@ -1827,13 +1814,12 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 	if !ok {
 		t.Fatal("StepCounters[1] missing")
 	}
-	if got := len(counter.EchoOutputs); got != 3 {
-		t.Fatalf("EchoOutputs length = %d, want 3", got)
+	if got := len(counter.Echoes); got != 3 {
+		t.Fatalf("Echoes length = %d, want 3", got)
 	}
-	for i, out := range counter.EchoOutputs {
-		want := fmt.Sprintf("iteration %d", i+1)
-		if !strings.Contains(out, want) {
-			t.Errorf("EchoOutputs[%d] = %q, want to contain %q", i, out, want)
+	for i, out := range counter.Echoes {
+		if want := fmt.Sprintf("iteration %d", i+1); out != want {
+			t.Errorf("Echoes[%d] = %q, want %q", i, out, want)
 		}
 	}
 
@@ -1849,14 +1835,14 @@ func TestStep_handleRepeatExecution_AccumulatesEchoOutputs(t *testing.T) {
 	if len(stepResults) != 1 {
 		t.Fatalf("StepResults length = %d, want 1", len(stepResults))
 	}
-	if stepResults[0].EchoOutput != "" {
-		t.Errorf("StepResult.EchoOutput should be empty for repeat steps, got %q", stepResults[0].EchoOutput)
+	if stepResults[0].Echo != "" || stepResults[0].HasEcho {
+		t.Errorf("StepResult.Echo should be empty for repeat steps, got %q", stepResults[0].Echo)
 	}
 	if stepResults[0].RepeatCounter == nil {
 		t.Fatal("StepResult.RepeatCounter is nil")
 	}
-	if got := len(stepResults[0].RepeatCounter.EchoOutputs); got != 3 {
-		t.Errorf("StepResult.RepeatCounter.EchoOutputs length = %d, want 3", got)
+	if got := len(stepResults[0].RepeatCounter.Echoes); got != 3 {
+		t.Errorf("StepResult.RepeatCounter.Echoes length = %d, want 3", got)
 	}
 }
 

@@ -30,7 +30,7 @@ func newReportResult() (*Result, []string) {
 		StartTime: start,
 		EndTime:   start.Add(1500 * time.Millisecond),
 		StepResults: []StepResult{
-			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, EchoOutput: "       line 1\n       line 2\n"},
+			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, Echo: "line 1\nline 2\n", HasEcho: true},
 			{Index: 1, Name: "Create", Status: StatusError, Test: "res.code == 201", Elapsed: 80 * time.Millisecond,
 				RetryAttempt: 3, RetryMax: 3,
 				Failure: &StepFailure{
@@ -104,7 +104,7 @@ func TestBuildReport(t *testing.T) {
 
 	steps := r.Jobs[0].Steps
 	if steps[0].Echo != "line 1\nline 2" {
-		t.Errorf("echo = %q, want the terminal indentation removed", steps[0].Echo)
+		t.Errorf("echo = %q, want it without the white space around it", steps[0].Echo)
 	}
 	if steps[0].DurationMs != 120 {
 		t.Errorf("DurationMs = %d, want 120", steps[0].DurationMs)
