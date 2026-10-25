@@ -173,6 +173,9 @@ func repeatShapes(job Job) map[string]expr.Shape {
 	steps := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	baseline := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	for j, st := range job.Steps {
+		if st == nil {
+			continue
+		}
 		id := st.ID
 		if id == "" {
 			id = defaultStepID(j)

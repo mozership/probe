@@ -516,6 +516,9 @@ func (c *checker) defaultsPath(jp, action string) string {
 func (c *checker) checkActions() {
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			path := fmt.Sprintf("jobs[%d].steps[%d].uses", i, j)
 			if actionref.IsExternal(st.Uses) {
 				if _, err := actionref.Parse(st.Uses); err != nil {
@@ -553,6 +556,9 @@ func (c *checker) checkEmbedded() {
 	}
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			line := c.line(fmt.Sprintf("jobs[%d].steps[%d].with.path", i, j))
 			eachEmbeddedStep(st, map[string]bool{}, func(file string, k int, es *Step) {
 				uses := es.Uses
@@ -619,6 +625,9 @@ func (c *checker) checkWith() {
 		c.checkDefaults(job.Defaults, jp, c.jobWhere(i))
 		defaults, _ := job.Defaults.(map[string]any)
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			sp := fmt.Sprintf("%s.steps[%d].with", jp, j)
 			// A key the step's with lacks comes from the defaults of its
 			// job or of the workflow, where it is checked. A key the step
@@ -702,6 +711,9 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 func (c *checker) checkRequired() {
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			groups := c.opts.Required[st.Uses]
 			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate) {
 				continue
@@ -829,6 +841,9 @@ func (c *checker) checkOutputs() {
 	byKey := map[string][]publisher{}
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			p := publisher{job: i, step: j, id: st.ID, keys: slices.Sorted(maps.Keys(st.Outputs))}
 			if len(p.keys) > 0 && st.ID != "" {
 				byID[st.ID] = append(byID[st.ID], p)
@@ -962,6 +977,9 @@ func (c *checker) eachExpr(f func(exprAt)) {
 		e.input = job.SkipIf
 		f(e)
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			sp := fmt.Sprintf("%s.steps[%d]", jp, j)
 			field := func(key string, late bool) exprAt {
 				return exprAt{path: sp + "." + key, where: c.stepWhere(i, j), field: key, job: i, step: j, late: late}
@@ -1383,6 +1401,9 @@ func (c *checker) checkTests() {
 			tested = repeatReads(job.Repeat.Test, job.Repeat.BaselineTest)
 		}
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
 			id := st.ID
 			if id == "" {
@@ -1435,6 +1456,9 @@ func (c *checker) checkRepeatTests() {
 		}
 		ids := make([]string, 0, len(job.Steps))
 		for j, st := range job.Steps {
+			if st == nil {
+				continue
+			}
 			id := st.ID
 			if id == "" {
 				id = defaultStepID(j)
