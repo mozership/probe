@@ -148,9 +148,7 @@ func (c *checker) keys(n ast.Node, path, where string, allowed []string, each fu
 				continue
 			}
 			msg := fmt.Sprintf("unknown key %q", key)
-			if s := suggest.Closest(key, allowed); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
-			}
+			msg += suggest.Hint(key, allowed)
 			c.add(SeverityError, line, where, "%s", msg)
 			continue
 		}

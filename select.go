@@ -157,8 +157,8 @@ func findJob(jobs []Job, byID map[string]int, name string) (int, error) {
 			known = append(known, j.ID, j.Name)
 		}
 		msg := fmt.Sprintf("no job has the id or name %q", name)
-		if s := suggest.Closest(name, known); s != "" {
-			msg += fmt.Sprintf("; did you mean %q?", s)
+		if hint := suggest.Hint(name, known); hint != "" {
+			msg += hint
 		} else if slices.ContainsFunc(jobs, func(j Job) bool { return expr.HasTemplate(j.Name) }) {
 			// The vars are not evaluated yet, and a name may read more.
 			msg += "; a job whose name has a template is selected by its id"

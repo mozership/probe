@@ -79,8 +79,8 @@ func (c *checker) checkNames() {
 			msg := fmt.Sprintf("vars.%s is not defined by the workflow, so it is nil unless --var gives it", chain[0])
 			if slices.Contains(later, chain[0]) {
 				msg = fmt.Sprintf("vars.%s is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it", chain[0])
-			} else if s := suggest.Closest(chain[0], vars); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
+			} else {
+				msg += suggest.Hint(chain[0], vars)
 			}
 			add(SeverityWarning, "%s", msg)
 		}
@@ -217,8 +217,8 @@ func nameHint(name string, names []string) string {
 	switch {
 	case expr.NameFor(name) != "":
 		return fmt.Sprintf("; did you mean %s?", expr.NameFor(name))
-	case suggest.Closest(name, names) != "":
-		return fmt.Sprintf("; did you mean %q?", suggest.Closest(name, names))
+	case suggest.Hint(name, names) != "":
+		return suggest.Hint(name, names)
 	case step && name == "steps":
 		return "; what an earlier step publishes is read under outputs"
 	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":

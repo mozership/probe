@@ -150,9 +150,7 @@ func (c *checker) outputRead(chain []string, byID, byKey map[string][]publisher,
 	pubs := byKey[chain[0]]
 	if len(pubs) == 0 {
 		msg := "is not published by any step"
-		if s := suggest.Closest(chain[0], publishedNames(byID, byKey)); s != "" {
-			msg += fmt.Sprintf("; did you mean %q?", s)
-		}
+		msg += suggest.Hint(chain[0], publishedNames(byID, byKey))
 		return msg, SeverityError
 	}
 	return c.ordered(pubs, needs, i, j, late)
