@@ -8,9 +8,9 @@ import (
 	"github.com/mozership/probe/expr"
 )
 
-// checkAliases tells what is wrong with the names the workflow's actions
-// give, each on its line.
-func (c *checker) checkAliases(problems []aliasProblem) {
+// reportAliasProblems tells what is wrong with the names the workflow's
+// actions give, each on its line.
+func (c *checker) reportAliasProblems(problems []aliasProblem) {
 	for _, p := range problems {
 		if p.name != "" {
 			c.add(SeverityError, c.line("actions."+p.name), "", "%s", firstLine(p.msg))
@@ -24,22 +24,22 @@ func (c *checker) checkAliases(problems []aliasProblem) {
 	}
 }
 
-// checkProblems tells what keeps the jobs from running as they are written,
-// which a run is refused for as the workflow is loaded, and the templates of
-// the workflow's vars that do not parse.
-func (c *checker) checkProblems(problems []problem) {
+// reportLoadProblems tells what keeps the jobs from running as they are
+// written, which a run is refused for as the workflow is loaded, and the
+// templates of the workflow's vars that do not parse.
+func (c *checker) reportLoadProblems(problems []problem) {
 	for _, p := range templateProblems("vars", "", "vars", c.wf.Vars) {
-		c.addProblem(p)
+		c.reportProblem(p)
 	}
 	for _, p := range problems {
-		c.addProblem(p)
+		c.reportProblem(p)
 	}
 }
 
-// addProblem tells p by the first line of its error, which says where in
+// reportProblem tells p by the first line of its error, which says where in
 // the expression it is, and how the expression is likely meant to be
 // written where it is written as another language would write it.
-func (c *checker) addProblem(p problem) {
+func (c *checker) reportProblem(p problem) {
 	msg := firstLine(p.err.Error())
 	if h, ok := errors.AsType[*expr.HintError](p.err); ok {
 		msg += "; " + strings.Join(h.Hints, "; ")

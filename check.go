@@ -167,13 +167,13 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 		return c.sorted(), nil
 	}
 	c.wf = &p.workflow
-	c.checkAliases(aliases)
+	c.reportAliasProblems(aliases)
 	c.checkActions()
 	c.checkEmbedded()
 	c.checkWith()
 	c.checkRequired()
 	c.checkNeeds()
-	c.checkProblems(problems)
+	c.reportLoadProblems(problems)
 	c.checkOutputs()
 	c.checkNames()
 	c.checkResults()
