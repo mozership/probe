@@ -3,8 +3,17 @@ package probe
 import (
 	"sync"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/procgroup"
 )
+
+// newBackground returns the tracker of the processes a run's steps leave in
+// the background. Its Stop waits for a step that timed out as long as its
+// action can take to return, so that a process the action reports late is
+// stopped with the others.
+func newBackground() *procgroup.Tracker {
+	return procgroup.NewTracker(actionrpc.ExitWait)
+}
 
 // ResponseTime provides response time information for expressions
 type ResponseTime struct {

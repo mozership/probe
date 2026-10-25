@@ -18,7 +18,6 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
 )
 
@@ -2108,7 +2107,7 @@ func TestStepTracksTheProcessesAnActionLeaves(t *testing.T) {
 			runner := &lateBackgroundRunner{t: t, err: err, pid: make(chan int, 1)}
 			jCtx := &JobContext{
 				runEnv: &runEnv{
-					background: procgroup.NewTracker(),
+					background: newBackground(),
 				},
 			}
 
@@ -2137,7 +2136,7 @@ func TestStepTimeoutStillTracksBackground(t *testing.T) {
 	runner := &lateBackgroundRunner{t: t, delay: 300 * time.Millisecond, pid: make(chan int, 1)}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
-			background: procgroup.NewTracker(),
+			background: newBackground(),
 		},
 	}
 

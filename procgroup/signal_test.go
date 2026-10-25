@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 // and prints the group's pid once it is ready for the signal. It returns
 // only if no signal ends it in time.
 func runSignalChild(log string) int {
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	end := tr.StopOnSignal()
 
 	c := exec.Command("/bin/sh", "-c", "sleep 60 & wait")
@@ -59,6 +59,9 @@ func TestStopOnSignal(t *testing.T) {
 	child := exec.Command(os.Args[0])
 	child.Env = append(os.Environ(), signalChildEnv+"="+log)
 	child.Stderr = os.Stderr
+	// The child leads a process group, as probe does in the foreground of a
+	// terminal, so that the signal can go to the whole group as Ctrl-C does.
+	child.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	out, err := child.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -89,11 +92,12 @@ func TestStopOnSignal(t *testing.T) {
 		t.Fatalf("process group %d is gone before the signal", pid)
 	}
 
-	if err := child.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := syscall.Kill(-child.Process.Pid, syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	// The group is in a session of its own, so the signal reaches only the
-	// child, which stops the group within the grace before it ends.
+	// The tracked group is in a session of its own, so the signal sent to
+	// the child's group does not reach it. Only the child's Stop does,
+	// within the grace, before the child ends.
 	select {
 	case err = <-exited:
 	case <-time.After(time.Minute):
@@ -120,7 +124,7 @@ func TestStopOnSignalEnd(t *testing.T) {
 	// Without a signal, ending the watch returns at once and leaves the
 	// processes to the Stop that follows it.
 	pid := startGroup(t, "sleep 60")
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Track(pid, "")
 
 	end := tr.StopOnSignal()

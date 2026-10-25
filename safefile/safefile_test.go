@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -239,8 +240,8 @@ func TestReplace_OutsideUnderAFile(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Replace(filepath.Join(file, "report.json"), writeText("report")); err == nil {
-		t.Error("Replace under a file succeeded")
+	if err := Replace(filepath.Join(file, "report.json"), writeText("report")); !errors.Is(err, syscall.ENOTDIR) {
+		t.Errorf("error = %v, want ENOTDIR for the directory under a file", err)
 	}
 }
 
@@ -290,8 +291,8 @@ func TestOpenForAppend_Errors(t *testing.T) {
 			if err := os.Mkdir("dir", 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := OpenForAppend("dir", confine); err == nil {
-				t.Error("a directory was opened to append to")
+			if _, _, err := OpenForAppend("dir", confine); !errors.Is(err, syscall.EISDIR) {
+				t.Errorf("error = %v, want EISDIR for a directory", err)
 			}
 
 			// The directory of a path outside the working directory cannot
@@ -300,8 +301,8 @@ func TestOpenForAppend_Errors(t *testing.T) {
 			if err := os.WriteFile(file, nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := OpenForAppend(filepath.Join(file, "summary.md"), confine); err == nil {
-				t.Error("a file under a file was opened to append to")
+			if _, _, err := OpenForAppend(filepath.Join(file, "summary.md"), confine); !errors.Is(err, syscall.ENOTDIR) {
+				t.Errorf("error = %v, want ENOTDIR for the directory under a file", err)
 			}
 		})
 	}

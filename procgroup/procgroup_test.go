@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// pendingWait is how long the trackers of these tests wait for a pending
+// action, long enough for one on a loaded machine.
+const pendingWait = 30 * time.Second
+
 // startGroup starts cmd in a process group of its own, as the shell action
 // does for a background step, and returns its pid.
 func startGroup(t *testing.T, cmd string) int {
@@ -59,7 +63,7 @@ func TestTrackerStop(t *testing.T) {
 	// have to go.
 	pid := startGroup(t, "sleep 60 & wait")
 
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Track(pid, log)
 	tr.Stop()
 
@@ -94,7 +98,7 @@ func TestTrackerStopIgnoringTerm(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Track(pid, "")
 
 	start := time.Now()
@@ -116,7 +120,7 @@ func TestTrackerStopExited(t *testing.T) {
 		t.Fatalf("process group %d did not exit", pid)
 	}
 
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Track(pid, "")
 
 	start := time.Now()
@@ -156,7 +160,7 @@ func TestTrackerStopReusedPid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.procs = []proc{{pid: pid, started: started + 1}}
 	tr.Stop()
 
@@ -180,7 +184,7 @@ func TestTrackerStopLeaderGone(t *testing.T) {
 		t.Fatalf("process group %d is gone before the test", pid)
 	}
 
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Track(pid, "")
 	tr.Stop()
 
@@ -192,7 +196,7 @@ func TestTrackerStopLeaderGone(t *testing.T) {
 func TestTrackerTrackAfterStop(t *testing.T) {
 	// A step that timed out can report its process after the workflow has
 	// stopped the others; it is stopped right away.
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	tr.Stop()
 
 	pid := startGroup(t, "sleep 60")
@@ -209,7 +213,7 @@ func TestTrackerTrackAfterStop(t *testing.T) {
 func TestTrackerStopWaitsForPending(t *testing.T) {
 	// An action still running when the workflow ends gets a moment to report
 	// the process it started.
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	done := tr.Begin()
 	pid := startGroup(t, "sleep 60")
 	go func() {
@@ -225,11 +229,33 @@ func TestTrackerStopWaitsForPending(t *testing.T) {
 	}
 }
 
+func TestTrackerStopPendingWaitBounded(t *testing.T) {
+	// An action that never returns holds Stop up only for the wait the
+	// tracker was given, and a process it reports after that is stopped at
+	// once.
+	wait := 300 * time.Millisecond
+	tr := NewTracker(wait)
+	done := tr.Begin()
+	defer done()
+
+	start := time.Now()
+	tr.Stop()
+	if elapsed := time.Since(start); elapsed < wait || elapsed >= pendingWait {
+		t.Errorf("stop took %v, want the %v wait for the pending action and no more than %v", elapsed, wait, pendingWait)
+	}
+
+	pid := startGroup(t, "sleep 60")
+	tr.Track(pid, "")
+	if !waitGroupGone(pid) {
+		t.Errorf("process group %d reported after the wait is still running", pid)
+	}
+}
+
 func TestTrackerAfterStop(t *testing.T) {
 	// What is to be undone along with the processes is undone once they are
 	// gone, in the order it was given, and again by a second stop, such as
 	// the one at the end of a workflow a signal already stopped.
-	tr := NewTracker()
+	tr := NewTracker(pendingWait)
 	pid := startGroup(t, "sleep 60")
 	tr.Track(pid, "")
 

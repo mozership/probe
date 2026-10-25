@@ -14,12 +14,6 @@ import (
 // cleanupTimeout is how long an action is given to clean up after a run.
 const cleanupTimeout = 30 * time.Second
 
-// runningActionWait bounds how long run waits for the actions still running
-// to return, so that what they leave is cleaned up too. One whose step timed
-// out is being stopped, and returns once it has exited on SIGTERM within
-// actionrpc.TermGrace, or a second after that, once it is given up on.
-const runningActionWait = actionrpc.TermGrace + time.Second
-
 // cleanups holds the external actions to call once a run is over, for each
 // to remove what its steps left behind: those whose action.yml sets cleanup
 // and that a step ran. An action is called once however many steps ran it.
@@ -150,7 +144,9 @@ func (c *cleanups) run() {
 	if c == nil {
 		return
 	}
-	deadline := time.Now().Add(runningActionWait)
+	// An action whose step timed out is still being stopped, and returns
+	// within ExitWait.
+	deadline := time.Now().Add(actionrpc.ExitWait)
 	for c.runningCount() > 0 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}

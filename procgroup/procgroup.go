@@ -14,12 +14,6 @@ import (
 // SIGTERM before it is killed.
 const TermGrace = 3 * time.Second
 
-// pendingWait bounds how long Stop waits for the actions still running to
-// report the processes they started. One whose step timed out is being
-// stopped, and returns once it has exited on SIGTERM or been killed, which
-// the action runner sees to within its own grace and a second more.
-const pendingWait = 3 * time.Second
-
 // proc is a process a step left running, along with the file its output goes
 // to.
 type proc struct {
@@ -42,6 +36,8 @@ type Tracker struct {
 	// pending counts actions still running. One can start a process
 	// even after its step timed out, so stop gives them a moment to report.
 	pending int
+	// pendingWait bounds how long Stop waits for those actions to report.
+	pendingWait time.Duration
 	// stopped is set once Stop has run; a process reported after that is
 	// stopped as soon as it is.
 	stopped bool
@@ -52,9 +48,10 @@ type Tracker struct {
 	afterStop []func()
 }
 
-// NewTracker returns a Tracker with nothing recorded.
-func NewTracker() *Tracker {
-	return &Tracker{}
+// NewTracker returns a Tracker with nothing recorded, whose Stop waits up
+// to pendingWait for the actions that Begin was called for to report.
+func NewTracker(pendingWait time.Duration) *Tracker {
+	return &Tracker{pendingWait: pendingWait}
 }
 
 // Begin is called before an action that can start a background process runs,
@@ -155,7 +152,7 @@ func (t *Tracker) Stop() {
 	t.stopping.Lock()
 	defer t.stopping.Unlock()
 
-	deadline := time.Now().Add(pendingWait)
+	deadline := time.Now().Add(t.pendingWait)
 	for t.pendingCount() > 0 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}

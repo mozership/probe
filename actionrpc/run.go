@@ -33,6 +33,13 @@ func Run(name string, with map[string]any, log hclog.Logger) (map[string]any, er
 // on SIGTERM before it is killed.
 const TermGrace = 2 * time.Second
 
+// ExitWait is how long, at most, a step call that is given up on takes to
+// return once its context is done: TermGrace for the action to exit on
+// SIGTERM or be killed, and a second more for awaitExit to see it gone.
+// That relies on command setting WaitDelay to TermGrace, so the process is
+// already dead when Kill runs and its own graceful wait does not apply.
+const ExitWait = TermGrace + time.Second
+
 // RunStep is Run for a step: the action is told about the step and given the
 // state it left in the job, and the state it leaves is returned, which is nil
 // when it keeps none.
@@ -363,9 +370,9 @@ func (o *stderrOutput) reason() string {
 
 // awaitExit waits for the process that serves an action to exit, as one sent
 // SIGTERM by command does, by TermGrace or by being killed then. It gives up
-// a little later, for Kill to see to the process.
+// at ExitWait, a little later, for Kill to see to the process.
 func awaitExit(cl *plugin.Client) {
-	deadline := time.Now().Add(TermGrace + time.Second)
+	deadline := time.Now().Add(ExitWait)
 	for !cl.Exited() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
