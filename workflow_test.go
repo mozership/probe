@@ -19,6 +19,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/textwidth"
 	"github.com/mozership/probe/mask"
 )
 
@@ -1148,7 +1149,7 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 		// The step's icon comes after the label and its padding.
 		end := strings.Index(line, "]") + 1
 		pad := len(line[end:]) - len(strings.TrimLeft(line[end:], " "))
-		at := displayWidth(line[:end+pad])
+		at := textwidth.Width(line[:end+pad])
 		if column >= 0 && at != column {
 			t.Errorf("steps should line up, got:\n%s", progress)
 			break

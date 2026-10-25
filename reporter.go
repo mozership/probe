@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 // OutputMode selects how a workflow run delivers its report.
@@ -174,7 +175,7 @@ func (r *StreamReporter) labelJobs(name func(id string) string) {
 	})
 	w := 0
 	for _, l := range labels {
-		w = max(w, displayWidth(l))
+		w = max(w, textwidth.Width(l))
 	}
 
 	r.mu.Lock()
@@ -308,7 +309,7 @@ func (r *StreamReporter) progress(jobID, icon, text, suffix string) {
 		label = jobID
 	}
 	job := colorDim().Sprintf("[%s]", label)
-	if pad := r.labelWidth - displayWidth(label); pad > 0 {
+	if pad := r.labelWidth - textwidth.Width(label); pad > 0 {
 		job += strings.Repeat(" ", pad)
 	}
 	r.printer.Fprintf(r.printer.errWriter, "%s %s %s %s%s\n", ts, job, icon, text, suffix)

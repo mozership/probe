@@ -167,10 +167,7 @@ func (j *Job) validateRepeatIDs() error {
 		if st == nil {
 			continue
 		}
-		id := st.ID
-		if id == "" {
-			id = defaultStepID(i)
-		}
+		id := st.idAt(i)
 		if k, ok := seen[id]; ok {
 			return fmt.Errorf("steps %d and %d are both read as steps.%s by the tests over the runs; give one of them another id", k, i, id)
 		}

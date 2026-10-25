@@ -3,9 +3,11 @@ package probe
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,6 +27,44 @@ func selectionJobs() []Job {
 		{ID: "notify", Name: "Notify", Needs: []string{"cleanup"}, Always: true},
 		{ID: "lint_cleanup", Name: "Lint cleanup", Needs: []string{"lint"}, Always: true},
 		{ID: "job_7", Name: "Tests"},
+	}
+}
+
+// TestNeededJobs follows needs however far down, from one job or several,
+// leaving out a need that is no job's, and coming back to a job of from
+// only through a cycle.
+func TestNeededJobs(t *testing.T) {
+	jobs := []Job{
+		{ID: "a"},
+		{ID: "b", Needs: []string{"a"}},
+		{ID: "c", Needs: []string{"b", "missing"}},
+		{ID: "d", Needs: []string{"a"}},
+		{ID: "e", Needs: []string{"f"}},
+		{ID: "f", Needs: []string{"e"}},
+	}
+	byID := map[string]int{}
+	for i, j := range jobs {
+		byID[j.ID] = i
+	}
+	tests := []struct {
+		name string
+		from []int
+		want []int
+	}{
+		{"a job that needs none", []int{0}, nil},
+		{"one need", []int{1}, []int{0}},
+		{"needs of needs", []int{2}, []int{0, 1}},
+		{"several jobs", []int{2, 3}, []int{0, 1}},
+		{"a cycle", []int{4}, []int{4, 5}},
+		{"no job", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := slices.Sorted(maps.Keys(neededJobs(jobs, byID, tt.from...)))
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("neededJobs(%v) = %v, want %v", tt.from, got, tt.want)
+			}
+		})
 	}
 }
 

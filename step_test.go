@@ -3141,3 +3141,14 @@ func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
 		t.Errorf("output should show the request the action made:\n%s", out)
 	}
 }
+
+// TestStep_IDAt reads a step by its id, or by where it is written when it
+// has none.
+func TestStep_IDAt(t *testing.T) {
+	if got := (&Step{ID: "login"}).idAt(2); got != "login" {
+		t.Errorf("idAt of a step with an id = %q, want login", got)
+	}
+	if got := (&Step{}).idAt(2); got != "step_2" {
+		t.Errorf("idAt of a step without one = %q, want step_2", got)
+	}
+}

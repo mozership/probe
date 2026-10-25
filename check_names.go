@@ -49,16 +49,11 @@ func exprKeys(t reflect.Type) []string {
 // are checked.
 func (c *checker) checkNames() {
 	workflowVars := varNames(c.wf.Vars)
-	seen := map[string]bool{}
 	// later are the vars the step defines that are not defined yet where
 	// input is read.
 	read := func(path, where, field, input string, names, vars, later []string) {
 		add := func(severity, format string, args ...any) {
-			key := path + "\x00" + fmt.Sprintf(format, args...)
-			if !seen[key] {
-				seen[key] = true
-				c.add(severity, c.line(path), where, "%s: "+format, append([]any{field}, args...)...)
-			}
+			c.addOnce(severity, path, where, "%s: "+format, append([]any{field}, args...)...)
 		}
 		for _, name := range expr.Names(input) {
 			if names == nil || slices.Contains(names, name) {
@@ -79,8 +74,8 @@ func (c *checker) checkNames() {
 			msg := fmt.Sprintf("vars.%s is not defined by the workflow, so it is nil unless --var gives it", chain[0])
 			if slices.Contains(later, chain[0]) {
 				msg = fmt.Sprintf("vars.%s is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it", chain[0])
-			} else if s := suggest.Closest(chain[0], vars); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
+			} else {
+				msg += suggest.Hint(chain[0], vars)
 			}
 			add(SeverityWarning, "%s", msg)
 		}
@@ -107,10 +102,7 @@ func (c *checker) checkNames() {
 		if job.Repeat == nil {
 			continue
 		}
-		for _, t := range []struct{ key, test string }{
-			{"test", job.Repeat.Test},
-			{"baseline_test", job.Repeat.BaselineTest},
-		} {
+		for _, t := range job.Repeat.tests() {
 			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars, nil)
 		}
 	}
@@ -125,13 +117,8 @@ func (c *checker) checkNames() {
 // whose action.yml says what it returns without Probe knowing it. Only the
 // top level is checked, as what is under a field, such as a body, is data.
 func (c *checker) checkResults() {
-	seen := map[string]bool{}
 	add := func(severity string, e exprAt, format string, args ...any) {
-		key := e.path + "\x00" + fmt.Sprintf(format, args...)
-		if !seen[key] {
-			seen[key] = true
-			c.add(severity, c.line(e.path), e.where, "%s: "+format, append([]any{e.field}, args...)...)
-		}
+		c.addOnce(severity, e.path, e.where, "%s: "+format, append([]any{e.field}, args...)...)
 	}
 	c.eachExpr(func(e exprAt) {
 		if e.step < 0 {
@@ -214,11 +201,12 @@ func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
 // as, to follow what names it, or an empty string.
 func nameHint(name string, names []string) string {
 	step := slices.Equal(names, stepNames)
+	hint := suggest.Hint(name, names)
 	switch {
 	case expr.NameFor(name) != "":
 		return fmt.Sprintf("; did you mean %s?", expr.NameFor(name))
-	case suggest.Closest(name, names) != "":
-		return fmt.Sprintf("; did you mean %q?", suggest.Closest(name, names))
+	case hint != "":
+		return hint
 	case step && name == "steps":
 		return "; what an earlier step publishes is read under outputs"
 	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":

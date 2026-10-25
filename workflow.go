@@ -240,8 +240,6 @@ func checkBuiltinUses(job *Job, builtin []string) error {
 // the workflow gives one under actions, which would have been replaced.
 func unknownAction(uses string, builtin []string) error {
 	msg := fmt.Sprintf("unknown action %q: it is not an action of Probe, an external action, or a name given under actions", uses)
-	if s := suggest.Closest(uses, builtin); s != "" {
-		msg += fmt.Sprintf("; did you mean %q?", s)
-	}
+	msg += suggest.Hint(uses, builtin)
 	return errors.New(msg)
 }
