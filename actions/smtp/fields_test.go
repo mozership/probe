@@ -12,7 +12,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 	addr := startMockServer(t, false)
 	a := &Action{log: hclog.NewNullLogger()}
 	for _, with := range []map[string]any{
-		{"addr": addr, "from": "from@example.com", "to": "to@example.com", "subject": "hi", "myhostname": "probe.test", "starttls": "off"},
+		{"addr": addr, "from": "from@example.com", "to": "to@example.com", "subject": "hi", "myhostname": "probe.test", "starttls": "off", "timeout": "5s"},
 		{"addr": addr, "from": "from@example.com", "to": "to@example.com", "session": 2, "message": 2, "length": 64},
 	} {
 		ret, err := a.Run(with)

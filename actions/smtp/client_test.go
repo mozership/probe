@@ -24,6 +24,7 @@ func TestNewReq(t *testing.T) {
 		Message:    1,
 		Length:     0,
 		StartTLS:   StartTLSAuto,
+		Timeout:    30 * time.Second,
 	}
 
 	if !reflect.DeepEqual(got, expected) {
@@ -710,5 +711,120 @@ func TestDeliverReturnsNoMailWhenNoneWasTaken(t *testing.T) {
 	res, _ := ret["res"].(map[string]any)
 	if res["maildata"] != "" {
 		t.Errorf("maildata = %q, want none, as the server refused the mail", res["maildata"])
+	}
+}
+
+// startSlowServer runs an SMTP server that accepts every message and waits
+// delay before each reply. A negative delay means it never says a word.
+func startSlowServer(t *testing.T, delay time.Duration) string {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		close(done)
+		_ = lis.Close()
+	})
+
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer func() { _ = conn.Close() }()
+				if delay < 0 {
+					<-done
+					return
+				}
+				text := textproto.NewConn(conn)
+				reply := func(line string) {
+					time.Sleep(delay)
+					_ = text.PrintfLine("%s", line)
+				}
+				reply("220 slow ESMTP")
+				for {
+					line, err := text.ReadLine()
+					if err != nil {
+						return
+					}
+					switch strings.ToUpper(strings.SplitN(line, " ", 2)[0]) {
+					case "DATA":
+						reply("354 go ahead")
+						if _, err := text.ReadDotBytes(); err != nil {
+							return
+						}
+						reply("250 queued")
+					case "QUIT":
+						reply("221 bye")
+						return
+					default:
+						reply("250 ok")
+					}
+				}
+			}(conn)
+		}
+	}()
+
+	return lis.Addr().String()
+}
+
+func TestDeliverTimesOutOnASilentServer(t *testing.T) {
+	// The server takes the connection and never greets, so the session
+	// fails once the timeout runs out, rather than waiting for ever.
+	start := time.Now()
+	_, err := Deliver(map[string]any{
+		"addr": startSlowServer(t, -1), "from": "from@example.com", "to": "to@example.com",
+		"timeout": "200ms",
+	})
+	if err == nil || !strings.Contains(err.Error(), "within the 200ms timeout") {
+		t.Errorf("Deliver() error = %v, want one naming the 200ms timeout", err)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("Deliver() took %s, want about 200ms", took)
+	}
+}
+
+func TestDeliverTimeoutLimitsEachWait(t *testing.T) {
+	// Each reply comes within the timeout although the session as a whole
+	// takes longer than it, so the mail is delivered.
+	start := time.Now()
+	ret, err := Deliver(map[string]any{
+		"addr": startSlowServer(t, 50*time.Millisecond), "from": "from@example.com", "to": "to@example.com",
+		"message": 3, "starttls": "off", "timeout": 0.3,
+	})
+	if err != nil {
+		t.Fatalf("Deliver() error: %v", err)
+	}
+	if took := time.Since(start); took <= 300*time.Millisecond {
+		t.Fatalf("the session took %s, which does not show the timeout is per wait", took)
+	}
+	res, _ := ret["res"].(map[string]any)
+	if res["code"] != 0 || res["sent"] != 3 {
+		t.Errorf("res = %v, want the three messages sent", res)
+	}
+}
+
+func TestDeliverRefusesAnInvalidTimeout(t *testing.T) {
+	for _, timeout := range []any{"soon", "0s", 0, -1, "-5s"} {
+		_, err := Deliver(map[string]any{
+			"addr": "127.0.0.1:1", "from": "from@example.com", "to": "to@example.com",
+			"timeout": timeout,
+		})
+		if err == nil || !strings.Contains(err.Error(), "invalid timeout") {
+			t.Errorf("timeout %v: error = %v, want an invalid timeout", timeout, err)
+		}
+	}
+}
+
+func TestReqDoRefusesANegativeTimeout(t *testing.T) {
+	r := NewReq()
+	r.Addr, r.From, r.To = "127.0.0.1:1", "from@example.com", "to@example.com"
+	r.Timeout = -time.Second
+	if _, err := r.Do(); err == nil || err.Error() != "invalid timeout -1s: use a duration above zero" {
+		t.Errorf("Do() error = %v, want an invalid timeout", err)
 	}
 }

@@ -27,6 +27,8 @@ type Bulk struct {
 	StartTLS string
 	// InsecureSkipTLS accepts any certificate after STARTTLS.
 	InsecureSkipTLS bool
+	// Timeout is each session's Mail.Timeout. Zero means no limit.
+	Timeout time.Duration
 
 	mu       sync.Mutex
 	count    int
@@ -136,6 +138,7 @@ func (b *Bulk) sendShare() (int, error) {
 		StartTLSDisabled:   b.StartTLS == "" || b.StartTLS == StartTLSOff,
 		StartTLSRequired:   b.StartTLS == StartTLSRequired,
 		InsecureSkipVerify: b.InsecureSkipTLS,
+		Timeout:            b.Timeout,
 		MessageCount:       n,
 	}
 

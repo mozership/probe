@@ -37,8 +37,11 @@ The fields below describe the delivery. All of them accept template expressions.
 | `length` | Integer | No | `0` | Number of `*` characters appended to the generated body |
 | `starttls` | String | No | `auto` | `auto` switches to TLS with `STARTTLS` when the server offers it, `required` fails a session whose server does not, and `off` never uses it |
 | `insecure_skip_tls` | Boolean | No | `false` | Accept any certificate after `STARTTLS`, such as a self-signed one |
+| `timeout` | Duration | No | `30s` | Time limit for connecting, and for each wait on the server to read or write |
 
 After `STARTTLS` the server's certificate is verified against the host in `addr`, so a self-signed or mismatched one fails the session unless `insecure_skip_tls` is set. A connection that starts in TLS, as on port 465, is not supported. There are no parameters for authentication, CC/BCC, a custom body or HTML. To include a report in the run output, use the step's `echo`.
+
+`timeout` accepts a duration string such as `10s` or `1m30s`, or a plain number of seconds. A value that is not a duration, not a number, or not above zero is rejected. It bounds each wait rather than the whole session, so a session of many messages may take longer than it as long as the server keeps answering. A session whose server does not answer in time fails, and when no message was delivered the step ends with an error, such as `mail delivery failed: tcp dial error: read tcp ...: i/o timeout (the server did not answer within the 30s timeout)`. The step's own `timeout`, 5m by default, is the outer limit on the whole action.
 
 The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80. Each message is sent with two more headers before these, `X-Send-Timestamp-Ns`, the time it was sent in Unix nanoseconds, and a `Message-ID` of its own, whose part before `@` is also added to the end of the subject as ` - <id>`.
 

@@ -37,8 +37,11 @@ steps:
 | `length` | Integer | 任意 | `0` | 生成する本文の末尾に付ける`*`の文字数 |
 | `starttls` | String | 任意 | `auto` | `auto`はサーバーが提示していれば`STARTTLS`でTLSに切り替え、`required`は提示しないサーバーのセッションを失敗させ、`off`は使わない |
 | `insecure_skip_tls` | Boolean | 任意 | `false` | `STARTTLS`の後、自己署名などどんな証明書も受け入れる |
+| `timeout` | Duration | 任意 | `30s` | 接続と、サーバーとの読み書きでの1回ごとの待ち時間の上限 |
 
 `STARTTLS`の後はサーバーの証明書を`addr`のホストで検証するため、自己署名の証明書やホストの合わない証明書は、`insecure_skip_tls`を指定しない限りセッションを失敗させます。ポート465のように最初からTLSで始まる接続には対応していません。認証、CC/BCC、任意の本文やHTMLを指定するパラメータはありません。実行結果にレポートを出したい場合はステップの`echo`を使います。
+
+`timeout`には`10s`や`1m30s`のような時間の文字列か、秒数を書きます。時間でも数でもない値や、0以下の値はエラーになります。上限はセッション全体ではなく1回ごとの待ちに掛かるため、サーバーが応答し続ける限り、多くのメッセージを送るセッションは`timeout`より長くかかっても構いません。時間内に応答しないサーバーのセッションは失敗し、1通も配送できなかった場合は`mail delivery failed: tcp dial error: read tcp ...: i/o timeout (the server did not answer within the 30s timeout)`のようなエラーでステップが終わります。アクション全体の外側の上限は、ステップ自体の`timeout`（デフォルトは5m）です。
 
 生成するメッセージには`From`、`To`、`Date`、`Subject`のヘッダーが付きます。本文は`This is a test mail.`の後に`length`個の`*`を続けたもので、80文字ごとに改行します。送るときには、メッセージごとにこれらの前へ2つのヘッダーを足します。送信した時刻をUnixナノ秒で表す`X-Send-Timestamp-Ns`と、メッセージごとの`Message-ID`です。`Message-ID`の`@`より前の部分は、件名の末尾にも` - <id>`の形で付けます。
 

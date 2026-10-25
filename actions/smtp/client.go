@@ -3,6 +3,7 @@ package smtp
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -22,7 +23,11 @@ type Req struct {
 	// (fail when it does not).
 	StartTLS        string `map:"starttls"`
 	InsecureSkipTLS bool   `map:"insecure_skip_tls"`
-	cb              *Callback
+	// Timeout limits connecting to the server, and each wait on it to
+	// read or write in a session. Zero, possible only through the Go API,
+	// means no limit.
+	Timeout time.Duration `map:"timeout"`
+	cb      *Callback
 }
 
 // The values of starttls.
@@ -33,11 +38,11 @@ const (
 )
 
 type Res struct {
-	Code     int    `map:"code"`
-	Sent     int    `map:"sent"`
-	Failed   int    `map:"failed"`
-	Total    int    `map:"total"`
-	Error    string `map:"error"`
+	Code   int    `map:"code"`
+	Sent   int    `map:"sent"`
+	Failed int    `map:"failed"`
+	Total  int    `map:"total"`
+	Error  string `map:"error"`
 	// MailData is the last message the server accepted, as it was sent.
 	MailData string `map:"maildata"`
 }
@@ -56,12 +61,16 @@ type Callback struct {
 	after  func(result *Result)
 }
 
+// defaultTimeout is the timeout when the step does not give one.
+const defaultTimeout = 30 * time.Second
+
 func NewReq() *Req {
 	return &Req{
 		Session:  1,
 		Message:  1,
 		Length:   0,
 		StartTLS: StartTLSAuto,
+		Timeout:  defaultTimeout,
 	}
 }
 
@@ -92,6 +101,7 @@ func (r *Req) Do() (*Result, error) {
 		Length:          r.Length,
 		StartTLS:        startTLS,
 		InsecureSkipTLS: r.InsecureSkipTLS,
+		Timeout:         r.Timeout,
 	}
 
 	// Execute mail delivery
@@ -146,6 +156,8 @@ func (r *Req) validate() (string, error) {
 		return "", fmt.Errorf("invalid message %d: use 1 or more", r.Message)
 	case r.Length < 0:
 		return "", fmt.Errorf("invalid length %d: use 0 or more", r.Length)
+	case r.Timeout < 0:
+		return "", fmt.Errorf("invalid timeout %s: use a duration above zero", r.Timeout)
 	}
 	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
 	if startTLS == "" {
@@ -173,9 +185,17 @@ func Deliver(data map[string]any, opts ...Option) (map[string]any, error) {
 	// A parameter that cannot be read stops the step before anything is
 	// sent: going on would send with that parameter at its zero value, such
 	// as insecure_skip_tls left false.
+	if v, ok := data["timeout"]; ok {
+		timeout, err := mapping.ParseTimeout(v)
+		if err != nil {
+			return map[string]any{}, err
+		}
+		data = maps.Clone(data)
+		data["timeout"] = timeout
+	}
 	// MapToStructByTags reads a number or a numeric string into session,
 	// message and length, and a bool or "true" and "false" into
-	// insecure_skip_tls, so the parameters go to it as they are.
+	// insecure_skip_tls, so the other parameters go to it as they are.
 	if err := mapping.MapToStructByTags(data, r); err != nil {
 		return map[string]any{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/textproto"
 	"strings"
+	"time"
 )
 
 // Client is an SMTP client forked from net/smtp, keeping what the smtp action
@@ -22,13 +23,42 @@ type Client struct {
 	helloError error
 }
 
-func Dial(addr string) (*Client, error) {
-	conn, err := net.Dial("tcp", addr)
+// Dial connects to the SMTP server at addr and reads its greeting. A timeout
+// above zero limits connecting, and each read from and write to the
+// connection after, so that a server that stops answering fails the session
+// rather than holding it. Zero means no limit.
+func Dial(addr string, timeout time.Duration) (*Client, error) {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return nil, err
 	}
+	if timeout > 0 {
+		conn = &deadlineConn{Conn: conn, timeout: timeout}
+	}
 	host, _, _ := net.SplitHostPort(addr)
 	return NewClient(conn, host)
+}
+
+// deadlineConn sets the connection's deadline afresh before each read and
+// write. The TLS connection after STARTTLS reads and writes through it, so
+// the handshake and what follows are limited the same way.
+type deadlineConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *deadlineConn) Read(b []byte) (int, error) {
+	if err := c.SetDeadline(time.Now().Add(c.timeout)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Read(b)
+}
+
+func (c *deadlineConn) Write(b []byte) (int, error) {
+	if err := c.SetDeadline(time.Now().Add(c.timeout)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Write(b)
 }
 
 func NewClient(conn net.Conn, host string) (*Client, error) {
