@@ -32,8 +32,7 @@ func TestStatusTypeConstants(t *testing.T) {
 	}
 }
 
-// WorkflowBuffer tests
-func TestWorkflowBuffer_AddStepResult(t *testing.T) {
+func TestResult_AddStepResult(t *testing.T) {
 	wb := NewResult()
 	jobID := "test-job"
 
@@ -90,7 +89,7 @@ func TestWorkflowBuffer_AddStepResult(t *testing.T) {
 	}
 }
 
-func TestWorkflowBuffer_AddStepResult_NonExistentJob(t *testing.T) {
+func TestResult_AddStepResult_NonExistentJob(t *testing.T) {
 	wb := NewResult()
 
 	stepResult := StepResult{
@@ -108,7 +107,7 @@ func TestWorkflowBuffer_AddStepResult_NonExistentJob(t *testing.T) {
 	}
 }
 
-func TestWorkflowBuffer_ConcurrentAccess(t *testing.T) {
+func TestResult_AddStepResult_Concurrent(t *testing.T) {
 	wb := NewResult()
 	jobID := "test-job"
 
