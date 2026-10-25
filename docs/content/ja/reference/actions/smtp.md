@@ -56,7 +56,7 @@ steps:
 | `res.failed` | Integer | 失敗したセッション数 |
 | `res.total` | Integer | 試行した通数。`message`と同じ値 |
 | `res.error` | String | 失敗時のエラーメッセージ |
-| `res.maildata` | String | サーバーが最後に受け付けたメール。`Message-ID`と送信時刻を含む、送ったままの内容。1通も受け付けられなければ空 |
+| `res.maildata` | String | サーバーが最後に受け付けたメール。`Message-ID`と送信時刻を含む、送ったままの内容。セッションが複数なら、最後に終わったセッションが最後に送ったメール。1通も受け付けられなければ空 |
 | `rt.duration` | String | 配送にかかった時間（例: `"3.4ms"`） |
 | `rt.sec` | Float | 配送にかかった時間（秒） |
 | `status` | Integer | `res.code`と同じ値 |

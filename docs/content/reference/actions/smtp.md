@@ -56,7 +56,7 @@ After the step, `res` reports how much was delivered.
 | `res.failed` | Integer | Sessions that failed |
 | `res.total` | Integer | Messages attempted, which is `message` |
 | `res.error` | String | Error message, when delivery failed |
-| `res.maildata` | String | The last message the server accepted, as it was sent with its `Message-ID` and send time. Empty when none was accepted |
+| `res.maildata` | String | The last message the server accepted, as it was sent with its `Message-ID` and send time. With several sessions, it is the last message of the session that finished last. Empty when none was accepted |
 | `rt.duration` | String | Time the delivery took, such as `"3.4ms"` |
 | `rt.sec` | Float | Time the delivery took in seconds |
 | `status` | Integer | Same as `res.code` |

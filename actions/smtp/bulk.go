@@ -45,8 +45,9 @@ type DeliveryResult struct {
 	// such as a 550 to RCPT TO, rather than failing to reach it.
 	Rejected bool
 	// LastSent is the last message a server accepted, as it was sent, or
-	// nil when none was. The sessions run at the same time, so it is from
-	// whichever got its message accepted last.
+	// nil when none was. The sessions run at the same time, so it is the
+	// last message of whichever session finished last, which need not be
+	// the message accepted last.
 	LastSent []byte
 }
 
