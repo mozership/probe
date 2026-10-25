@@ -172,7 +172,7 @@ jobs:
 | `res.headers` | Object | レスポンスヘッダー。キーは`Content-Type`のような正規形 |
 | `res.body` | Any | レスポンスボディ。JSONならオブジェクトや配列に解析され、それ以外は文字列 |
 | `res.rawbody` | String | 解析前のボディ。JSONとして解析したときに入ります |
-| `res.filepath` | String | バイナリレスポンスを保存したファイルのパス |
+| `res.filepath` | String | バイナリレスポンスを保存したファイルのパス。`Content-Type`がテキストでないものをバイナリとします。テキストは`text/*`、JSON、XML、JavaScript、フォーム、`application/problem+json`や`image/svg+xml`のように`+json`か`+xml`で終わる型です。`Content-Type`のないレスポンスはテキストです |
 | `res.cookies` | Object | サーバーが設定したCookie。名前と値で入り、リダイレクトの途中で設定されたものも含みます |
 | `res.violations` | Array | リクエストとレスポンスのうちOpenAPIドキュメントが許可しないもの。すべて許可されていれば空です。`openapi`を指定したときだけ入ります |
 | `res.contract` | Object | OpenAPIドキュメントでレスポンスを対応付けた先。`spec`、`GET /users/{id}`のような`operation`、`200`、`2XX`、`default`のような`response`が入ります。`response`は、オペレーションがそのステータスのレスポンスを宣言していない場合は入りません。ドキュメントにリクエストのオペレーションがある場合だけ入ります |

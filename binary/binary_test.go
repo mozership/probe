@@ -23,6 +23,18 @@ func TestIsTextualMimeType(t *testing.T) {
 		{"video/mp4", "video/mp4", false},
 		{"application/pdf", "application/pdf", false},
 		{"application/octet-stream", "application/octet-stream", false},
+		{"problem+json", "application/problem+json", true},
+		{"vnd.api+json", "application/vnd.api+json", true},
+		{"hal+json", "application/hal+json", true},
+		{"soap+xml", "application/soap+xml", true},
+		{"svg+xml", "image/svg+xml", true},
+		{"problem+json with charset", "application/problem+json; charset=utf-8", true},
+		{"uppercase", "Application/Problem+JSON", true},
+		{"uppercase text", "TEXT/HTML; Charset=UTF-8", true},
+		{"malformed parameter", "application/problem+json; charset", true},
+		{"garbage", "garbage", false},
+		{"garbage with slashes", "///", false},
+		{"suffix only in a parameter", "image/png; profile=a+json", false},
 	}
 
 	for _, tt := range tests {
@@ -30,6 +42,36 @@ func TestIsTextualMimeType(t *testing.T) {
 			result := isTextualMimeType(tt.contentType)
 			if result != tt.expected {
 				t.Errorf("isTextualMimeType(%q) = %v, expected %v", tt.contentType, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsJSONMediaType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		expected    bool
+	}{
+		{"application/json", true},
+		{"application/json; charset=utf-8", true},
+		{"Application/JSON", true},
+		{"application/problem+json", true},
+		{"application/vnd.api+json", true},
+		{"application/hal+json", true},
+		{"application/problem+json; charset", true},
+		{"application/soap+xml", false},
+		{"image/svg+xml", false},
+		{"text/plain; format=application/json", false},
+		{"image/png", false},
+		{"application/octet-stream", false},
+		{"", false},
+		{"garbage", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			if got := IsJSONMediaType(tt.contentType); got != tt.expected {
+				t.Errorf("IsJSONMediaType(%q) = %v, expected %v", tt.contentType, got, tt.expected)
 			}
 		})
 	}

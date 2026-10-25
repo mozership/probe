@@ -34,9 +34,9 @@ steps:
 | `metadata` | Object | 任意 | `{}` | リクエストメタデータ（HTTPのヘッダーに相当） |
 | `timeout` | String | 任意 | `30s` | 接続とリフレクションによる解決を含めた、呼び出しの制限時間。`"10s"`のようなGoのduration形式。それ以外の値はエラー |
 | `tls` | Boolean | 任意 | `false` | TLSを使う |
-| `insecure` | Boolean | 任意 | `false` | 証明書の検証をスキップする |
-| `cert_file` | String | 任意 | - | mTLS用のクライアント証明書 |
-| `key_file` | String | 任意 | - | mTLS用のクライアント鍵 |
+| `insecure` | Boolean | 任意 | `false` | サーバー証明書の検証をスキップする。このとき`ca_file`は効かないが、クライアント証明書は送る |
+| `cert_file` | String | 任意 | - | mTLS用のクライアント証明書。`key_file`と合わせて指定する |
+| `key_file` | String | 任意 | - | mTLS用のクライアント鍵。`cert_file`と合わせて指定する |
 | `ca_file` | String | 任意 | - | サーバー検証に使うCA証明書 |
 | `codec` | String | 任意 | `json` | Connectの呼び出しのエンコード。`json`か`proto`。`protocol: connect`のときだけ |
 | `max_messages` | Integer | 任意 | - | レスポンスのストリームがこの件数届いた時点で打ち切る。[ストリーミングのメソッド](#ストリーミングのメソッド)を参照 |

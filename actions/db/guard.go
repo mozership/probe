@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/lib/pq"
@@ -17,9 +18,32 @@ import (
 // defaultPorts are the ports of the servers a DSN without one connects to.
 var defaultPorts = map[string]string{"mysql": "3306", "postgres": "5432"}
 
-// readVerbs are the words a statement allowed under a read-only guard
-// starts with.
+// readVerbs are the words a statement that reads rows starts with: the
+// statements the action runs as a query and reads the rows of, and the only
+// ones a read-only guard allows.
 var readVerbs = []string{"SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "WITH"}
+
+// firstVerb returns the first word of the query in upper case: the letters,
+// digits and underscores it starts with past any leading white space, so
+// that SELECT* and SELECT(1) start with SELECT, but SELECTED does not. A
+// query that starts with anything else, such as a comment or a
+// parenthesis, has no first word, and the empty string is returned.
+func firstVerb(query string) string {
+	query = strings.TrimSpace(query)
+	end := strings.IndexFunc(query, func(c rune) bool {
+		return c != '_' && !unicode.IsLetter(c) && !unicode.IsDigit(c)
+	})
+	if end < 0 {
+		end = len(query)
+	}
+	return strings.ToUpper(query[:end])
+}
+
+// returnsRows tells whether a statement that starts with the verb, as
+// firstVerb returns it, reads rows.
+func returnsRows(verb string) bool {
+	return slices.Contains(readVerbs, verb)
+}
 
 // checkGuard returns a Refused error when the guard of the run does not
 // allow the query: a server it does not allow, or, under --read-only, a
@@ -65,9 +89,8 @@ func (r *Req) checkGuard(guard actionrpc.Guard) error {
 	if strings.Contains(query, ";") {
 		return actionrpc.Refuse("the query holds a semicolon, which may end a statement and start another, and the run is read-only; give one statement that reads, without one")
 	}
-	word := strings.ToUpper(words[0])
-	if !slices.Contains(readVerbs, word) {
-		return actionrpc.Refuse("the statement %s may write, and the run is read-only; only %s are run", word, strings.Join(readVerbs, ", "))
+	if !returnsRows(firstVerb(query)) {
+		return actionrpc.Refuse("the statement %s may write, and the run is read-only; only %s are run", strings.ToUpper(words[0]), strings.Join(readVerbs, ", "))
 	}
 	return nil
 }

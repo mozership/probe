@@ -98,7 +98,11 @@ func (e *Expr) Options(env any) []ex.Option {
 				if !ok1 || !ok2 {
 					return false, fmt.Errorf("match_json parameters must be objects")
 				}
-				return jsonutil.Match(src, target), nil
+				ok, err := jsonutil.Match(src, target)
+				if err != nil {
+					return false, fmt.Errorf("match_json: %w", err)
+				}
+				return ok, nil
 			},
 		),
 		ex.Function(
@@ -112,7 +116,11 @@ func (e *Expr) Options(env any) []ex.Option {
 				if !ok1 || !ok2 {
 					return nil, fmt.Errorf("diff_json parameters must be objects")
 				}
-				return jsonutil.Diff(src, target), nil
+				diff, err := jsonutil.Diff(src, target)
+				if err != nil {
+					return nil, fmt.Errorf("diff_json: %w", err)
+				}
+				return diff, nil
 			},
 		),
 		ex.Function(
