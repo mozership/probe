@@ -250,3 +250,78 @@
 .dark .diagram--dark {
   display: block;
 }
+
+/*
+ * Pixel stars behind the page. Each star masks a flat colour with its shape,
+ * so it takes the theme's colour. It rests faint and flares for a moment on a
+ * cycle of its own, so the sky twinkles star by star. How bright it flares is
+ * its own too: --star-gain, set on each star, scales the theme's peak.
+ */
+:root {
+  --probe-star: #0065a8;
+  --probe-star-floor: 0.08;
+  --probe-star-peak: 0.6;
+}
+
+:root.dark {
+  --probe-star: #d7efff;
+  --probe-star-floor: 0.12;
+  --probe-star-peak: 0.9;
+}
+
+.probe-stars {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.probe-star {
+  position: absolute;
+  background-color: var(--probe-star);
+  mask-size: 100% 100%;
+  opacity: var(--probe-star-floor);
+  animation-name: probe-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+/* One pixel of the art is 2px. */
+.probe-star--dot {
+  width: 2px;
+  height: 2px;
+  mask-image: url('/star-dot.svg');
+}
+
+.probe-star--plus {
+  width: 6px;
+  height: 6px;
+  mask-image: url('/star-plus.svg');
+}
+
+.probe-star--sparkle {
+  width: 10px;
+  height: 10px;
+  mask-image: url('/star-sparkle.svg');
+}
+
+@keyframes probe-twinkle {
+  0%,
+  35%,
+  65%,
+  100% {
+    opacity: var(--probe-star-floor);
+  }
+  50% {
+    opacity: calc(var(--probe-star-peak) * var(--star-gain, 1));
+  }
+}
+
+/* Without motion the stars stay, a little above their resting light. */
+@media (prefers-reduced-motion: reduce) {
+  .probe-star {
+    animation: none;
+    opacity: calc((var(--probe-star-floor) + var(--probe-star-peak)) / 3);
+  }
+}

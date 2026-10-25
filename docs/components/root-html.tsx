@@ -1,5 +1,6 @@
 import { Head } from 'nextra/components'
 import { notoSansJP, oswald } from './fonts'
+import { Starfield } from './starfield'
 import type { ReactNode } from 'react'
 
 export function RootHtml({ lang, children }: { lang: 'en' | 'ja'; children: ReactNode }) {
@@ -11,7 +12,10 @@ export function RootHtml({ lang, children }: { lang: 'en' | 'ja'; children: Reac
       >
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
       </Head>
-      <body className={`${oswald.variable} ${notoSansJP.variable}`}>{children}</body>
+      <body className={`${oswald.variable} ${notoSansJP.variable}`}>
+        <Starfield />
+        {children}
+      </body>
     </html>
   )
 }
