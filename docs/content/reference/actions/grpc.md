@@ -33,9 +33,9 @@ The fields below describe the call. All of them accept template expressions.
 | `metadata` | Object | No | `{}` | Request metadata (the gRPC equivalent of headers) |
 | `timeout` | String | No | `30s` | Time limit for the call, including connecting and the reflection lookup. A Go duration such as `"10s"`; any other value is an error |
 | `tls` | Boolean | No | `false` | Use TLS |
-| `insecure` | Boolean | No | `false` | Skip certificate verification |
-| `cert_file` | String | No | - | Client certificate for mutual TLS |
-| `key_file` | String | No | - | Client key for mutual TLS |
+| `insecure` | Boolean | No | `false` | Skip verifying the server's certificate. `ca_file` has no effect then; a client certificate is still sent |
+| `cert_file` | String | No | - | Client certificate for mutual TLS. Give it with `key_file` |
+| `key_file` | String | No | - | Client key for mutual TLS. Give it with `cert_file` |
 | `ca_file` | String | No | - | CA certificate used to verify the server |
 | `codec` | String | No | `json` | How a Connect call encodes its messages: `json` or `proto`. Only with `protocol: connect` |
 | `max_messages` | Integer | No | - | Leave a stream of responses once this many have come. See [Streaming Methods](#streaming-methods) |
