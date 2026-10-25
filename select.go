@@ -68,27 +68,20 @@ func selectJobs(jobs []Job, names []string) ([]Job, *jobSelection, error) {
 	}
 
 	why := make([]int, len(jobs))
-	var queue []int
+	var selected []int
 	for _, name := range names {
 		i, err := findJob(jobs, byID, name)
 		if err != nil {
 			return nil, nil, err
 		}
-		if why[i] == 0 {
-			queue = append(queue, i)
-		}
+		selected = append(selected, i)
 		why[i] = selectedJob
 	}
 
 	// The jobs the selected ones need, however far down.
-	for len(queue) > 0 {
-		i := queue[0]
-		queue = queue[1:]
-		for _, dep := range jobs[i].Needs {
-			if k, ok := byID[dep]; ok && why[k] == 0 {
-				why[k] = neededJob
-				queue = append(queue, k)
-			}
+	for k := range neededJobs(jobs, byID, selected...) {
+		if why[k] == 0 {
+			why[k] = neededJob
 		}
 	}
 
@@ -134,6 +127,26 @@ func selectJobs(jobs []Job, names []string) ([]Job, *jobSelection, error) {
 		out = append(out, j)
 	}
 	return out, sel, nil
+}
+
+// neededJobs returns the jobs of jobs that those at from need, directly or
+// through the jobs they need, by their indices, given the index of each job
+// by its id. One of from is among them only when a job it needs needs it in
+// turn. A need that is no job's id is left out.
+func neededJobs(jobs []Job, byID map[string]int, from ...int) map[int]bool {
+	out := map[int]bool{}
+	stack := slices.Clone(from)
+	for len(stack) > 0 {
+		i := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for _, dep := range jobs[i].Needs {
+			if k, ok := byID[dep]; ok && !out[k] {
+				out[k] = true
+				stack = append(stack, k)
+			}
+		}
+	}
+	return out
 }
 
 // findJob returns the index of the job of jobs whose id is name, or, when
