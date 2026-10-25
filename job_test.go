@@ -369,8 +369,8 @@ func TestJob_RunStandalone_Success(t *testing.T) {
 }
 
 func TestJob_RunStandalone_Failure(t *testing.T) {
-	// Test with step that returns error via MockActionRunner
-	mock := NewMockActionRunner()
+	// Test with step that returns error via the mock runner
+	mock := newMockRunner()
 	testErr := fmt.Errorf("mock action execution failed")
 	mock.SetError("failing-action", testErr)
 
@@ -378,17 +378,16 @@ func TestJob_RunStandalone_Failure(t *testing.T) {
 		Name: "Failed Test Job",
 		Steps: []*Step{
 			{
-				Name:         "Failing Step",
-				Uses:         "failing-action",
-				With:         map[string]any{},
-				actionRunner: mock,
+				Name: "Failing Step",
+				Uses: "failing-action",
+				With: map[string]any{},
 			},
 		},
 	}
 
 	vars := map[string]any{"test_var": "test_value"}
 	printer := newBufferPrinter()
-	run := job.RunStandalone(vars, printer, "test-job", "")
+	run := job.RunStandalone(vars, printer, "test-job", "", WithActionRunner(mock))
 
 	// Job with a failing action should fail
 	if run.Success {
@@ -496,14 +495,13 @@ func TestJob_RunStandalone_HidesCredentials(t *testing.T) {
 		With: map[string]any{"password": "inner-only-pass"},
 		Test: "true",
 	}
-	step.actionRunner = NewMockActionRunner()
 	job := &Job{Name: "embedded", Steps: []*Step{step}}
 
 	printer := newBufferPrinter()
 	if printer.Masker() != nil {
 		t.Fatal("the printer already has a masker; the test needs one without")
 	}
-	job.RunStandalone(map[string]any{}, printer, "embedded", "")
+	job.RunStandalone(map[string]any{}, printer, "embedded", "", WithActionRunner(newMockRunner()))
 
 	if got := printer.Masker().String("sent inner-only-pass"); got != "sent <redacted>" {
 		t.Errorf("Masker().String() = %q, want the step's password hidden", got)
@@ -552,14 +550,10 @@ func TestJob_ApplyDefaults(t *testing.T) {
 
 func TestJob_RunStandalone(t *testing.T) {
 	passing := func() *Step {
-		st := &Step{Name: "ok", Uses: "hello", Test: "true"}
-		st.actionRunner = NewMockActionRunner()
-		return st
+		return &Step{Name: "ok", Uses: "hello", Test: "true"}
 	}
 	failing := func() *Step {
-		st := &Step{Name: "ng", Uses: "hello", Test: "false"}
-		st.actionRunner = NewMockActionRunner()
-		return st
+		return &Step{Name: "ng", Uses: "hello", Test: "false"}
 	}
 
 	tests := []struct {
@@ -576,7 +570,7 @@ func TestJob_RunStandalone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			job := &Job{Name: "standalone", Steps: tt.steps}
-			run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "standalone", t.TempDir())
+			run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "standalone", t.TempDir(), WithActionRunner(newMockRunner()))
 
 			if tt.wantErr != "" {
 				if run.Err == nil || !strings.Contains(run.Err.Error(), tt.wantErr) {
@@ -609,10 +603,10 @@ func TestRunStandaloneTellsTheRun(t *testing.T) {
 		{name: "a run of its own"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			runner := NewMockActionRunner()
+			runner := newMockRunner()
 			runner.SetResult("hello", map[string]any{"status": 0})
-			job := &Job{Name: "embedded", Steps: []*Step{{Name: "s", Uses: "hello", actionRunner: runner}}}
-			job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", "", tt.opts...)
+			job := &Job{Name: "embedded", Steps: []*Step{{Name: "s", Uses: "hello"}}}
+			job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", "", append(tt.opts, WithActionRunner(runner))...)
 
 			calls := runner.Calls["hello"]
 			if len(calls) != 1 {
@@ -647,15 +641,15 @@ func TestRunStandaloneUnderAGuard(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	job := &Job{Name: "embedded", Steps: []*Step{
-		{Name: "keeps", Uses: "hello", Test: "true", actionRunner: runner},
-		{Name: "does not", Uses: "ssh", Test: "true", actionRunner: runner},
+		{Name: "keeps", Uses: "hello", Test: "true"},
+		{Name: "does not", Uses: "ssh", Test: "true"},
 		// An external action that declares no guard is refused without its
 		// executable being fetched.
-		{Name: "silent", Uses: "./silent", Test: "true", actionRunner: runner},
+		{Name: "silent", Uses: "./silent", Test: "true"},
 	}}
-	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard))
+	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard), WithActionRunner(runner))
 
 	if run.Err != nil {
 		t.Fatalf("Err = %v, want none", run.Err)
@@ -696,9 +690,9 @@ func TestRunStandaloneTakesTheActionAtItsWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	guard := actionrpc.Guard{ReadOnly: true}
-	runner := NewMockActionRunner()
-	job := &Job{Name: "embedded", Steps: []*Step{{Name: "declared", Uses: "./declared", Test: "true", actionRunner: runner}}}
-	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard))
+	runner := newMockRunner()
+	job := &Job{Name: "embedded", Steps: []*Step{{Name: "declared", Uses: "./declared", Test: "true"}}}
+	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard), WithActionRunner(runner))
 
 	if run.Err != nil || !run.Success {
 		t.Fatalf("Err = %v, Success = %v; want the declared action to run", run.Err, run.Success)
@@ -723,9 +717,9 @@ func TestRunStandaloneReplacesAnInheritedDeclaration(t *testing.T) {
 		t.Fatal(err)
 	}
 	guard := actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"./silent": {actionrpc.KindReadOnly}}}
-	runner := NewMockActionRunner()
-	job := &Job{Name: "embedded", Steps: []*Step{{Name: "silent", Uses: "./silent", Test: "true", actionRunner: runner}}}
-	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard))
+	runner := newMockRunner()
+	job := &Job{Name: "embedded", Steps: []*Step{{Name: "silent", Uses: "./silent", Test: "true"}}}
+	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard), WithActionRunner(runner))
 
 	if run.Err != nil {
 		t.Fatalf("Err = %v, want none", run.Err)
@@ -738,10 +732,36 @@ func TestRunStandaloneReplacesAnInheritedDeclaration(t *testing.T) {
 	}
 }
 
+// TestRunStandaloneNeedsNoCheck checks that a job run on its own passes a
+// step without a test of an action WithNeedsNoCheck names, as a workflow
+// does one Config.NeedsNoCheck names, and counts it as untested without.
+func TestRunStandaloneNeedsNoCheck(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		opts []StandaloneOption
+		want string
+	}{
+		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: IconSuccess},
+		{name: "told nothing", want: IconTriangle},
+		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: IconTriangle},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &Job{Name: "embedded", Steps: []*Step{{Name: "Greets", Uses: "hello"}}}
+			run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", t.TempDir(), append(tt.opts, WithActionRunner(newMockRunner()))...)
+			if !run.Success {
+				t.Fatalf("Success = false, want a step without a test to fail nothing: %v", run.Err)
+			}
+			if !strings.Contains(run.Report, strings.TrimSpace(tt.want)+"  Greets") {
+				t.Errorf("Report = %q, want the step marked %q", run.Report, strings.TrimSpace(tt.want))
+			}
+		})
+	}
+}
+
 func TestRunStandaloneWithoutARefusal(t *testing.T) {
-	runner := NewMockActionRunner()
-	job := &Job{Name: "embedded", Steps: []*Step{{Name: "fails", Uses: "hello", Test: "false", actionRunner: runner}}}
-	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", t.TempDir())
+	runner := newMockRunner()
+	job := &Job{Name: "embedded", Steps: []*Step{{Name: "fails", Uses: "hello", Test: "false"}}}
+	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", t.TempDir(), WithActionRunner(runner))
 	if run.Success || run.Refused != nil {
 		t.Errorf("Success = %v, Refused = %+v; want a failure that is not a refusal", run.Success, run.Refused)
 	}
@@ -750,11 +770,11 @@ func TestRunStandaloneWithoutARefusal(t *testing.T) {
 // Running a job leaves it as written: each run evaluates the job's name and
 // its steps anew, and what a run finds out is the run's alone.
 func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("hello", map[string]any{"status": 0, "res": map[string]any{"code": 200}, "rt": "10ms"})
 	job := &Job{ID: "work", Name: "Work {{vars.n}}", Steps: []*Step{
-		{Name: "Greet {{vars.n}}", Uses: "hello", Test: "res.code == 200", actionRunner: runner},
-		{Uses: "hello", actionRunner: runner, Iteration: Iteration{Entries: []map[string]any{{"x": 1}, {"x": 2}}}},
+		{Name: "Greet {{vars.n}}", Uses: "hello", Test: "res.code == 200"},
+		{Uses: "hello", Iteration: Iteration{Entries: []map[string]any{{"x": 1}, {"x": 2}}}},
 	}}
 	written := &Job{Name: job.Name, Steps: []*Step{{}, {}}}
 	for i, st := range job.Steps {
@@ -768,6 +788,7 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
 		failed, err := job.run(JobContext{
 			runEnv: &runEnv{
+				Config:  Config{ActionRunner: runner},
 				Printer: printer,
 				Result:  result,
 			},

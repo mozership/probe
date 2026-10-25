@@ -152,8 +152,10 @@ func TestIterationEntries(t *testing.T) {
 
 // iterationWorkflow is a workflow of one job whose last step iterates over
 // what iteration, a template, comes to. The step before it publishes rows.
-func iterationWorkflow(iteration string, failFast bool) (*Workflow, *MockActionRunner) {
-	rows := NewMockActionRunner()
+// runner runs the actions of both, the first with rows and the last with
+// each.
+func iterationWorkflow(iteration string, failFast bool) (w *Workflow, runner ActionRunner, rows, each *mockRunner) {
+	rows = newMockRunner()
 	rows.SetResult("hello", map[string]any{
 		"status": 0,
 		"res": map[string]any{"rows": []any{
@@ -161,22 +163,22 @@ func iterationWorkflow(iteration string, failFast bool) (*Workflow, *MockActionR
 			map[string]any{"id": 2, "name": "grace"},
 		}},
 	})
-	each := NewMockActionRunner()
-	w := &Workflow{
+	each = newMockRunner()
+	w = &Workflow{
 		Name: "Iteration",
 		Vars: map[string]any{"none": []any{}, "names": []any{"ada"}},
 		Jobs: []Job{{ID: "users", Name: "Users", FailFast: failFast, Steps: []*Step{
-			{ID: "list", Name: "List", Uses: "hello", actionRunner: rows, Test: "len(res.rows) == 2", Outputs: map[string]string{"rows": "res.rows", "none": "nil"}},
-			{Name: "Greet {{vars.name}}", Uses: "hello", actionRunner: each, With: map[string]any{"id": "{{vars.id}}"}, Iteration: Iteration{Expr: iteration}},
+			{ID: "list", Name: "List", Uses: "hello", Test: "len(res.rows) == 2", Outputs: map[string]string{"rows": "res.rows", "none": "nil"}},
+			{Name: "Greet {{vars.name}}", Uses: "hello", With: map[string]any{"id": "{{vars.id}}"}, Iteration: Iteration{Expr: iteration}},
 		}}},
 	}
-	return w, each
+	return w, stepRunners{byName: map[string]ActionRunner{"List": rows}, fallback: each}, rows, each
 }
 
 func TestWorkflow_Start_IterationFromTemplate(t *testing.T) {
 	t.Run("the outputs of an earlier step", func(t *testing.T) {
-		w, each := iterationWorkflow("{{ outputs.list.rows }}", false)
-		report := startCapturing(t, w, OutputModeSpinner)
+		w, runner, _, each := iterationWorkflow("{{ outputs.list.rows }}", false)
+		report := startCapturing(t, w, OutputModeSpinner, runner)
 
 		calls := each.Calls["hello"]
 		if len(calls) != 2 {
@@ -200,8 +202,8 @@ func TestWorkflow_Start_IterationFromTemplate(t *testing.T) {
 		if err := os.WriteFile(path, []byte(`[{"id": 7, "name": "linus"}]`), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		w, each := iterationWorkflow("{{ parse_json(file('"+path+"')) }}", false)
-		report := startCapturing(t, w, OutputModeSpinner)
+		w, runner, _, each := iterationWorkflow("{{ parse_json(file('"+path+"')) }}", false)
+		report := startCapturing(t, w, OutputModeSpinner, runner)
 
 		if calls := each.Calls["hello"]; len(calls) != 1 || !strings.Contains(report, "Greet linus") {
 			t.Errorf("the step ran %d times, want once with the case of the file:\n%s", len(calls), report)
@@ -209,8 +211,8 @@ func TestWorkflow_Start_IterationFromTemplate(t *testing.T) {
 	})
 
 	t.Run("a list without entries skips the step", func(t *testing.T) {
-		w, each := iterationWorkflow("{{ vars.none }}", false)
-		report := startCapturing(t, w, OutputModeSpinner)
+		w, runner, _, each := iterationWorkflow("{{ vars.none }}", false)
+		report := startCapturing(t, w, OutputModeSpinner, runner)
 
 		if len(each.Calls["hello"]) != 0 || !strings.Contains(report, "(SKIPPED)") {
 			t.Errorf("the step should be skipped:\n%s", report)
@@ -226,8 +228,8 @@ func TestWorkflow_Start_IterationFromTemplate(t *testing.T) {
 		"a template that cannot be evaluated does": {"{{ outputs.list.rows.nope.x }}", "iteration"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			w, each := iterationWorkflow(tt.iteration, false)
-			report := startCapturing(t, w, OutputModeSpinner)
+			w, runner, _, each := iterationWorkflow(tt.iteration, false)
+			report := startCapturing(t, w, OutputModeSpinner, runner)
 
 			if len(each.Calls["hello"]) != 0 {
 				t.Errorf("the step ran:\n%s", report)
@@ -242,9 +244,9 @@ func TestWorkflow_Start_IterationFromTemplate(t *testing.T) {
 	}
 
 	t.Run("it is not evaluated after a failure in a job with fail_fast", func(t *testing.T) {
-		w, each := iterationWorkflow("{{ outputs.list.none }}", true)
-		w.Jobs[0].Steps[0].actionRunner.(*MockActionRunner).SetError("hello", errors.New("boom"))
-		report := startCapturing(t, w, OutputModeSpinner)
+		w, runner, rows, each := iterationWorkflow("{{ outputs.list.none }}", true)
+		rows.SetError("hello", errors.New("boom"))
+		report := startCapturing(t, w, OutputModeSpinner, runner)
 
 		if len(each.Calls["hello"]) != 0 || !strings.Contains(report, "(SKIPPED)") || strings.Contains(report, "want a list") {
 			t.Errorf("the step should be skipped without its iteration being read:\n%s", report)
@@ -330,8 +332,8 @@ func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
 
-	each := NewMockActionRunner()
-	after := NewMockActionRunner()
+	each := newMockRunner()
+	after := newMockRunner()
 	w := &Workflow{
 		Name: "Repeat",
 		Vars: map[string]any{"runs": []any{
@@ -341,11 +343,11 @@ func TestWorkflow_Start_RepeatWithIterationThatChanges(t *testing.T) {
 		}},
 		Jobs: []Job{{ID: "work", Name: "Work", Repeat: &Repeat{Count: 3}, Steps: []*Step{
 			// No entry in the first run, two in the second, one in the third.
-			{Name: "Each {{vars.n ?? 'none'}}", Uses: "hello", actionRunner: each, Test: "true", Iteration: Iteration{Expr: "{{ vars.runs[repeat_index] }}"}},
-			{Name: "After", Uses: "hello", actionRunner: after, Test: "true"},
+			{Name: "Each {{vars.n ?? 'none'}}", Uses: "hello", Test: "true", Iteration: Iteration{Expr: "{{ vars.runs[repeat_index] }}"}},
+			{Name: "After", Uses: "hello", Test: "true"},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, stepRunners{byName: map[string]ActionRunner{"After": after}, fallback: each})
 
 	if got := len(each.Calls["hello"]); got != 3 {
 		t.Errorf("the iterated step ran %d times, want 3:\n%s", got, report)
@@ -397,15 +399,15 @@ func TestWorkflow_Start_RepeatWithIterationAlwaysEmpty(t *testing.T) {
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
 
-	each := NewMockActionRunner()
+	each := newMockRunner()
 	w := &Workflow{
 		Name: "Repeat",
 		Vars: map[string]any{"none": []any{}},
 		Jobs: []Job{{ID: "work", Name: "Work", Repeat: &Repeat{Count: 2}, Steps: []*Step{
-			{Name: "Each", Uses: "hello", actionRunner: each, Test: "true", Iteration: Iteration{Expr: "{{ vars.none }}"}},
+			{Name: "Each", Uses: "hello", Test: "true", Iteration: Iteration{Expr: "{{ vars.none }}"}},
 		}}},
 	}
-	report := startCapturing(t, w, OutputModeSpinner)
+	report := startCapturing(t, w, OutputModeSpinner, each)
 
 	if len(each.Calls["hello"]) != 0 || !strings.Contains(report, "skipped in 2/2 runs") || strings.Contains(report, "success") && !strings.Contains(report, "All jobs succeeded") {
 		t.Errorf("the step should be reported as skipped in both runs:\n%s", report)
