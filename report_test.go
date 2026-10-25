@@ -16,6 +16,7 @@ import (
 	"github.com/mozership/probe/report"
 
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 )
 
 // newReportResult builds a Result covering every status a report has to map.
@@ -148,7 +149,7 @@ func TestBuildReport_StatusMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildStepReport(tt.sr).Status; got != tt.want {
+			if got := buildStepReport(tt.sr, nil).Status; got != tt.want {
 				t.Errorf("status = %q, want %q", got, tt.want)
 			}
 		})
@@ -157,7 +158,7 @@ func TestBuildReport_StatusMapping(t *testing.T) {
 
 func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
 	sr := StepResult{Status: StatusSuccess, Failure: &StepFailure{Kind: FailureAssertion}}
-	if got := buildStepReport(sr).Failure; got != nil {
+	if got := buildStepReport(sr, nil).Failure; got != nil {
 		t.Errorf("Failure = %+v, want nil for a passing step", got)
 	}
 }
@@ -165,9 +166,92 @@ func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
 func TestBuildReport_FailureCarriesViolations(t *testing.T) {
 	vs := []report.Violation{{In: "response", Field: "$.id", Message: "body failed"}}
 	sr := StepResult{Status: StatusError, Failure: &StepFailure{Kind: FailureContractResponse, Violations: vs}}
-	got := buildStepReport(sr).Failure
+	got := buildStepReport(sr, nil).Failure
 	if got == nil || !reflect.DeepEqual(got.Violations, vs) {
 		t.Errorf("Failure = %+v, want the violations carried over", got)
+	}
+}
+
+// The message of a failure in the report files is told anew as they are
+// written, but it is the message the failure was made with when the masker
+// has learned nothing since: of a test that is false, with its operands
+// shown or hidden and a secret the masker knew in one cut short, of one that
+// could not be evaluated or did not come to a boolean, of an action's error
+// and of a broken contract, alone or as the first of the runs of a repeated
+// step that failed.
+func TestBuildReport_KeepsTheMessageOfAFailure(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	m := mask.New(nil, nil)
+	m.Learn(map[string]any{"headers": map[string]any{"authorization": token}})
+	printer := newBufferPrinter()
+	printer.SetMasker(m)
+	env := StepContext{Res: map[string]any{"code": 500, "body": strings.Repeat("x", 180) + token}}
+
+	failed := func(test string, hideOperands bool) *StepFailure {
+		t.Helper()
+		passed, f := evaluateTest(&expr.Expr{}, test, env, printer, hideOperands)
+		if passed {
+			t.Fatalf("%s held, want it to fail", test)
+		}
+		return f
+	}
+	tests := []struct {
+		name    string
+		failure *StepFailure
+		want    string
+	}{
+		{name: "a test that is false", failure: failed("res.code == 200", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
+		{name: "a test that is false, its operands hidden", failure: failed("res.code == 200", true), want: "test evaluated to false: res.code == 200"},
+		{name: "a test that is false, a known secret cut short", failure: failed(`res.body == ""`, false), want: `test evaluated to false: res.body == "" (res.body = "` + strings.Repeat("x", 180) + `<redacted>")`},
+		{name: "a test that is false of two values", failure: failed("res.code == 200 && res.body != ''", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
+		{name: "a test that cannot be evaluated", failure: failed("nosuch(1)", false)},
+		{name: "a test that is not a boolean", failure: failed("res.code", false), want: "test evaluated to 500 (int), not a boolean"},
+		{name: "an action's error", failure: &StepFailure{Kind: FailureAction, Message: "dial tcp 127.0.0.1:1: connect: connection refused"}, want: "dial tcp 127.0.0.1:1: connect: connection refused"},
+		{name: "a broken contract", failure: &StepFailure{Kind: FailureContractResponse, Message: "the response breaks its contract in 1 place"}, want: "the response breaks its contract in 1 place"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.want != "" && tt.failure.Message != tt.want {
+				t.Fatalf("Message = %q, want %q", tt.failure.Message, tt.want)
+			}
+			if got := buildStepReport(StepResult{Status: StatusError, Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+				t.Errorf("step: message = %q, want %q", got, tt.failure.Message)
+			}
+			if got := buildRepeatTestReport(&RepeatTestResult{Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+				t.Errorf("test of a repeated job: message = %q, want %q", got, tt.failure.Message)
+			}
+			repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: tt.failure}, false)
+			if got := buildStepReport(repeated, m).Failure.Message; got != repeated.Failure.Message {
+				t.Errorf("repeated step: message = %q, want %q", got, repeated.Failure.Message)
+			}
+		})
+	}
+}
+
+// What a false condition compared is masked in the message of the report
+// files with what the masker knows as they are written, before it is cut, so
+// a secret it learned after the test was checked is hidden whole.
+func TestBuildReport_MasksTheMessageWithWhatTheMaskerLearnedSince(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	m := mask.New(nil, nil)
+	printer := newBufferPrinter()
+	printer.SetMasker(m)
+	env := StepContext{Res: map[string]any{"body": strings.Repeat("x", 180) + token}}
+	_, f := evaluateTest(&expr.Expr{}, `res.body == ""`, env, printer, false)
+	if f == nil || !strings.Contains(f.Message, token[:12]) {
+		t.Fatalf("failure = %+v, want the message to have the start of the token cut short", f)
+	}
+
+	m.Learn(map[string]any{"headers": map[string]any{"authorization": token}})
+	want := `test evaluated to false: res.body == "" (res.body = "` + strings.Repeat("x", 180) + `<redacted>")`
+	if got := buildStepReport(StepResult{Status: StatusError, Failure: f}, m).Failure.Message; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+	// A repeated step keeps the count of the runs it failed in before the
+	// message of the first of them.
+	repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: f}, false)
+	if got, want := buildStepReport(repeated, m).Failure.Message, "2 of 3 iterations failed; the first: "+want; got != want {
+		t.Errorf("repeated step: message = %q, want %q", got, want)
 	}
 }
 
@@ -178,7 +262,7 @@ func TestBuildReport_StepCarriesContract(t *testing.T) {
 		{Status: StatusError, Contract: c},
 		{Status: StatusSuccess, Contract: c, RepeatCounter: &StepRepeatCounter{SuccessCount: 1, Checked: true}},
 	} {
-		if got := buildStepReport(sr).Contract; got != c {
+		if got := buildStepReport(sr, nil).Contract; got != c {
 			t.Errorf("Contract = %+v, want %+v", got, c)
 		}
 	}

@@ -346,7 +346,7 @@ func (r *workflowRun) writeReports() error {
 		return nil
 	}
 
-	rep := BuildReport(r.w.Name, r.w.Description, r.result, r.jobIDs(), r.startedAt, r.finishedAt)
+	rep := buildReport(r.w.Name, r.w.Description, r.result, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
 	if r.selection != nil {
 		rep.Selection = r.selection.report()
