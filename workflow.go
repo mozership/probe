@@ -640,7 +640,7 @@ func (w *Workflow) validateRepeatLimits() error {
 
 		// Validate retry configuration for each step
 		for stepIdx, step := range job.Steps {
-			if step.Retry != nil {
+			if step != nil && step.Retry != nil {
 				if err := step.Retry.Validate(); err != nil {
 					return NewConfigurationError("invalid_retry",
 						fmt.Sprintf("job %d (%s), step %d: %v", jobIdx, job.Name, stepIdx, err), nil)

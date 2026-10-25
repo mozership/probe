@@ -39,6 +39,14 @@ func TestProbe_load(t *testing.T) {
 			wantLoadErr: `the name "http" is that of an action of Probe`,
 		},
 		{
+			// The load goes past the wrong name, to steps that are empty,
+			// which are not read as steps.
+			name:        "a wrong name and empty steps",
+			workflow:    "name: w\n" + names + "jobs:\n- name: J\n  repeat:\n    count: 2\n    interval: 1s\n    test: steps.step_0.code == 0\n  steps:\n  -\n  - uses: http\n    id: a\n    retry:\n      max_attempts: 2\n  -\n",
+			wantAliases: 1,
+			wantLoadErr: `the name "http" is that of an action of Probe`,
+		},
+		{
 			name:        "a text that does not decode",
 			workflow:    "name: [\n",
 			wantErr:     "failed to decode YAML workflow",
