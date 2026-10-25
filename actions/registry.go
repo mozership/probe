@@ -46,7 +46,7 @@ var specs = map[string]func() actionspec.Spec{
 func init() {
 	specs["embedded"] = func() actionspec.Spec {
 		s := embedded.Spec()
-		s.Serve = func() { embedded.ServeWithActions(Names(), NeedsNoCheck()) }
+		s.Serve = func() { embedded.ServeWithActions(Names(), embedded.WithNeedsNoCheck(NeedsNoCheck())) }
 		return s
 	}
 }
