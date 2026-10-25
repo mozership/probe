@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/report"
 )

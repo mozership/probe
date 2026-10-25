@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // checkTests warns of steps that nothing checks, and of tests that read

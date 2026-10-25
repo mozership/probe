@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/kind"
 )
 

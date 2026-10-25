@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // exprAt is an expression of a job or a step, or one of the templates of

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/duration"
+	"github.com/mozership/probe/internal/expr"
 )
 
 const (

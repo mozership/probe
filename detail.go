@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/dump"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 )
 
