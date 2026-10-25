@@ -146,10 +146,22 @@ func TestMergeStringMaps(t *testing.T) {
 			expected: map[string]string{"a": "1", "b": "overridden", "c": "3"},
 		},
 		{
-			name:     "ignore non-string values",
+			name:     "write numbers and bools as text",
 			base:     map[string]string{"a": "1"},
-			over:     map[string]any{"a": "overridden", "b": 123, "c": true},
-			expected: map[string]string{"a": "overridden"},
+			over:     map[string]any{"a": "overridden", "b": 123, "c": true, "d": 0.5},
+			expected: map[string]string{"a": "overridden", "b": "123", "c": "true", "d": "0.5"},
+		},
+		{
+			name:     "leave out nil, maps and lists",
+			base:     map[string]string{"a": "1"},
+			over:     map[string]any{"a": nil, "b": map[string]any{"x": 1}, "c": []any{1}},
+			expected: map[string]string{"a": "1"},
+		},
+		{
+			name:     "nil base map",
+			base:     nil,
+			over:     map[string]any{"a": 1},
+			expected: map[string]string{"a": "1"},
 		},
 		{
 			name:     "empty base map",

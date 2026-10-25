@@ -37,27 +37,19 @@ func (e *ValidationError) AddMessage(s string) {
 	e.messages = append(e.messages, s)
 }
 
-// mergeStringMaps merges two string maps, where values from 'over' override values from 'base'.
-// Only string values from 'over' are included; non-string values are ignored.
+// mergeStringMaps returns a new map of base with the values of over put
+// over it, each written as StringMap writes it.
 //
 // Example:
 //
 //	base := map[string]string{"a": "1", "b": "2"}
-//	over := map[string]any{"b": "overridden", "c": "3", "d": 123}
+//	over := map[string]any{"b": "overridden", "c": 3, "d": nil}
 //	result := mergeStringMaps(base, over)
 //	// result: map[string]string{"a": "1", "b": "overridden", "c": "3"}
-//	// Note: "d": 123 is ignored because it's not a string
 func mergeStringMaps(base map[string]string, over map[string]any) map[string]string {
-	res := make(map[string]string)
-
+	res := make(map[string]string, len(base)+len(over))
 	maps.Copy(res, base)
-
-	for k, v := range over {
-		if value, ok := v.(string); ok {
-			res[k] = value
-		}
-	}
-
+	maps.Copy(res, StringMap(over))
 	return res
 }
 

@@ -182,3 +182,45 @@ func TestEnvToStringValue_MapsOntoStruct(t *testing.T) {
 		t.Errorf("Env = %v, want %v", r.Env, want)
 	}
 }
+
+func TestStringMap(t *testing.T) {
+	in := map[string]any{
+		"text":   "x",
+		"int":    1024,
+		"uint":   uint8(7),
+		"float":  100.5,
+		"bool":   true,
+		"nil":    nil,
+		"map":    map[string]any{"a": 1},
+		"list":   []any{"a"},
+		"struct": struct{}{},
+	}
+	want := map[string]string{"text": "x", "int": "1024", "uint": "7", "float": "100.5", "bool": "true"}
+	if got := StringMap(in); !reflect.DeepEqual(got, want) {
+		t.Errorf("StringMap() = %v, want %v", got, want)
+	}
+	if in["int"] != 1024 {
+		t.Error("the input should keep its original values")
+	}
+}
+
+// TestMapToStructByTags_StringMapOfNumbers checks a map[string]string field,
+// such as the headers of an HTTP request or the metadata of a gRPC one,
+// takes a number as its text rather than dropping it.
+func TestMapToStructByTags_StringMapOfNumbers(t *testing.T) {
+	type req struct {
+		Headers map[string]string `map:"headers"`
+	}
+	params := map[string]any{"headers": map[string]any{"Content-Length": 1024, "X-Debug": true, "Accept": "*/*"}}
+	r := &req{Headers: map[string]string{"User-Agent": "probe"}}
+	if err := MapToStructByTags(params, r); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"User-Agent": "probe", "Content-Length": "1024", "X-Debug": "true", "Accept": "*/*"}
+	if !reflect.DeepEqual(r.Headers, want) {
+		t.Errorf("Headers = %v, want %v", r.Headers, want)
+	}
+	if params["headers"].(map[string]any)["Content-Length"] != 1024 {
+		t.Error("the params should keep their original values")
+	}
+}

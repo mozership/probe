@@ -479,8 +479,6 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	// Handle body conversion for JSON content-type
 	MarshalBodyIfJSON(call.With, m)
 
-	m = mapping.HeaderToStringValue(m)
-
 	// Extract custom headers and merge with defaults before MapToStructByTags
 	var customHeaders map[string]string
 	if headersInterface, exists := m["headers"]; exists {
@@ -488,13 +486,8 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 			// A copy, since basic_auth, form and multipart change it.
 			customHeaders = maps.Clone(headers)
 		} else if headersInterfaceMap, ok := headersInterface.(map[string]any); ok {
-			// Convert map[string]interface{} to map[string]string
-			customHeaders = make(map[string]string)
-			for k, v := range headersInterfaceMap {
-				if strVal, ok := v.(string); ok {
-					customHeaders[k] = strVal
-				}
-			}
+			// A number such as Content-Length: 1024 is sent as its text.
+			customHeaders = mapping.StringMap(headersInterfaceMap)
 		}
 	}
 

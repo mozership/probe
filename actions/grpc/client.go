@@ -706,8 +706,6 @@ func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, error) {
 		return map[string]any{}, err
 	}
 
-	m = mapping.HeaderToStringValue(m)
-
 	// Create new request
 	r := NewReq()
 	r.contract = contract

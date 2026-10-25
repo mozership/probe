@@ -2,7 +2,6 @@ package mapping
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -10,52 +9,27 @@ import (
 	"github.com/mozership/probe/internal/scalar"
 )
 
-// HeaderToStringValue converts header values to strings for HTTP processing.
-// This function ensures all header values are strings, converting numbers and other types as needed.
+// StringMap returns the values of m that are a string, a bool or a number,
+// each written as text as scalar.String writes it, so a header such as
+// X-Retry: 3 is passed on as "3" instead of dropped. Any other value, such
+// as nil, a map or a list, is left out. m itself is not modified.
 //
 // Example:
 //
-//	data := map[string]any{
-//	  "headers": map[string]any{
-//	    "Content-Length": 1024,
-//	    "X-Rate-Limit": 100.5,
-//	    "Authorization": "Bearer token",
-//	  },
-//	}
-//
-//	result := HeaderToStringValue(data)
-//	// result["headers"] = map[string]any{
-//	//   "Content-Length": "1024",
-//	//   "X-Rate-Limit": "100.5",
-//	//   "Authorization": "Bearer token",
-//	// }
-func HeaderToStringValue(data map[string]any) map[string]any {
-	v, exists := data["headers"]
-	if !exists {
-		return data
-	}
-
-	newHeaders := make(map[string]any)
-	if headers, ok := v.(map[string]any); ok {
-		for key, value := range headers {
-			switch v := value.(type) {
-			case string:
-				newHeaders[key] = v
-			case int:
-				newHeaders[key] = strconv.Itoa(v)
-			case float64:
-				newHeaders[key] = strconv.FormatFloat(v, 'f', -1, 64)
-			default:
-				newHeaders[key] = fmt.Sprintf("%v", v)
-			}
+//	StringMap(map[string]any{"a": "x", "b": 1024, "c": 0.5, "d": true, "e": nil})
+//	// map[string]string{"a": "x", "b": "1024", "c": "0.5", "d": "true"}
+func StringMap(m map[string]any) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		switch v.(type) {
+		case string, bool,
+			int, int8, int16, int32, int64,
+			uint, uint8, uint16, uint32, uint64,
+			float32, float64:
+			out[k], _ = scalar.String(v)
 		}
 	}
-
-	if len(newHeaders) > 0 {
-		data["headers"] = newHeaders
-	}
-
-	return data
+	return out
 }
 
 // envPrefix marks a flat key that names one environment variable, as in

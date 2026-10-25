@@ -3,12 +3,11 @@ package embedded
 import (
 	"errors"
 	"fmt"
-	"github.com/mozership/probe/actionrpc"
-	"maps"
 	"path/filepath"
 	"time"
 
 	"github.com/mozership/probe"
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/mapping"
 )
 
@@ -147,12 +146,6 @@ func (r *Req) Do() (*Result, error) {
 }
 
 func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
-	// Create a copy to avoid modifying the original data
-	dataCopy := make(map[string]any)
-	maps.Copy(dataCopy, data)
-
-	m := mapping.HeaderToStringValue(dataCopy)
-
 	r := NewReq()
 
 	cb := &Callback{}
@@ -161,7 +154,7 @@ func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 	}
 	r.cb = cb
 
-	if err := mapping.MapToStructByTags(m, r); err != nil {
+	if err := mapping.MapToStructByTags(data, r); err != nil {
 		return map[string]any{}, err
 	}
 
