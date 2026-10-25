@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 )
 

@@ -16,7 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )

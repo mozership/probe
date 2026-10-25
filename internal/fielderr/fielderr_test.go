@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 func Test_unjoin(t *testing.T) {

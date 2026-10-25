@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/mozership/probe/dag"
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/vareval"
 )
 

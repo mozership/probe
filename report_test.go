@@ -15,7 +15,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // newReportResult builds a Result covering every status a report has to map.

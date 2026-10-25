@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/expr"
 )
 
 // problem is what keeps a job from running as it is written. It is found as
