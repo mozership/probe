@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/oas"
+	"github.com/mozership/probe/internal/oas"
 	"github.com/mozership/probe/report"
 )
 

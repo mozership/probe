@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
-	"github.com/mozership/probe/procgroup"
 )
 
 // newBackground returns the tracker of the processes a run's steps leave in

@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // NOTE: SSH config file support is intentionally not implemented to maintain

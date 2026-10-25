@@ -16,9 +16,9 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/actions"
 	"github.com/mozership/probe/actions/grpc"
-	"github.com/mozership/probe/envfile"
+	"github.com/mozership/probe/internal/envfile"
+	"github.com/mozership/probe/internal/oas"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/oas"
 	"github.com/mozership/probe/report"
 )
 

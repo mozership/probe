@@ -16,8 +16,8 @@ import (
 
 	ex "github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/mozership/probe/jsonutil"
-	"github.com/mozership/probe/truncate"
+	"github.com/mozership/probe/internal/jsonutil"
+	"github.com/mozership/probe/internal/truncate"
 )
 
 var (

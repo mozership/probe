@@ -21,7 +21,7 @@ import (
 	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/hostport"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // DefaultTimeout bounds a request when the step does not set `timeout`. The

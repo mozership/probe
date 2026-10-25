@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // Match compares two `map[string]any` objects strictly.

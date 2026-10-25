@@ -15,7 +15,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/contractcheck"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
