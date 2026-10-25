@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -742,7 +743,8 @@ func TestReportRenderer_repeatTestText(t *testing.T) {
 		{"none", nil, ""},
 		{"skipped", &RepeatTestResult{Test: "p95 < 100", Skipped: "no run took a time"}, "    ⏭  repeat test: p95 < 100\n       skipped: no run took a time\n"},
 		{"passed", &RepeatTestResult{Test: "p95 < 100", Passed: true}, "    ✓  repeat test: p95 < 100\n"},
-		{"failed", &RepeatTestResult{Test: "p95 < 100", Output: "       p95 = 120\n"}, "    ✗  repeat test: p95 < 100\n       p95 = 120\n"},
+		{"failed", &RepeatTestResult{Test: "p95 < 100", Failure: &StepFailure{Kind: FailureAssertion, clause: &expr.Clause{Expr: "p95 < 100", Operands: []expr.Operand{{Expr: "p95", Value: 120}}}}}, "    ✗  repeat test: p95 < 100\n       failed: p95 < 100\n         p95 = 120\n"},
+		{"not a boolean", &RepeatTestResult{Test: "p95", Failure: &StepFailure{Kind: FailureTestType, got: 120}}, "    ✗  repeat test: p95\n       Test: `p95` = 120\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -773,7 +775,8 @@ func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
 		{"retried, then timed", StepResult{Index: 1, Name: "get", Status: StatusSuccess, RetryAttempt: 2, RetryMax: 3, RT: "12ms"}, " 1. ✓  get ⟳ 2/3 (12ms)\n"},
 		{"waited", StepResult{Index: 1, Name: "get", Status: StatusSuccess, WaitTime: "1s"}, " 1. ✓  " + IconWait + "1s → get\n"},
 		{"failed", StepResult{Index: 2, Name: "post", Status: StatusError}, " 2. ✗  post\n"},
-		{"failed, with why", StepResult{Index: 2, Name: "post", Status: StatusError, TestOutput: "       res.code = 500"}, " 2. ✗  post\n       res.code = 500\n"},
+		{"failed, with why", StepResult{Index: 2, Name: "post", Status: StatusError, Failure: &StepFailure{Kind: FailureAction, Message: "connection refused"}}, " 2. ✗  post\n       connection refused\n\n"},
+		{"failed, with nothing to tell", StepResult{Index: 2, Name: "post", Status: StatusError, Failure: &StepFailure{Kind: FailureAssertion}}, " 2. ✗  post\n"},
 		{"untested", StepResult{Index: 3, Name: "sleep", Status: StatusWarning}, " 3. △  sleep\n"},
 		{"skipped", StepResult{Index: 4, Name: "later", Status: StatusSkipped}, " 4. ⏭  later (SKIPPED)\n"},
 		{"echoed", StepResult{Index: 5, Name: "echo", Status: StatusWarning, Echo: "hello\n\n", HasEcho: true}, " 5. △  echo\n       hello\n"},
@@ -922,6 +925,49 @@ func TestWriteEcho(t *testing.T) {
 			writeEcho(&b, echoText(tt.content, tt.err))
 			if got := b.String(); got != tt.expected {
 				t.Errorf("writeEcho() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// failureTextOf returns why f failed, as the report shows it under its step,
+// for a renderer without a masker.
+func failureTextOf(f *StepFailure, test string) string {
+	return newReportRenderer(nil, nil, nil).failureText(f, test)
+}
+
+// Why a step failed is shown under it by the kind of its failure, from
+// what the failure holds.
+func TestReportRenderer_failureText(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	clause := &expr.Clause{Expr: "res.code == 200", Operands: []expr.Operand{{Expr: "res.code", Value: 500}}}
+	tests := []struct {
+		name    string
+		failure *StepFailure
+		test    string
+		want    string
+	}{
+		{"none", nil, "", ""},
+		{"false, with the exchange", &StepFailure{Kind: FailureAssertion, clause: clause, Request: map[string]any{"url": "/"}, Response: map[string]any{"code": 500}},
+			"res.code == 200",
+			"       failed: res.code == 200\n         res.code = 500\n       request:\n         url: /\n       response:\n         code: 500\n"},
+		{"false, without the exchange", &StepFailure{Kind: FailureAssertion, clause: &expr.Clause{Expr: "res.code == 200"}}, "res.code == 200", "       failed: res.code == 200\n"},
+		{"false, its condition unknown", &StepFailure{Kind: FailureAssertion}, "res.code == 200", ""},
+		{"not evaluated", &StepFailure{Kind: FailureTestError, Message: "unknown name nosuch\n | nosuch"}, "nosuch", "       test error: unknown name nosuch\n        | nosuch\n"},
+		{"not a boolean", &StepFailure{Kind: FailureTestType, got: 500}, "res.code", "       Test: `res.code` = 500\n"},
+		{"broken contract", &StepFailure{Kind: FailureContractResponse, Violations: []report.Violation{{In: "response", Field: "body.id", Reason: "required"}}},
+			"",
+			"       " + (report.Violation{In: "response", Field: "body.id", Reason: "required"}).String() + "\n"},
+		{"an action error", &StepFailure{Kind: FailureAction, Message: "connection refused\n"}, "", "       connection refused\n"},
+		{"a template", &StepFailure{Kind: FailureTemplate, Message: "with.url: unknown"}, "", "       with.url: unknown\n"},
+		{"refused", &StepFailure{Kind: FailureRefused, Message: "refused: not here"}, "", "       refused: not here\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := failureTextOf(tt.failure, tt.test); got != tt.want {
+				t.Errorf("failureText() = %q, want %q", got, tt.want)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/report"
 )
 
@@ -67,14 +68,13 @@ type StepResult struct {
 	Index int
 	// ID is the id of the step, or step_ and where it is written in the job
 	// when it has none; see Step.repeatID.
-	ID         string
-	Name       string
-	Status     StatusType
-	StartedAt  time.Time
-	RT         string
-	RTSec      float64
-	WaitTime   string
-	TestOutput string
+	ID        string
+	Name      string
+	Status    StatusType
+	StartedAt time.Time
+	RT        string
+	RTSec     float64
+	WaitTime  string
 	// Echo is what the step's echo came to, as it is: the report indents
 	// and colors it. HasEcho is whether the step has an echo, which may
 	// come to nothing.
@@ -123,6 +123,12 @@ type StepFailure struct {
 	// refused is what the guard of the run refused, when Kind is
 	// FailureRefused, so that why is read from it rather than the message.
 	refused *actionrpc.Refused
+	// clause is the condition of the test that is false, when Kind is
+	// FailureAssertion and it could be told, with the secrets hidden; got
+	// is what the test came to, when Kind is FailureTestType. The report
+	// shows them under the step.
+	clause *expr.Clause
+	got    any
 }
 
 // JobResult stores execution results for a job
@@ -155,8 +161,6 @@ func (jr *JobResult) Succeeded() bool {
 type RepeatTestResult struct {
 	Test   string
 	Passed bool
-	// Output is what the terminal shows under the test when it failed.
-	Output string
 	// Failure is why the test failed; nil when it passed.
 	Failure *StepFailure
 	// Skipped is why the test was not checked, which a test against the run

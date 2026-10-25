@@ -525,8 +525,7 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 		},
 	}
 
-	status, testOutput := step.verdict(jCtx)
-	result := step.createStepResult("Test Step", jCtx, status, testOutput)
+	result := step.createStepResult("Test Step", jCtx, step.verdict(jCtx))
 
 	if result.RT != "250ms" {
 		t.Errorf("RT = %v, want %v", result.RT, "250ms")
@@ -591,8 +590,11 @@ func TestStep_createFailedStepResult(t *testing.T) {
 	if result.Report != "HTTP error occurred" {
 		t.Errorf("Report = %v, want %v", result.Report, "HTTP error occurred")
 	}
-	if result.TestOutput != "       test error message\n" {
-		t.Errorf("TestOutput = %q, want %q", result.TestOutput, "       test error message\n")
+	if result.Failure == nil || result.Failure.Message != "test error message" {
+		t.Errorf("Failure = %+v, want the error", result.Failure)
+	}
+	if out := failureTextOf(result.Failure, result.Test); out != "       test error message\n" {
+		t.Errorf("failure text = %q, want %q", out, "       test error message\n")
 	}
 	if result.RepeatCounter != nil {
 		t.Errorf("RepeatCounter should be nil for non-repeat step, got %v", result.RepeatCounter)
@@ -625,11 +627,11 @@ func TestStep_verdict(t *testing.T) {
 				},
 			}
 
-			status, out := st.verdict(jCtx)
+			status := st.verdict(jCtx)
 			if status != tt.wantStatus {
 				t.Errorf("status = %v, want %v", status, tt.wantStatus)
 			}
-			if (out != "") != tt.wantOutput {
+			if out := failureTextOf(st.failure, st.Test); (out != "") != tt.wantOutput {
 				t.Errorf("output = %q, want one: %v", out, tt.wantOutput)
 			}
 			if jCtx.Failed != tt.wantFailed {
@@ -657,9 +659,9 @@ func TestStep_createStepResult_ChangesNothing(t *testing.T) {
 		},
 	}
 
-	result := st.createStepResult("Check", jCtx, StatusError, "the output")
-	if result.Status != StatusError || result.TestOutput != "the output" || result.Failure != failure {
-		t.Errorf("result = %+v, want the status, output and failure it was given", result)
+	result := st.createStepResult("Check", jCtx, StatusError)
+	if result.Status != StatusError || result.Failure != failure {
+		t.Errorf("result = %+v, want the status it was given and the failure the check left", result)
 	}
 	if jCtx.Failed {
 		t.Error("Failed = true, want the job left as it was")
@@ -668,8 +670,8 @@ func TestStep_createStepResult_ChangesNothing(t *testing.T) {
 		t.Errorf("failures = %v, want none recorded", jCtx.Result.failures)
 	}
 
-	passed := st.createStepResult("Check", jCtx, StatusSuccess, "")
-	if passed.Failure != nil || passed.TestOutput != "" {
+	passed := st.createStepResult("Check", jCtx, StatusSuccess)
+	if passed.Failure != nil {
 		t.Errorf("result = %+v, want no failure on a step that passed", passed)
 	}
 }
@@ -693,7 +695,7 @@ func TestStep_createFailedStepResult_HasTestAsARunStepHas(t *testing.T) {
 			jCtx := &JobContext{runEnv: &runEnv{Config: Config{NeedsNoCheck: []string{"hello"}}}}
 
 			failed := st.createFailedStepResult("Step", jCtx)
-			ran := st.createStepResult("Step", jCtx, StatusSuccess, "")
+			ran := st.createStepResult("Step", jCtx, StatusSuccess)
 			if failed.HasTest != tt.want || ran.HasTest != tt.want {
 				t.Errorf("HasTest = %v failed and %v run, want %v", failed.HasTest, ran.HasTest, tt.want)
 			}
@@ -719,8 +721,8 @@ func TestStep_createFailedStepResult_NoTest(t *testing.T) {
 	if result.HasTest != false {
 		t.Errorf("HasTest = %v, want %v", result.HasTest, false)
 	}
-	if result.TestOutput != "" {
-		t.Errorf("TestOutput = %v, want empty string", result.TestOutput)
+	if result.Failure != nil {
+		t.Errorf("Failure = %+v, want none without an error", result.Failure)
 	}
 }
 
@@ -2420,7 +2422,7 @@ func TestStep_check_Contract(t *testing.T) {
 			if !tt.wantChecked {
 				return
 			}
-			_, ok := st.check(newBufferPrinter())
+			ok := st.check(newBufferPrinter())
 			if ok != tt.wantOK {
 				t.Fatalf("check() = %v, want %v", ok, tt.wantOK)
 			}
@@ -2493,8 +2495,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 				},
 			}
 
-			status, testOutput := st.verdict(jCtx)
-			result := st.createStepResult("Contract", jCtx, status, testOutput)
+			result := st.createStepResult("Contract", jCtx, st.verdict(jCtx))
 			if result.Status != tt.wantStatus {
 				t.Errorf("Status = %v, want %v", result.Status, tt.wantStatus)
 			}
@@ -2507,8 +2508,8 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			if result.Failure == nil || len(result.Failure.Violations) != 1 {
 				t.Fatalf("Failure = %+v, want the violation", result.Failure)
 			}
-			if !strings.Contains(result.TestOutput, "GET Path '/v1/teams' not found") {
-				t.Errorf("TestOutput = %q, want the violation", result.TestOutput)
+			if out := failureTextOf(result.Failure, result.Test); !strings.Contains(out, "GET Path '/v1/teams' not found") {
+				t.Errorf("failure text = %q, want the violation", out)
 			}
 			if got := jCtx.Result.exitCode(true); got != ExitTestFailed {
 				t.Errorf("exit code = %d, want %d", got, ExitTestFailed)
@@ -2676,7 +2677,7 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 		},
 	}
 
-	result := st.createStepResult("Get a user", jCtx, StatusSuccess, "")
+	result := st.createStepResult("Get a user", jCtx, StatusSuccess)
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
 	if !reflect.DeepEqual(result.Contract, want) {
 		t.Errorf("Contract = %+v, want %+v", result.Contract, want)
@@ -2930,13 +2931,13 @@ func TestStep_runTest_FalseClause(t *testing.T) {
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}}
 			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}
 
-			out, ok := st.runTest(printer)
-			if ok {
+			if st.runTest(printer) {
 				t.Fatal("runTest() passed, want it to fail")
 			}
 			if st.failure == nil || st.failure.Message != tt.wantMessage {
 				t.Errorf("failure = %+v, want the message %q", st.failure, tt.wantMessage)
 			}
+			out := failureTextOf(st.failure, st.Test)
 			if !strings.HasPrefix(out, tt.wantOutput) {
 				t.Errorf("output = %q, want it to start with %q", out, tt.wantOutput)
 			}
@@ -2967,7 +2968,7 @@ func TestEvaluateTest(t *testing.T) {
 		wantDetail   string
 	}{
 		{name: "a test that holds", test: "res.code == 500", wantPassed: true},
-		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr)},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr.Error())},
 		{name: "a test that is not a boolean", test: "res.code", wantKind: FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: typeMismatchDetail("res.code", 500)},
 		{name: "a test that is false", test: "res.code == 200", wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200 (res.code = 500)", wantDetail: "       failed: res.code == 200\n         res.code = 500\n"},
 		{name: "a test that is false, its operands hidden", test: "res.code == 200", hideOperands: true, wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200", wantDetail: "       failed: res.code == 200\n"},
@@ -2977,13 +2978,13 @@ func TestEvaluateTest(t *testing.T) {
 			printer := newBufferPrinter()
 			printer.SetMasker(mask.New(nil, nil))
 
-			passed, failure, detail := evaluateTest(&expr.Expr{}, tt.test, env, printer, tt.hideOperands)
+			passed, failure := evaluateTest(&expr.Expr{}, tt.test, env, printer, tt.hideOperands)
 			if passed != tt.wantPassed {
 				t.Errorf("passed = %v, want %v", passed, tt.wantPassed)
 			}
 			if tt.wantPassed {
-				if failure != nil || detail != "" {
-					t.Errorf("failure = %+v, detail = %q, want neither", failure, detail)
+				if failure != nil {
+					t.Errorf("failure = %+v, want none", failure)
 				}
 				return
 			}
@@ -2993,7 +2994,7 @@ func TestEvaluateTest(t *testing.T) {
 			if failure != nil && (failure.Request != nil || failure.Response != nil) {
 				t.Errorf("failure = %+v, want no exchange: the caller adds one", failure)
 			}
-			if detail != tt.wantDetail {
+			if detail := failureTextOf(failure, tt.test); detail != tt.wantDetail {
 				t.Errorf("detail = %q, want %q", detail, tt.wantDetail)
 			}
 		})
@@ -3017,13 +3018,13 @@ func TestStep_runTest_ErrorAndType(t *testing.T) {
 			printer.SetMasker(mask.New(nil, nil))
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Req: map[string]any{"url": "/"}, Res: map[string]any{"code": 500}}}
 
-			out, ok := st.runTest(printer)
-			if ok {
+			if st.runTest(printer) {
 				t.Fatal("runTest() passed, want it to fail")
 			}
 			if st.failure == nil || st.failure.Kind != tt.wantKind {
 				t.Fatalf("failure = %+v, want %s", st.failure, tt.wantKind)
 			}
+			out := failureTextOf(st.failure, st.Test)
 			if st.failure.Request != nil || strings.Contains(out, "request:") {
 				t.Errorf("failure = %+v, output = %q, want no exchange", st.failure, out)
 			}

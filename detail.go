@@ -184,9 +184,10 @@ func contractDetail(m *mask.Masker, f *StepFailure) string {
 	return b.String()
 }
 
-// testErrorDetail formats the error a test could not be evaluated for.
-func testErrorDetail(err error) string {
-	return indentDetail(fmt.Sprintf("test error: %v", err))
+// testErrorDetail formats the error a test could not be evaluated for, by
+// its message.
+func testErrorDetail(message string) string {
+	return indentDetail("test error: " + message)
 }
 
 // typeMismatchText is what a test that did not evaluate to a boolean is

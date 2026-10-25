@@ -114,7 +114,7 @@ func (r *reportRenderer) writeStepRepeatError(b *strings.Builder, counter *StepR
 	}
 	switch f.Kind {
 	case FailureAction, FailureTemplate, FailureRefused:
-		b.WriteString(indentDetail(f.Message))
+		b.WriteString(r.failureText(f, ""))
 	}
 }
 
@@ -144,7 +144,37 @@ func (r *reportRenderer) repeatTestText(label string, rt *RepeatTestResult) stri
 	case rt.Passed:
 		return fmt.Sprintf("    %s %s: %s\n", colorSuccess().Sprintf(IconSuccess), label, rt.Test)
 	}
-	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, rt.Output)
+	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, r.failureText(rt.Failure, rt.Test))
+}
+
+// failureText returns why a step, or a test of a repeated job, failed, as
+// it is shown under it: f is its failure and test its test. A test that is
+// false is told by the condition of it that is false and what that
+// compared, then the request and the response; one that could not be
+// evaluated, or did not come to a boolean, by that; a contract that is
+// broken by where, then the request and the response; and an error by its
+// message. It is empty when f is nil.
+func (r *reportRenderer) failureText(f *StepFailure, test string) string {
+	if f == nil {
+		return ""
+	}
+	switch f.Kind {
+	case FailureAssertion:
+		var b strings.Builder
+		if f.clause != nil {
+			b.WriteString(falseClauseDetail(*f.clause))
+		}
+		b.WriteString(exchangeDetail(r.masker, f.Request, f.Response))
+		return b.String()
+	case FailureTestError:
+		return testErrorDetail(f.Message)
+	case FailureTestType:
+		return typeMismatchDetail(test, f.got)
+	case FailureContractResponse, FailureContractRequest:
+		return contractDetail(r.masker, f)
+	default:
+		return indentDetail(f.Message)
+	}
 }
 
 // writeUnderJob writes text as the body of the block of a job: its first
@@ -371,8 +401,8 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 			case StatusSuccess:
 				r.fprintf(&output, "%s %s %s%s%s\n", num, colorSuccess().Sprintf(IconSuccess), waitPrefix, stepResult.Name, ps)
 			case StatusError:
-				if stepResult.TestOutput != "" {
-					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps, stepResult.TestOutput)
+				if why := r.failureText(stepResult.Failure, stepResult.Test); why != "" {
+					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps, why)
 				} else {
 					r.fprintf(&output, "%s %s %s%s%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps)
 				}
