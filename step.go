@@ -95,7 +95,10 @@ func (st *stepRun) writtenName() string {
 	return st.Name
 }
 
-func (st *stepRun) Do(jCtx *JobContext) {
+// run runs the step in the job jCtx is of: it waits for it or skips it,
+// runs its action, checks what the action returned and adds the step's
+// result to the job's, or counts the run in a repeated job.
+func (st *stepRun) run(jCtx *JobContext) {
 	// 1. Preparation phase: validation, wait, skip check
 	name, shouldContinue := st.prepare(jCtx)
 	if !shouldContinue {
@@ -569,7 +572,7 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	var failure *StepFailure
 	switch {
 	case hasError && st.err != nil:
-		failure = st.newFailure(failureKindOf(st.err), st.err.Error())
+		failure = st.errorFailure()
 	case hasTest && !testResult:
 		failure = st.failure
 	}
@@ -722,7 +725,7 @@ func (st *stepRun) check(printer *Printer) (string, bool) {
 		st.failure = nil
 		return "", true
 	}
-	return st.DoTest(printer)
+	return st.runTest(printer)
 }
 
 // evalTest evaluates the test expression and returns the raw result
@@ -731,7 +734,10 @@ func (st *stepRun) evalTest() (any, error) {
 	return st.expr.Eval(st.Test, st.ctx)
 }
 
-func (st *stepRun) DoTest(printer *Printer) (string, bool) {
+// runTest evaluates the step's test against what its action returned,
+// leaves why it failed as the step's failure, or none when it held, and
+// returns what the result shows of it and whether it held.
+func (st *stepRun) runTest(printer *Printer) (string, bool) {
 	// Which condition of the test is false is told with what it compared,
 	// unless the action keeps its response out of the report.
 	dump, isBool := st.ctx.Res["dump"].(bool)
@@ -791,6 +797,17 @@ func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOpe
 	return false, &StepFailure{Kind: FailureAssertion, Message: message}, detail
 }
 
+// errorFailure is the failure of a step that failed with its error before
+// its test could run. A refusal of the guard is kept on it as it is.
+func (st *stepRun) errorFailure() *StepFailure {
+	f := st.newFailure(failureKindOf(st.err), st.err.Error())
+	var refused *actionrpc.Refused
+	if errors.As(st.err, &refused) {
+		f.refused = refused
+	}
+	return f
+}
+
 // newFailure builds a StepFailure carrying the request and response, unless
 // the action opted out of dumping them with res.dump: false.
 func (st *stepRun) newFailure(kind, message string) *StepFailure {
@@ -811,7 +828,13 @@ func (st *stepRun) elapsed() time.Duration {
 	return time.Since(st.startedAt)
 }
 
-func (st *stepRun) SetCtx(j JobContext, override map[string]any) {
+// bindContext gives the step the context its templates and test are
+// evaluated in for the run j is of: the vars of the job, with the step's
+// own evaluated against the outputs so far and override, an entry of its
+// iteration, over them. A var of the step that cannot be evaluated is left
+// out and kept in templateErr, which it sets anew, so that the step fails
+// when it runs.
+func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 	// Use outputs from the unified Outputs structure
 	var outputs map[string]any
 	if j.Outputs != nil {
@@ -1144,7 +1167,7 @@ func (st *stepRun) createFailedStepResult(name string, jCtx *JobContext) StepRes
 	// Include error information if available
 	if st.err != nil {
 		result.TestOutput = indentDetail(st.err.Error())
-		result.Failure = st.newFailure(failureKindOf(st.err), st.err.Error())
+		result.Failure = st.errorFailure()
 	}
 
 	return result

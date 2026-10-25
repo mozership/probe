@@ -1120,8 +1120,8 @@ func TestStep_finalize(t *testing.T) {
 	}
 }
 
-// Integration test for the refactored Do() method
-func TestStep_Do_Integration(t *testing.T) {
+// Integration test for the run method
+func TestStep_run_Integration(t *testing.T) {
 	t.Run("step with skip condition", func(t *testing.T) {
 		step := newStepRun(&Step{
 			Name:   "Skipped Step",
@@ -1140,11 +1140,11 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		// Execute the step (should be skipped)
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Since step is skipped, job should not fail
 		if jobContext.Failed {
-			t.Errorf("Do() with skip condition should not fail the job")
+			t.Errorf("run() with skip condition should not fail the job")
 		}
 	})
 
@@ -1180,15 +1180,15 @@ func TestStep_Do_Integration(t *testing.T) {
 		// Execute the step
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("Do() method panicked: %v", r)
+				t.Errorf("run() method panicked: %v", r)
 			}
 		}()
 
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Verify successful execution
 		if jobContext.Failed {
-			t.Errorf("Do() with successful mock should not fail the job")
+			t.Errorf("run() with successful mock should not fail the job")
 		}
 
 		// Verify context was updated
@@ -1220,11 +1220,11 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		// Execute the step
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Verify failed execution
 		if !jobContext.Failed {
-			t.Errorf("Do() with failing mock should fail the job")
+			t.Errorf("run() with failing mock should fail the job")
 		}
 
 		// Verify error was set
@@ -2907,7 +2907,7 @@ func TestFailureKindOf_Refused(t *testing.T) {
 	}
 }
 
-func TestStep_DoTest_FalseClause(t *testing.T) {
+func TestStep_runTest_FalseClause(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
@@ -2943,9 +2943,9 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}}
 			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}
 
-			out, ok := st.DoTest(printer)
+			out, ok := st.runTest(printer)
 			if ok {
-				t.Fatal("DoTest() passed, want it to fail")
+				t.Fatal("runTest() passed, want it to fail")
 			}
 			if st.failure == nil || st.failure.Message != tt.wantMessage {
 				t.Errorf("failure = %+v, want the message %q", st.failure, tt.wantMessage)
@@ -3015,7 +3015,7 @@ func TestEvaluateTest(t *testing.T) {
 
 // A test that cannot be evaluated, or is not a boolean, fails the step
 // without the exchange, which only a false test is told with.
-func TestStep_DoTest_ErrorAndType(t *testing.T) {
+func TestStep_runTest_ErrorAndType(t *testing.T) {
 	tests := []struct {
 		name     string
 		test     string
@@ -3030,9 +3030,9 @@ func TestStep_DoTest_ErrorAndType(t *testing.T) {
 			printer.SetMasker(mask.New(nil, nil))
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Req: map[string]any{"url": "/"}, Res: map[string]any{"code": 500}}}
 
-			out, ok := st.DoTest(printer)
+			out, ok := st.runTest(printer)
 			if ok {
-				t.Fatal("DoTest() passed, want it to fail")
+				t.Fatal("runTest() passed, want it to fail")
 			}
 			if st.failure == nil || st.failure.Kind != tt.wantKind {
 				t.Fatalf("failure = %+v, want %s", st.failure, tt.wantKind)

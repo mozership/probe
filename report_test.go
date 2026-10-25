@@ -351,7 +351,7 @@ func TestWorkflow_StartReportsWriteError(t *testing.T) {
 	}
 }
 
-func TestStep_DoTestRecordsFailure(t *testing.T) {
+func TestStep_runTestRecordsFailure(t *testing.T) {
 	tests := []struct {
 		name     string
 		test     string
@@ -379,7 +379,7 @@ func TestStep_DoTestRecordsFailure(t *testing.T) {
 				failure: &StepFailure{Kind: "stale"},
 			}
 
-			st.DoTest(newBufferPrinter())
+			st.runTest(newBufferPrinter())
 
 			if tt.wantKind == "" {
 				if st.failure != nil {

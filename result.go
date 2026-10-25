@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 )
 
@@ -114,6 +115,9 @@ type StepFailure struct {
 	Response map[string]any
 	// Violations are what broke the contract, when Kind is a contract's.
 	Violations []report.Violation
+	// refused is what the guard of the run refused, when Kind is
+	// FailureRefused, so that why is read from it rather than the message.
+	refused *actionrpc.Refused
 }
 
 // JobResult stores execution results for a job

@@ -2,6 +2,7 @@ package probe
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -839,5 +840,56 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 		if !reflect.DeepEqual(*st, *written.Steps[i]) {
 			t.Errorf("step %d = %+v, want it as written, %+v", i, *st, *written.Steps[i])
 		}
+	}
+}
+
+// The refusal is read from the failure the step was refused with, not from
+// a message that looks like one, and is found when it is wrapped.
+func TestFirstRefusal(t *testing.T) {
+	failure := func(err error) *StepFailure {
+		return (&stepRun{Step: &Step{}, err: err}).errorFailure()
+	}
+	tests := []struct {
+		name string
+		jr   *JobResult
+		want string
+	}{
+		{
+			name: "none refused",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: failure(errors.New("refused: looks like one"))}}},
+		},
+		{
+			name: "the first of those refused",
+			jr: &JobResult{StepResults: []StepResult{
+				{Index: 0, Name: "a"},
+				{Index: 1, Name: "b", Failure: failure(actionrpc.Refuse("the action ssh does not keep to --read-only"))},
+				{Index: 2, Name: "c", Failure: failure(actionrpc.Refuse("the second"))},
+			}},
+			want: `step 1 "b" of the embedded job: the action ssh does not keep to --read-only`,
+		},
+		{
+			name: "a refusal wrapped in another error",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", actionrpc.Refuse("no network")))}}},
+			want: `step 0 "a" of the embedded job: no network`,
+		},
+		{
+			name: "a repeated step",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", RepeatCounter: &StepRepeatCounter{Failure: failure(actionrpc.Refuse("no network"))}}}},
+			want: `step 0 "a" of the embedded job: no network`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := firstRefusal(tt.jr)
+			if tt.want == "" {
+				if got != nil {
+					t.Errorf("firstRefusal() = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Reason != tt.want {
+				t.Errorf("firstRefusal() = %+v, want %q", got, tt.want)
+			}
+		})
 	}
 }
