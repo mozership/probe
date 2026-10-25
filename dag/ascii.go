@@ -3,6 +3,8 @@ package dag
 import (
 	"slices"
 	"strings"
+
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 const (
@@ -21,7 +23,6 @@ const (
 	arrowDown          = "↓"
 	stepBullet         = "○"
 	stepBulletEmbedded = "↗"
-	ellipsis           = "…"
 
 	// Tree characters for embedded steps
 	treeBranch = "├"
@@ -241,8 +242,8 @@ func (r *asciiRenderer) renderNode(node *asciiNode) []string {
 	lines = append(lines, nodeTopLeft+strings.Repeat(nodeHorizontal, innerWidth)+nodeTopRight)
 
 	// Job name (centered, truncate with ellipsis if too long)
-	name := truncateWithEllipsis(node.Job.Name, innerWidth-2) // -2 for padding
-	padding := innerWidth - runeWidth(name)
+	name := textwidth.Truncate(node.Job.Name, innerWidth-2) // -2 for padding
+	padding := innerWidth - textwidth.Width(name)
 	leftPad := padding / 2
 	rightPad := padding - leftPad
 	lines = append(lines, nodeVertical+strings.Repeat(" ", leftPad)+name+strings.Repeat(" ", rightPad)+nodeVertical)
@@ -260,12 +261,12 @@ func (r *asciiRenderer) renderNode(node *asciiNode) []string {
 		}
 		// Format: " ○ stepname" or " ↗ stepname" with truncation
 		prefix := " " + bullet + " "
-		prefixWidth := runeWidth(prefix)
+		prefixWidth := textwidth.Width(prefix)
 		maxStepNameWidth := innerWidth - prefixWidth
-		truncatedStepName := truncateWithEllipsis(stepName, maxStepNameWidth)
+		truncatedStepName := textwidth.Truncate(stepName, maxStepNameWidth)
 		stepLine := prefix + truncatedStepName
 		// Pad to inner width
-		stepLineWidth := runeWidth(stepLine)
+		stepLineWidth := textwidth.Width(stepLine)
 		if stepLineWidth < innerWidth {
 			stepLine = stepLine + strings.Repeat(" ", innerWidth-stepLineWidth)
 		}
@@ -285,13 +286,13 @@ func (r *asciiRenderer) renderNode(node *asciiNode) []string {
 
 				// Format: "   ├ stepname" or "   └ stepname"
 				embPrefix := "   " + treeChar + " "
-				embPrefixWidth := runeWidth(embPrefix)
+				embPrefixWidth := textwidth.Width(embPrefix)
 				maxEmbStepNameWidth := innerWidth - embPrefixWidth
-				truncatedEmbStepName := truncateWithEllipsis(embStepName, maxEmbStepNameWidth)
+				truncatedEmbStepName := textwidth.Truncate(embStepName, maxEmbStepNameWidth)
 				embStepLine := embPrefix + truncatedEmbStepName
 
 				// Pad to inner width
-				embStepLineWidth := runeWidth(embStepLine)
+				embStepLineWidth := textwidth.Width(embStepLine)
 				if embStepLineWidth < innerWidth {
 					embStepLine = embStepLine + strings.Repeat(" ", innerWidth-embStepLineWidth)
 				}
@@ -300,14 +301,14 @@ func (r *asciiRenderer) renderNode(node *asciiNode) []string {
 
 			// Add filename at the end with dim color (aligned with tree characters)
 			filePrefix := "   "
-			filePrefixWidth := runeWidth(filePrefix)
+			filePrefixWidth := textwidth.Width(filePrefix)
 			maxFilenameWidth := innerWidth - filePrefixWidth
-			truncatedFilename := truncateWithEllipsis(step.EmbeddedFile, maxFilenameWidth)
+			truncatedFilename := textwidth.Truncate(step.EmbeddedFile, maxFilenameWidth)
 			// Apply dim color
 			dimFilename := ansiDim + truncatedFilename + ansiReset
 			// Calculate padding based on non-colored text length
 			fileLine := filePrefix + dimFilename
-			actualWidth := filePrefixWidth + runeWidth(truncatedFilename)
+			actualWidth := filePrefixWidth + textwidth.Width(truncatedFilename)
 			if actualWidth < innerWidth {
 				fileLine = filePrefix + dimFilename + strings.Repeat(" ", innerWidth-actualWidth)
 			}
@@ -326,23 +327,6 @@ func (r *asciiRenderer) renderNode(node *asciiNode) []string {
 	}
 
 	return lines
-}
-
-// truncateWithEllipsis truncates a string to maxLen runes, adding ellipsis if truncated
-func truncateWithEllipsis(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	if maxLen <= 1 {
-		return string(runes[:maxLen])
-	}
-	return string(runes[:maxLen-1]) + ellipsis
-}
-
-// runeWidth returns the display width of a string (counting runes)
-func runeWidth(s string) int {
-	return len([]rune(s))
 }
 
 // flagsToChar converts connection flags to the appropriate box-drawing character

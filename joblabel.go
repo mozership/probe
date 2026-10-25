@@ -1,11 +1,6 @@
 package probe
 
-import (
-	"strings"
-	"unicode"
-
-	"golang.org/x/text/width"
-)
+import "github.com/mozership/probe/internal/textwidth"
 
 // maxJobLabelWidth is how many columns the label of a job takes at most in
 // a progress line. The lines of jobs that run at once are told apart by it,
@@ -24,13 +19,13 @@ func jobLabels(order []string, name func(id string) string) map[string]string {
 	for _, id := range order {
 		n := ""
 		if name != nil {
-			n = oneLine(name(id))
+			n = textwidth.OneLine(name(id))
 		}
 		if n == "" {
 			n = id
 		}
 		full[id] = n
-		labels[id] = truncateWidth(n, maxJobLabelWidth)
+		labels[id] = textwidth.Truncate(n, maxJobLabelWidth)
 		count[labels[id]]++
 	}
 
@@ -39,69 +34,12 @@ func jobLabels(order []string, name func(id string) string) map[string]string {
 			continue
 		}
 		suffix := " (" + id + ")"
-		room := maxJobLabelWidth - displayWidth(suffix)
+		room := maxJobLabelWidth - textwidth.Width(suffix)
 		if room < 4 {
-			labels[id] = truncateWidth(id, maxJobLabelWidth)
+			labels[id] = textwidth.Truncate(id, maxJobLabelWidth)
 			continue
 		}
-		labels[id] = truncateWidth(full[id], room) + suffix
+		labels[id] = textwidth.Truncate(full[id], room) + suffix
 	}
 	return labels
-}
-
-// oneLine returns s with each run of white space and control characters
-// made one space, so that a name keeps to the line it labels, and without
-// format characters, such as one that turns the text after it right to
-// left, which would change how the rest of the line reads.
-func oneLine(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.Is(unicode.Cf, r) {
-			return -1
-		}
-		return r
-	}, s)
-	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
-		return unicode.IsSpace(r) || unicode.IsControl(r)
-	}), " ")
-}
-
-// displayWidth returns how many columns s takes in a terminal: two for a
-// wide character, such as one of Japanese, none for a mark that combines
-// with the one before it, and one for any other.
-func displayWidth(s string) int {
-	w := 0
-	for _, r := range s {
-		w += runeWidth(r)
-	}
-	return w
-}
-
-func runeWidth(r rune) int {
-	if unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) {
-		return 0
-	}
-	switch width.LookupRune(r).Kind() {
-	case width.EastAsianWide, width.EastAsianFullwidth:
-		return 2
-	}
-	return 1
-}
-
-// truncateWidth returns s cut to at most maxWidth columns, ending in an
-// ellipsis when it was cut.
-func truncateWidth(s string, maxWidth int) string {
-	if displayWidth(s) <= maxWidth {
-		return s
-	}
-	var b strings.Builder
-	w := 0
-	for _, r := range s {
-		rw := runeWidth(r)
-		if w+rw > maxWidth-1 {
-			break
-		}
-		b.WriteRune(r)
-		w += rw
-	}
-	return b.String() + "…"
 }
