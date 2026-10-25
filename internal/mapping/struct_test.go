@@ -138,6 +138,7 @@ func TestMergeStringMaps(t *testing.T) {
 		base     map[string]string
 		over     map[string]any
 		expected map[string]string
+		wantErr  string
 	}{
 		{
 			name:     "merge string values",
@@ -146,10 +147,28 @@ func TestMergeStringMaps(t *testing.T) {
 			expected: map[string]string{"a": "1", "b": "overridden", "c": "3"},
 		},
 		{
-			name:     "ignore non-string values",
+			name:     "write numbers and bools as text",
 			base:     map[string]string{"a": "1"},
-			over:     map[string]any{"a": "overridden", "b": 123, "c": true},
-			expected: map[string]string{"a": "overridden"},
+			over:     map[string]any{"a": "overridden", "b": 123, "c": true, "d": 0.5},
+			expected: map[string]string{"a": "overridden", "b": "123", "c": "true", "d": "0.5"},
+		},
+		{
+			name:     "write nil as an empty string",
+			base:     map[string]string{"a": "1"},
+			over:     map[string]any{"a": nil, "b": nil},
+			expected: map[string]string{"a": "", "b": ""},
+		},
+		{
+			name:    "refuse a list",
+			base:    map[string]string{"a": "1"},
+			over:    map[string]any{"b": []any{1}},
+			wantErr: "cannot convert a list to a string for 'b'",
+		},
+		{
+			name:     "nil base map",
+			base:     nil,
+			over:     map[string]any{"a": 1},
+			expected: map[string]string{"a": "1"},
 		},
 		{
 			name:     "empty base map",
@@ -161,7 +180,16 @@ func TestMergeStringMaps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeStringMaps(tt.base, tt.over)
+			result, err := mergeStringMaps(tt.base, tt.over)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("mergeStringMaps() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("mergeStringMaps() = %v, want %v", result, tt.expected)
 			}

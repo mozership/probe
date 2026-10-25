@@ -73,37 +73,6 @@ func TestParseTimeoutSaysWhy(t *testing.T) {
 	}
 }
 
-func TestAnyToString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    any
-		expected string
-		ok       bool
-	}{
-		{"string", "hello", "hello", true},
-		{"bool true", true, "true", true},
-		{"bool false", false, "false", true},
-		{"int", 42, "42", true},
-		{"int64", int64(42), "42", true},
-		{"float64", 3.14, "3.14", true},
-		{"[]byte", []byte("bytes"), "bytes", true},
-		{"nil", nil, "nil", true},
-		{"unsupported", []int{1, 2, 3}, "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, ok := AnyToString(tt.input)
-			if ok != tt.ok {
-				t.Errorf("AnyToString() ok = %v, want %v", ok, tt.ok)
-			}
-			if result != tt.expected {
-				t.Errorf("AnyToString() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestTitleCase(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -211,5 +180,78 @@ func TestEnvToStringValue_MapsOntoStruct(t *testing.T) {
 	}
 	if want := map[string]string{"PORT": "8080", "APP": "probe"}; !reflect.DeepEqual(r.Env, want) {
 		t.Errorf("Env = %v, want %v", r.Env, want)
+	}
+}
+
+func TestStringMap(t *testing.T) {
+	in := map[string]any{
+		"text":  "x",
+		"int":   1024,
+		"uint":  uint8(7),
+		"float": 100.5,
+		"bool":  true,
+		"nil":   nil,
+	}
+	want := map[string]string{"text": "x", "int": "1024", "uint": "7", "float": "100.5", "bool": "true", "nil": ""}
+	got, err := StringMap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("StringMap() = %v, want %v", got, want)
+	}
+	if in["int"] != 1024 {
+		t.Error("the input should keep its original values")
+	}
+}
+
+func TestStringMapRefusesWhatHasNoText(t *testing.T) {
+	tests := []struct {
+		in   map[string]any
+		want string
+	}{
+		{map[string]any{"ok": "x", "X-List": []any{"a"}}, "cannot convert a list to a string for 'X-List'"},
+		{map[string]any{"X-Map": map[string]any{"a": 1}}, "cannot convert a map to a string for 'X-Map'"},
+		{map[string]any{"X-Struct": struct{}{}}, "cannot convert struct {} to a string for 'X-Struct'"},
+		// Of two bad values, the first key in order is told, every time.
+		{map[string]any{"b": []any{}, "a": map[string]any{}}, "cannot convert a map to a string for 'a'"},
+	}
+	for _, tt := range tests {
+		got, err := StringMap(tt.in)
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("StringMap(%v) = %v, %v; want error %q", tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestMapToStructByTags_StringMapNamesTheField(t *testing.T) {
+	type req struct {
+		Headers map[string]string `map:"headers"`
+	}
+	err := MapToStructByTags(map[string]any{"headers": map[string]any{"X-List": []any{1}}}, &req{})
+	want := "cannot convert a list to a string for 'X-List' in field 'headers'"
+	if err == nil || err.Error() != want {
+		t.Errorf("MapToStructByTags() error = %v, want %q", err, want)
+	}
+}
+
+// TestMapToStructByTags_StringMapOfNumbers checks a map[string]string field,
+// such as the headers of an HTTP request or the metadata of a gRPC one,
+// takes a number as its text rather than dropping it.
+func TestMapToStructByTags_StringMapOfNumbers(t *testing.T) {
+	type req struct {
+		Headers map[string]string `map:"headers"`
+	}
+	params := map[string]any{"headers": map[string]any{"Content-Length": 1024, "X-Debug": true, "Accept": "*/*"}}
+	r := &req{Headers: map[string]string{"User-Agent": "probe"}}
+	if err := MapToStructByTags(params, r); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"User-Agent": "probe", "Content-Length": "1024", "X-Debug": "true", "Accept": "*/*"}
+	if !reflect.DeepEqual(r.Headers, want) {
+		t.Errorf("Headers = %v, want %v", r.Headers, want)
+	}
+	if params["headers"].(map[string]any)["Content-Length"] != 1024 {
+		t.Error("the params should keep their original values")
 	}
 }

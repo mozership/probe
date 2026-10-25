@@ -3,14 +3,40 @@ package jsonutil
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
 
-// Decode unmarshals a JSON string into either a map[string]any (object
-// input) or []any (array input). On failure it returns a map[string]any
-// with an error_message instead of an error, so callers can surface the
-// parse error in place of the data.
+// Parse decodes a JSON object into a map[string]any or a JSON array into a
+// []any, surrounding whitespace aside. It refuses an empty string, any other
+// JSON value, such as a string, a number or null, and invalid JSON.
+func Parse(s string) (any, error) {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 {
+		return nil, errors.New("empty string")
+	}
+
+	switch s[0] {
+	case '{':
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(s), &obj); err != nil {
+			return nil, err
+		}
+		return obj, nil
+	case '[':
+		var arr []any
+		if err := json.Unmarshal([]byte(s), &arr); err != nil {
+			return nil, err
+		}
+		return arr, nil
+	}
+	return nil, errors.New("input is not a JSON object or array")
+}
+
+// Decode decodes a JSON object or array as Parse does. On failure it returns
+// a map[string]any with an error_message instead of an error, so callers can
+// surface the parse error in place of the data.
 //
 // Example:
 //
@@ -21,29 +47,15 @@ import (
 //	// result: []any{map[string]any{"id": float64(1)}, map[string]any{"id": float64(2)}}
 //
 //	result := Decode(`invalid json`)
-//	// result: map[string]any{"error_message": "mustMarshalJSON error: ..."}
-func Decode(st string) any {
-	// Pick the target type from the first non-space byte so callers
-	// that handed us an array body don't get their data replaced by
-	// the unmarshal error from the (object-only) default branch.
-	trimmed := strings.TrimLeft(st, " \t\r\n")
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var arr []any
-		if err := json.Unmarshal([]byte(st), &arr); err != nil {
-			return map[string]any{
-				"error_message": fmt.Sprintf("mustMarshalJSON error: %s", err),
-			}
-		}
-		return arr
-	}
-
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(st), &obj); err != nil {
+//	// result: map[string]any{"error_message": "invalid JSON: ..."}
+func Decode(s string) any {
+	v, err := Parse(s)
+	if err != nil {
 		return map[string]any{
-			"error_message": fmt.Sprintf("mustMarshalJSON error: %s", err),
+			"error_message": fmt.Sprintf("invalid JSON: %s", err),
 		}
 	}
-	return obj
+	return v
 }
 
 // LooksLikeJSON checks if a string appears to be JSON by examining its first and last characters.

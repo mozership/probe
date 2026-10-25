@@ -1,11 +1,11 @@
-package binary
+package body
 
 import (
 	"os"
 	"testing"
 )
 
-func TestIsTextualMimeType(t *testing.T) {
+func TestIsText(t *testing.T) {
 	tests := []struct {
 		name        string
 		contentType string
@@ -39,15 +39,15 @@ func TestIsTextualMimeType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isTextualMimeType(tt.contentType)
+			result := isText(tt.contentType)
 			if result != tt.expected {
-				t.Errorf("isTextualMimeType(%q) = %v, expected %v", tt.contentType, result, tt.expected)
+				t.Errorf("isText(%q) = %v, expected %v", tt.contentType, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestIsJSONMediaType(t *testing.T) {
+func TestIsJSON(t *testing.T) {
 	tests := []struct {
 		contentType string
 		expected    bool
@@ -70,14 +70,14 @@ func TestIsJSONMediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.contentType, func(t *testing.T) {
-			if got := IsJSONMediaType(tt.contentType); got != tt.expected {
-				t.Errorf("IsJSONMediaType(%q) = %v, expected %v", tt.contentType, got, tt.expected)
+			if got := IsJSON(tt.contentType); got != tt.expected {
+				t.Errorf("IsJSON(%q) = %v, expected %v", tt.contentType, got, tt.expected)
 			}
 		})
 	}
 }
 
-func TestSaveBinaryToTempFile(t *testing.T) {
+func TestSaveTemp(t *testing.T) {
 	tests := []struct {
 		name        string
 		data        []byte
@@ -110,7 +110,7 @@ func TestSaveBinaryToTempFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filePath, err := SaveBinaryToTempFile(tt.data, tt.contentType)
+			filePath, err := saveTemp(tt.data, tt.contentType)
 
 			if tt.wantErr {
 				if err == nil {
@@ -165,7 +165,7 @@ func TestSaveBinaryToTempFile(t *testing.T) {
 	}
 }
 
-func TestProcessHttpBody(t *testing.T) {
+func TestTextOrFile(t *testing.T) {
 	tests := []struct {
 		name         string
 		data         []byte
@@ -213,7 +213,7 @@ func TestProcessHttpBody(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bodyString, filePath, err := ProcessHttpBody(tt.data, tt.contentType)
+			bodyString, filePath, err := TextOrFile(tt.data, tt.contentType)
 
 			if tt.wantErr {
 				if err == nil {
@@ -251,7 +251,7 @@ func TestProcessHttpBody(t *testing.T) {
 	}
 }
 
-func TestGetExtensionFromMimeType(t *testing.T) {
+func TestExtension(t *testing.T) {
 	tests := []struct {
 		contentType string
 		expected    string
@@ -269,16 +269,16 @@ func TestGetExtensionFromMimeType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.contentType, func(t *testing.T) {
-			result := getExtensionFromMimeType(tt.contentType)
+			result := extension(tt.contentType)
 			if result != tt.expected {
-				t.Errorf("getExtensionFromMimeType(%q) = %q, expected %q", tt.contentType, result, tt.expected)
+				t.Errorf("extension(%q) = %q, expected %q", tt.contentType, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestSaveBinaryToTempFile_OwnerOnly(t *testing.T) {
-	path, err := SaveBinaryToTempFile([]byte("private screenshot"), "image/png")
+func TestSaveTemp_OwnerOnly(t *testing.T) {
+	path, err := saveTemp([]byte("private screenshot"), "image/png")
 	if err != nil {
 		t.Fatal(err)
 	}

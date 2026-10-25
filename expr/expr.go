@@ -16,8 +16,8 @@ import (
 
 	ex "github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/mozership/probe/jsonutil"
-	"github.com/mozership/probe/truncate"
+	"github.com/mozership/probe/internal/jsonutil"
+	"github.com/mozership/probe/internal/truncate"
 )
 
 var (
@@ -257,7 +257,11 @@ func (e *Expr) Options(env any) []ex.Option {
 				if len(s) > maxStringLength {
 					return nil, fmt.Errorf("parse_json parameter exceeds maximum length (%d chars)", maxStringLength)
 				}
-				return jsonutil.Parse(s)
+				v, err := jsonutil.Parse(s)
+				if err != nil {
+					return nil, fmt.Errorf("parse_json: %w", err)
+				}
+				return v, nil
 			},
 		),
 		ex.Function(
@@ -536,10 +540,7 @@ func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 		}
 
 		// Convert the output to string with size limit
-		outputStr := fmt.Sprintf("%v", output)
-		if len(outputStr) > maxStringLength {
-			outputStr = outputStr[:maxStringLength] + truncate.Message()
-		}
+		outputStr := truncate.String(fmt.Sprintf("%v", output), maxStringLength)
 		if err := write(outputStr); err != nil {
 			return "", err
 		}

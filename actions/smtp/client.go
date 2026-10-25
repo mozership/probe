@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 type Req struct {

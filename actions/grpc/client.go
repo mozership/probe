@@ -15,7 +15,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/contractcheck"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -705,8 +705,6 @@ func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, error) {
 	if err != nil {
 		return map[string]any{}, err
 	}
-
-	m = mapping.HeaderToStringValue(m)
 
 	// Create new request
 	r := NewReq()

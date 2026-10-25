@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/mozership/probe/internal/truncate"
 )
 
 func TestEvalTemplateMap(t *testing.T) {
@@ -1322,5 +1325,24 @@ func TestEvalTemplateMapEvaluatedPath(t *testing.T) {
 	want := map[string]string{"headers.{{ vars.h }}": "headers.authorization", "plain": "plain"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("paths = %v, want %v", got, want)
+	}
+}
+
+// TestEvalTemplateTruncatesAtARune checks the output of a template longer
+// than maxStringLength is cut at the start of a rune, so a long value of
+// Japanese text does not end in a broken byte.
+func TestEvalTemplateTruncatesAtARune(t *testing.T) {
+	// Three bytes a rune, so maxStringLength falls inside one.
+	s := strings.Repeat("日", maxStringLength/3+1)
+	got, err := (&Expr{}).EvalTemplate("{{ s }}", map[string]any{"s": s})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, ok := strings.CutSuffix(got, truncate.Message())
+	if !ok {
+		t.Fatalf("the output should end with the truncation marker, got ...%q", got[max(0, len(got)-40):])
+	}
+	if !utf8.ValidString(kept) || len(kept) > maxStringLength || !strings.HasPrefix(s, kept) {
+		t.Errorf("kept %d bytes, valid UTF-8 %v; want a valid prefix of at most %d bytes", len(kept), utf8.ValidString(kept), maxStringLength)
 	}
 }

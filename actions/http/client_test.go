@@ -1078,3 +1078,38 @@ func TestCheckGuardTakesTheSchemePort(t *testing.T) {
 func srvURL(r *hp.Request) string {
 	return "http://" + r.Host
 }
+
+// TestRequestHeaderValues checks a header written as a number is sent as
+// its text and one written with nothing after it as an empty header, and
+// that a list, which has no text, is refused with the header named.
+func TestRequestHeaderValues(t *testing.T) {
+	var got hp.Header
+	srv := httptest.NewServer(hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
+		got = r.Header.Clone()
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := Request(map[string]any{
+		"url":     srv.URL,
+		"get":     "/",
+		"headers": map[string]any{"x-retry": 3, "x-empty": nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := got.Get("X-Retry"); v != "3" {
+		t.Errorf("X-Retry = %q, want %q", v, "3")
+	}
+	if v, ok := got["X-Empty"]; !ok || len(v) != 1 || v[0] != "" {
+		t.Errorf("X-Empty = %q (sent %v), want one empty value", v, ok)
+	}
+
+	_, err = Request(map[string]any{
+		"url":     srv.URL,
+		"get":     "/",
+		"headers": map[string]any{"x-list": []any{"a", "b"}},
+	})
+	if want := "cannot convert a list to a string for 'x-list' in field 'headers'"; err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}

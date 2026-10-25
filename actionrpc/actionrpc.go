@@ -15,9 +15,9 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
+	"github.com/mozership/probe/internal/pb"
+	"github.com/mozership/probe/internal/truncate"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/pb"
-	"github.com/mozership/probe/truncate"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
