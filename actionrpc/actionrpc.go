@@ -725,8 +725,10 @@ func convertFloatToInt(value any) any {
 
 	switch v := value.(type) {
 	case float64:
-		// Check if the float64 is actually an integer value
-		if v == math.Trunc(v) && v >= math.MinInt64 && v <= math.MaxInt64 {
+		// Check if the float64 is actually an integer value. float64 of
+		// MaxInt64 rounds up to 2^63, which int64 cannot hold, so the upper
+		// bound is exclusive.
+		if v == math.Trunc(v) && v >= math.MinInt64 && v < -float64(math.MinInt64) {
 			return int64(v)
 		}
 		return v

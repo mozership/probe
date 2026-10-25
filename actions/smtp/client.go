@@ -1,11 +1,12 @@
 package smtp
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/binary"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -22,7 +23,11 @@ type Req struct {
 	// (fail when it does not).
 	StartTLS        string `map:"starttls"`
 	InsecureSkipTLS bool   `map:"insecure_skip_tls"`
-	cb              *Callback
+	// Timeout limits connecting to the server, and each wait on it to
+	// read or write in a session, with twice it for the reply to the end of
+	// a message. Zero, possible only through the Go API, means no limit.
+	Timeout time.Duration `map:"timeout"`
+	cb      *Callback
 }
 
 // The values of starttls.
@@ -33,13 +38,13 @@ const (
 )
 
 type Res struct {
-	Code     int    `map:"code"`
-	Sent     int    `map:"sent"`
-	Failed   int    `map:"failed"`
-	Total    int    `map:"total"`
-	Error    string `map:"error"`
-	MailData string `map:"maildata"` // For text mail data
-	FilePath string `map:"filepath"` // For binary mail data files
+	Code   int    `map:"code"`
+	Sent   int    `map:"sent"`
+	Failed int    `map:"failed"`
+	Total  int    `map:"total"`
+	Error  string `map:"error"`
+	// MailData is the last message the server accepted, as it was sent.
+	MailData string `map:"maildata"`
 }
 
 type Result struct {
@@ -56,12 +61,41 @@ type Callback struct {
 	after  func(result *Result)
 }
 
+// maxSession is the most sessions a step may open at once. Each is a
+// connection of its own, and 1000 is far beyond what one server takes from
+// one client, such as the 50 of Postfix's smtpd_client_connection_count_limit,
+// while it keeps the goroutines and file descriptors of a step in bounds.
+const maxSession = 1000
+
+// maxLength is the longest body a step may ask for, 100 MiB. It is above the
+// limits of common servers, such as Postfix's 10240000 bytes and Gmail's
+// 25 MB, so that a test can still go past a server's limit. The sessions
+// share one body, and res.maildata copies it once, so a step holds about
+// twice it however many sessions it opens.
+const maxLength = 100 << 20
+
+// maxTimeout is the longest timeout a step may give, a day. It is far past
+// the 10 minutes RFC 5321 gives the longest wait, and past what a step is
+// for, and it keeps twice the timeout, for the reply to the end of a
+// message, well inside a time.Duration.
+const maxTimeout = 24 * time.Hour
+
+// defaultTimeout is the timeout when the step does not give one. It is
+// well below the step's own default timeout of 5 minutes, so that a server
+// that stops answering fails its session, and the step still gets the
+// counts of the others, before the step timeout ends the action and drops
+// them; the reply to the end of a message, at twice it, is 2 minutes. RFC
+// 5321 4.5.3.2 asks for 5 and 10 minutes, which a step can give by raising
+// both timeouts.
+const defaultTimeout = time.Minute
+
 func NewReq() *Req {
 	return &Req{
 		Session:  1,
 		Message:  1,
 		Length:   0,
 		StartTLS: StartTLSAuto,
+		Timeout:  defaultTimeout,
 	}
 }
 
@@ -69,23 +103,9 @@ func (r *Req) Do() (*Result, error) {
 	// Always create result with current request data, even if validation fails
 	result := &Result{Req: *r}
 
-	if r.Addr == "" {
-		return result, fmt.Errorf("Req.Addr is required")
-	}
-	if r.From == "" {
-		return result, fmt.Errorf("Req.From is required")
-	}
-	if r.To == "" {
-		return result, fmt.Errorf("Req.To is required")
-	}
-	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
-	if startTLS == "" {
-		startTLS = StartTLSAuto
-	}
-	switch startTLS {
-	case StartTLSOff, StartTLSAuto, StartTLSRequired:
-	default:
-		return result, fmt.Errorf("invalid starttls %q: use off, auto or required", r.StartTLS)
+	startTLS, err := r.validate()
+	if err != nil {
+		return result, err
 	}
 
 	// callback before
@@ -95,38 +115,19 @@ func (r *Req) Do() (*Result, error) {
 
 	start := time.Now()
 
-	// Create parameter map for bulk email
-	params := map[string]string{
-		"addr":       r.Addr,
-		"from":       r.From,
-		"to":         r.To,
-		"subject":    r.Subject,
-		"myhostname": r.MyHostname,
+	bulk := &Bulk{
+		Addr:            r.Addr,
+		From:            r.From,
+		To:              r.To,
+		Subject:         r.Subject,
+		MyHostname:      r.MyHostname,
+		Session:         r.Session,
+		Message:         r.Message,
+		Length:          r.Length,
+		StartTLS:        startTLS,
+		InsecureSkipTLS: r.InsecureSkipTLS,
+		Timeout:         r.Timeout,
 	}
-
-	if r.Session > 0 {
-		params["session"] = fmt.Sprintf("%d", r.Session)
-	}
-	if r.Message > 0 {
-		params["message"] = fmt.Sprintf("%d", r.Message)
-	}
-	if r.Length > 0 {
-		params["length"] = fmt.Sprintf("%d", r.Length)
-	}
-
-	// Convert params to map[string]any for NewBulk
-	paramsAny := make(map[string]any)
-	for k, v := range params {
-		paramsAny[k] = v
-	}
-
-	// Create bulk mailer
-	bulk, err := NewBulk(paramsAny)
-	if err != nil {
-		return result, fmt.Errorf("failed to create bulk mailer: %w", err)
-	}
-	bulk.StartTLS = startTLS
-	bulk.InsecureSkipTLS = r.InsecureSkipTLS
 
 	// Execute mail delivery
 	deliveryResult := bulk.DeliverWithResult()
@@ -138,23 +139,13 @@ func (r *Req) Do() (*Result, error) {
 		status = 0 // success if no failures and at least one sent
 	}
 
-	// Get mail data for processing
-	mailData := bulk.makeData()
-
-	// Process mail data (check if it's text or binary)
-	bodyString, filePath, err := binary.ProcessHttpBody(mailData, "text/plain")
-	if err != nil {
-		return result, fmt.Errorf("failed to process mail data: %w", err)
-	}
-
 	result.Res = Res{
 		Code:     status,
 		Sent:     deliveryResult.Sent,
 		Failed:   deliveryResult.Failed,
 		Total:    deliveryResult.Total,
 		Error:    deliveryResult.Error,
-		MailData: bodyString,
-		FilePath: filePath,
+		MailData: deliveryResult.LastSent.String(),
 	}
 	result.Status = status
 
@@ -172,24 +163,46 @@ func (r *Req) Do() (*Result, error) {
 	return result, nil
 }
 
-func Send(data map[string]any, opts ...Option) (map[string]any, error) {
-	// Convert map[string]any to map[string]string for internal processing
-	dataCopy := make(map[string]string)
-	for k, v := range data {
-		if str, ok := v.(string); ok {
-			dataCopy[k] = str
-		} else {
-			dataCopy[k] = fmt.Sprintf("%v", v)
-		}
+// validate checks the parameters before anything is sent, naming the one
+// that is wrong, and returns starttls in the form Bulk takes.
+func (r *Req) validate() (string, error) {
+	switch {
+	case r.Addr == "":
+		return "", errors.New("addr is required")
+	case r.From == "":
+		return "", errors.New("from is required")
+	case r.To == "":
+		return "", errors.New("to is required")
+	// Fewer than one session or message would send nothing and report
+	// only a failure, and a negative length was taken as 0. Sessions and
+	// length have an upper bound as well, since every session opens its
+	// connection at once, and the body is held in memory.
+	case r.Session < 1 || r.Session > maxSession:
+		return "", fmt.Errorf("invalid session %d: use 1 to %d", r.Session, maxSession)
+	case r.Message < 1:
+		return "", fmt.Errorf("invalid message %d: use 1 or more", r.Message)
+	case r.Length < 0 || r.Length > maxLength:
+		return "", fmt.Errorf("invalid length %d: use 0 to %d", r.Length, maxLength)
+	case r.Timeout < 0:
+		return "", fmt.Errorf("invalid timeout %s: use a duration above zero", r.Timeout)
+	case r.Timeout > maxTimeout:
+		return "", fmt.Errorf("invalid timeout %s: use at most %s", r.Timeout, maxTimeout)
 	}
-
-	// Convert map[string]string to map[string]any for HeaderToStringValue
-	dataCopyAny := make(map[string]any)
-	for k, v := range dataCopy {
-		dataCopyAny[k] = v
+	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
+	if startTLS == "" {
+		startTLS = StartTLSAuto
 	}
-	m := mapping.HeaderToStringValue(dataCopyAny)
+	switch startTLS {
+	case StartTLSOff, StartTLSAuto, StartTLSRequired:
+		return startTLS, nil
+	default:
+		return "", fmt.Errorf("invalid starttls %q: use off, auto or required", r.StartTLS)
+	}
+}
 
+// Deliver runs the smtp action: it reads the parameters in data, sends the
+// mail they describe, and returns the result as a map.
+func Deliver(data map[string]any, opts ...Option) (map[string]any, error) {
 	r := NewReq()
 
 	cb := &Callback{}
@@ -201,7 +214,18 @@ func Send(data map[string]any, opts ...Option) (map[string]any, error) {
 	// A parameter that cannot be read stops the step before anything is
 	// sent: going on would send with that parameter at its zero value, such
 	// as insecure_skip_tls left false.
-	if err := mapping.MapToStructByTags(m, r); err != nil {
+	if v, ok := data["timeout"]; ok {
+		timeout, err := mapping.ParseTimeout(v)
+		if err != nil {
+			return map[string]any{}, err
+		}
+		data = maps.Clone(data)
+		data["timeout"] = timeout
+	}
+	// MapToStructByTags reads a number or a numeric string into session,
+	// message and length, and a bool or "true" and "false" into
+	// insecure_skip_tls, so the other parameters go to it as they are.
+	if err := mapping.MapToStructByTags(data, r); err != nil {
 		return map[string]any{}, err
 	}
 

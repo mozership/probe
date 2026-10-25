@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mozership/probe/actions/smtp"
+	"github.com/mozership/probe/internal/smtptest"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 	}
 
 	// Create mock SMTP server
-	server := &smtp.MockServer{
+	server := &smtptest.Server{
 		Addr: addr,
 		Name: "probe-test-smtp.local",
 		Log:  log.New(os.Stdout, "[SMTP] ", log.LstdFlags),

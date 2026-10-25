@@ -28,7 +28,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	after := WithAfter(func(result *Result) {
 		a.log.Trace("email delivery completed", "result", result)
 	})
-	ret, err := Send(with, before, after)
+	ret, err := Deliver(with, before, after)
 
 	actionrpc.LogOutcome(a.log, "email delivery", ret, err)
 
