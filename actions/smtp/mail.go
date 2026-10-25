@@ -149,7 +149,7 @@ func getFQDN() string {
 // suffix so each mail's Message-ID and Subject can be cross-referenced.
 func genMessageID() (idLeft, full string) {
 	ns := time.Now().UnixNano()
-	uid, err := OptimisticUID()
+	uid, err := randomID()
 	if err != nil {
 		idLeft = fmt.Sprintf("%d", ns)
 	} else {

@@ -22,6 +22,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/internal/smtptest"
 )
 
 func TestMail_New(t *testing.T) {
@@ -313,36 +315,8 @@ func TestMail_SendSession_Success(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Start mock SMTP server
-			mockServer := &MockServer{
-				Addr: "localhost:0",
-				Name: "test.example.com",
-				Log:  log.New(io.Discard, "", 0), // Disable logging for tests
-			}
-
-			// Create a listener to get a free port
-			listener, err := net.Listen("tcp", "localhost:0")
-			if err != nil {
-				t.Fatalf("failed to create listener: %v", err)
-			}
-			addr := listener.Addr().String()
-			_ = listener.Close()
-
-			mockServer.Addr = addr
-			tt.mail.Addr = addr
-
-			// Start server in goroutine
-			go func() {
-				if err := mockServer.Serve(); err != nil {
-					t.Logf("mock server error: %v", err)
-				}
-			}()
-
-			// Give server time to start
-			time.Sleep(100 * time.Millisecond)
-
-			// Run the test
-			err = tt.mail.SendSession()
+			tt.mail.Addr = startMockServer(t, false)
+			err := tt.mail.SendSession()
 
 			if tt.wantError {
 				if err == nil {
@@ -451,11 +425,11 @@ func startMockServer(t *testing.T, withTLS bool) string {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	server := &MockServer{
+	server := &smtptest.Server{
 		Addr: addr,
 		Name: "test.example.com",
 		Log:  log.New(io.Discard, "", 0),
-		TLS:  &TLS{CertPath: certPath, KeyPath: keyPath},
+		TLS:  &smtptest.TLS{CertPath: certPath, KeyPath: keyPath},
 	}
 	go func() { _ = server.Serve() }()
 

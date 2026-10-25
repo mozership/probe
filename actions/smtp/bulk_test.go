@@ -1,46 +1,9 @@
 package smtp
 
 import (
-	"io"
-	"log"
-	"net"
 	"reflect"
 	"testing"
-	"time"
 )
-
-// setupMockServer creates and starts a mock SMTP server for testing
-func setupMockServer(t *testing.T) (*MockServer, string) {
-	t.Helper()
-
-	mockServer := &MockServer{
-		Addr: "localhost:0",
-		Name: "test.example.com",
-		Log:  log.New(io.Discard, "", 0), // Disable logging for tests
-	}
-
-	// Get available port
-	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to get available port: %v", err)
-	}
-	addr := listener.Addr().String()
-	_ = listener.Close()
-
-	mockServer.Addr = addr
-
-	// Start server in goroutine
-	go func() {
-		if err := mockServer.Serve(); err != nil {
-			t.Logf("mock server error: %v", err)
-		}
-	}()
-
-	// Wait a bit for server to start
-	time.Sleep(100 * time.Millisecond)
-
-	return mockServer, addr
-}
 
 func TestBulkDeliverWithResult(t *testing.T) {
 	tests := []struct {
@@ -83,7 +46,7 @@ func TestBulkDeliverWithResult(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Start mock SMTP server
-			_, addr := setupMockServer(t)
+			addr := startMockServer(t, false)
 
 			bulk := &Bulk{
 				Addr:       addr,
@@ -162,7 +125,7 @@ func TestBulkSendShare(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Start mock SMTP server
-			_, addr := setupMockServer(t)
+			addr := startMockServer(t, false)
 
 			bulk := &Bulk{
 				Addr:       addr,
