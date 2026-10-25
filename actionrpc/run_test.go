@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -18,6 +20,51 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// testActionDir holds the actions under testdata that the tests build.
+var testActionDir string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "actionrpc-test")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	testActionDir = dir
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+var (
+	testActionsMu sync.Mutex
+	testActions   = map[string]func() (string, error){}
+)
+
+// testAction returns the executable of the action under testdata named
+// name, which is built once for all the tests that use it: building it
+// takes long, the more so when other packages are built alongside.
+func testAction(t *testing.T, name string) string {
+	t.Helper()
+	testActionsMu.Lock()
+	build, ok := testActions[name]
+	if !ok {
+		build = sync.OnceValues(func() (string, error) {
+			bin := filepath.Join(testActionDir, name)
+			if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/"+name).CombinedOutput(); err != nil {
+				return "", fmt.Errorf("go build: %w\n%s", err, out)
+			}
+			return bin, nil
+		})
+		testActions[name] = build
+	}
+	testActionsMu.Unlock()
+	bin, err := build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
 
 // That an action stopped once ctx is done exited by the signal is not an
 // error, while that it exited by itself with one, or any other error, still
@@ -110,22 +157,44 @@ func TestOver(t *testing.T) {
 // An action that does not return in time is stopped, given SIGTERM first so
 // that it can stop what it started, and the call returns once ctx is done.
 func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "hang")
-	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/hang-action").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
-	pidfile := filepath.Join(dir, "pid")
+	bin := testAction(t, "hang-action")
+	pidfile := filepath.Join(t.TempDir(), "pid")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// ctx is done only once the action is in its call, however long it took
+	// to start, so that it is the call that is given up on.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	start := time.Now()
+	returned := make(chan struct{})
+	canceled := make(chan time.Time, 1)
+	go func() {
+		defer close(canceled)
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(pidfile); err == nil && len(data) > 0 {
+				canceled <- time.Now()
+				cancel()
+				return
+			}
+			select {
+			case <-returned:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		cancel()
+	}()
 	_, _, err := RunExecutableStepContext(ctx, bin, nil, Call{With: map[string]any{"pidfile": pidfile}}, hclog.NewNullLogger())
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("RunExecutableStepContext() error = %v, want the deadline exceeded", err)
+	stopped := time.Now()
+	close(returned)
+	at, ok := <-canceled
+	if !ok {
+		t.Fatalf("the action did not run: RunExecutableStepContext() error = %v", err)
 	}
-	if took := time.Since(start); took > 2*time.Second+StopGrace+5*time.Second {
-		t.Errorf("RunExecutableStepContext() took %s", took)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("RunExecutableStepContext() error = %v, want ctx's", err)
+	}
+	if took := stopped.Sub(at); took > StopGrace+5*time.Second {
+		t.Errorf("RunExecutableStepContext() returned %s after ctx was done", took)
 	}
 
 	data, err := os.ReadFile(pidfile)
@@ -148,10 +217,7 @@ func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
 // in, and one whose process exited before it returned is told so, with how
 // it exited and what it wrote of why.
 func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "failing")
-	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/failing-action").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
+	bin := testAction(t, "failing-action")
 
 	tests := []struct {
 		mode     string
@@ -194,10 +260,7 @@ func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
 
 // The cleanup of an action tells why it failed as a call of the action does.
 func TestCleanupExecutableTellsWhyTheCleanupFailed(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "failing")
-	if out, err := exec.Command("go", "build", "-o", bin, "github.com/mozership/probe/testdata/failing-action").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
+	bin := testAction(t, "failing-action")
 	tests := map[string]string{
 		"error": "the widget would not go",
 		"panic": "the action exited before it returned (exit status 2): panic: the widget exploded while cleaning up",
