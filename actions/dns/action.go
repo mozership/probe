@@ -60,14 +60,14 @@ func ResFields() []string {
 // ReqTypes returns the kinds of the fields of the req the dns action
 // returns, and ResTypes those of its res, for probe check to report an
 // expression that does with a field what its kind does not allow.
-func ReqTypes() map[string]kind.Kind {
+func ReqTypes() map[string]string {
 	return kind.Fields(Req{})
 }
 
 // ResTypes returns the kinds of the fields of the res the dns action
 // returns; see ReqTypes.
-func ResTypes() map[string]kind.Kind {
-	return map[string]kind.Kind{
+func ResTypes() map[string]string {
+	return map[string]string{
 		"answers":       kind.List,
 		"authoritative": kind.Bool,
 		"protocol":      kind.String,

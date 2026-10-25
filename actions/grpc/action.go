@@ -87,13 +87,13 @@ func ResFields() []string {
 // returns, those of Req, and ResTypes those of its res, those of Res and of
 // the fields it adds, for probe check to report an expression that does
 // with a field what its kind does not allow.
-func ReqTypes() map[string]kind.Kind {
+func ReqTypes() map[string]string {
 	return kind.Fields(Req{})
 }
 
 // ResTypes returns the kinds of the fields of the res the grpc action
 // returns; see ReqTypes.
-func ResTypes() map[string]kind.Kind {
+func ResTypes() map[string]string {
 	types := kind.Fields(Res{})
 	types["complete"] = kind.Bool
 	types["contract"] = kind.Map

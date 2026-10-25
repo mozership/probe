@@ -70,7 +70,7 @@ func CheckRequired(t testing.TB, required [][]string, with map[string]any, run f
 // empty may be, is of any kind.
 type Kinds struct {
 	t        testing.TB
-	req, res map[string]kind.Kind
+	req, res map[string]string
 	// seen are the fields a value of was checked, as req.<name> and
 	// res.<name>.
 	seen map[string]bool
@@ -78,7 +78,7 @@ type Kinds struct {
 
 // NewKinds returns a Kinds that checks what an action returns against req
 // and res, the kinds of the fields of its req and res it declares.
-func NewKinds(t testing.TB, req, res map[string]kind.Kind) *Kinds {
+func NewKinds(t testing.TB, req, res map[string]string) *Kinds {
 	return &Kinds{t: t, req: req, res: res, seen: map[string]bool{}}
 }
 

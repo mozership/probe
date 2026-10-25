@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	reqTypes = map[string]map[string]kind.Kind{
+	reqTypes = map[string]map[string]string{
 		"http":  {"url": kind.String, "method": kind.String, "headers": kind.Map, "body": kind.String},
 		"shell": {"cmd": kind.String},
 		"hello": {},
 	}
-	resTypes = map[string]map[string]kind.Kind{
+	resTypes = map[string]map[string]string{
 		"http":  {"status": kind.String, "code": kind.Number, "headers": kind.Map, "body": kind.String},
 		"shell": {"code": kind.Number, "stdout": kind.String, "stderr": kind.String},
 		"hello": {"dump": kind.Bool, "status": kind.Number},
@@ -154,9 +154,9 @@ jobs:
 // What readActionResult reads of res is of the kinds readResTypes tells
 // check of.
 func TestReadResTypes(t *testing.T) {
-	declared := map[string]kind.Kind{"body": kind.String, "code": kind.Number, "stdout": kind.String}
+	declared := map[string]string{"body": kind.String, "code": kind.Number, "stdout": kind.String}
 	got := readResTypes(declared)
-	want := map[string]kind.Kind{"rawbody": kind.String, "code": kind.Number, "stdout": kind.String}
+	want := map[string]string{"rawbody": kind.String, "code": kind.Number, "stdout": kind.String}
 	if !maps.Equal(got, want) {
 		t.Errorf("readResTypes(%v) = %v, want %v", declared, got, want)
 	}
@@ -176,4 +176,48 @@ func TestReadResTypes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestCheck_TypesAfterRefused checks that a part of an expression the
+// checker refuses and an evaluation takes, such as an index of a string,
+// hides nothing after it, that a not in and a not contains are told as
+// written, and that an external action is checked by no kind, even one
+// given kinds by its name.
+func TestCheck_TypesAfterRefused(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: types
+jobs:
+- name: Commands
+  steps:
+  - name: Index
+    uses: shell
+    with:
+      cmd: echo 4
+    test: res.stdout[0] == "4" && res.code == "0"
+  - name: Not contains
+    uses: shell
+    with:
+      cmd: echo
+    test: res.stdout not contains 1
+  - name: Not in
+    uses: shell
+    with:
+      cmd: echo
+    test: res.code not in [res.stdout] && res.code not in ["0"]
+  - name: External
+    uses: ./actions/mine
+    test: res.code == "200 OK"
+`)
+	opts := checkActions
+	opts.ReqTypes = reqTypes
+	opts.ResTypes = maps.Clone(resTypes)
+	opts.ResTypes["./actions/mine"] = map[string]string{"code": kind.Number}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 9, `test: res.code == "0" is never true: res.code is a number and "0" a string`},
+		{SeverityError, 14, `test: res.stdout not contains 1 fails: res.stdout is a string and 1 a number`},
+		{SeverityError, 19, `test: res.code not in [res.stdout] is always true`},
+	})
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
-	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/suggest"
 )
 
@@ -79,12 +78,14 @@ type CheckOptions struct {
 	ReqFields map[string][]string
 	ResFields map[string][]string
 	// ReqTypes and ResTypes are the kinds of the fields of the req and the
-	// res each action returns, by its name, so that an expression that does
-	// with a field what its kind does not allow is reported, as res.code ==
-	// "200 OK" is, which is never true of a number. A field they leave out,
-	// and a field of an action they do not name, may hold anything.
-	ReqTypes map[string]map[string]kind.Kind
-	ResTypes map[string]map[string]kind.Kind
+	// res each action returns, by its name and then the field's: number,
+	// string, bool, map or list. An expression that does with a field what
+	// its kind does not allow is reported, as res.code == "200 OK" is, which
+	// is never true of a number. A field of another kind or none, a field
+	// they leave out, and a field of an action they do not name, may hold
+	// anything, as may every field of an external action.
+	ReqTypes map[string]map[string]string
+	ResTypes map[string]map[string]string
 	// WithFields are the actions whose req and res hold the keys of the
 	// step's with too, besides the fields they are named with, as an action
 	// that returns what it is given does.

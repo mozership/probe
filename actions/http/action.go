@@ -114,13 +114,13 @@ func ResFields() []string {
 // the fields it adds, for probe check to report an expression that does
 // with a field what its kind does not allow. multipart, which shows what
 // was written, may hold anything.
-func ReqTypes() map[string]kind.Kind {
+func ReqTypes() map[string]string {
 	return kind.Fields(Req{})
 }
 
 // ResTypes returns the kinds of the fields of the res the http action
 // returns; see ReqTypes.
-func ResTypes() map[string]kind.Kind {
+func ResTypes() map[string]string {
 	types := kind.Fields(Res{})
 	types["contract"] = kind.Map
 	types["violations"] = kind.List

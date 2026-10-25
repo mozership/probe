@@ -186,7 +186,7 @@ func TestFieldsAndRequired(t *testing.T) {
 func TestTypesAreOfFields(t *testing.T) {
 	for part, all := range map[string]struct {
 		fields map[string][]string
-		types  map[string]map[string]kind.Kind
+		types  map[string]map[string]string
 	}{
 		"req": {AllReqFields(), AllReqTypes()},
 		"res": {AllResFields(), AllResTypes()},
@@ -206,6 +206,31 @@ func TestTypesAreOfFields(t *testing.T) {
 			t.Errorf("the kinds of %s are declared for %d actions, want %d", part, len(all.types), len(Names()))
 		}
 	}
+	// A field declared without a kind may hold anything, so that nothing is
+	// checked of what reads it; each is one that does.
+	untyped := map[string][]string{"http": {"req.multipart"}}
+	got := map[string][]string{}
+	for _, name := range Names() {
+		for part, all := range map[string]struct {
+			fields []string
+			types  map[string]string
+		}{
+			"req": {AllReqFields()[name], AllReqTypes()[name]},
+			"res": {AllResFields()[name], AllResTypes()[name]},
+		} {
+			for _, field := range all.fields {
+				if _, ok := all.types[field]; !ok {
+					got[name] = append(got[name], part+"."+field)
+				}
+			}
+		}
+		slices.Sort(got[name])
+	}
+	for _, name := range Names() {
+		if !slices.Equal(got[name], untyped[name]) {
+			t.Errorf("%s declares no kind of %v, want none but %v", name, got[name], untyped[name])
+		}
+	}
 	// The status code of an http response is a number, which a test
 	// compares with a number.
 	if got := AllResTypes()["http"]["code"]; got != kind.Number {
@@ -219,7 +244,7 @@ func TestTypesAreOfFields(t *testing.T) {
 // what the page says. A field a page gives as Any, as a body is, which is
 // read as the JSON it holds, is of any kind whatever the action declares.
 func TestTypesMatchTheDocs(t *testing.T) {
-	words := map[string]kind.Kind{
+	words := map[string]string{
 		"integer": kind.Number, "int": kind.Number, "number": kind.Number, "float": kind.Number,
 		"string":  kind.String,
 		"boolean": kind.Bool, "bool": kind.Bool,
@@ -227,7 +252,7 @@ func TestTypesMatchTheDocs(t *testing.T) {
 		"array": kind.List, "list": kind.List,
 	}
 	row := regexp.MustCompile("(?m)^\\| `(res|req)\\.([a-z_]+)` \\| ([A-Za-z]+) \\|")
-	declared := map[string]map[string]map[string]kind.Kind{"req": AllReqTypes(), "res": AllResTypes()}
+	declared := map[string]map[string]map[string]string{"req": AllReqTypes(), "res": AllResTypes()}
 	rows := 0
 	for _, name := range Names() {
 		data, err := os.ReadFile(filepath.Join("..", "docs", "content", "reference", "actions", name+".md"))

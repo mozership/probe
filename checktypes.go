@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/kind"
 )
@@ -130,10 +131,16 @@ func (c *checker) checkTypes() {
 
 // resultShapes returns the shapes of the names an expression of st reads
 // once its action has returned: those of stepShapes, with the fields of res
-// and req whose kinds the action declares.
+// and req whose kinds the action declares. A step of an external action
+// reads its res and req as maps whose fields may hold anything.
 func (c *checker) resultShapes(st *Step) map[string]expr.Shape {
 	out := maps.Clone(stepShapes)
-	for name, types := range map[string]map[string]kind.Kind{
+	// What an external action returns is checked by no kind, whatever its
+	// name: it may hold anything.
+	if actionref.IsExternal(st.Uses) {
+		return out
+	}
+	for name, types := range map[string]map[string]string{
 		"req": c.opts.ReqTypes[st.Uses],
 		"res": readResTypes(c.opts.ResTypes[st.Uses]),
 	} {

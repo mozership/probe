@@ -59,8 +59,26 @@ func TestCheckTypes(t *testing.T) {
 		{`status == "0"`, true, `status == "0" is never true`, ``},
 		{`len(res.rows) == "2"`, true, `len(res.rows) is a number and "2" a string`, ``},
 		{`upper(res.status) == 1`, true, `upper(res.status) is a string and 1 a number`, ``},
+		{`string(res.code) == res.code`, true, `string(res.code) == res.code is never true: string(res.code) is a string and res.code a number`, `compare res.code with a number`},
 		{`res.headers == 1`, true, `res.headers == 1 is never true: res.headers is a map and 1 a number`, ``},
-		{`res.code in ["200", "201"]`, true, `is never true: res.code is a number and the elements of ["200", "201"] are strings`, ``},
+		{`res.code in ["200", "201"]`, true, `res.code in ["200", "201"] fails: res.code is a number, and a list written of strings alone, as ["200", "201"] is, is looked up by strings`, `list values of the kind of res.code`},
+		{`res.code not in ["0"]`, true, `res.code not in ["0"] fails: res.code is a number`, ``},
+		{`res.code in [res.status]`, true, `res.code in [res.status] is never true: res.code is a number and the elements of [res.status] are strings`, ``},
+		{`res.code not in [res.status]`, true, `res.code not in [res.status] is always true: res.code is a number and the elements of [res.status] are strings`, ``},
+		{`res.status in [200, 201]`, true, `res.status in [200, 201] is never true: res.status is a string and the elements of [200, 201] are numbers`, ``},
+		{`res.status not contains 1`, true, `res.status not contains 1 fails: res.status is a string and 1 a number`, `contains takes strings`},
+		{`res.status not matches 1`, true, `res.status not matches 1 fails`, ``},
+		{`res.status not startsWith 2`, true, `res.status not startsWith 2 fails`, ``},
+		{`!(res.status contains 1)`, true, `res.status contains 1 fails`, ``},
+		{`not res.status`, true, `not res.status fails: res.status is a string`, `not takes true or false`},
+		// What the checker refuses and an evaluation takes is set aside, and
+		// the rest is checked.
+		{`res.status[0] == "2" && res.code == "200"`, true, `res.code == "200" is never true`, ``},
+		{`res.status.x == 1 || res.code + "x" == ""`, true, `res.code + "x" fails`, ``},
+		{`len(res.code) > 0 || res.code == "1"`, true, `res.code == "1" is never true`, ``},
+		{`res.status[0] + 1`, true, ``, ``},
+		{`len(res.status[0]) + 1`, true, `len(res.status[0]) + 1 is a number, not true or false`, ``},
+		{`len(res.status[0]) == "1"`, true, `len(res.status[0]) == "1" is never true: len(res.status[0]) is a number`, `or compare string(len(res.status[0])) with "1"`},
 		{`"2" in res.status`, true, `"2" in res.status fails: res.status is a string`, `write res.status contains "2"`},
 		{`"a" in res.code`, true, `"a" in res.code fails: res.code is a number`, `in looks for an element of a list or a key of a map`},
 		{`res.code + "x" == "200x"`, true, `res.code + "x" fails: res.code is a number and "x" a string, which + does not take together`, `string(res.code) + "x"`},
@@ -124,6 +142,9 @@ func TestCheckTypes(t *testing.T) {
 		// takes.
 		{`res.status[0:3] == "200"`, true, ``, ``},
 		{`res.status[0] == "2"`, true, ``, ``},
+		{`res.status[0] == "2" && res.code == 200`, true, ``, ``},
+		{`res.code not in [200, 201]`, true, ``, ``},
+		{`res.status not contains "x"`, true, ``, ``},
 		// A name that is not there is told by check of its own.
 		{`nope + 1`, false, ``, ``},
 		{`nope(1)`, true, ``, ``},
@@ -195,5 +216,14 @@ func TestCheckTypesShapes(t *testing.T) {
 	}
 	if err := CheckTypes(`"a" + 1`, nil, false); err == nil {
 		t.Error(`"a" + 1 with no names = nil, want an error`)
+	}
+}
+
+// The hint of a comparison of a number with the number as a string does not
+// tell to compare the string with itself.
+func TestCheckTypesCompareHint(t *testing.T) {
+	err := CheckTypes(`string(res.code) == res.code`, typeNames, true)
+	if err == nil || strings.Contains(err.Error(), "with string(res.code)") {
+		t.Errorf("CheckTypes = %v, want no hint to compare string(res.code) with itself", err)
 	}
 }

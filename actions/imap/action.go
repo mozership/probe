@@ -62,13 +62,13 @@ func ResFields() []string {
 // returns, those of Req, and ResTypes those of its res, those of Res, for
 // probe check to report an expression that does with a field what its kind
 // does not allow.
-func ReqTypes() map[string]kind.Kind {
+func ReqTypes() map[string]string {
 	return kind.Fields(Req{})
 }
 
 // ResTypes returns the kinds of the fields of the res the imap action
 // returns; see ReqTypes.
-func ResTypes() map[string]kind.Kind {
+func ResTypes() map[string]string {
 	return kind.Fields(Res{})
 }
 

@@ -9,7 +9,7 @@ import (
 func TestOf(t *testing.T) {
 	tests := []struct {
 		v    any
-		want Kind
+		want string
 		ok   bool
 	}{
 		{int64(200), Number, true},
@@ -54,7 +54,7 @@ func TestFields(t *testing.T) {
 		hidden   string `map:"hidden"`
 	}
 	_ = res{}.hidden
-	want := map[string]Kind{
+	want := map[string]string{
 		"code": Number, "rows": Number, "rate": Number, "status": String, "raw": String,
 		"timeout": String, "at": String, "ok": Bool, "headers": Map, "data": Map,
 		"items": List, "params": List, "complete": Bool,

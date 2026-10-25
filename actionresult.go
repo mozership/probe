@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/jsonutil"
 )
 
@@ -77,7 +76,7 @@ func addedResFields(res []string) []string {
 // body, which is read as the value it holds when it holds JSON, is of any
 // kind, and rawbody, which keeps such a body as text, is a string, as the
 // body is. json, which stdout of JSON is read as, is of any kind.
-func readResTypes(types map[string]kind.Kind) map[string]kind.Kind {
+func readResTypes(types map[string]string) map[string]string {
 	out := maps.Clone(types)
 	if k, ok := out["body"]; ok {
 		delete(out, "body")

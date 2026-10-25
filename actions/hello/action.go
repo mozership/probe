@@ -62,12 +62,12 @@ func ResFields() []string {
 // returns: none, as the keys of with, which it returns as req, may hold
 // anything. ResTypes returns those of its res: status and dump, which it
 // sets over the keys of with of the same names.
-func ReqTypes() map[string]kind.Kind {
-	return map[string]kind.Kind{}
+func ReqTypes() map[string]string {
+	return map[string]string{}
 }
 
 // ResTypes returns the kinds of the fields of the res the hello action
 // returns; see ReqTypes.
-func ResTypes() map[string]kind.Kind {
-	return map[string]kind.Kind{"dump": kind.Bool, "status": kind.Number}
+func ResTypes() map[string]string {
+	return map[string]string{"dump": kind.Bool, "status": kind.Number}
 }

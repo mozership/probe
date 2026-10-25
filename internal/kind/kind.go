@@ -8,25 +8,24 @@ import (
 	"time"
 )
 
-// Kind is a kind of value an expression reads.
-type Kind string
-
-// The kinds of value. A whole number and one with a fraction are both a
-// number: an action sends its numbers as one kind, and the runner receives
-// those that are whole as integers.
+// The kinds of value, as they are named where a kind is given as text, as
+// probe.CheckOptions takes them. A whole number and one with a fraction are
+// both a number: an action sends its numbers as one kind, and the runner
+// receives those that are whole as integers. Any other name, the empty one
+// included, is of a value that may be of any kind.
 const (
-	Number Kind = "number"
-	String Kind = "string"
-	Bool   Kind = "bool"
-	Map    Kind = "map"
-	List   Kind = "list"
+	Number = "number"
+	String = "string"
+	Bool   = "bool"
+	Map    = "map"
+	List   = "list"
 )
 
 // Of returns the kind of v, a value as the runner receives it from an
 // action: a number, a string, a bool, a map keyed by strings or a list. It
 // returns false for nil, which is of no kind, and for a value of any other
 // type.
-func Of(v any) (Kind, bool) {
+func Of(v any) (string, bool) {
 	switch v.(type) {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return Number, true
@@ -49,7 +48,7 @@ func Of(v any) (Kind, bool) {
 // for one of bool, a list for a slice or an array, and a map for a map or a
 // struct. A field of an interface type, which may hold anything, is left
 // out, as is a field without a tag.
-func Fields(v any) map[string]Kind {
+func Fields(v any) map[string]string {
 	t := reflect.TypeOf(v)
 	for t != nil && t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -57,7 +56,7 @@ func Fields(v any) map[string]Kind {
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil
 	}
-	out := map[string]Kind{}
+	out := map[string]string{}
 	for f := range t.Fields() {
 		name := f.Tag.Get("map")
 		if name == "" || !f.IsExported() {
@@ -72,7 +71,7 @@ func Fields(v any) map[string]Kind {
 
 // OfType returns the kind a value of t is sent as, as Fields tells it, and
 // false for a type whose values may be of any kind, as an interface's are.
-func OfType(t reflect.Type) (Kind, bool) {
+func OfType(t reflect.Type) (string, bool) {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}

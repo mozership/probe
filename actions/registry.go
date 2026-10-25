@@ -22,7 +22,6 @@ import (
 	"github.com/mozership/probe/actions/shell"
 	"github.com/mozership/probe/actions/smtp"
 	"github.com/mozership/probe/actions/ssh"
-	"github.com/mozership/probe/internal/kind"
 )
 
 // builtin maps an action name to the function that serves it. Each value
@@ -173,7 +172,7 @@ func AllResFields() map[string][]string {
 // reqTypes and resTypes are the kinds of the fields of the req and the res
 // each built-in action returns, as its package declares them.
 var (
-	reqTypes = map[string]func() map[string]kind.Kind{
+	reqTypes = map[string]func() map[string]string{
 		"db":       db.ReqTypes,
 		"dns":      dns.ReqTypes,
 		"embedded": embedded.ReqTypes,
@@ -185,7 +184,7 @@ var (
 		"smtp":     smtp.ReqTypes,
 		"ssh":      ssh.ReqTypes,
 	}
-	resTypes = map[string]func() map[string]kind.Kind{
+	resTypes = map[string]func() map[string]string{
 		"db":       db.ResTypes,
 		"dns":      dns.ResTypes,
 		"embedded": embedded.ResTypes,
@@ -200,21 +199,21 @@ var (
 )
 
 // AllReqTypes returns the kinds of the fields of the req each built-in
-// action returns, by its name, for probe check to report an expression that
-// does with a field what its kind does not allow. A field left out may hold
-// anything.
-func AllReqTypes() map[string]map[string]kind.Kind {
+// action returns, by its name, as number, string, bool, map or list, for
+// probe check to report an expression that does with a field what its kind
+// does not allow. A field left out may hold anything.
+func AllReqTypes() map[string]map[string]string {
 	return collectTypes(reqTypes)
 }
 
 // AllResTypes returns the kinds of the fields of the res each built-in
 // action returns, by its name; see AllReqTypes.
-func AllResTypes() map[string]map[string]kind.Kind {
+func AllResTypes() map[string]map[string]string {
 	return collectTypes(resTypes)
 }
 
-func collectTypes(m map[string]func() map[string]kind.Kind) map[string]map[string]kind.Kind {
-	out := make(map[string]map[string]kind.Kind, len(m))
+func collectTypes(m map[string]func() map[string]string) map[string]map[string]string {
+	out := make(map[string]map[string]string, len(m))
 	for name, f := range m {
 		out[name] = f()
 	}
