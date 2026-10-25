@@ -11,7 +11,7 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-func TestReportRenderer_generateHeader(t *testing.T) {
+func TestReportRenderer_headerText(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
@@ -46,15 +46,15 @@ func TestReportRenderer_generateHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := r.generateHeader(tt.title, tt.description)
+			result := r.headerText(tt.title, tt.description)
 			if result != tt.want {
-				t.Errorf("generateHeader() = %q, want %q", result, tt.want)
+				t.Errorf("headerText() = %q, want %q", result, tt.want)
 			}
 		})
 	}
 }
 
-func TestReportRenderer_generateJobStatus(t *testing.T) {
+func TestReportRenderer_writeJobStatus(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
@@ -63,7 +63,6 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		jobID    string
 		jobName  string
 		status   StatusType
 		duration float64
@@ -71,7 +70,6 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 	}{
 		{
 			name:     "success status",
-			jobID:    "job1",
 			jobName:  "Test Job",
 			status:   StatusSuccess,
 			duration: 1.5,
@@ -79,7 +77,6 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 		},
 		{
 			name:     "error status",
-			jobID:    "job2",
 			jobName:  "Failed Job",
 			status:   StatusError,
 			duration: 2.3,
@@ -87,7 +84,6 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 		},
 		{
 			name:     "skipped status",
-			jobID:    "job3",
 			jobName:  "Skipped Job",
 			status:   StatusSkipped,
 			duration: 0.0,
@@ -95,7 +91,6 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 		},
 		{
 			name:     "warning status",
-			jobID:    "job4",
 			jobName:  "Warning Job",
 			status:   StatusWarning,
 			duration: 0.1,
@@ -106,18 +101,18 @@ func TestReportRenderer_generateJobStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			r.generateJobStatus(tt.jobID, tt.jobName, tt.status, tt.duration, &output)
+			r.writeJobStatus(&output, tt.jobName, tt.status, tt.duration)
 
 			result := output.String()
 			if result != tt.want {
-				t.Errorf("generateJobStatus() = %q, want %q", result, tt.want)
+				t.Errorf("writeJobStatus() = %q, want %q", result, tt.want)
 			}
 		})
 	}
 }
 
 // Test that job status uses correct colors for each status type - with actual color detection
-func TestReportRenderer_generateJobStatus_ColorMapping(t *testing.T) {
+func TestReportRenderer_writeJobStatus_ColorMapping(t *testing.T) {
 	// Enable colors to detect actual color differences
 	color.NoColor = false
 	defer func() { color.NoColor = true }()
@@ -154,25 +149,25 @@ func TestReportRenderer_generateJobStatus_ColorMapping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			r.generateJobStatus("test-job", "Test Job", tt.status, 1.0, &output)
+			r.writeJobStatus(&output, "Test Job", tt.status, 1.0)
 
 			result := output.String()
 
 			// Verify basic content is present
 			if !strings.Contains(result, "Test Job") {
-				t.Errorf("generateJobStatus() should contain job name, got %q", result)
+				t.Errorf("writeJobStatus() should contain job name, got %q", result)
 			}
 
 			// Verify the expected color code is present in the output
 			if !strings.Contains(result, tt.expectedColorCode) {
-				t.Errorf("generateJobStatus() should contain color code %q for %s, got %q", tt.expectedColorCode, tt.name, result)
+				t.Errorf("writeJobStatus() should contain color code %q for %s, got %q", tt.expectedColorCode, tt.name, result)
 			}
 		})
 	}
 }
 
 // Test that SUCCESS status specifically does NOT use blue color (colorInfo)
-func TestReportRenderer_generateJobStatus_SuccessNotBlue(t *testing.T) {
+func TestReportRenderer_writeJobStatus_SuccessNotBlue(t *testing.T) {
 	// Enable colors to detect actual color differences
 	color.NoColor = false
 	defer func() { color.NoColor = true }()
@@ -180,7 +175,7 @@ func TestReportRenderer_generateJobStatus_SuccessNotBlue(t *testing.T) {
 	r := newReportRenderer(nil, nil, nil)
 
 	var output strings.Builder
-	r.generateJobStatus("success-job", "Success Job", StatusSuccess, 1.5, &output)
+	r.writeJobStatus(&output, "Success Job", StatusSuccess, 1.5)
 
 	result := output.String()
 
@@ -200,7 +195,7 @@ func TestReportRenderer_generateJobStatus_SuccessNotBlue(t *testing.T) {
 }
 
 // Test that skipped jobs have gray formatting for entire line
-func TestReportRenderer_generateJobStatus_SkippedFormatting(t *testing.T) {
+func TestReportRenderer_writeJobStatus_SkippedFormatting(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
@@ -209,63 +204,57 @@ func TestReportRenderer_generateJobStatus_SkippedFormatting(t *testing.T) {
 
 	// Test skipped job formatting
 	var output strings.Builder
-	r.generateJobStatus("skip-job", "Skipped Job", StatusSkipped, 0.0, &output)
+	r.writeJobStatus(&output, "Skipped Job", StatusSkipped, 0.0)
 
 	result := output.String()
 	expected := "⏺ Skipped Job (SKIPPED)\n"
 
 	if result != expected {
-		t.Errorf("generateJobStatus() for skipped job = %q, want %q", result, expected)
+		t.Errorf("writeJobStatus() for skipped job = %q, want %q", result, expected)
 	}
 
 	// Test non-skipped job formatting for comparison
 	var output2 strings.Builder
-	r.generateJobStatus("success-job", "Success Job", StatusSuccess, 1.5, &output2)
+	r.writeJobStatus(&output2, "Success Job", StatusSuccess, 1.5)
 
 	result2 := output2.String()
 	expected2 := "⏺ Success Job (Completed in 1.50s)\n"
 
 	if result2 != expected2 {
-		t.Errorf("generateJobStatus() for success job = %q, want %q", result2, expected2)
+		t.Errorf("writeJobStatus() for success job = %q, want %q", result2, expected2)
 	}
 }
 
-func TestReportRenderer_generateJobResults(t *testing.T) {
+func TestReportRenderer_writeUnderJob(t *testing.T) {
 	r := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name  string
-		jobID string
 		input string
 		want  string
 	}{
 		{
 			name:  "empty input",
-			jobID: "job1",
 			input: "",
 			want:  "\n",
 		},
 		{
 			name:  "single line",
-			jobID: "job1",
 			input: "Test output",
 			want:  "  ⎿ Test output\n\n",
 		},
 		{
 			name:  "multiple lines",
-			jobID: "job1",
 			input: "Line 1\nLine 2\nLine 3",
 			want:  "  ⎿ Line 1\n    Line 2\n    Line 3\n\n",
 		},
 		{
 			name:  "with empty lines",
-			jobID: "job1",
 			input: "Line 1\n\nLine 3",
 			want:  "  ⎿ Line 1\n    Line 3\n\n",
 		},
 		{
 			name:  "whitespace only input",
-			jobID: "job1",
 			input: "   \n  \t  \n   ",
 			want:  "\n",
 		},
@@ -274,17 +263,17 @@ func TestReportRenderer_generateJobResults(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			r.generateJobResults(tt.jobID, tt.input, &output)
+			r.writeUnderJob(&output, tt.input)
 
 			result := output.String()
 			if result != tt.want {
-				t.Errorf("generateJobResults() = %q, want %q", result, tt.want)
+				t.Errorf("writeUnderJob() = %q, want %q", result, tt.want)
 			}
 		})
 	}
 }
 
-func TestReportRenderer_generateFooter(t *testing.T) {
+func TestReportRenderer_writeFooter(t *testing.T) {
 	r := newReportRenderer(nil, nil, nil)
 
 	tests := []struct {
@@ -320,19 +309,19 @@ func TestReportRenderer_generateFooter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			r.generateFooter(tt.totalTime, tt.successCount, tt.totalJobs, &output)
+			r.writeFooter(&output, tt.totalTime, tt.successCount, tt.totalJobs)
 
 			result := output.String()
 			for _, want := range tt.wantContains {
 				if !strings.Contains(result, want) {
-					t.Errorf("generateFooter() should contain %q, got %q", want, result)
+					t.Errorf("writeFooter() should contain %q, got %q", want, result)
 				}
 			}
 		})
 	}
 }
 
-func TestReportRenderer_generateReport(t *testing.T) {
+func TestReportRenderer_reportText(t *testing.T) {
 	r := newReportRenderer([]string{"job1", "job2"}, nil, nil)
 
 	// Create test WorkflowBuffer
@@ -375,7 +364,7 @@ func TestReportRenderer_generateReport(t *testing.T) {
 		},
 	}
 
-	result := r.GenerateReport(rs)
+	result := r.reportText(rs)
 
 	// Verify the report contains expected elements
 	expectedContains := []string{
@@ -389,24 +378,24 @@ func TestReportRenderer_generateReport(t *testing.T) {
 
 	for _, expected := range expectedContains {
 		if !strings.Contains(result, expected) {
-			t.Errorf("generateReport() should contain %q, got:\n%s", expected, result)
+			t.Errorf("reportText() should contain %q, got:\n%s", expected, result)
 		}
 	}
 }
 
-func TestReportRenderer_generateReport_EmptyBuffer(t *testing.T) {
+func TestReportRenderer_reportText_EmptyBuffer(t *testing.T) {
 	r := newReportRenderer(nil, nil, nil)
 
 	rs := NewResult()
-	result := r.GenerateReport(rs)
+	result := r.reportText(rs)
 
 	// Should contain at least the footer
 	if !strings.Contains(result, "Total workflow time: 0.00s") {
-		t.Errorf("generateReport() with empty buffer should contain footer, got %q", result)
+		t.Errorf("reportText() with empty buffer should contain footer, got %q", result)
 	}
 }
 
-func TestReportRenderer_generateReport_WithRepeatStep(t *testing.T) {
+func TestReportRenderer_reportText_WithRepeatStep(t *testing.T) {
 	r := newReportRenderer([]string{"job1"}, nil, nil)
 
 	rs := NewResult()
@@ -436,7 +425,7 @@ func TestReportRenderer_generateReport_WithRepeatStep(t *testing.T) {
 		},
 	}
 
-	result := r.GenerateReport(rs)
+	result := r.reportText(rs)
 
 	expectedContains := []string{
 		"Job with Repeat",
@@ -448,13 +437,13 @@ func TestReportRenderer_generateReport_WithRepeatStep(t *testing.T) {
 
 	for _, expected := range expectedContains {
 		if !strings.Contains(result, expected) {
-			t.Errorf("generateReport() should contain %q, got:\n%s", expected, result)
+			t.Errorf("reportText() should contain %q, got:\n%s", expected, result)
 		}
 	}
 }
 
 // Test embedded job report formatting with newlines
-func TestReportRenderer_generateJobResultsFromStepResults_ReportNewlineFormatting(t *testing.T) {
+func TestReportRenderer_stepResultsText_ReportNewlineFormatting(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
@@ -542,16 +531,16 @@ func TestReportRenderer_generateJobResultsFromStepResults_ReportNewlineFormattin
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := r.generateJobResultsFromStepResults("", tt.stepResults)
+			result := r.stepResultsText("", tt.stepResults)
 
 			// Check that the result contains the expected formatted report
 			if !strings.Contains(result, tt.wantContains) {
-				t.Errorf("generateJobResultsFromStepResults() should contain %q, got:\n%s", tt.wantContains, result)
+				t.Errorf("stepResultsText() should contain %q, got:\n%s", tt.wantContains, result)
 			}
 
 			// Check that the result ends with a newline to prevent display corruption
 			if !strings.HasSuffix(result, tt.wantEndsWith) {
-				t.Errorf("generateJobResultsFromStepResults() should end with %q, got result ending with: %q", tt.wantEndsWith, result[len(result)-5:])
+				t.Errorf("stepResultsText() should end with %q, got result ending with: %q", tt.wantEndsWith, result[len(result)-5:])
 			}
 
 			// Verify that embedded job reports are properly indented with 5 spaces
@@ -567,10 +556,10 @@ func TestReportRenderer_generateJobResultsFromStepResults_ReportNewlineFormattin
 	}
 }
 
-// TestReportRenderer_generateJobResultsFromStepResults_Baseline shows under the times
+// TestReportRenderer_stepResultsText_Baseline shows under the times
 // of each repeated step those of the step of its id in the baseline, in the
 // job of the same id, and says so of a step the baseline has none of.
-func TestReportRenderer_generateJobResultsFromStepResults_Baseline(t *testing.T) {
+func TestReportRenderer_stepResultsText_Baseline(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
@@ -595,12 +584,12 @@ func TestReportRenderer_generateJobResultsFromStepResults_Baseline(t *testing.T)
 	}}
 
 	r := newReportRenderer(nil, nil, nil)
-	if got := r.generateJobResultsFromStepResults("api", steps); strings.Contains(got, "baseline") {
+	if got := r.stepResultsText("api", steps); strings.Contains(got, "baseline") {
 		t.Errorf("without a baseline nothing should be shown against one, got:\n%s", got)
 	}
 
 	r.baseline = baseline
-	got := r.generateJobResultsFromStepResults("api", steps)
+	got := r.stepResultsText("api", steps)
 	for _, want := range []string{
 		"max 120ms\n      baseline p50 100ms (+20.0%), p95 200ms (-40.0%), p99 120ms\n",
 		"max 5.0ms\n      no baseline\n",
@@ -614,7 +603,7 @@ func TestReportRenderer_generateJobResultsFromStepResults_Baseline(t *testing.T)
 	}
 }
 
-func TestReportRenderer_generateJobResultsFromStepResults_RepeatEchoOutputs(t *testing.T) {
+func TestReportRenderer_stepResultsText_RepeatEchoOutputs(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
@@ -638,7 +627,7 @@ func TestReportRenderer_generateJobResultsFromStepResults_RepeatEchoOutputs(t *t
 		},
 	}
 
-	got := r.generateJobResultsFromStepResults("", []StepResult{stepResult})
+	got := r.stepResultsText("", []StepResult{stepResult})
 
 	for i := 1; i <= 3; i++ {
 		want := fmt.Sprintf("iteration %d", i)
@@ -671,7 +660,7 @@ func TestReportRenderer_MasksTheReport(t *testing.T) {
 		},
 	}
 
-	for name, got := range map[string]string{"GenerateReport": r.GenerateReport(rs), "GenerateReportOnlySteps": r.GenerateReportOnlySteps(rs)} {
+	for name, got := range map[string]string{"reportText": r.reportText(rs), "stepsText": r.stepsText(rs)} {
 		if strings.Contains(got, "hunter2") {
 			t.Errorf("%s() shows the secret:\n%s", name, got)
 		}
@@ -681,7 +670,7 @@ func TestReportRenderer_MasksTheReport(t *testing.T) {
 	}
 }
 
-func TestReportRenderer_printStepRepeatResult_Skipped(t *testing.T) {
+func TestReportRenderer_writeStepRepeatResult_Skipped(t *testing.T) {
 	// The colors are put back as they were, for the tests after this one.
 	noColor := color.NoColor
 	color.NoColor = true
@@ -702,9 +691,9 @@ func TestReportRenderer_printStepRepeatResult_Skipped(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out strings.Builder
-			r.printStepRepeatResult(&tt.counter, tt.hasTest, &out)
+			r.writeStepRepeatResult(&out, &tt.counter, tt.hasTest)
 			if !strings.Contains(out.String(), tt.want) {
-				t.Errorf("printStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
+				t.Errorf("writeStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
 			}
 		})
 	}

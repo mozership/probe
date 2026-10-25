@@ -359,9 +359,9 @@ func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
 		}
 		result.Jobs["test-job"] = jobResult
 
-		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).GenerateReport(result)
+		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).reportText(result)
 		if !strings.Contains(got, "test-job") {
-			t.Errorf("GenerateReport() should have the job, got:\n%s", got)
+			t.Errorf("reportText() should have the job, got:\n%s", got)
 		}
 	})
 }
