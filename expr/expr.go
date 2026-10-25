@@ -540,10 +540,7 @@ func (e *Expr) EvalTemplate(input string, env any) (string, error) {
 		}
 
 		// Convert the output to string with size limit
-		outputStr := fmt.Sprintf("%v", output)
-		if len(outputStr) > maxStringLength {
-			outputStr = outputStr[:maxStringLength] + truncate.Message()
-		}
+		outputStr := truncate.String(fmt.Sprintf("%v", output), maxStringLength)
 		if err := write(outputStr); err != nil {
 			return "", err
 		}
