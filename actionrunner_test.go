@@ -109,7 +109,7 @@ type stoppableRunner struct {
 }
 
 func (r *stoppableRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	<-opts.context().Done()
+	<-opts.Context().Done()
 	close(r.stopped)
 	return nil, nil, r.err
 }
@@ -122,7 +122,7 @@ type contextRecordingRunner struct {
 }
 
 func (r *contextRecordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	r.ctx, r.during = opts.ctx, opts.context().Err()
+	r.ctx, r.during = opts.ctx, opts.Context().Err()
 	return map[string]any{"status": 0}, nil, nil
 }
 
