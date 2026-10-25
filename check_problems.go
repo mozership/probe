@@ -24,14 +24,19 @@ func (c *checker) reportAliasProblems(problems []aliasProblem) {
 	}
 }
 
-// reportLoadProblems tells what keeps the jobs from running as they are
-// written, which a run is refused for as the workflow is loaded, and the
-// templates of the workflow's vars that do not parse.
-func (c *checker) reportLoadProblems(problems []problem) {
-	for _, p := range templateProblems("vars", "", "vars", c.wf.Vars) {
+// reportJobProblems tells what keeps the jobs from running as they are
+// written, which a run is refused for as the workflow is loaded.
+func (c *checker) reportJobProblems(problems []problem) {
+	for _, p := range problems {
 		c.reportProblem(p)
 	}
-	for _, p := range problems {
+}
+
+// checkVarsTemplates tells the templates of the workflow's vars that do not
+// parse. A load does not refuse them, as it does the jobs' problems: they
+// are found as the vars are evaluated, when the run starts.
+func (c *checker) checkVarsTemplates() {
+	for _, p := range templateProblems("vars", "", "vars", c.wf.Vars) {
 		c.reportProblem(p)
 	}
 }

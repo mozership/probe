@@ -14,3 +14,14 @@ func stepWhere(job string, i int, st *Step) string {
 	}
 	return fmt.Sprintf("%s, step %d %q", job, i, st.Name)
 }
+
+// jobWhere names the job at index i of the workflow checked.
+func (c *checker) jobWhere(i int) string {
+	return jobWhere(c.wf.Jobs, i)
+}
+
+// stepWhere names the step at index j of the job at index i of the
+// workflow checked.
+func (c *checker) stepWhere(i, j int) string {
+	return stepWhere(c.jobWhere(i), j, c.wf.Jobs[i].Steps[j])
+}

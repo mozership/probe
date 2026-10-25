@@ -178,18 +178,18 @@ func (c *checker) walkWorkflow(body ast.Node) {
 		for i, job := range items(value) {
 			jp := fmt.Sprintf("jobs[%d]", i)
 			c.lines[jp] = lineOf(job)
-			jobWhere := named(fmt.Sprintf("job %d", i), job)
-			c.keys(job, jp, jobWhere, jobKeys, func(key string, value ast.Node) {
+			jobLabel := named(fmt.Sprintf("job %d", i), job)
+			c.keys(job, jp, jobLabel, jobKeys, func(key string, value ast.Node) {
 				switch key {
 				case "defaults":
 					c.noteLines(jp+".defaults", value)
 				case "repeat":
-					c.keys(value, jp+".repeat", jobWhere, repeatKeys, nil)
+					c.keys(value, jp+".repeat", jobLabel, repeatKeys, nil)
 				case "steps":
 					for j, step := range items(value) {
 						sp := fmt.Sprintf("%s.steps[%d]", jp, j)
 						c.lines[sp] = lineOf(step)
-						where := named(fmt.Sprintf("%s, step %d", jobWhere, j), step)
+						where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
 						c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
 							switch key {
 							case "retry":
