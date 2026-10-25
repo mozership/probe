@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/report"
 )
 
 // The runs of a job are counted only when it is repeated, warmed up or
@@ -140,20 +142,36 @@ func TestExecutor_Run(t *testing.T) {
 	}
 }
 
-// concurrencyRunner answers every action after a pause, and records the
-// most calls it was in at once.
-type concurrencyRunner struct {
-	mu      sync.Mutex
-	running int
-	most    int
+// overlapRunner holds every call to an action until a second call is in
+// one at the same time, or until wait is over, and records whether two
+// calls ever were.
+type overlapRunner struct {
+	wait time.Duration
+
+	mu         sync.Mutex
+	running    int
+	overlapped bool
+	both       chan struct{}
 }
 
-func (r *concurrencyRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func newOverlapRunner(wait time.Duration) *overlapRunner {
+	return &overlapRunner{wait: wait, both: make(chan struct{})}
+}
+
+func (r *overlapRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
 	r.mu.Lock()
 	r.running++
-	r.most = max(r.most, r.running)
+	if r.running > 1 && !r.overlapped {
+		r.overlapped = true
+		close(r.both)
+	}
 	r.mu.Unlock()
-	time.Sleep(200 * time.Millisecond)
+
+	select {
+	case <-r.both:
+	case <-time.After(r.wait):
+	}
+
 	r.mu.Lock()
 	r.running--
 	r.mu.Unlock()
@@ -162,14 +180,17 @@ func (r *concurrencyRunner) RunActions(name string, with map[string]any, opts Ru
 
 // The runs of an async job start an interval apart, without waiting for the
 // run before to end, while those of any other job run one after another.
+// An async run waits in its action for the next run to be in it as well,
+// for as long as a stalled machine could take; a run in turn waits a short
+// while, which no other run is in its action during.
 func TestExecutor_Run_AsyncOverlaps(t *testing.T) {
 	for _, async := range []bool{false, true} {
-		name := "in turn"
+		name, wait := "in turn", 20*time.Millisecond
 		if async {
-			name = "async"
+			name, wait = "async", 30*time.Second
 		}
 		t.Run(name, func(t *testing.T) {
-			runner := &concurrencyRunner{}
+			runner := newOverlapRunner(wait)
 			job := Job{
 				Name:   "job",
 				ID:     "job",
@@ -179,8 +200,11 @@ func TestExecutor_Run_AsyncOverlaps(t *testing.T) {
 			if passed, _ := runJob(t, job); !passed {
 				t.Fatal("Run() = false, want true")
 			}
-			if overlapped := runner.most > 1; overlapped != async {
-				t.Errorf("most runs at once = %d, want them to overlap %v", runner.most, async)
+			runner.mu.Lock()
+			overlapped := runner.overlapped
+			runner.mu.Unlock()
+			if overlapped != async {
+				t.Errorf("runs overlapped = %v, want %v", overlapped, async)
 			}
 		})
 	}
@@ -259,12 +283,19 @@ func TestRepeatStepResult(t *testing.T) {
 
 // The counters are read in the order of their keys, which is the order the
 // steps ran in, with what the runs share filled in. A counter given its
-// total by the step keeps it.
+// total by the step keeps it. The snapshot's fields are its own, and what
+// they point to is the stored counter's.
 func TestJobRepeat_snapshotCounters(t *testing.T) {
+	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	contract := &report.Contract{Spec: "openapi.yml"}
 	rep := newJobRepeat(5, 2)
 	rep.tested = true
 	rep.counters[7] = StepRepeatCounter{Name: "third"}
-	rep.counters[0] = StepRepeatCounter{Name: "first", RepeatTotal: 4}
+	rep.counters[0] = StepRepeatCounter{
+		Name: "first", RepeatTotal: 4,
+		Failure: failure, Contract: contract,
+		RTs: []float64{0.1}, EchoOutputs: []string{"echo"},
+	}
 	rep.counters[3] = StepRepeatCounter{Name: "second"}
 
 	got := rep.snapshotCounters()
@@ -283,7 +314,15 @@ func TestJobRepeat_snapshotCounters(t *testing.T) {
 	}
 	got[0].Name = "changed"
 	if rep.counters[0].Name != "first" {
-		t.Error("changing the snapshot changed the counters")
+		t.Error("setting a field of the snapshot changed the stored counter")
+	}
+	if got[0].Failure != failure || got[0].Contract != contract {
+		t.Error("the snapshot should point to the stored counter's failure and contract")
+	}
+	got[0].RTs[0] = 9
+	got[0].EchoOutputs[0] = "changed"
+	if rep.counters[0].RTs[0] != 9 || rep.counters[0].EchoOutputs[0] != "changed" {
+		t.Error("the snapshot should share the stored counter's RTs and echo outputs")
 	}
 }
 
