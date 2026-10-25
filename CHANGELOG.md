@@ -12,7 +12,8 @@ This release breaks the Go API in a minor version, for code that imports
 probe as a library: the packages only probe itself imported, the root
 package, `actionrpc` on the side that runs an action, and the packages of
 the built-in actions. Workflow files are not affected, except as told under
-Behaviour Changes below. An external action served with `actionrpc.Serve`,
+Behaviour Changes below and where `Load` now refuses a workflow before any
+job runs, which the root package's part tells. An external action served with `actionrpc.Serve`,
 which is how one is written, is not affected unless it imports `mapping`.
 
 Much of what goes was used only by Probe's own tests, or by nothing; it is
@@ -86,11 +87,12 @@ passing the call on to `PluginActionRunner` with `opts` as it was given.
 
 #### The steps that pass without a test
 
-The engine no longer knows the `hello` action by name. Which actions' steps
-pass without a test is told to it, and the `probe` command tells it, so the
-command behaves as before. A program that runs workflows through the root
-package and leaves it unset counts a `hello` step without a test as
-untested, as v1.29.0 did.
+In v1.29.0 every step without a test counted as untested. Since then a
+`hello` step passes without one, as the `probe` command runs and checks
+workflows; the engine does not know `hello` by name, but is told which
+actions' steps pass without a test, and the `probe` command tells it. A
+program that runs workflows through the root package and leaves it unset
+counts such a step as untested, as v1.29.0 did.
 
 | To get what `probe` does | Set |
 |---|---|
@@ -180,7 +182,7 @@ for the registry are gone, as is the one that served the action:
 |---|---|
 | `Serve()` of `db`, `dns`, `grpc`, `hello`, `http`, `imap`, `shell`, `smtp`, `ssh` | `actions.Lookup(name)` |
 | `embedded.Serve()` | `embedded.ServeWithActions(names, opts...)`, as `actions.Lookup("embedded")` serves it |
-| `Keeps()` and `Params()` of each package | `actions.Keeps()[name]`, `actions.AllParams()[name]`, or the fields of `<package>.Spec()` |
+| `Keeps()` of `db`, `dns`, `embedded`, `grpc`, `hello` and `http`, and `Params()` of each package but `hello` | `actions.Keeps()[name]`, `actions.AllParams()[name]`, or the fields of `<package>.Spec()` |
 | `actions.Keeping()` | `actions.Keeps()` |
 | `actions.Params(name)` | `actions.AllParams()[name]` |
 | `embedded.ServeWithActions(builtin []string)` | `embedded.ServeWithActions(builtin []string, opts ...Option)`; a call compiles as it did |
@@ -218,17 +220,23 @@ connected first. They are now methods of the session `Do` opens:
 `RunOptions.Context` and `RunOptions.Trace`, `WithActionRunner`,
 `WithNeedsNoCheck`, `ReadJobFile`, `Outputs.SetFlat`, `JobResult.Succeeded`
 and `Printer.PrintGivenRequest` are new in the root package.
-`actionrpc.Call.Contract`, `Call.Processes`, `ContractCheck`,
-`ContractCheckOf`, `Process`, `ExitError`, `StartError`, `DecodeParams`,
+`actionrpc.Call.Contract`, `Call.Processes`, `Contract`, `ContractCheck`,
+`ContractCheckOf`, `ContractMatch`, `Violation`, `Process`, `Processes`, `ExitError`, `StartError`, `DecodeParams`,
 `EncodeResult`, `ParamNames` and `ParseTimeout` are new, as are
 `actionref.Manifest.Res`; `actions.Configure`, `CheckOptions`,
 `NeedsNoCheck`, `Contracts`, `WithFields`, `AllRequired`, `AllReqFields`,
 `AllResFields`, `AllReqTypes` and `AllResTypes`; `embedded.WithNeedsNoCheck`;
 `mask.MinLength` and `Masker.TooShort`; and `report.ReadBaseline`,
-`Report.Selection` and `Report.Partial`.
+`report.Selection`, `Report.Selection` and `Report.Partial`.
 
 ### Behaviour Changes
 
+- A job starts as soon as the jobs it needs are done, not when every job started with them is (#412)
+- `probe a.yml b.yml` reads the files as one workflow, and `--job` runs the jobs named and what they need (#433)
+- `probe check` reports errors it did not, such as names, fields of `res` and `req`, required keys and the kinds of values an expression reads, so a workflow it passed in v1.29.0 may now fail it (#437, #447, #450)
+- With the `probe` command, a `hello` step without a test passes, and `probe check` no longer warns of it (#448)
+- A secret shorter than 4 characters is masked only where it is a whole value, and the password in a URL is always hidden (#443, #444)
+- Starting the same workflow twice in a program gives each start a run of its own: no job failed, no outputs, every job, and its own env (#459)
 - `timeout` of the shell, ssh, grpc, db and dns actions is read as smtp and imap read it: a duration or a number of seconds, fractions kept, above zero. ssh and grpc now take `30`; shell refuses `0`, which stopped the command at once (#483)
 - The http action's `timeout` refuses a value too long for a duration, or below a nanosecond, where it used to wrap or mean no limit; `0` still means no limit (#483)
 - `interval: 1.5` and `initial_delay: 1.5` are 1.5s, not 1s, and `wait: 1.5` is taken; a negative `interval`, `initial_delay`, step `timeout` or `wait` is an error, as is one too long for a duration (#483)
