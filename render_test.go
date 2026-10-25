@@ -824,6 +824,35 @@ func TestReportRenderer_stepResultsText_RepeatEchoSkipsBlank(t *testing.T) {
 	}
 }
 
+// A repeated step shows why its first run failed when its test could not
+// tell: the error of its action, a template or the guard. A failed test is
+// told by the count.
+func TestReportRenderer_writeStepRepeatError(t *testing.T) {
+	r := newReportRenderer(nil, nil, nil)
+
+	tests := []struct {
+		name    string
+		failure *StepFailure
+		want    string
+	}{
+		{"no failure", nil, ""},
+		{"no message", &StepFailure{Kind: FailureAction}, ""},
+		{"the action", &StepFailure{Kind: FailureAction, Message: "connection refused"}, "       connection refused\n"},
+		{"a template", &StepFailure{Kind: FailureTemplate, Message: "cannot fetch y"}, "       cannot fetch y\n"},
+		{"the guard", &StepFailure{Kind: FailureRefused, Message: "refused"}, "       refused\n"},
+		{"the test", &StepFailure{Kind: FailureAssertion, Message: "res.code == 200"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			r.writeStepRepeatError(&out, &StepRepeatCounter{Failure: tt.failure})
+			if got := out.String(); got != tt.want {
+				t.Errorf("writeStepRepeatError() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // There is nothing to render of no result.
 func TestReportRenderer_NilResult(t *testing.T) {
 	r := newReportRenderer([]string{"job"}, nil, nil)
