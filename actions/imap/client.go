@@ -29,9 +29,6 @@ type Req struct {
 	InsecureSkipTLS bool          `map:"insecure_skip_tls"`
 	Commands        []Command     `map:"commands"`
 	cb              *Callback
-	cl              *imapclient.Client
-	latestSeqSet    string
-	latestUidSet    string
 }
 
 type Res struct {
@@ -195,33 +192,12 @@ func WithAfter(f func(res *Res)) Option {
 }
 
 func Request(data map[string]any, opts ...Option) (map[string]any, error) {
-	m := mapping.HeaderToStringValue(data)
+	// A copy, so that parsing timeout leaves the caller's map as it was.
+	m := maps.Clone(data)
 
-	// Manually handle type conversions BEFORE MapToStructByTags to prevent reflection panics
-	if portInput, exists := m["port"]; exists {
-		if portStr, ok := portInput.(string); ok {
-			if portInt, err := strconv.Atoi(portStr); err == nil {
-				m["port"] = portInt
-			}
-		}
-	}
-
-	if tlsInput, exists := m["tls"]; exists {
-		if tlsStr, ok := tlsInput.(string); ok {
-			if tlsBool, err := strconv.ParseBool(tlsStr); err == nil {
-				m["tls"] = tlsBool
-			}
-		}
-	}
-
-	if insecureInput, exists := m["insecure_skip_tls"]; exists {
-		if insecureStr, ok := insecureInput.(string); ok {
-			if insecureBool, err := strconv.ParseBool(insecureStr); err == nil {
-				m["insecure_skip_tls"] = insecureBool
-			}
-		}
-	}
-
+	// MapToStructByTags reads port, tls and insecure_skip_tls from strings
+	// as well, but not a duration, so timeout is parsed here; a number is
+	// seconds.
 	if timeoutInput, exists := m["timeout"]; exists {
 		timeout, err := mapping.ParseTimeout(timeoutInput)
 		if err != nil {
@@ -232,7 +208,7 @@ func Request(data map[string]any, opts ...Option) (map[string]any, error) {
 
 	r := NewReq()
 	if err := mapping.MapToStructByTags(m, r); err != nil {
-		return map[string]any{}, fmt.Errorf("failed in map-to-struct-by-tags for data: %w", err)
+		return map[string]any{}, fmt.Errorf("invalid imap parameters: %w", err)
 	}
 
 	cb := &Callback{}
@@ -241,14 +217,16 @@ func Request(data map[string]any, opts ...Option) (map[string]any, error) {
 	}
 	r.cb = cb
 
+	// Do's errors already say what failed: connecting, logging in, or the
+	// session running out of time.
 	ret, err := r.Do()
 	if err != nil {
-		return map[string]any{}, fmt.Errorf("failed to Do(): %w", err)
+		return map[string]any{}, err
 	}
 
 	mapRet, err := mapping.StructToMapByTags(ret)
 	if err != nil {
-		return map[string]any{}, fmt.Errorf("failed in struct-to-map-by-tags for result: %w", err)
+		return map[string]any{}, fmt.Errorf("failed to convert the imap result: %w", err)
 	}
 
 	return mapRet, nil
@@ -263,6 +241,7 @@ func NewReq() *Req {
 	}
 }
 
+// Do connects, logs in, runs the commands in one session and logs out.
 func (r *Req) Do() (*Result, error) {
 	result := &Result{Req: *r}
 
@@ -272,7 +251,7 @@ func (r *Req) Do() (*Result, error) {
 
 	start := time.Now()
 
-	res, err := r.runImap()
+	res, err := r.run()
 	result.RT = time.Since(start)
 	if err != nil {
 		return result, err
@@ -305,11 +284,9 @@ func (r *Req) timeoutError(doing string, err error) error {
 	return fmt.Errorf("IMAP session timed out after %s while %s: %w", r.Timeout, doing, err)
 }
 
-func (r *Req) runImap() (*Res, error) {
+// dial connects to the server r names, with TLS or without.
+func (r *Req) dial() (*imapclient.Client, error) {
 	addr := net.JoinHostPort(r.Host, strconv.Itoa(r.Port))
-	// timeout bounds the whole session. The dialer covers connecting and the
-	// TLS handshake; a timer started once connected covers the rest.
-	deadline := time.Now().Add(r.Timeout)
 	options := &imapclient.Options{
 		Dialer:      &net.Dialer{Timeout: r.Timeout},
 		WordDecoder: &mime.WordDecoder{CharsetReader: charset.Reader},
@@ -319,17 +296,27 @@ func (r *Req) runImap() (*Res, error) {
 		TLSConfig: &tls.Config{InsecureSkipVerify: r.InsecureSkipTLS},
 	}
 
-	var err error
+	dial := imapclient.DialInsecure
 	if r.TLS {
-		r.cl, err = imapclient.DialTLS(addr, options)
-		if err != nil {
-			return nil, r.dialError(err)
-		}
-	} else {
-		r.cl, err = imapclient.DialInsecure(addr, options)
-		if err != nil {
-			return nil, r.dialError(err)
-		}
+		dial = imapclient.DialTLS
+	}
+	cl, err := dial(addr, options)
+	if err != nil {
+		return nil, r.dialError(err)
+	}
+	return cl, nil
+}
+
+// run is the session Do times. A command that fails is reported in the Res;
+// a connection, login or timeout failure is the error.
+func (r *Req) run() (*Res, error) {
+	// timeout bounds the whole session. The dialer covers connecting and the
+	// TLS handshake; a timer started once connected covers the rest.
+	deadline := time.Now().Add(r.Timeout)
+
+	cl, err := r.dial()
+	if err != nil {
+		return nil, err
 	}
 
 	// Closing the connection is what stops a command waiting on a server
@@ -340,22 +327,23 @@ func (r *Req) runImap() (*Res, error) {
 	if r.Timeout > 0 {
 		timer := time.AfterFunc(time.Until(deadline), func() {
 			timedOut.Store(true)
-			_ = r.cl.Close()
+			_ = cl.Close()
 		})
 		defer timer.Stop()
 	}
 	defer func() {
-		_ = r.cl.Close()
+		_ = cl.Close()
 	}()
 
-	if err := r.cl.Login(r.Username, r.Password).Wait(); err != nil {
+	if err := cl.Login(r.Username, r.Password).Wait(); err != nil {
 		if timedOut.Load() {
 			return nil, r.timeoutError("logging in", err)
 		}
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}
 
-	cmdRes, err := r.ExecCommands()
+	s := &session{cl: cl}
+	cmdRes, err := s.runCommands(r.Commands)
 	res := Res{Data: *cmdRes}
 
 	// A session cut short is the environment's failure, not the command's,
@@ -369,13 +357,13 @@ func (r *Req) runImap() (*Res, error) {
 		res.Error = err.Error()
 		// The session can still run out while logging out; that is a
 		// timeout like any other, with the command's failure kept in it.
-		if logoutErr := r.cl.Logout().Wait(); timedOut.Load() {
+		if logoutErr := cl.Logout().Wait(); timedOut.Load() {
 			return nil, fmt.Errorf("%w (after the command failed: %v)", r.timeoutError("logging out", logoutErr), err)
 		}
 		return &res, nil
 	}
 
-	if err := r.cl.Logout().Wait(); err != nil {
+	if err := cl.Logout().Wait(); err != nil {
 		if timedOut.Load() {
 			return nil, r.timeoutError("logging out", err)
 		}
@@ -389,125 +377,97 @@ func (r *Req) runImap() (*Res, error) {
 	return &res, nil
 }
 
-// DEBUG: hclog.Default().Info(fmt.Sprintf("%#v\n", data))
-func (r *Req) ExecCommands() (*Data, error) {
+// session is a logged-in connection that runs a Req's commands. It keeps
+// the messages the last search found, which a fetch, store or copy without
+// a sequence acts on.
+type session struct {
+	cl           *imapclient.Client
+	latestSeqSet string
+	latestUidSet string
+}
+
+// commandFunc runs cmd in s and puts its answer in its entry of data.
+type commandFunc func(s *session, cmd Command, data *Data) error
+
+// commandFuncs holds what runs each command, by its name in lower case.
+var commandFuncs = map[string]commandFunc{
+	"select": func(s *session, c Command, d *Data) error {
+		return assign(&d.Select)(s.Select(c.Mailbox))
+	},
+	"examine": func(s *session, c Command, d *Data) error {
+		return assign(&d.Examine)(s.Examine(c.Mailbox))
+	},
+	"search": func(s *session, c Command, d *Data) error {
+		return assign(&d.Search)(s.Search(c.Criteria))
+	},
+	"uid search": func(s *session, c Command, d *Data) error {
+		return assign(&d.Search)(s.UIDSearch(c.Criteria))
+	},
+	"list": func(s *session, c Command, d *Data) error {
+		return assign(&d.List)(s.List(c.Reference, c.Pattern))
+	},
+	"fetch": func(s *session, c Command, d *Data) error {
+		return assign(&d.Fetch)(s.Fetch(c.Sequence, c.Dataitem))
+	},
+	"uid fetch": func(s *session, c Command, d *Data) error {
+		return assign(&d.Fetch)(s.UIDFetch(c.Sequence, c.Dataitem))
+	},
+	"store": func(s *session, c Command, d *Data) error {
+		return assign(&d.Store)(s.Store(c.Sequence, c.Dataitem, c.Value, false))
+	},
+	"uid store": func(s *session, c Command, d *Data) error {
+		return assign(&d.Store)(s.Store(c.Sequence, c.Dataitem, c.Value, true))
+	},
+	"copy": func(s *session, c Command, d *Data) error {
+		return assign(&d.Copy)(s.Copy(c.Sequence, c.Mailbox, false))
+	},
+	"uid copy": func(s *session, c Command, d *Data) error {
+		return assign(&d.Copy)(s.Copy(c.Sequence, c.Mailbox, true))
+	},
+	"create": func(s *session, c Command, d *Data) error {
+		return assign(&d.Create)(s.Create(c.Mailbox))
+	},
+	"delete": func(s *session, c Command, d *Data) error {
+		return assign(&d.Delete)(s.Delete(c.Mailbox))
+	},
+	"rename": func(s *session, c Command, d *Data) error {
+		return assign(&d.Rename)(s.Rename(c.OldMailbox, c.NewMailbox))
+	},
+	"subscribe": func(s *session, c Command, d *Data) error {
+		return assign(&d.Subscribe)(s.Subscribe(c.Mailbox))
+	},
+	"unsubscribe": func(s *session, c Command, d *Data) error {
+		return assign(&d.Unsubscribe)(s.Unsubscribe(c.Mailbox))
+	},
+	"noop": func(s *session, _ Command, d *Data) error {
+		return assign(&d.Noop)(s.Noop())
+	},
+}
+
+// assign returns a function that takes a command's answer and puts it in
+// entry, unless the command failed. A failed command leaves the entry as it
+// was, as it stops the commands after it.
+func assign[T any](entry *T) func(*T, error) error {
+	return func(v *T, err error) error {
+		if err != nil {
+			return err
+		}
+		*entry = *v
+		return nil
+	}
+}
+
+// runCommands runs cmds in order and stops at the first that fails. With
+// the error it gives what the commands before it returned.
+func (s *session) runCommands(cmds []Command) (*Data, error) {
 	data := Data{}
-	for i, cmd := range r.Commands {
-		switch strings.ToLower(cmd.Name) {
-		case "select":
-			selectData, err := r.Select(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Select = *selectData
-			r.forgetSearch()
-		case "examine":
-			examineData, err := r.Examine(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Examine = *examineData
-			r.forgetSearch()
-		case "search":
-			searchData, err := r.Search(&cmd.Criteria)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Search = *searchData
-			// Only the latest search counts: a command without a sequence
-			// must not fall back to an older search of the other kind.
-			r.latestSeqSet = data.Search.All
-			r.latestUidSet = ""
-		case "uid search":
-			searchData, err := r.UIDSearch(&cmd.Criteria)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Search = *searchData
-			r.latestUidSet = data.Search.All
-			r.latestSeqSet = ""
-		case "list":
-			listData, err := r.List(cmd.Reference, cmd.Pattern)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.List = *listData
-		case "fetch":
-			if cmd.Sequence == "" {
-				cmd.Sequence = r.latestSeqSet
-			}
-			fetchData, err := r.Fetch(cmd.Sequence, cmd.Dataitem)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Fetch = *fetchData
-		case "uid fetch":
-			if cmd.Sequence == "" {
-				cmd.Sequence = r.latestUidSet
-			}
-			fetchData, err := r.UIDFetch(cmd.Sequence, cmd.Dataitem)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Fetch = *fetchData
-		case "store", "uid store":
-			uid := strings.HasPrefix(strings.ToLower(cmd.Name), "uid")
-			if cmd.Sequence == "" {
-				cmd.Sequence = r.latestSet(uid)
-			}
-			storeData, err := r.Store(cmd.Sequence, cmd.Dataitem, cmd.Value, uid)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Store = *storeData
-		case "copy", "uid copy":
-			uid := strings.HasPrefix(strings.ToLower(cmd.Name), "uid")
-			if cmd.Sequence == "" {
-				cmd.Sequence = r.latestSet(uid)
-			}
-			copyData, err := r.Copy(cmd.Sequence, cmd.Mailbox, uid)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Copy = *copyData
-		case "create":
-			createData, err := r.Create(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Create = *createData
-		case "delete":
-			deleteData, err := r.Delete(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Delete = *deleteData
-		case "rename":
-			renameData, err := r.Rename(cmd.OldMailbox, cmd.NewMailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Rename = *renameData
-		case "subscribe":
-			subscribeData, err := r.Subscribe(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Subscribe = *subscribeData
-		case "unsubscribe":
-			unsubscribeData, err := r.Unsubscribe(cmd.Mailbox)
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Unsubscribe = *unsubscribeData
-		case "noop":
-			noopData, err := r.Noop()
-			if err != nil {
-				return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
-			}
-			data.Noop = *noopData
-		default:
+	for i, cmd := range cmds {
+		run, ok := commandFuncs[strings.ToLower(cmd.Name)]
+		if !ok {
 			return &data, fmt.Errorf("failed to execute command %d: unsupported command '%s'", i+1, cmd.Name)
+		}
+		if err := run(s, cmd, &data); err != nil {
+			return &data, fmt.Errorf("failed to execute command %d (%s): %w", i+1, cmd.Name, err)
 		}
 	}
 	return &data, nil
@@ -533,42 +493,58 @@ func newSelectData(data *imap.SelectData) *SelectData {
 	return &sd
 }
 
-func (r *Req) Select(mb string) (*SelectData, error) {
+// Select implements SELECT.
+func (s *session) Select(mb string) (*SelectData, error) {
+	return s.selectMailbox(mb, false)
+}
+
+// Examine implements EXAMINE, a read-only SELECT.
+func (s *session) Examine(mb string) (*SelectData, error) {
+	return s.selectMailbox(mb, true)
+}
+
+// selectMailbox opens mb, read-only for EXAMINE. It forgets the last
+// search, whose numbers belong to the mailbox open before.
+func (s *session) selectMailbox(mb string, readOnly bool) (*SelectData, error) {
 	opts := &imap.SelectOptions{
-		ReadOnly:  false,
+		ReadOnly:  readOnly,
 		CondStore: false,
 	}
 
-	data, err := r.cl.Select(mb, opts).Wait()
+	data, err := s.cl.Select(mb, opts).Wait()
 	if err != nil {
-		return nil, fmt.Errorf("failed to Select: %s", err)
+		command := "Select"
+		if readOnly {
+			command = "Examine"
+		}
+		return nil, fmt.Errorf("failed to %s: %w", command, err)
 	}
 
+	s.forgetSearch()
 	return newSelectData(data), nil
 }
 
-func (r *Req) Search(cr *Criteria) (*SearchData, error) {
-	return r.search(cr, false)
+func (s *session) Search(cr Criteria) (*SearchData, error) {
+	return s.search(cr, false)
 }
 
-func (r *Req) UIDSearch(cr *Criteria) (*SearchData, error) {
-	return r.search(cr, true)
+func (s *session) UIDSearch(cr Criteria) (*SearchData, error) {
+	return s.search(cr, true)
 }
 
 // search implements SEARCH, or UID SEARCH when uid is true, which finds the
-// same messages but reports their UIDs.
-func (r *Req) search(cr *Criteria, uid bool) (*SearchData, error) {
-	name, command := "search", "Search"
+// same messages but reports their UIDs. Only the latest search counts: a
+// command without a sequence must not fall back to an older search of the
+// other kind.
+func (s *session) search(cr Criteria, uid bool) (*SearchData, error) {
+	command := "Search"
 	if uid {
-		name, command = "uid_search", "UIDSearch"
-	}
-	if cr == nil {
-		return nil, fmt.Errorf("%s criteria is nil", name)
+		command = "UIDSearch"
 	}
 
-	criteria, err := r.buildSearchCriteria(*cr)
+	criteria, err := buildSearchCriteria(cr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build SearchCriteria: %s", err)
+		return nil, fmt.Errorf("invalid search criteria: %w", err)
 	}
 
 	opts := &imap.SearchOptions{
@@ -579,13 +555,13 @@ func (r *Req) search(cr *Criteria, uid bool) (*SearchData, error) {
 		ReturnSave:  true,
 	}
 
-	run := r.cl.Search
+	run := s.cl.Search
 	if uid {
-		run = r.cl.UIDSearch
+		run = s.cl.UIDSearch
 	}
 	data, err := run(criteria, opts).Wait()
 	if err != nil {
-		return nil, fmt.Errorf("failed to %s: %s", command, err)
+		return nil, fmt.Errorf("failed to %s: %w", command, err)
 	}
 
 	// No match gives no set at all, which String would dereference.
@@ -600,6 +576,12 @@ func (r *Req) search(cr *Criteria, uid bool) (*SearchData, error) {
 		Count: int(data.Count),
 	}
 
+	s.forgetSearch()
+	if uid {
+		s.latestUidSet = all
+	} else {
+		s.latestSeqSet = all
+	}
 	return &sd, nil
 }
 
@@ -617,7 +599,7 @@ func formatDate(t time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
-func (r *Req) parseDate(st string) (time.Time, error) {
+func parseDate(st string) (time.Time, error) {
 	original := strings.TrimSpace(st)
 	lower := strings.ToLower(original)
 
@@ -667,7 +649,7 @@ func (r *Req) parseDate(st string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported date format: %s", original)
 }
 
-func (r *Req) buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
+func buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
 	res := imap.SearchCriteria{}
 
 	rangeStr := ":"
@@ -747,7 +729,7 @@ func (r *Req) buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
 	}
 
 	if cr.Since != "" {
-		d, err := r.parseDate(cr.Since)
+		d, err := parseDate(cr.Since)
 		if err != nil {
 			return nil, fmt.Errorf("invalid since date %s: %w", cr.Since, err)
 		}
@@ -755,7 +737,7 @@ func (r *Req) buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
 	}
 
 	if cr.Before != "" {
-		d, err := r.parseDate(cr.Before)
+		d, err := parseDate(cr.Before)
 		if err != nil {
 			return nil, fmt.Errorf("invalid before date %s: %w", cr.Before, err)
 		}
@@ -763,7 +745,7 @@ func (r *Req) buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
 	}
 
 	if cr.SentSince != "" {
-		d, err := r.parseDate(cr.SentSince)
+		d, err := parseDate(cr.SentSince)
 		if err != nil {
 			return nil, fmt.Errorf("invalid sent_since date %s: %w", cr.SentSince, err)
 		}
@@ -771,7 +753,7 @@ func (r *Req) buildSearchCriteria(cr Criteria) (*imap.SearchCriteria, error) {
 	}
 
 	if cr.SentBefore != "" {
-		d, err := r.parseDate(cr.SentBefore)
+		d, err := parseDate(cr.SentBefore)
 		if err != nil {
 			return nil, fmt.Errorf("invalid sent_before date %s: %w", cr.SentBefore, err)
 		}
@@ -829,30 +811,15 @@ func searchFlag(flag string) imap.Flag {
 	return imap.Flag(flag)
 }
 
-// Examine implements EXAMINE command (read-only SELECT)
-func (r *Req) Examine(mb string) (*SelectData, error) {
-	opts := &imap.SelectOptions{
-		ReadOnly:  true,
-		CondStore: false,
-	}
-
-	data, err := r.cl.Select(mb, opts).Wait()
-	if err != nil {
-		return nil, fmt.Errorf("failed to Examine: %s", err)
-	}
-
-	return newSelectData(data), nil
-}
-
-// List implements LIST command
-func (r *Req) List(ref, pattern string) (*ListData, error) {
+// List implements LIST.
+func (s *session) List(ref, pattern string) (*ListData, error) {
 	if pattern == "" {
 		pattern = "*"
 	}
 
-	list, err := r.cl.List(ref, pattern, nil).Collect()
+	list, err := s.cl.List(ref, pattern, nil).Collect()
 	if err != nil {
-		return nil, fmt.Errorf("failed to List: %s", err)
+		return nil, fmt.Errorf("failed to List: %w", err)
 	}
 
 	ld := ListData{
@@ -876,134 +843,99 @@ func (r *Req) List(ref, pattern string) (*ListData, error) {
 	return &ld, nil
 }
 
-// Create implements CREATE command
-func (r *Req) Create(mailbox string) (*CreateData, error) {
+// The commands below have no answer but whether they succeeded. A failed one
+// stops the commands after it with res.code 1, so success is true whenever
+// its entry is filled; it is false only for a command that did not run.
+
+// Create implements CREATE.
+func (s *session) Create(mailbox string) (*CreateData, error) {
 	if mailbox == "" {
 		return nil, fmt.Errorf("mailbox name is required for CREATE command")
 	}
 
-	err := r.cl.Create(mailbox, nil).Wait()
-	if err != nil {
-		return &CreateData{
-			Success: false,
-			Mailbox: mailbox,
-		}, fmt.Errorf("failed to Create mailbox %s: %s", mailbox, err)
+	if err := s.cl.Create(mailbox, nil).Wait(); err != nil {
+		return nil, fmt.Errorf("failed to Create mailbox %s: %w", mailbox, err)
 	}
 
-	return &CreateData{
-		Success: true,
-		Mailbox: mailbox,
-	}, nil
+	return &CreateData{Success: true, Mailbox: mailbox}, nil
 }
 
-// Delete implements DELETE command
-func (r *Req) Delete(mailbox string) (*DeleteData, error) {
+// Delete implements DELETE.
+func (s *session) Delete(mailbox string) (*DeleteData, error) {
 	if mailbox == "" {
 		return nil, fmt.Errorf("mailbox name is required for DELETE command")
 	}
 
-	err := r.cl.Delete(mailbox).Wait()
-	if err != nil {
-		return &DeleteData{
-			Success: false,
-			Mailbox: mailbox,
-		}, fmt.Errorf("failed to Delete mailbox %s: %s", mailbox, err)
+	if err := s.cl.Delete(mailbox).Wait(); err != nil {
+		return nil, fmt.Errorf("failed to Delete mailbox %s: %w", mailbox, err)
 	}
 
-	return &DeleteData{
-		Success: true,
-		Mailbox: mailbox,
-	}, nil
+	return &DeleteData{Success: true, Mailbox: mailbox}, nil
 }
 
-// Rename implements RENAME command
-func (r *Req) Rename(oldMailbox, newMailbox string) (*RenameData, error) {
+// Rename implements RENAME.
+func (s *session) Rename(oldMailbox, newMailbox string) (*RenameData, error) {
 	if oldMailbox == "" || newMailbox == "" {
 		return nil, fmt.Errorf("both old and new mailbox names are required for RENAME command")
 	}
 
-	err := r.cl.Rename(oldMailbox, newMailbox, nil).Wait()
-	if err != nil {
-		return &RenameData{
-			Success:    false,
-			OldMailbox: oldMailbox,
-			NewMailbox: newMailbox,
-		}, fmt.Errorf("failed to Rename mailbox from %s to %s: %s", oldMailbox, newMailbox, err)
+	if err := s.cl.Rename(oldMailbox, newMailbox, nil).Wait(); err != nil {
+		return nil, fmt.Errorf("failed to Rename mailbox from %s to %s: %w", oldMailbox, newMailbox, err)
 	}
 
-	return &RenameData{
-		Success:    true,
-		OldMailbox: oldMailbox,
-		NewMailbox: newMailbox,
-	}, nil
+	return &RenameData{Success: true, OldMailbox: oldMailbox, NewMailbox: newMailbox}, nil
 }
 
-// Subscribe implements SUBSCRIBE command
-func (r *Req) Subscribe(mailbox string) (*StatusData, error) {
+// Subscribe implements SUBSCRIBE.
+func (s *session) Subscribe(mailbox string) (*StatusData, error) {
 	if mailbox == "" {
 		return nil, fmt.Errorf("mailbox name is required for SUBSCRIBE command")
 	}
 
-	err := r.cl.Subscribe(mailbox).Wait()
-	if err != nil {
-		return &StatusData{
-			Success: false,
-			Mailbox: mailbox,
-		}, fmt.Errorf("failed to Subscribe to mailbox %s: %s", mailbox, err)
+	if err := s.cl.Subscribe(mailbox).Wait(); err != nil {
+		return nil, fmt.Errorf("failed to Subscribe to mailbox %s: %w", mailbox, err)
 	}
 
-	return &StatusData{
-		Success: true,
-		Mailbox: mailbox,
-	}, nil
+	return &StatusData{Success: true, Mailbox: mailbox}, nil
 }
 
-// Unsubscribe implements UNSUBSCRIBE command
-func (r *Req) Unsubscribe(mailbox string) (*StatusData, error) {
+// Unsubscribe implements UNSUBSCRIBE.
+func (s *session) Unsubscribe(mailbox string) (*StatusData, error) {
 	if mailbox == "" {
 		return nil, fmt.Errorf("mailbox name is required for UNSUBSCRIBE command")
 	}
 
-	err := r.cl.Unsubscribe(mailbox).Wait()
-	if err != nil {
-		return &StatusData{
-			Success: false,
-			Mailbox: mailbox,
-		}, fmt.Errorf("failed to Unsubscribe from mailbox %s: %s", mailbox, err)
+	if err := s.cl.Unsubscribe(mailbox).Wait(); err != nil {
+		return nil, fmt.Errorf("failed to Unsubscribe from mailbox %s: %w", mailbox, err)
 	}
 
-	return &StatusData{
-		Success: true,
-		Mailbox: mailbox,
-	}, nil
+	return &StatusData{Success: true, Mailbox: mailbox}, nil
 }
 
-// Noop implements NOOP command
-func (r *Req) Noop() (*NoopData, error) {
-	err := r.cl.Noop().Wait()
-	if err != nil {
-		return &NoopData{
-			Success: false,
-		}, fmt.Errorf("failed to execute Noop: %s", err)
+// Noop implements NOOP.
+func (s *session) Noop() (*NoopData, error) {
+	if err := s.cl.Noop().Wait(); err != nil {
+		return nil, fmt.Errorf("failed to execute Noop: %w", err)
 	}
 
-	return &NoopData{
-		Success: true,
-	}, nil
+	return &NoopData{Success: true}, nil
 }
 
 // Fetch implements FETCH command
-func (r *Req) Fetch(sequence, dataitem string) (*FetchData, error) {
-	return r.fetch(sequence, dataitem, false)
+func (s *session) Fetch(sequence, dataitem string) (*FetchData, error) {
+	return s.fetch(sequence, dataitem, false)
 }
 
-func (r *Req) UIDFetch(sequence, dataitem string) (*FetchData, error) {
-	return r.fetch(sequence, dataitem, true)
+func (s *session) UIDFetch(sequence, dataitem string) (*FetchData, error) {
+	return s.fetch(sequence, dataitem, true)
 }
 
 // fetch implements FETCH, or UID FETCH when uid is true, which takes UIDs in
 // sequence. FETCH needs dataitem; UID FETCH fetches ALL without it.
-func (r *Req) fetch(sequence, dataitem string, uid bool) (*FetchData, error) {
+func (s *session) fetch(sequence, dataitem string, uid bool) (*FetchData, error) {
+	if sequence == "" {
+		sequence = s.latestSet(uid)
+	}
 	if sequence == "" {
 		command := "FETCH command"
 		if uid {
@@ -1018,23 +950,23 @@ func (r *Req) fetch(sequence, dataitem string, uid bool) (*FetchData, error) {
 		dataitem = "ALL"
 	}
 
-	numSet, err := r.parseNumSet(sequence, uid)
+	numSet, err := parseNumSet(sequence, uid)
 	if err != nil {
 		return nil, err
 	}
 
-	fetchItems, err := r.parseFetchItems(dataitem)
+	fetchItems, err := parseFetchItems(dataitem)
 	if err != nil {
 		return nil, fmt.Errorf("invalid dataitem %s: %w", dataitem, err)
 	}
 
-	messages, err := r.cl.Fetch(numSet, fetchItems).Collect()
+	messages, err := s.cl.Fetch(numSet, fetchItems).Collect()
 	if err != nil {
 		failed := "Fetch"
 		if uid {
 			failed = "UID Fetch"
 		}
-		return nil, fmt.Errorf("failed to %s: %s", failed, err)
+		return nil, fmt.Errorf("failed to %s: %w", failed, err)
 	}
 
 	fd := FetchData{
@@ -1077,11 +1009,11 @@ func (r *Req) fetch(sequence, dataitem string, uid bool) (*FetchData, error) {
 						// Check if this is a header section
 						if bodySection.Section.Specifier == imap.PartSpecifierHeader {
 							// Parse headers and add to message.Headers
-							headers := r.parseHeaderData(content)
+							headers := parseHeaderData(content)
 							maps.Copy(message.Headers, headers)
 						} else if len(bodySection.Section.HeaderFields) > 0 {
 							// Handle HEADER.FIELDS specifically
-							headers := r.parseHeaderData(content)
+							headers := parseHeaderData(content)
 							maps.Copy(message.Headers, headers)
 						} else if bodySection.Section.Specifier == imap.PartSpecifierText || bodySection.Section.Specifier == "" {
 							// This is text content or full message
@@ -1116,7 +1048,10 @@ func (r *Req) fetch(sequence, dataitem string, uid bool) (*FetchData, error) {
 // Store implements STORE and UID STORE: it changes the flags of the given
 // messages. dataitem is FLAGS, +FLAGS or -FLAGS, optionally followed by
 // .SILENT, and value lists the flags, as in "\Seen \Flagged" or "(\Seen)".
-func (r *Req) Store(sequence, dataitem, value string, uid bool) (*StoreData, error) {
+func (s *session) Store(sequence, dataitem, value string, uid bool) (*StoreData, error) {
+	if sequence == "" {
+		sequence = s.latestSet(uid)
+	}
 	if sequence == "" {
 		return nil, fmt.Errorf("sequence is required for STORE command: give one, or run a search of the same kind (search, or uid search for a uid command) just before it in this mailbox")
 	}
@@ -1124,7 +1059,7 @@ func (r *Req) Store(sequence, dataitem, value string, uid bool) (*StoreData, err
 		return nil, fmt.Errorf("dataitem is required for STORE command")
 	}
 
-	numSet, err := r.parseNumSet(sequence, uid)
+	numSet, err := parseNumSet(sequence, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -1133,7 +1068,7 @@ func (r *Req) Store(sequence, dataitem, value string, uid bool) (*StoreData, err
 		return nil, err
 	}
 
-	messages, err := r.cl.Store(numSet, store, nil).Collect()
+	messages, err := s.cl.Store(numSet, store, nil).Collect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to Store: %w", err)
 	}
@@ -1189,7 +1124,10 @@ func parseStoreFlags(dataitem, value string) (*imap.StoreFlags, error) {
 // Copy implements COPY and UID COPY: it copies the given messages into
 // mailbox. Count is the number of messages the server reports copied, which
 // it does when it supports UIDPLUS; otherwise it is 0.
-func (r *Req) Copy(sequence, mailbox string, uid bool) (*CopyData, error) {
+func (s *session) Copy(sequence, mailbox string, uid bool) (*CopyData, error) {
+	if sequence == "" {
+		sequence = s.latestSet(uid)
+	}
 	if sequence == "" {
 		return nil, fmt.Errorf("sequence is required for COPY command: give one, or run a search of the same kind (search, or uid search for a uid command) just before it in this mailbox")
 	}
@@ -1197,12 +1135,12 @@ func (r *Req) Copy(sequence, mailbox string, uid bool) (*CopyData, error) {
 		return nil, fmt.Errorf("mailbox is required for COPY command")
 	}
 
-	numSet, err := r.parseNumSet(sequence, uid)
+	numSet, err := parseNumSet(sequence, uid)
 	if err != nil {
 		return nil, err
 	}
 
-	copied, err := r.cl.Copy(numSet, mailbox).Wait()
+	copied, err := s.cl.Copy(numSet, mailbox).Wait()
 	if err != nil {
 		return nil, fmt.Errorf("failed to Copy: %w", err)
 	}
@@ -1218,15 +1156,15 @@ func (r *Req) Copy(sequence, mailbox string, uid bool) (*CopyData, error) {
 
 // parseNumSet parses sequence as sequence numbers, or as UIDs for the UID
 // form of a command.
-func (r *Req) parseNumSet(sequence string, uid bool) (imap.NumSet, error) {
+func parseNumSet(sequence string, uid bool) (imap.NumSet, error) {
 	if uid {
-		uidset, err := r.parseUIDSet(sequence)
+		uidset, err := parseUIDSet(sequence)
 		if err != nil {
 			return nil, fmt.Errorf("invalid UID set %s: %w", sequence, err)
 		}
 		return *uidset, nil
 	}
-	seqset, err := r.parseSequenceSet(sequence)
+	seqset, err := parseSequenceSet(sequence)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sequence set %s: %w", sequence, err)
 	}
@@ -1236,18 +1174,19 @@ func (r *Req) parseNumSet(sequence string, uid bool) (imap.NumSet, error) {
 // forgetSearch drops the last search result. Sequence numbers and UIDs
 // belong to one mailbox, so after another is selected the result would
 // point at unrelated messages.
-func (r *Req) forgetSearch() {
-	r.latestSeqSet = ""
-	r.latestUidSet = ""
+func (s *session) forgetSearch() {
+	s.latestSeqSet = ""
+	s.latestUidSet = ""
 }
 
 // latestSet returns the messages the last SEARCH or UID SEARCH found, which
-// a command without a sequence acts on, as FETCH does.
-func (r *Req) latestSet(uid bool) string {
+// a FETCH, STORE or COPY without a sequence acts on. A search of one kind
+// leaves nothing for the other.
+func (s *session) latestSet(uid bool) string {
 	if uid {
-		return r.latestUidSet
+		return s.latestUidSet
 	}
-	return r.latestSeqSet
+	return s.latestSeqSet
 }
 
 // numRange is one element of a sequence or UID set. 0 stands for "*", the
@@ -1300,7 +1239,7 @@ func parseNumOrStar(s, what string) (uint32, error) {
 }
 
 // parseSequenceSet parses a sequence set string into an imap.SeqSet
-func (r *Req) parseSequenceSet(sequence string) (*imap.SeqSet, error) {
+func parseSequenceSet(sequence string) (*imap.SeqSet, error) {
 	ranges, err := parseNumRanges(sequence, "sequence number")
 	if err != nil {
 		return nil, err
@@ -1317,7 +1256,7 @@ func (r *Req) parseSequenceSet(sequence string) (*imap.SeqSet, error) {
 }
 
 // parseUIDSet parses a UID set string into an imap.UIDSet
-func (r *Req) parseUIDSet(sequence string) (*imap.UIDSet, error) {
+func parseUIDSet(sequence string) (*imap.UIDSet, error) {
 	ranges, err := parseNumRanges(sequence, "UID")
 	if err != nil {
 		return nil, err
@@ -1364,7 +1303,7 @@ func splitFetchItems(dataitem string) []string {
 	return items
 }
 
-func (r *Req) parseFetchItems(dataitem string) (*imap.FetchOptions, error) {
+func parseFetchItems(dataitem string) (*imap.FetchOptions, error) {
 	opts := &imap.FetchOptions{}
 
 	dataitem = strings.TrimSpace(dataitem)
@@ -1399,7 +1338,7 @@ func (r *Req) parseFetchItems(dataitem string) (*imap.FetchOptions, error) {
 	}
 
 	for _, item := range splitFetchItems(dataitem) {
-		if err := r.addFetchItem(opts, item); err != nil {
+		if err := addFetchItem(opts, item); err != nil {
 			return nil, err
 		}
 	}
@@ -1416,7 +1355,7 @@ var bodySectionPartial = regexp.MustCompile(`^(BODY(?:\.PEEK)?\[.*)\](<\d+\.\d+>
 
 // addFetchItem adds one data item of a list to opts. An item it does not
 // know is an error: ignoring it fetched nothing for it without a word.
-func (r *Req) addFetchItem(opts *imap.FetchOptions, item string) error {
+func addFetchItem(opts *imap.FetchOptions, item string) error {
 	upper := strings.ToUpper(strings.TrimSpace(item))
 
 	if strings.HasPrefix(upper, "BODY[") || strings.HasPrefix(upper, "BODY.PEEK[") {
@@ -1427,7 +1366,7 @@ func (r *Req) addFetchItem(opts *imap.FetchOptions, item string) error {
 		if !strings.HasSuffix(upper, "]") {
 			return fmt.Errorf("invalid BODY section: %s", item)
 		}
-		bodySection, err := r.parseBodySection(upper)
+		bodySection, err := parseBodySection(upper)
 		if err != nil {
 			return fmt.Errorf("failed to parse BODY section: %w", err)
 		}
@@ -1464,7 +1403,7 @@ func (r *Req) addFetchItem(opts *imap.FetchOptions, item string) error {
 }
 
 // parseBodySection parses BODY[...] or BODY.PEEK[...] sections
-func (r *Req) parseBodySection(bodyItem string) (*imap.FetchItemBodySection, error) {
+func parseBodySection(bodyItem string) (*imap.FetchItemBodySection, error) {
 	bodySection := &imap.FetchItemBodySection{}
 
 	// Remove BODY[ or BODY.PEEK[ prefix and ] suffix
@@ -1610,7 +1549,7 @@ func (r *Req) parseBodySection(bodyItem string) (*imap.FetchItemBodySection, err
 }
 
 // parseHeaderData parses RFC 2822 header format and returns a map
-func (r *Req) parseHeaderData(headerData string) map[string]string {
+func parseHeaderData(headerData string) map[string]string {
 	headers := make(map[string]string)
 	lines := strings.Split(headerData, "\n")
 

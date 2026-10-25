@@ -27,8 +27,6 @@ import (
 )
 
 func TestBuildSearchCriteria(t *testing.T) {
-	r := NewReq()
-
 	tests := []struct {
 		name     string
 		criteria Criteria
@@ -395,7 +393,7 @@ func TestBuildSearchCriteria(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := r.buildSearchCriteria(tt.criteria)
+			got, err := buildSearchCriteria(tt.criteria)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -413,8 +411,6 @@ func TestBuildSearchCriteria(t *testing.T) {
 }
 
 func TestParseDate(t *testing.T) {
-	r := NewReq()
-
 	tests := []struct {
 		name    string
 		input   string
@@ -476,7 +472,7 @@ func TestParseDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := r.parseDate(tt.input)
+			got, err := parseDate(tt.input)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -644,10 +640,9 @@ func TestParseFetchItemsBodySection(t *testing.T) {
 		},
 	}
 
-	r := NewReq()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts, err := r.parseFetchItems(tt.dataitem)
+			opts, err := parseFetchItems(tt.dataitem)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseFetchItems() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -695,10 +690,9 @@ func TestParseBodySection(t *testing.T) {
 		},
 	}
 
-	r := NewReq()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			section, err := r.parseBodySection(tt.bodyItem)
+			section, err := parseBodySection(tt.bodyItem)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseBodySection() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -758,10 +752,9 @@ func TestParseHeaderData(t *testing.T) {
 		},
 	}
 
-	r := NewReq()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := r.parseHeaderData(tt.headerData)
+			result := parseHeaderData(tt.headerData)
 
 			// Check if all expected headers are present
 			for key, expectedValue := range tt.expected {
@@ -1405,7 +1398,7 @@ func TestSplitFetchItems(t *testing.T) {
 
 func TestParseFetchItemsHeaderFieldsInList(t *testing.T) {
 	// A section with spaces in it used to be cut apart and dropped.
-	opts, err := NewReq().parseFetchItems("ENVELOPE BODY[HEADER.FIELDS (SUBJECT FROM)]")
+	opts, err := parseFetchItems("ENVELOPE BODY[HEADER.FIELDS (SUBJECT FROM)]")
 	if err != nil {
 		t.Fatalf("parseFetchItems() error: %v", err)
 	}
@@ -1456,12 +1449,11 @@ func TestStartOfDayLocal(t *testing.T) {
 
 func TestParseDateDayMonthYear(t *testing.T) {
 	// The day comes first: 10-Oct is the tenth, and 13-Oct is a day too.
-	r := NewReq()
 	for in, want := range map[string]time.Time{
 		"10-Oct-2026": time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
 		"13-Oct-2026": time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC),
 	} {
-		got, err := r.parseDate(in)
+		got, err := parseDate(in)
 		if err != nil {
 			t.Errorf("parseDate(%q) error: %v", in, err)
 			continue
@@ -1563,24 +1555,21 @@ func TestSearchSeveralNumbers(t *testing.T) {
 
 func TestParseFetchItemsUnknown(t *testing.T) {
 	// An item that is not known used to fetch nothing for it, without a word.
-	r := NewReq()
 	for _, dataitem := range []string{"ENVELOP", "FLAGS ENVELOP", "BODY[TEXT", "()", "", "FLAGS ALL"} {
-		if _, err := r.parseFetchItems(dataitem); err == nil {
+		if _, err := parseFetchItems(dataitem); err == nil {
 			t.Errorf("parseFetchItems(%q) succeeded, want an error", dataitem)
 		}
 	}
-	_, err := r.parseFetchItems("FLAGS ENVELOP")
+	_, err := parseFetchItems("FLAGS ENVELOP")
 	if err == nil || !strings.Contains(err.Error(), `"ENVELOP"`) || !strings.Contains(err.Error(), "RFC822.SIZE") {
 		t.Errorf("error = %v, want it to name the item and the items there are", err)
 	}
 }
 
 func TestParseFetchItemsForms(t *testing.T) {
-	r := NewReq()
-
 	// Lists are read whatever the case, and may be in parentheses
 	for _, dataitem := range []string{"flags uid", "(FLAGS UID)", "( flags Uid )"} {
-		opts, err := r.parseFetchItems(dataitem)
+		opts, err := parseFetchItems(dataitem)
 		if err != nil {
 			t.Fatalf("parseFetchItems(%q) error: %v", dataitem, err)
 		}
@@ -1590,13 +1579,13 @@ func TestParseFetchItemsForms(t *testing.T) {
 	}
 
 	// A macro alone, whatever the case
-	opts, err := r.parseFetchItems("fast")
+	opts, err := parseFetchItems("fast")
 	if err != nil || !opts.Flags || !opts.InternalDate || !opts.RFC822Size || opts.Envelope {
 		t.Errorf("parseFetchItems(fast) = %+v, %v, want FLAGS INTERNALDATE RFC822.SIZE", opts, err)
 	}
 
 	// The partial range of a section comes after it, as IMAP writes it
-	opts, err = r.parseFetchItems("UID BODY.PEEK[TEXT]<0.512>")
+	opts, err = parseFetchItems("UID BODY.PEEK[TEXT]<0.512>")
 	if err != nil {
 		t.Fatalf("parseFetchItems() error: %v", err)
 	}
@@ -1611,7 +1600,6 @@ func TestParseFetchItemsForms(t *testing.T) {
 func TestParseFetchItemsRFC822(t *testing.T) {
 	// The RFC822 items are fetched as the sections RFC 3501 defines them as,
 	// rather than as unrelated items standing in for them.
-	r := NewReq()
 	tests := []struct {
 		item      string
 		specifier imap.PartSpecifier
@@ -1622,7 +1610,7 @@ func TestParseFetchItemsRFC822(t *testing.T) {
 		{item: "RFC822.TEXT", specifier: imap.PartSpecifierText, peek: false},
 	}
 	for _, tt := range tests {
-		opts, err := r.parseFetchItems(tt.item)
+		opts, err := parseFetchItems(tt.item)
 		if err != nil {
 			t.Fatalf("parseFetchItems(%q) error: %v", tt.item, err)
 		}
