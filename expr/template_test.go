@@ -105,6 +105,17 @@ func TestEvalTemplateWithTypePreservationMapLiteral(t *testing.T) {
 	}
 }
 
+func TestTemplateExprs(t *testing.T) {
+	got := TemplateExprs(`Bearer {{outputs.auth.token}} for {{ vars.name }}`)
+	want := []string{"outputs.auth.token", " vars.name "}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("TemplateExprs = %q, want %q", got, want)
+	}
+	if got := TemplateExprs("no template"); got != nil {
+		t.Errorf("TemplateExprs = %q, want none", got)
+	}
+}
+
 func TestReplaceTemplates(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"no template", "no template"},

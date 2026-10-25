@@ -113,6 +113,30 @@ func skipStringLiteral(s string, i int) (int, bool) {
 	return 0, false
 }
 
+// TemplateExprs returns the expressions of the {{ }} templates in s, in the
+// order they come.
+func TemplateExprs(s string) []string {
+	var out []string
+	for _, span := range findTemplates(s) {
+		out = append(out, span.expr)
+	}
+	return out
+}
+
+// ReplaceTemplates returns s with repl in place of each {{ }} template in
+// it, for what is written around the templates to be read without them.
+func ReplaceTemplates(s, repl string) string {
+	var b strings.Builder
+	last := 0
+	for _, span := range findTemplates(s) {
+		b.WriteString(s[last:span.start])
+		b.WriteString(repl)
+		last = span.end
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
 // HasTemplate reports whether s holds a {{ }} template, as the evaluation of
 // s finds one: a "{{" that is never closed, or a "}}" alone, is text.
 func HasTemplate(s string) bool {
