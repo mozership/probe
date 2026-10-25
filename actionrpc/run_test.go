@@ -156,7 +156,7 @@ func TestOver(t *testing.T) {
 
 // An action that does not return in time is stopped, given SIGTERM first so
 // that it can stop what it started, and the call returns once ctx is done.
-func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
+func TestRunExecutableStopsAnActionThatHangs(t *testing.T) {
 	bin := testAction(t, "hang-action")
 	pidfile := filepath.Join(t.TempDir(), "pid")
 
@@ -183,18 +183,18 @@ func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
 		}
 		cancel()
 	}()
-	_, _, err := RunExecutableStepContext(ctx, bin, nil, Call{With: map[string]any{"pidfile": pidfile}}, hclog.NewNullLogger())
+	_, _, err := RunExecutable(ctx, bin, nil, Call{With: map[string]any{"pidfile": pidfile}}, hclog.NewNullLogger())
 	stopped := time.Now()
 	close(returned)
 	at, ok := <-canceled
 	if !ok {
-		t.Fatalf("the action did not run: RunExecutableStepContext() error = %v", err)
+		t.Fatalf("the action did not run: RunExecutable() error = %v", err)
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("RunExecutableStepContext() error = %v, want ctx's", err)
+		t.Errorf("RunExecutable() error = %v, want ctx's", err)
 	}
 	if took := stopped.Sub(at); took > StopGrace+5*time.Second {
-		t.Errorf("RunExecutableStepContext() returned %s after ctx was done", took)
+		t.Errorf("RunExecutable() returned %s after ctx was done", took)
 	}
 
 	data, err := os.ReadFile(pidfile)
@@ -216,7 +216,7 @@ func TestRunExecutableStepContextStopsAnActionThatHangs(t *testing.T) {
 // An action's error is told as the action said it, whatever gRPC carried it
 // in, and one whose process exited before it returned is told so, with how
 // it exited and what it wrote of why.
-func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
+func TestRunExecutableTellsWhyAnActionFailed(t *testing.T) {
 	bin := testAction(t, "failing-action")
 
 	tests := []struct {
@@ -232,9 +232,9 @@ func TestRunExecutableStepTellsWhyAnActionFailed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mode, func(t *testing.T) {
-			_, _, err := RunExecutableStep(bin, nil, Call{With: map[string]any{"mode": tt.mode}}, hclog.NewNullLogger())
+			_, _, err := RunExecutable(context.Background(), bin, nil, Call{With: map[string]any{"mode": tt.mode}}, hclog.NewNullLogger())
 			if err == nil {
-				t.Fatal("RunExecutableStep() succeeded, want an error")
+				t.Fatal("RunExecutable() succeeded, want an error")
 			}
 			if err.Error() != tt.want {
 				t.Errorf("error = %q, want %q", err.Error(), tt.want)
@@ -275,14 +275,192 @@ func TestCleanupExecutableTellsWhyTheCleanupFailed(t *testing.T) {
 	}
 }
 
+// lateContext is a context whose deadline has passed while it is not done
+// yet, as gRPC can find a context: it is done a moment after its deadline is
+// first read, with the deadline exceeded.
+type lateContext struct {
+	context.Context
+	once sync.Once
+	done chan struct{}
+}
+
+func newLateContext() *lateContext {
+	return &lateContext{Context: context.Background(), done: make(chan struct{})}
+}
+
+func (c *lateContext) Deadline() (time.Time, bool) {
+	c.once.Do(func() { time.AfterFunc(100*time.Millisecond, func() { close(c.done) }) })
+	return time.Now().Add(-time.Second), true
+}
+
+func (c *lateContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *lateContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+// A call that gRPC gave up on by the deadline is told as the deadline
+// exceeded, even before ctx is done, and any other error as it is.
+func TestCallErrorOfACallPastItsDeadline(t *testing.T) {
+	gaveUp := status.Error(codes.DeadlineExceeded, "context deadline exceeded")
+	ctx := newLateContext()
+	if ctx.Err() != nil {
+		t.Fatal("the context should not be done before its deadline is read")
+	}
+	p := &process{}
+	if err := p.callError(ctx, nil, gaveUp); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("callError() = %v, want the deadline exceeded", err)
+	}
+	if !p.callFailed.Load() {
+		t.Error("the call should be marked as failed")
+	}
+
+	failed := status.Error(codes.NotFound, "no such widget")
+	if err := (&process{}).callError(context.Background(), nil, failed); err != failed {
+		t.Errorf("callError() = %v, want %v", err, failed)
+	}
+}
+
+// A step and a cleanup whose call gRPC gives up on by the deadline, before
+// ctx is done, both return the deadline exceeded rather than what gRPC said.
+func TestCallsPastTheirDeadlineReturnTheDeadlineExceeded(t *testing.T) {
+	bin := testAction(t, "failing-action")
+	calls := map[string]func(ctx context.Context) error{
+		"step": func(ctx context.Context) error {
+			_, _, err := RunExecutable(ctx, bin, nil, Call{With: map[string]any{}}, hclog.NewNullLogger())
+			return err
+		},
+		"cleanup": func(ctx context.Context) error {
+			return CleanupExecutable(ctx, bin, nil, CleanupCall{RunID: "run1"}, hclog.NewNullLogger())
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			if err := call(newLateContext()); !errors.Is(err, context.DeadlineExceeded) {
+				t.Errorf("error = %v, want the deadline exceeded", err)
+			}
+		})
+	}
+}
+
+// expiringContext is a context that runs out of time when expire is called,
+// as one with a deadline does once the deadline comes. Its deadline is the
+// time it expired, and it has none before.
+type expiringContext struct {
+	context.Context
+	mu   sync.Mutex
+	at   time.Time
+	done chan struct{}
+}
+
+func newExpiringContext() *expiringContext {
+	return &expiringContext{Context: context.Background(), done: make(chan struct{})}
+}
+
+// expire has the context run out of time, unless it already has, and
+// returns when it did.
+func (c *expiringContext) expire() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.at.IsZero() {
+		c.at = time.Now()
+		close(c.done)
+	}
+	return c.at
+}
+
+func (c *expiringContext) Deadline() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.at, !c.at.IsZero()
+}
+
+func (c *expiringContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *expiringContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+// A cleanup that is still in its call when its time runs out is killed
+// where it is, without the SIGTERM and the grace the action of a step is
+// given, and the deadline exceeded is returned.
+func TestCleanupExecutableKillsAnActionThatHangs(t *testing.T) {
+	bin := testAction(t, "hang-action")
+	pidfile := filepath.Join(t.TempDir(), "pid")
+
+	// ctx runs out of time only once the action is in its cleanup, however
+	// long it took to start, so that it is the call that is given up on.
+	ctx := newExpiringContext()
+	returned := make(chan struct{})
+	expired := make(chan time.Time, 1)
+	go func() {
+		defer close(expired)
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(pidfile); err == nil && len(data) > 0 {
+				expired <- ctx.expire()
+				return
+			}
+			select {
+			case <-returned:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		ctx.expire()
+	}()
+	err := CleanupExecutable(ctx, bin, nil, CleanupCall{RunID: pidfile}, hclog.NewNullLogger())
+	stopped := time.Now()
+	close(returned)
+	at, ok := <-expired
+	if !ok {
+		t.Fatalf("the action did not reach its cleanup: CleanupExecutable() error = %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("CleanupExecutable() error = %v, want the deadline exceeded", err)
+	}
+	if took := stopped.Sub(at); took >= StopGrace {
+		t.Errorf("CleanupExecutable() returned %s after the deadline, want less than the grace of %s", took, StopGrace)
+	}
+
+	data, err := os.ReadFile(pidfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("the action is still running: kill(%d, 0) = %v", pid, err)
+	}
+	if _, err := os.Stat(pidfile + ".term"); err == nil {
+		t.Error("the action was sent SIGTERM, want it killed")
+	}
+}
+
 // An executable that does not serve an action is told not to have started,
 // with what it wrote of why.
-func TestRunExecutableStepTellsWhyAnActionDidNotStart(t *testing.T) {
+func TestRunExecutableTellsWhyAnActionDidNotStart(t *testing.T) {
 	exe := filepath.Join(t.TempDir(), "broken")
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\necho 'cannot read the config' >&2\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := RunExecutableStep(exe, nil, Call{With: map[string]any{}}, hclog.NewNullLogger())
+	_, _, err := RunExecutable(context.Background(), exe, nil, Call{With: map[string]any{}}, hclog.NewNullLogger())
 	var startErr *StartError
 	if !errors.As(err, &startErr) {
 		t.Fatalf("error = %v, want a StartError", err)

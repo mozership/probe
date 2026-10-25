@@ -93,7 +93,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return actionrpc.RunStepContext(opts.context(), name, call, log)
+		return actionrpc.RunBuiltin(opts.context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -107,7 +107,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
-	return actionrpc.RunExecutableStepContext(opts.context(), exe.Path, exe.SHA256, call, log)
+	return actionrpc.RunExecutable(opts.context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks
