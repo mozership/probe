@@ -1255,6 +1255,29 @@ jobs:
 	checkFindings(t, findings, nil)
 }
 
+// TestNewChecker gives the checker maps of its own to add the params and
+// the fields of res of external actions to, with or without those of opts.
+func TestNewChecker(t *testing.T) {
+	params := map[string][]string{"http": {"url"}}
+	fields := map[string][]string{"http": {"code"}}
+	c := newChecker(CheckOptions{Params: params, ResFields: fields})
+	c.params["./a"] = []string{"x"}
+	c.resFields["./a"] = []string{"y"}
+	if len(params) != 1 || len(fields) != 1 {
+		t.Errorf("the maps of opts were added to: %v, %v", params, fields)
+	}
+	if len(c.params) != 2 || len(c.resFields) != 2 {
+		t.Errorf("params = %v, resFields = %v, want those of opts and ./a", c.params, c.resFields)
+	}
+
+	c = newChecker(CheckOptions{})
+	c.params["./a"] = []string{"x"}
+	c.resFields["./a"] = []string{"y"}
+	if len(c.params) != 1 || len(c.resFields) != 1 {
+		t.Errorf("params = %v, resFields = %v, want those of ./a", c.params, c.resFields)
+	}
+}
+
 // The fields of the built-in actions the checks of res and req are tested
 // against, as the actions declare them.
 var (

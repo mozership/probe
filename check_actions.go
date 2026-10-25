@@ -115,10 +115,10 @@ func (c *checker) readParams(uses string, line int, where string) {
 		return
 	}
 	if m.Params != nil {
-		c.opts.Params[uses] = m.Params
+		c.params[uses] = m.Params
 	}
 	if m.Res != nil {
-		c.opts.ResFields[uses] = m.Res
+		c.resFields[uses] = m.Res
 	}
 }
 
@@ -193,7 +193,7 @@ func (c *checker) checkDefaults(v any, jp, where string) {
 // withKeys checks the keys of with, at path, against those action takes,
 // for each key own says belongs there.
 func (c *checker) withKeys(action string, with map[string]any, path, where, field string, own func(string) bool) {
-	params, ok := c.opts.Params[action]
+	params, ok := c.params[action]
 	if !ok {
 		return
 	}
