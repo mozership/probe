@@ -74,6 +74,12 @@ const maxSession = 1000
 // twice it however many sessions it opens.
 const maxLength = 100 << 20
 
+// maxTimeout is the longest timeout a step may give, a day. It is far past
+// the 10 minutes RFC 5321 gives the longest wait, and past what a step is
+// for, and it keeps twice the timeout, for the reply to the end of a
+// message, well inside a time.Duration.
+const maxTimeout = 24 * time.Hour
+
 // defaultTimeout is the timeout when the step does not give one. It is
 // well below the step's own default timeout of 5 minutes, so that a server
 // that stops answering fails its session, and the step still gets the
@@ -179,6 +185,8 @@ func (r *Req) validate() (string, error) {
 		return "", fmt.Errorf("invalid length %d: use 0 to %d", r.Length, maxLength)
 	case r.Timeout < 0:
 		return "", fmt.Errorf("invalid timeout %s: use a duration above zero", r.Timeout)
+	case r.Timeout > maxTimeout:
+		return "", fmt.Errorf("invalid timeout %s: use at most %s", r.Timeout, maxTimeout)
 	}
 	startTLS := strings.ToLower(strings.TrimSpace(r.StartTLS))
 	if startTLS == "" {

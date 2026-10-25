@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/textproto"
 	"os"
@@ -121,15 +122,26 @@ func (e *waitTimeout) Timeout() bool { return true }
 // Temporary is as the wrapped error has it, for net.Error.
 func (e *waitTimeout) Temporary() bool { return e.err.Temporary() } //nolint:staticcheck // net.Error still declares it
 
-// waitLonger runs f with the timeout of each wait multiplied by n.
+// waitLonger runs f with the timeout of each wait multiplied by n, or the
+// longest time.Duration when the product would not fit one, as a timeout
+// set through the Go API may be as long as it likes.
 func (c *Client) waitLonger(n time.Duration, f func() error) error {
 	if c.deadline == nil {
 		return f()
 	}
 	timeout := c.deadline.timeout
-	c.deadline.timeout = n * timeout
+	c.deadline.timeout = scaleTimeout(timeout, n)
 	defer func() { c.deadline.timeout = timeout }()
 	return f()
+}
+
+// scaleTimeout returns d times n for a d and n above zero, or the longest
+// time.Duration when that would overflow.
+func scaleTimeout(d, n time.Duration) time.Duration {
+	if d > math.MaxInt64/n {
+		return math.MaxInt64
+	}
+	return d * n
 }
 
 func NewClient(conn net.Conn, host string) (*Client, error) {

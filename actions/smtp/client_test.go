@@ -839,7 +839,7 @@ func TestDeliverTimeoutLimitsEachWait(t *testing.T) {
 }
 
 func TestDeliverRefusesAnInvalidTimeout(t *testing.T) {
-	for _, timeout := range []any{"soon", "0s", 0, -1, "-5s"} {
+	for _, timeout := range []any{"soon", "0s", 0, -1, "-5s", "2000000h", "25h"} {
 		_, err := Deliver(map[string]any{
 			"addr": "127.0.0.1:1", "from": "from@example.com", "to": "to@example.com",
 			"timeout": timeout,
@@ -847,6 +847,19 @@ func TestDeliverRefusesAnInvalidTimeout(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "invalid timeout") {
 			t.Errorf("timeout %v: error = %v, want an invalid timeout", timeout, err)
 		}
+	}
+}
+
+func TestReqDoRefusesATimeoutBeyondADay(t *testing.T) {
+	r := NewReq()
+	r.Addr, r.From, r.To = "127.0.0.1:1", "from@example.com", "to@example.com"
+	r.Timeout = 2000000 * time.Hour
+	if _, err := r.Do(); err == nil || err.Error() != "invalid timeout 2000000h0m0s: use at most 24h0m0s" {
+		t.Errorf("Do() error = %v, want the timeout refused", err)
+	}
+	r.Timeout = 24 * time.Hour
+	if _, err := r.validate(); err != nil {
+		t.Errorf("validate() with a day: %v", err)
 	}
 }
 

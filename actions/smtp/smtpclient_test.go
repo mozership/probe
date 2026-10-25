@@ -3,6 +3,7 @@ package smtp
 import (
 	"context"
 	"errors"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -75,5 +76,24 @@ func TestDeadlineConnNamesOnlyItsOwnWait(t *testing.T) {
 	}
 	if got := c.waited(nil); got != nil {
 		t.Errorf("waited(nil) = %v", got)
+	}
+}
+
+func TestScaleTimeoutSaturates(t *testing.T) {
+	tests := []struct {
+		d, n, want time.Duration
+	}{
+		{time.Minute, 2, 2 * time.Minute},
+		{24 * time.Hour, 2, 48 * time.Hour},
+		// Twice 2000000h does not fit a time.Duration, and used to wrap round
+		// to a negative wait, which fails at once.
+		{2000000 * time.Hour, 2, math.MaxInt64},
+		{math.MaxInt64, 2, math.MaxInt64},
+		{math.MaxInt64 / 2, 2, math.MaxInt64 - 1},
+	}
+	for _, tt := range tests {
+		if got := scaleTimeout(tt.d, tt.n); got != tt.want {
+			t.Errorf("scaleTimeout(%s, %d) = %s, want %s", tt.d, tt.n, got, tt.want)
+		}
 	}
 }
