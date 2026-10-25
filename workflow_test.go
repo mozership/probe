@@ -1918,3 +1918,68 @@ func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
 		}
 	}
 }
+
+// A secret that a later step teaches the masker is hidden in the report
+// files as it is in the terminal report: the message of a failure, which
+// tells what the false condition compared, is made as the files are
+// written, masked before the values are cut, so no file has the part of the
+// secret that the cut left. A repeated step is told by the first of its
+// runs that failed, which the later step had not run after either.
+func TestWorkflow_Start_MasksWhatALaterStepTeachesInReportFiles(t *testing.T) {
+	const token = "tk-0123456789abcdefghijklmnopqrstuvwxyz"
+	tests := []struct {
+		name   string
+		body   string
+		test   string
+		repeat *Repeat
+	}{
+		// The response is cut after 512 bytes, inside the token.
+		{name: "in the response", body: strings.Repeat("x", 500) + token, test: "res.code == 200"},
+		// A value the condition compared is cut after 200 characters,
+		// inside the token.
+		{name: "in the false condition", body: strings.Repeat("x", 180) + token, test: `res.body == ""`},
+		{name: "in the false condition of a repeated step", body: strings.Repeat("x", 180) + token, test: `res.body == ""`, repeat: &Repeat{Count: 2}},
+	}
+	formats := map[report.Format]string{report.JSON: "report.json", report.JUnit: "report.xml", report.Markdown: "report.md"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			leaks := newMockRunner()
+			leaks.SetResult("http", map[string]any{"res": map[string]any{"code": 500, "body": tt.body}, "status": 0})
+			w := &Workflow{
+				Name: "Leak",
+				Jobs: []Job{{ID: "j", Name: "J", Repeat: tt.repeat, Steps: []*Step{
+					{Name: "Leaks", Uses: "http", Test: tt.test},
+					// The token is a credential of this step, which teaches
+					// the masker it.
+					{Name: "Uses", Uses: "http", With: map[string]any{"headers": map[string]any{"authorization": token}}},
+				}}},
+				printer: newBufferPrinter(),
+			}
+			dir := t.TempDir()
+			var targets []report.Target
+			for format, file := range formats {
+				targets = append(targets, report.Target{Format: format, Path: filepath.Join(dir, file)})
+			}
+			runner := stepRunners{byName: map[string]ActionRunner{"Leaks": leaks}, fallback: newMockRunner()}
+			if err := w.Start(Config{ActionRunner: runner, Reports: targets}); err != nil {
+				t.Fatalf("Start() error: %v", err)
+			}
+
+			for format, file := range formats {
+				data, err := os.ReadFile(filepath.Join(dir, file))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := string(data)
+				if !strings.Contains(got, "Leaks") || !strings.Contains(got, "<redacted>") {
+					t.Fatalf("the %s report should have the failed step with the token hidden:\n%s", format, got)
+				}
+				for _, part := range []string{token, token[:9], token[:12]} {
+					if strings.Contains(got, part) {
+						t.Errorf("the %s report has %q of the token:\n%s", format, part, got)
+					}
+				}
+			}
+		})
+	}
+}
