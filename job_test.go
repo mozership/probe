@@ -2,6 +2,7 @@ package probe
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -890,6 +891,108 @@ func TestFirstRefusal(t *testing.T) {
 			}
 			if got == nil || got.Reason != tt.want {
 				t.Errorf("firstRefusal() = %+v, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Each run of a repeated job with fail_fast starts over: a failure in one
+// run does not skip the steps of the next.
+func TestJob_FailFastStartsOverEachRun(t *testing.T) {
+	failing := newMockRunner()
+	failing.SetError("hello", errors.New("boom"))
+	after := newMockRunner()
+	job := &Job{ID: "work", Name: "Work", FailFast: true, Steps: []*Step{
+		{Name: "Fails", Uses: "hello", SkipIf: "repeat_index == 1"},
+		{Name: "After", Uses: "hello"},
+	}}
+	runner := stepRunners{byName: map[string]ActionRunner{"Fails": failing, "After": after}}
+
+	for i := range 2 {
+		printer := newBufferPrinter()
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		failed, err := job.run(JobContext{
+			runEnv: &runEnv{
+				Config:  Config{ActionRunner: runner},
+				Printer: printer,
+				Result:  result,
+			},
+			Outputs:       NewOutputs(),
+			RepeatCurrent: i,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := i == 0; failed != want {
+			t.Errorf("run %d: failed = %v, want %v", i, failed, want)
+		}
+	}
+	if got := len(after.Calls["hello"]); got != 1 {
+		t.Errorf("the step after ran %d times, want once: in the run whose first step was skipped", got)
+	}
+}
+
+func TestMergeDefaults(t *testing.T) {
+
+	tests := []struct {
+		name     string
+		data     map[string]any
+		defaults map[string]any
+		expected map[string]any
+	}{
+		{
+			name: "simple defaults",
+			data: map[string]any{
+				"existing": "value",
+			},
+			defaults: map[string]any{
+				"new_key": "default_value",
+			},
+			expected: map[string]any{
+				"existing": "value",
+				"new_key":  "default_value",
+			},
+		},
+		{
+			name: "nested defaults",
+			data: map[string]any{
+				"nested": map[string]any{
+					"existing": "value",
+				},
+			},
+			defaults: map[string]any{
+				"nested": map[string]any{
+					"new_key": "default_value",
+				},
+			},
+			expected: map[string]any{
+				"nested": map[string]any{
+					"existing": "value",
+					"new_key":  "default_value",
+				},
+			},
+		},
+		{
+			name: "overwrite protection",
+			data: map[string]any{
+				"key": "original",
+			},
+			defaults: map[string]any{
+				"key": "default",
+			},
+			expected: map[string]any{
+				"key": "original",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mergeDefaults(tt.data, tt.defaults)
+			if !reflect.DeepEqual(tt.data, tt.expected) {
+				t.Errorf("mergeDefaults() = %v, want %v", tt.data, tt.expected)
 			}
 		})
 	}

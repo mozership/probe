@@ -3,7 +3,9 @@ package probe
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 // operation returns the operation of the ProbeError err is, or holds.
@@ -227,5 +229,58 @@ func TestWorkflow_Start_EnvLeavesConfigEnv(t *testing.T) {
 
 	if got, want := w.Env(), map[string]string{"OWN": "workflow"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Env() after Start = %v, want the workflow's own %v", got, want)
+	}
+}
+
+// Test_evalVars checks that a run evaluates the vars of its workflow with
+// the run's environment and the vars given, keeping the vars the workflow
+// writes as they are. How vars are evaluated is tested in internal/vareval.
+func Test_evalVars(t *testing.T) {
+	wf := &Workflow{
+		Name: "Test",
+		Vars: map[string]any{"host": "{{HOST}}", "url": "http://{{vars.host}}:{{vars.port}}", "port": "{{PORT}}"},
+	}
+	r := &workflowRun{
+		w:      wf,
+		config: Config{Vars: map[string]string{"port": "9090"}},
+		env:    map[string]string{"HOST": "from-env", "PORT": "8080"},
+	}
+	got, err := r.evalVars()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"host": "from-env", "url": "http://from-env:9090", "port": "9090"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("evalVars() = %#v, want %#v", got, want)
+	}
+	if wf.Vars["port"] != "{{PORT}}" {
+		t.Errorf("the vars of the workflow were changed: %#v", wf.Vars)
+	}
+}
+
+// A job whose dependency can no longer be done fails the run rather than be
+// waited for for ever.
+func TestWorkflowRun_runJobsStopsWhenNothingCanRun(t *testing.T) {
+	w := &Workflow{Name: "stuck", Jobs: []Job{
+		{ID: "a", Name: "A", Steps: []*Step{{Uses: "hello"}}},
+		{ID: "b", Name: "B", Needs: []string{"a"}, Steps: []*Step{{Uses: "hello"}}},
+	}}
+	w.printer = newBufferPrinter()
+	r, err := w.prepare(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a is taken for running, but nothing runs it.
+	r.scheduler.Start("a")
+
+	errc := make(chan error, 1)
+	go func() { errc <- r.runJobs(r.newJobContext(nil, nil)) }()
+	select {
+	case err := <-errc:
+		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {
+			t.Errorf("runJobs() error = %v, want that b cannot run", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runJobs() waited for a job that nothing runs")
 	}
 }

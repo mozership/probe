@@ -1,8 +1,10 @@
 package probe
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/mozership/probe/expr"
@@ -106,5 +108,110 @@ func TestStepContext_testEnv(t *testing.T) {
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("testEnv() = %v, want %v", env, want)
+	}
+}
+
+func TestStepContext_RepeatIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		repeatIndex int
+		expression  string
+		expected    string
+	}{
+		{
+			name:        "repeat_index in echo",
+			repeatIndex: 3,
+			expression:  "Repeat: {{repeat_index}}",
+			expected:    "Repeat: 3",
+		},
+		{
+			name:        "repeat_index in test",
+			repeatIndex: 5,
+			expression:  "repeat_index == 5",
+			expected:    "true",
+		},
+		{
+			name:        "repeat_index arithmetic",
+			repeatIndex: 2,
+			expression:  "{{repeat_index + 1}}",
+			expected:    "3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := StepContext{
+				RepeatIndex: tt.repeatIndex,
+			}
+
+			ev := &expr.Expr{}
+			var result string
+			var err error
+
+			if strings.Contains(tt.expression, "{{") {
+				// Template expression
+				result, err = ev.EvalTemplate(tt.expression, ctx)
+			} else {
+				// Boolean/arithmetic expression
+				output, evalErr := ev.Eval(tt.expression, ctx)
+				err = evalErr
+				if err == nil {
+					result = fmt.Sprintf("%v", output)
+				}
+			}
+
+			if err != nil {
+				t.Errorf("Expression evaluation failed: %v", err)
+				return
+			}
+
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestJobContextRepeatTracking(t *testing.T) {
+	ctx := JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+		},
+		repeat: &jobRepeat{
+			total:    10,
+			counters: make(map[int]StepRepeatCounter),
+		},
+		RepeatCurrent: 5,
+	}
+
+	// Test initial state
+	if !ctx.repeating() {
+		t.Error("expected the runs to be counted")
+	}
+
+	if ctx.RepeatCurrent != 5 {
+		t.Errorf("expected RepeatCurrent to be 5, got %d", ctx.RepeatCurrent)
+	}
+
+	if ctx.repeat.total != 10 {
+		t.Errorf("expected the total to be 10, got %d", ctx.repeat.total)
+	}
+
+	// Test step counter initialization
+	counter := StepRepeatCounter{
+		SuccessCount: 3,
+		FailureCount: 2,
+		Name:         "Test Step",
+		LastResult:   true,
+	}
+
+	ctx.repeat.counters[0] = counter
+
+	if len(ctx.repeat.counters) != 1 {
+		t.Errorf("expected 1 step counter, got %d", len(ctx.repeat.counters))
+	}
+
+	if ctx.repeat.counters[0].SuccessCount != 3 {
+		t.Errorf("expected SuccessCount to be 3, got %d", ctx.repeat.counters[0].SuccessCount)
 	}
 }

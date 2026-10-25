@@ -574,3 +574,48 @@ func TestRepeatedJobOutputs(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
+	job := &Job{ID: "work", Name: "Work", Steps: []*Step{{Name: "Never run", Test: "true"}, {Name: "Run once", Test: "true"}}}
+	result := NewResult()
+	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx := &JobContext{
+		runEnv: &runEnv{
+			Result: result,
+		},
+		repeat: &jobRepeat{
+			total: 3,
+			counters: map[int]StepRepeatCounter{
+				0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
+				1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
+			},
+		},
+	}
+	NewExecutor(job).appendRepeatStepResults(ctx)
+
+	steps := result.Jobs[job.ID].StepResults
+	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
+		t.Fatalf("statuses = %+v, want skipped then success", steps)
+	}
+
+	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
+	got := r.Jobs[0].Steps
+	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
+		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)
+	}
+	if got[1].Status != "passed" || got[1].Repeat.Total != 3 || got[1].Repeat.Skipped != 2 || got[1].Repeat.Success != 1 {
+		t.Errorf("report of the step run once = %+v, repeat %+v", got[1], got[1].Repeat)
+	}
+	// The message of a failure counts the runs the step was not run in
+	// among the runs, as the count of the report does.
+	failed := NewResult()
+	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	ctx.Result = failed
+	ctx.repeat.counters = map[int]StepRepeatCounter{
+		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
+	}
+	NewExecutor(job).appendRepeatStepResults(ctx)
+	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {
+		t.Errorf("message = %q, want the three runs counted", got)
+	}
+}
