@@ -31,7 +31,9 @@ var (
 // a duration; whether it means none, no limit or the default is for the
 // caller to say. Parse refuses a negative value, one too long for a
 // time.Duration rather than wrapping it around to another, and one above zero
-// that would truncate to zero. The error says why, and not what v was, so
+// but below a nanosecond. A fraction of a second is rounded to the nearest
+// nanosecond, so that 4.1, which as a float is a little below 4.1, is 4.1s
+// and not a nanosecond less. The error says why, and not what v was, so
 // that the caller can name the field.
 func Parse(v any) (time.Duration, error) {
 	switch t := v.(type) {
@@ -48,6 +50,11 @@ func Parse(v any) (time.Duration, error) {
 			}
 			return d, nil
 		}
+		// A whole number is read as one, so that it stays exact however
+		// large it is.
+		if secs, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return fromWholeSeconds(secs)
+		}
 		secs, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			return 0, errNotDuration
@@ -56,7 +63,10 @@ func Parse(v any) (time.Duration, error) {
 	case float64:
 		return fromSeconds(t)
 	case float32:
-		return fromSeconds(float64(t))
+		// The float32 nearest 0.1 is further from it than the float64
+		// nearest, so it is read as the decimal it is written as.
+		secs, _ := strconv.ParseFloat(strconv.FormatFloat(float64(t), 'g', -1, 32), 64)
+		return fromSeconds(secs)
 	}
 
 	rv := reflect.ValueOf(v)
@@ -86,7 +96,7 @@ func fromWholeSeconds(secs int64) (time.Duration, error) {
 }
 
 // fromSeconds converts a number of seconds that may have a fraction, after
-// checking the range as fromWholeSeconds does.
+// checking the range as fromWholeSeconds does, to the nearest nanosecond.
 func fromSeconds(secs float64) (time.Duration, error) {
 	switch {
 	case math.IsNaN(secs):
@@ -98,9 +108,10 @@ func fromSeconds(secs float64) (time.Duration, error) {
 	case secs == 0:
 		return 0, nil
 	}
-	d := time.Duration(secs * float64(time.Second))
-	if d <= 0 {
+	// Compared in seconds, 1e-9 is the float that a nanosecond is
+	// written as, so a nanosecond is taken and anything below it is not.
+	if secs < 1e-9 {
 		return 0, errTooShort
 	}
-	return d, nil
+	return time.Duration(math.Round(secs * float64(time.Second))), nil
 }
