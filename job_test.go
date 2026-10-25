@@ -732,6 +732,32 @@ func TestRunStandaloneReplacesAnInheritedDeclaration(t *testing.T) {
 	}
 }
 
+// TestRunStandaloneNeedsNoCheck checks that a job run on its own passes a
+// step without a test of an action WithNeedsNoCheck names, as a workflow
+// does one Config.NeedsNoCheck names, and counts it as untested without.
+func TestRunStandaloneNeedsNoCheck(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		opts []StandaloneOption
+		want string
+	}{
+		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: IconSuccess},
+		{name: "told nothing", want: IconTriangle},
+		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: IconTriangle},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &Job{Name: "embedded", Steps: []*Step{{Name: "Greets", Uses: "hello"}}}
+			run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", t.TempDir(), append(tt.opts, WithActionRunner(newMockRunner()))...)
+			if !run.Success {
+				t.Fatalf("Success = false, want a step without a test to fail nothing: %v", run.Err)
+			}
+			if !strings.Contains(run.Report, strings.TrimSpace(tt.want)+"  Greets") {
+				t.Errorf("Report = %q, want the step marked %q", run.Report, strings.TrimSpace(tt.want))
+			}
+		})
+	}
+}
+
 func TestRunStandaloneWithoutARefusal(t *testing.T) {
 	runner := newMockRunner()
 	job := &Job{Name: "embedded", Steps: []*Step{{Name: "fails", Uses: "hello", Test: "false"}}}
