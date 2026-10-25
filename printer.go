@@ -172,19 +172,19 @@ func (p *Printer) write(w io.Writer, s string) error {
 
 func (p *Printer) Fprint(w io.Writer, a ...any) {
 	if err := p.write(w, fmt.Sprint(a...)); err != nil {
-		fmt.Printf("Fprint: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprint: %v\n", err)
 	}
 }
 
 func (p *Printer) Fprintf(w io.Writer, f string, a ...any) {
 	if err := p.write(w, fmt.Sprintf(f, a...)); err != nil {
-		fmt.Printf("Fprintf: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprintf: %v\n", err)
 	}
 }
 
 func (p *Printer) Fprintln(w io.Writer, a ...any) {
 	if err := p.write(w, fmt.Sprintln(a...)); err != nil {
-		fmt.Printf("Fprintln: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Fprintln: %v\n", err)
 	}
 }
 
@@ -229,9 +229,9 @@ func (p *Printer) generateLogError(format string, args ...any) string {
 	return fmt.Sprintf("%s\n", colorError().Sprintf("[ERROR] %s", fmt.Sprintf(format, args...)))
 }
 
-// LogError prints error messages to stderr
+// LogError prints error messages to the error writer
 func (p *Printer) LogError(format string, args ...any) {
-	p.Fprint(os.Stderr, p.generateLogError(format, args...))
+	p.Fprint(p.errWriter, p.generateLogError(format, args...))
 }
 
 // LogWarn prints a warning to the error writer: something the user should
