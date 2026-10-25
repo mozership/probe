@@ -1,12 +1,14 @@
 package smtp
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/textproto"
+	"os"
 	"strings"
 	"time"
 )
@@ -37,10 +39,7 @@ type Client struct {
 func Dial(addr string, timeout time.Duration) (*Client, error) {
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			return nil, fmt.Errorf("%w (could not connect within %s)", err, timeout)
-		}
-		return nil, err
+		return nil, dialError(err, timeout)
 	}
 	var deadline *deadlineConn
 	if timeout > 0 {
@@ -54,6 +53,18 @@ func Dial(addr string, timeout time.Duration) (*Client, error) {
 	}
 	c.deadline = deadline
 	return c, nil
+}
+
+// dialError names the timeout when connecting ran out of it. The system
+// may give up first, with ETIMEDOUT after a minute or two of a host that
+// does not answer, and that error is its own, so it goes as it is. Running
+// out of the dial's deadline gives os.ErrDeadlineExceeded or, when it ran
+// out before the connection was tried, context.DeadlineExceeded.
+func dialError(err error, timeout time.Duration) error {
+	if timeout > 0 && (errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded)) {
+		return fmt.Errorf("%w (could not connect within %s)", err, timeout)
+	}
+	return err
 }
 
 // deadlineConn sets the connection's deadline afresh before each read and
@@ -80,9 +91,12 @@ func (c *deadlineConn) Write(b []byte) (int, error) {
 	return n, c.waited(err)
 }
 
-// waited names how long the wait was when err is from running out of it.
+// waited names how long the wait was when err is from running out of the
+// deadline. Another timeout, such as the system's ETIMEDOUT of a connection
+// that broke, is not that wait, so it goes as it is.
 func (c *deadlineConn) waited(err error) error {
-	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+	var netErr net.Error
+	if c.timeout > 0 && errors.Is(err, os.ErrDeadlineExceeded) && errors.As(err, &netErr) {
 		return &waitTimeout{err: netErr, wait: c.timeout}
 	}
 	return err
