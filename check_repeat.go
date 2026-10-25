@@ -8,15 +8,6 @@ import (
 	"github.com/mozership/probe/expr"
 )
 
-// The fields of a step that the tests of a repeated job read under steps,
-// those that the test against the run compared to reads under
-// baseline.steps, and those of their rt.
-var (
-	repeatRunFields   = []string{"runs", "success", "failure", "skipped", "success_rate", "rt"}
-	baselineRunFields = []string{"runs", "success", "success_rate", "rt"}
-	repeatRTFields    = []string{"min", "mean", "p50", "p90", "p95", "p99", "max"}
-)
-
 // checkRepeatTests checks that the tests of a repeated job read steps of the
 // job by their ids, and fields that they have; that only the test against
 // the run compared to reads it, under baseline.steps; and that this test
@@ -28,28 +19,17 @@ func (c *checker) checkRepeatTests() {
 		}
 		ids := make([]string, 0, len(job.Steps))
 		for j, st := range job.Steps {
-			id := st.ID
-			if id == "" {
-				id = defaultStepID(j)
-			}
-			ids = append(ids, id)
+			ids = append(ids, st.idAt(j))
 		}
-		for _, t := range []struct{ key, test string }{
-			{"test", job.Repeat.Test},
-			{"baseline_test", job.Repeat.BaselineTest},
-		} {
+		for _, t := range job.Repeat.tests() {
 			if strings.TrimSpace(t.test) == "" || expr.Parse(t.test) != nil {
 				continue
 			}
 			key := "repeat." + t.key
-			line := c.line(fmt.Sprintf("jobs[%d].%s", i, key))
-			// A chain is read with each of its prefixes, so the same finding
-			// comes from several of them.
-			seen := map[string]bool{}
+			path := fmt.Sprintf("jobs[%d].%s", i, key)
 			add := func(severity, msg string) {
-				if msg != "" && !seen[msg] {
-					seen[msg] = true
-					c.add(severity, line, c.jobWhere(i), "%s: %s", key, msg)
+				if msg != "" {
+					c.addOnce(severity, path, c.jobWhere(i), "%s: %s", key, msg)
 				}
 			}
 			for _, chain := range expr.Reads(t.test, "steps") {
@@ -94,7 +74,7 @@ func repeatChainProblem(prefix string, chain, ids, fields []string) string {
 	case len(chain) > 1 && !slices.Contains(fields, chain[1]):
 		return fmt.Sprintf("%s.%s has no %s; it has %s",
 			prefix, chain[0], chain[1], strings.Join(fields, ", "))
-	case len(chain) > 2 && chain[1] != "rt":
+	case len(chain) > 2 && chain[1] != runFieldRT:
 		return fmt.Sprintf("%s.%s.%s is a number, which has no %s",
 			prefix, chain[0], chain[1], chain[2])
 	case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):

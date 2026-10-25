@@ -50,9 +50,7 @@ func (c *checker) checkActions() {
 				continue
 			}
 			msg := fmt.Sprintf("unknown action %q", st.Uses)
-			if s := suggest.Closest(st.Uses, c.opts.Actions); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
-			}
+			msg += suggest.Hint(st.Uses, c.opts.Actions)
 			c.add(SeverityError, c.line(path), c.stepWhere(i, j), "%s", msg)
 		}
 	}
@@ -84,9 +82,7 @@ func (c *checker) checkEmbedded() {
 					return
 				}
 				msg := fmt.Sprintf("%s: step %d uses %q, which is not an action of Probe or a name under actions", file, k, uses)
-				if s := suggest.Closest(uses, append(slices.Sorted(maps.Keys(c.wf.Actions)), c.opts.Actions...)); s != "" {
-					msg += fmt.Sprintf("; did you mean %q?", s)
-				}
+				msg += suggest.Hint(uses, append(slices.Sorted(maps.Keys(c.wf.Actions)), c.opts.Actions...))
 				c.add(SeverityError, line, c.stepWhere(i, j), "%s", msg)
 			})
 		}
@@ -170,9 +166,7 @@ func (c *checker) checkDefaults(v any, jp, where string) {
 		}
 		if len(c.opts.Actions) > 0 && !slices.Contains(c.opts.Actions, action) && !actionref.IsExternal(action) {
 			msg := fmt.Sprintf("defaults: no action is named %q, so its defaults apply to no step", action)
-			if s := suggest.Closest(action, c.opts.Actions); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
-			}
+			msg += suggest.Hint(action, c.opts.Actions)
 			c.add(SeverityError, c.line(path), where, "%s", msg)
 			continue
 		}
@@ -204,9 +198,7 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 			continue
 		}
 		msg := fmt.Sprintf("%s: unknown key %q for the %s action", field, key, action)
-		if s := suggest.Closest(key, params); s != "" {
-			msg += fmt.Sprintf("; did you mean %q?", s)
-		}
+		msg += suggest.Hint(key, params)
 		c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
 	}
 }

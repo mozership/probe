@@ -18,7 +18,7 @@ import (
 func TestAddToSchedule_WithoutID(t *testing.T) {
 	w := &Workflow{Jobs: []Job{{Name: "a"}}}
 	const want = `job "a" has no ID`
-	if _, err := w.newScheduler(); err == nil || err.Error() != want {
+	if _, err := newScheduler(w.Jobs); err == nil || err.Error() != want {
 		t.Errorf("newScheduler() error = %v, want %q", err, want)
 	}
 }
@@ -33,8 +33,8 @@ func TestCycleIsToldInWorkflowOrder(t *testing.T) {
 			{ID: "zeta", Name: "Zeta", Needs: []string{"alpha"}},
 			{ID: "alpha", Name: "Alpha", Needs: []string{"zeta"}},
 		}}
-		if _, err := w.initJobScheduler(); err == nil || err.Error() != want {
-			t.Errorf("initJobScheduler() error = %v, want %q", err, want)
+		if _, err := validatedScheduler(w.Jobs); err == nil || err.Error() != want {
+			t.Errorf("validatedScheduler() error = %v, want %q", err, want)
 		}
 	})
 

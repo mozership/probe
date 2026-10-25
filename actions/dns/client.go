@@ -178,18 +178,9 @@ func (r *Req) normalize() (dns.Question, time.Duration, error) {
 
 	timeout := defaultTimeout
 	if r.Timeout != "" {
-		parsed, err := time.ParseDuration(r.Timeout)
+		parsed, err := mapping.ParseTimeout(r.Timeout)
 		if err != nil {
-			// A number alone is taken as seconds.
-			if _, errInt := strconv.Atoi(r.Timeout); errInt != nil {
-				return dns.Question{}, 0, fmt.Errorf("invalid timeout format: %s (use duration string like '5s' or integer seconds)", r.Timeout)
-			}
-			if parsed, err = time.ParseDuration(r.Timeout + "s"); err != nil {
-				return dns.Question{}, 0, fmt.Errorf("invalid timeout: %s (%w)", r.Timeout, err)
-			}
-		}
-		if parsed <= 0 {
-			return dns.Question{}, 0, fmt.Errorf("invalid timeout: %s (must be above zero)", r.Timeout)
+			return dns.Question{}, 0, err
 		}
 		timeout = parsed
 	}

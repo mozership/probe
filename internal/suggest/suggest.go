@@ -2,7 +2,10 @@
 // known, so that an error can ask "did you mean" it.
 package suggest
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Closest returns the name of allowed closest to name, when one is close
 // enough to be what was meant: two edits from it at most, and no more than
@@ -11,6 +14,16 @@ import "strings"
 func Closest(name string, allowed []string) string {
 	// A short name is close to too many others: x is two edits from rt.
 	return Within(name, allowed, min(2, len(name)/2))
+}
+
+// Hint returns the question that follows an error about name, which is not
+// among allowed: "; did you mean" the name Closest finds, or an empty string
+// when none is close enough.
+func Hint(name string, allowed []string) string {
+	if s := Closest(name, allowed); s != "" {
+		return fmt.Sprintf("; did you mean %q?", s)
+	}
+	return ""
 }
 
 // Within returns the name of allowed closest to name, when it is edits

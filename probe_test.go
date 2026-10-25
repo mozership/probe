@@ -356,7 +356,7 @@ func TestProbe_validateIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Probe{workflow: tt.workflow}
-			err := p.validateIDs()
+			err := p.workflow.validateIDs()
 
 			if tt.expectError {
 				if err == nil {
@@ -567,7 +567,7 @@ func TestProbe_validateAndInitializeIDs_Integration(t *testing.T) {
 			p := &Probe{workflow: tt.workflow}
 
 			// Run validation
-			err := p.validateIDs()
+			err := p.workflow.validateIDs()
 
 			if tt.expectValidationErr {
 				if err == nil {
@@ -615,7 +615,7 @@ func TestProbe_validateIDs_ErrorMessages(t *testing.T) {
 			},
 		}
 		p := &Probe{workflow: workflow}
-		err := p.validateIDs()
+		err := p.workflow.validateIDs()
 
 		if err == nil {
 			t.Fatal("expected error but got none")
@@ -643,7 +643,7 @@ func TestProbe_validateIDs_ErrorMessages(t *testing.T) {
 			},
 		}
 		p := &Probe{workflow: workflow}
-		err := p.validateIDs()
+		err := p.workflow.validateIDs()
 
 		if err == nil {
 			t.Fatal("expected error but got none")

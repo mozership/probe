@@ -3,6 +3,8 @@ package probe
 import (
 	"strings"
 	"testing"
+
+	"github.com/mozership/probe/internal/textwidth"
 )
 
 func TestJobLabels(t *testing.T) {
@@ -69,48 +71,10 @@ func TestJobLabels(t *testing.T) {
 				if got[id] != want {
 					t.Errorf("label of %s = %q, want %q", id, got[id], want)
 				}
-				if w := displayWidth(got[id]); w > maxJobLabelWidth {
+				if w := textwidth.Width(got[id]); w > maxJobLabelWidth {
 					t.Errorf("label of %s is %d columns wide, more than %d", id, w, maxJobLabelWidth)
 				}
 			}
 		})
-	}
-}
-
-func TestDisplayWidth(t *testing.T) {
-	tests := []struct {
-		in   string
-		want int
-	}{
-		{"", 0},
-		{"Tests", 5},
-		{"結合テスト", 10},
-		{"ﾃｽﾄ", 3},
-		{"é", 1},
-		{"Ｔｅｓｔ", 8},
-	}
-	for _, tt := range tests {
-		if got := displayWidth(tt.in); got != tt.want {
-			t.Errorf("displayWidth(%q) = %d, want %d", tt.in, got, tt.want)
-		}
-	}
-}
-
-func TestTruncateWidth(t *testing.T) {
-	tests := []struct {
-		in   string
-		max  int
-		want string
-	}{
-		{"Tests", 5, "Tests"},
-		{"Testing", 5, "Test…"},
-		{"結合テスト", 10, "結合テスト"},
-		{"結合テスト", 6, "結合…"},
-		{"結合テスト", 5, "結合…"},
-	}
-	for _, tt := range tests {
-		if got := truncateWidth(tt.in, tt.max); got != tt.want {
-			t.Errorf("truncateWidth(%q, %d) = %q, want %q", tt.in, tt.max, got, tt.want)
-		}
 	}
 }

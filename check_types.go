@@ -52,7 +52,6 @@ func typeShape(t reflect.Type) expr.Shape {
 // data. A value whose kind is not known is taken to be of the kind that
 // would be right.
 func (c *checker) checkTypes() {
-	seen := map[string]bool{}
 	check := func(path, where, field, input string, template bool, names map[string]expr.Shape, outcome string) {
 		if strings.TrimSpace(input) == "" {
 			return
@@ -75,12 +74,7 @@ func (c *checker) checkTypes() {
 		for _, h := range hints {
 			msg += "; " + h
 		}
-		key := path + "\x00" + msg
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		c.add(SeverityError, c.line(path), where, "%s: %s", field, msg)
+		c.addOnce(SeverityError, path, where, "%s: %s", field, msg)
 	}
 
 	forStrings("vars", c.wf.Vars, func(path, s string) {
@@ -120,10 +114,7 @@ func (c *checker) checkTypes() {
 			continue
 		}
 		names := repeatShapes(job)
-		for _, t := range []struct{ key, test string }{
-			{"test", job.Repeat.Test},
-			{"baseline_test", job.Repeat.BaselineTest},
-		} {
+		for _, t := range job.Repeat.tests() {
 			check(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, false, names, "so the job fails")
 		}
 	}
@@ -167,16 +158,13 @@ func repeatShapes(job Job) map[string]expr.Shape {
 		for _, f := range fields {
 			s.Fields[f] = number
 		}
-		s.Fields["rt"] = rt
+		s.Fields[runFieldRT] = rt
 		return s
 	}
 	steps := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	baseline := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
 	for j, st := range job.Steps {
-		id := st.ID
-		if id == "" {
-			id = defaultStepID(j)
-		}
+		id := st.idAt(j)
 		steps.Fields[id] = run(repeatRunFields)
 		baseline.Fields[id] = run(baselineRunFields)
 	}

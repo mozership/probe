@@ -6,9 +6,13 @@ import (
 	"strings"
 )
 
-// mergeMaps recursively merges two maps of type map[string]any.
-// If keys conflict, values from 'over' override those in 'base'.
-// Nested maps are merged recursively, preserving data from both maps.
+// mergeMapsShared returns base with over merged into it, over's value taking
+// the place of base's where a key is in both. Where both values are maps,
+// they are merged in turn, into a map of their own. Every other value, a
+// map only one of them has included, is shared with base or over rather
+// than copied, so the result must not be changed in place: unlike
+// mergeDefaults, which gives each step a copy of what it is given, it is for
+// a map that is only read, such as the vars of a step.
 //
 // Example:
 //
@@ -20,13 +24,13 @@ import (
 //	  "nested": map[string]any{"y": 3, "z": 4},
 //	  "c": 5,
 //	}
-//	result := mergeMaps(base, over)
+//	result := mergeMapsShared(base, over)
 //	// result: map[string]any{
 //	//   "a": 1,
 //	//   "nested": map[string]any{"x": 1, "y": 3, "z": 4},
 //	//   "c": 5,
 //	// }
-func mergeMaps(base, over map[string]any) map[string]any {
+func mergeMapsShared(base, over map[string]any) map[string]any {
 	merged := make(map[string]any)
 
 	// Copy all entries from base into the result
@@ -38,7 +42,7 @@ func mergeMaps(base, over map[string]any) map[string]any {
 			// If both values are maps, merge them recursively
 			if map1Nested, ok1 := existing.(map[string]any); ok1 {
 				if map2Nested, ok2 := value.(map[string]any); ok2 {
-					merged[key] = mergeMaps(map1Nested, map2Nested)
+					merged[key] = mergeMapsShared(map1Nested, map2Nested)
 					continue
 				}
 			}
@@ -48,22 +52,6 @@ func mergeMaps(base, over map[string]any) map[string]any {
 	}
 
 	return merged
-}
-
-// strmapToAnymap converts a map[string]string to map[string]any.
-// This is a simple type conversion utility function.
-//
-// Example:
-//
-//	input := map[string]string{"name": "John", "age": "30"}
-//	result := strmapToAnymap(input)
-//	// result: map[string]any{"name": "John", "age": "30"}
-func strmapToAnymap(strmap map[string]string) map[string]any {
-	anymap := make(map[string]any)
-	for k, v := range strmap {
-		anymap[k] = v
-	}
-	return anymap
 }
 
 // envMap returns all environment variables as a map[string]string.

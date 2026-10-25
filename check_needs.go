@@ -22,9 +22,7 @@ func (c *checker) checkNeeds() {
 			}
 			unknown = true
 			msg := fmt.Sprintf("needs: no job has the id %q", need)
-			if s := suggest.Closest(need, slices.Sorted(maps.Keys(ids))); s != "" {
-				msg += fmt.Sprintf("; did you mean %q?", s)
-			}
+			msg += suggest.Hint(need, slices.Sorted(maps.Keys(ids)))
 			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d].needs", i)), c.jobWhere(i), "%s", msg)
 		}
 	}

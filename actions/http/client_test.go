@@ -680,6 +680,9 @@ func TestParseTimeout(t *testing.T) {
 		{"surrounding spaces are ignored", " 5s ", 5 * time.Second, false},
 		{"zero disables the limit", "0", 0, false},
 		{"zero duration disables the limit", "0s", 0, false},
+		{"fractional zero disables the limit", "0.0", 0, false},
+		{"below a nanosecond is rejected", "0.0000000001", 0, true},
+		{"too many seconds for a duration is rejected", "18446744074", 0, true},
 		{"negative duration is rejected", "-1s", 0, true},
 		{"negative number is rejected", "-1", 0, true},
 		{"unparsable value is rejected", "soon", 0, true},
@@ -786,6 +789,13 @@ func TestDoReadsStructuredSyntaxBodiesAsText(t *testing.T) {
 				t.Errorf("expected no file, got %q", got.Res.FilePath)
 			}
 		})
+	}
+}
+
+func TestParseTimeoutSaysWhyItRefuses(t *testing.T) {
+	_, err := parseTimeout("-1s")
+	if err == nil || err.Error() != "invalid timeout -1s: a duration cannot be below zero" {
+		t.Errorf("parseTimeout(-1s) error = %v, want it to say the timeout is below zero", err)
 	}
 }
 

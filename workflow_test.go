@@ -19,6 +19,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/textwidth"
 	"github.com/mozership/probe/mask"
 )
 
@@ -666,17 +667,20 @@ func TestEnv(t *testing.T) {
 	}
 }
 
-// Test_evalVars checks that a workflow evaluates its vars with its
-// environment and the vars given, keeping the vars it writes as they are.
-// How vars are evaluated is tested in internal/vareval.
+// Test_evalVars checks that a run evaluates the vars of its workflow with
+// the run's environment and the vars given, keeping the vars the workflow
+// writes as they are. How vars are evaluated is tested in internal/vareval.
 func Test_evalVars(t *testing.T) {
 	wf := &Workflow{
-		Name:  "Test",
-		Vars:  map[string]any{"host": "{{HOST}}", "url": "http://{{vars.host}}:{{vars.port}}", "port": "{{PORT}}"},
-		env:   map[string]string{"HOST": "from-env", "PORT": "8080"},
-		given: map[string]string{"port": "9090"},
+		Name: "Test",
+		Vars: map[string]any{"host": "{{HOST}}", "url": "http://{{vars.host}}:{{vars.port}}", "port": "{{PORT}}"},
 	}
-	got, err := wf.evalVars()
+	r := &workflowRun{
+		w:      wf,
+		config: Config{Vars: map[string]string{"port": "9090"}},
+		env:    map[string]string{"HOST": "from-env", "PORT": "8080"},
+	}
+	got, err := r.evalVars()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1145,7 +1149,7 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 		// The step's icon comes after the label and its padding.
 		end := strings.Index(line, "]") + 1
 		pad := len(line[end:]) - len(strings.TrimLeft(line[end:], " "))
-		at := displayWidth(line[:end+pad])
+		at := textwidth.Width(line[:end+pad])
 		if column >= 0 && at != column {
 			t.Errorf("steps should line up, got:\n%s", progress)
 			break
@@ -1729,29 +1733,28 @@ func TestWorkflow_Start_RunsAJobOnceTheJobsItNeedsAreDone(t *testing.T) {
 
 // A job whose dependency can no longer be done fails the run rather than be
 // waited for for ever.
-func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) {
+func TestWorkflowRun_runJobsStopsWhenNothingCanRun(t *testing.T) {
 	w := &Workflow{Name: "stuck", Jobs: []Job{
 		{ID: "a", Name: "A", Steps: []*Step{{Uses: "hello"}}},
 		{ID: "b", Name: "B", Needs: []string{"a"}, Steps: []*Step{{Uses: "hello"}}},
 	}}
 	w.printer = newBufferPrinter()
-	w.outputs = NewOutputs()
-	scheduler, err := w.initJobScheduler()
+	r, err := w.prepare(Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// a is taken for running, but nothing runs it.
-	scheduler.Start("a")
+	r.scheduler.Start("a")
 
 	errc := make(chan error, 1)
-	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler, nil)) }()
+	go func() { errc <- r.runJobs(r.newJobContext(nil, nil)) }()
 	select {
 	case err := <-errc:
 		if err == nil || !strings.Contains(err.Error(), "jobs b cannot run") {
-			t.Errorf("startJobsWithDependencies() error = %v, want that b cannot run", err)
+			t.Errorf("runJobs() error = %v, want that b cannot run", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("startJobsWithDependencies() waited for a job that nothing runs")
+		t.Fatal("runJobs() waited for a job that nothing runs")
 	}
 }
 

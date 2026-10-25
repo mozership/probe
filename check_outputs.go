@@ -150,9 +150,7 @@ func (c *checker) outputRead(chain []string, byID, byKey map[string][]publisher,
 	pubs := byKey[chain[0]]
 	if len(pubs) == 0 {
 		msg := "is not published by any step"
-		if s := suggest.Closest(chain[0], publishedNames(byID, byKey)); s != "" {
-			msg += fmt.Sprintf("; did you mean %q?", s)
-		}
+		msg += suggest.Hint(chain[0], publishedNames(byID, byKey))
 		return msg, SeverityError
 	}
 	return c.ordered(pubs, needs, i, j, late)
@@ -198,25 +196,13 @@ func publishedNames(byID, byKey map[string][]publisher) []string {
 // ancestors returns, for each job, the jobs it needs, directly or through
 // the jobs they need.
 func (c *checker) ancestors() []map[int]bool {
-	index := map[string]int{}
+	byID := make(map[string]int, len(c.wf.Jobs))
 	for i, job := range c.wf.Jobs {
-		index[job.ID] = i
+		byID[job.ID] = i
 	}
 	out := make([]map[int]bool, len(c.wf.Jobs))
-	var visit func(i int, into map[int]bool)
-	visit = func(i int, into map[int]bool) {
-		for _, id := range c.wf.Jobs[i].Needs {
-			k, ok := index[id]
-			if !ok || into[k] {
-				continue
-			}
-			into[k] = true
-			visit(k, into)
-		}
-	}
 	for i := range c.wf.Jobs {
-		out[i] = map[int]bool{}
-		visit(i, out[i])
+		out[i] = neededJobs(c.wf.Jobs, byID, i)
 	}
 	return out
 }

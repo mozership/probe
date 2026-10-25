@@ -64,6 +64,17 @@ func TestStep_parseWaitDuration(t *testing.T) {
 			expected: 0,
 			hasError: true,
 		},
+		{name: "zero", wait: "0", expected: 0},
+		{name: "zero duration", wait: "0s", expected: 0},
+		{name: "fractional seconds", wait: "1.5", expected: 1500 * time.Millisecond},
+		{name: "spaces around", wait: " 2 ", expected: 2 * time.Second},
+		{name: "a nanosecond", wait: "1ns", expected: time.Nanosecond},
+		{name: "negative seconds", wait: "-1", hasError: true},
+		{name: "negative duration", wait: "-1s", hasError: true},
+		{name: "below a nanosecond", wait: "0.0000000001", hasError: true},
+		{name: "the most seconds a duration holds", wait: "9223372036", expected: 9223372036 * time.Second},
+		{name: "too many seconds for a duration", wait: "9223372037", hasError: true},
+		{name: "too long a duration", wait: "2562048h", hasError: true},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +157,10 @@ func TestStep_getWaitTimeForDisplay(t *testing.T) {
 			wait:     "invalid",
 			expected: "",
 		},
+		{name: "zero", wait: "0", expected: "0s"},
+		{name: "minutes in seconds", wait: "1m30s", expected: "90s"},
+		{name: "fractional seconds", wait: "1.5", expected: "1.5s"},
+		{name: "negative returns empty", wait: "-1s", expected: ""},
 		{
 			name:     "template not evaluated returns empty",
 			wait:     "{{ vars.wait }}",
@@ -234,7 +249,7 @@ func TestStep_prepare_WaitThatIsNoTime(t *testing.T) {
 		want string
 	}{
 		{name: "a template that cannot be evaluated", wait: "{{1 +}}s", want: "wait expression evaluation error: "},
-		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait format: soon"},
+		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait soon: use a duration"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3112,5 +3127,16 @@ func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
 	out := printer.errWriter.(*bytes.Buffer).String()
 	if !strings.Contains(out, "[DEBUG] Request:\n[DEBUG]   url: made\n") || strings.Contains(out, "given") {
 		t.Errorf("output should show the request the action made:\n%s", out)
+	}
+}
+
+// TestStep_IDAt reads a step by its id, or by where it is written when it
+// has none.
+func TestStep_IDAt(t *testing.T) {
+	if got := (&Step{ID: "login"}).idAt(2); got != "login" {
+		t.Errorf("idAt of a step with an id = %q, want login", got)
+	}
+	if got := (&Step{}).idAt(2); got != "step_2" {
+		t.Errorf("idAt of a step without one = %q, want step_2", got)
 	}
 }

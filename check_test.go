@@ -1,9 +1,11 @@
 package probe
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -267,7 +269,7 @@ vars:
   wait: 1s
 `,
 			want: []want{
-				{SeverityError, 7, "wait: invalid wait format: soon"},
+				{SeverityError, 7, "wait: invalid wait soon: use a duration"},
 				{SeverityError, 15, "wait: template {{ vars. }}"},
 			},
 		},
@@ -1305,6 +1307,26 @@ func TestNewChecker(t *testing.T) {
 	c.resFields["./a"] = []string{"y"}
 	if len(c.params) != 1 || len(c.resFields) != 1 {
 		t.Errorf("params = %v, resFields = %v, want those of ./a", c.params, c.resFields)
+	}
+}
+
+// TestCheckerAddOnce adds a finding once for a path and a message, at the
+// line of the path, while another path or message is added again.
+func TestCheckerAddOnce(t *testing.T) {
+	c := newChecker(CheckOptions{})
+	c.lines = map[string]int{"jobs[0].steps[0]": 4, "jobs[0].steps[1]": 7}
+	c.files = []fileStart{{name: "w.yml", line: 1}}
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
+	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "b")
+	c.addOnce(SeverityWarning, "jobs[0].steps[1].test", "s", "%s: %s", "test", "a")
+	var got []string
+	for _, f := range c.findings {
+		got = append(got, fmt.Sprintf("%s %d %s", f.Severity, f.Line, f.Message))
+	}
+	want := []string{"error 4 test: a", "error 4 test: b", "warning 7 test: a"}
+	if !slices.Equal(got, want) {
+		t.Errorf("findings = %q, want %q", got, want)
 	}
 }
 

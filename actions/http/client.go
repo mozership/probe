@@ -19,6 +19,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/binary"
 	"github.com/mozership/probe/internal/contractcheck"
+	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/mapping"
 )
@@ -84,30 +85,19 @@ func NewReq() *Req {
 	}
 }
 
-// parseTimeout turns the request's timeout field into a duration. It accepts a
-// Go duration string ("10s", "1m30s") and, like the workflow-level interval
-// fields, a bare number of seconds. An empty value falls back to
-// DefaultTimeout, and zero disables the limit.
+// parseTimeout turns the request's timeout field into a duration. It reads
+// it as mapping.ParseTimeout does, as a duration string ("10s", "1m30s") or a
+// number of seconds, except that an empty value falls back to DefaultTimeout
+// and a zero, which ParseTimeout refuses, disables the limit.
 func parseTimeout(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return DefaultTimeout, nil
 	}
-
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		sec, ferr := strconv.ParseFloat(s, 64)
-		if ferr != nil {
-			return 0, fmt.Errorf("invalid timeout: %q", s)
-		}
-		d = time.Duration(sec * float64(time.Second))
+	if d, err := duration.Parse(s); err == nil && d == 0 {
+		return 0, nil
 	}
-
-	if d < 0 {
-		return 0, fmt.Errorf("timeout must not be negative: %q", s)
-	}
-
-	return d, nil
+	return mapping.ParseTimeout(s)
 }
 
 // joinHeader returns h with the values of each header joined, as the result

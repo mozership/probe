@@ -67,12 +67,12 @@ func TestExecutor_setupContext(t *testing.T) {
 func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
 	t.Helper()
 	w := &Workflow{Name: "executor", Jobs: []Job{job}, printer: newBufferPrinter()}
-	scheduler, err := w.initJobScheduler()
+	scheduler, err := validatedScheduler(w.Jobs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := w.newJobContext(Config{ActionRunner: runner}, nil, scheduler, nil)
-	ctx.Outputs = NewOutputs()
+	r := &workflowRun{w: w, config: Config{ActionRunner: runner}, jobs: w.Jobs, scheduler: scheduler, outputs: NewOutputs()}
+	ctx := r.newJobContext(nil, nil)
 	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
 	return passed, ctx.Result.Jobs[job.ID]

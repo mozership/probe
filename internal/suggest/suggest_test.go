@@ -23,6 +23,15 @@ func TestClosest(t *testing.T) {
 	}
 }
 
+func TestHint(t *testing.T) {
+	allowed := []string{"jobs", "needs"}
+	for name, want := range map[string]string{"need": `; did you mean "needs"?`, "JOBS": `; did you mean "jobs"?`, "steps": ""} {
+		if got := Hint(name, allowed); got != want {
+			t.Errorf("Hint(%q, %q) = %q, want %q", name, allowed, got, want)
+		}
+	}
+}
+
 func TestWithin(t *testing.T) {
 	fields := []string{"code", "stderr", "stdout"}
 	for name, want := range map[string]string{"cod": "code", "Code": "code", "body": "", "stdot": "stdout"} {
