@@ -123,7 +123,7 @@ func (p *Probe) loadGraph() error {
 	if err := p.Load(); err != nil {
 		return err
 	}
-	if err := p.checkCycle(); err != nil {
+	if err := p.workflow.checkCycle(); err != nil {
 		return err
 	}
 	if len(p.Config.Jobs) == 0 {
@@ -135,18 +135,6 @@ func (p *Probe) loadGraph() error {
 	}
 	p.workflow.Jobs = jobs
 	return nil
-}
-
-// checkCycle refuses jobs whose needs are in a cycle, as a run does, with
-// the scheduler's check. A need that is no job is left for dag to draw.
-func (p *Probe) checkCycle() error {
-	s := NewJobScheduler()
-	for i := range p.workflow.Jobs {
-		if err := s.AddJob(&p.workflow.Jobs[i]); err != nil {
-			return err
-		}
-	}
-	return s.checkCircularDependencies()
 }
 
 func (p *Probe) Load() error {

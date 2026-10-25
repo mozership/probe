@@ -2,6 +2,8 @@ package probe
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -83,9 +85,11 @@ func TestJobScheduler_MarkJobsWithFailedDependencies(t *testing.T) {
 			t.Errorf("Expected no more jobs to be skipped, got: %v", skipped2)
 		}
 
-		// No job is left to start
-		if pending := scheduler.PendingJobs(); len(pending) != 0 {
-			t.Errorf("Expected no pending jobs after all jobs are in terminal state, got: %v", pending)
+		// Every job is completed or skipped
+		for id, status := range scheduler.status {
+			if status != JobCompleted && status != JobSkipped {
+				t.Errorf("Expected %s to be in a terminal state, got: %v", id, status)
+			}
 		}
 	})
 
@@ -427,6 +431,34 @@ func TestJobScheduler_AddJob_WithoutID(t *testing.T) {
 	if err := NewJobScheduler().AddJob(&Job{Name: "a"}); err == nil {
 		t.Error("AddJob() of a job without an ID succeeded")
 	}
+}
+
+// A cycle is told from its first job in the workflow, not in the order of
+// the IDs, by a run and by probe dag alike.
+func TestCycleIsToldInWorkflowOrder(t *testing.T) {
+	const want = "circular dependency detected: zeta -> alpha"
+
+	t.Run("run", func(t *testing.T) {
+		w := &Workflow{Jobs: []Job{
+			{ID: "zeta", Name: "Zeta", Needs: []string{"alpha"}},
+			{ID: "alpha", Name: "Alpha", Needs: []string{"zeta"}},
+		}}
+		if _, err := w.initJobScheduler(); err == nil || err.Error() != want {
+			t.Errorf("initJobScheduler() error = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("dag", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "cycle.yml")
+		content := "name: Cycle\njobs:\n- id: zeta\n  name: Zeta\n  needs: [alpha]\n  steps:\n  - uses: hello\n- id: alpha\n  name: Alpha\n  needs: [zeta]\n  steps:\n  - uses: hello\n"
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p := &Probe{FilePath: path}
+		if _, err := p.DagMermaid(); err == nil || err.Error() != want {
+			t.Errorf("DagMermaid() error = %v, want %q", err, want)
+		}
+	})
 }
 
 // canRun reports whether the scheduler would start jobID now.

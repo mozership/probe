@@ -316,15 +316,33 @@ func (w *Workflow) jobNamer(vars map[string]any) func(id string) string {
 	}
 }
 
-// initJobScheduler creates and sets up the job scheduler with dependencies
-func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+// newScheduler returns a scheduler of the workflow's jobs, added in the
+// order they are written.
+func (w *Workflow) newScheduler() (*JobScheduler, error) {
 	scheduler := NewJobScheduler()
-
-	// Add all jobs to scheduler
 	for i := range w.Jobs {
 		if err := scheduler.AddJob(&w.Jobs[i]); err != nil {
 			return nil, err
 		}
+	}
+	return scheduler, nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
+// that is no job is not refused.
+func (w *Workflow) checkCycle() error {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return err
+	}
+	return scheduler.checkCircularDependencies()
+}
+
+// initJobScheduler creates and sets up the job scheduler with dependencies
+func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate dependencies
