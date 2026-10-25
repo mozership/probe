@@ -108,32 +108,22 @@ type CheckOptions struct {
 // The error it returns is for a workflow that cannot be read at all, such
 // as a file that does not exist.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
+	// What a run warns of as it loads is told as a finding here, as load
+	// writes no warning.
 	p := New(path, false)
-	// What a run warns of is told as a finding here.
-	p.Config.Warn = nil
-	files, err := p.yamlFiles()
+	files, err := yamlFiles(p.FilePath)
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no YAML file", path)
 	}
-	data, contents, err := p.readYamlFiles(files)
+	data, contents, err := readYamlFiles(files)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &checker{opts: opts, lines: map[string]int{}}
-	// The params of external actions are added as they are read, so the
-	// caller's map is left as it was.
-	c.opts.Params = maps.Clone(opts.Params)
-	if c.opts.Params == nil {
-		c.opts.Params = map[string][]string{}
-	}
-	c.opts.ResFields = maps.Clone(opts.ResFields)
-	if c.opts.ResFields == nil {
-		c.opts.ResFields = map[string][]string{}
-	}
+	c := newChecker(opts)
 	c.mapFiles(files, contents)
 	for _, r := range redefinedJobs(files, contents) {
 		c.findings = append(c.findings, Finding{
@@ -157,12 +147,11 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 
 	// What is wrong with the names of external actions is told on the line
 	// of each, with whatever else is wrong, rather than ending the check.
-	var aliases []aliasProblem
-	var problems []problem
+	// The workflow is loaded from the text read above, so that the lines
+	// mapped to the files are those of the text loaded.
 	p.Config.Actions = opts.Actions
-	p.aliasProblems = &aliases
-	p.problems = &problems
-	if err := p.Load(); err != nil {
+	aliases, problems, err := p.load(files, data)
+	if err != nil {
 		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
 		return c.sorted(), nil
 	}
@@ -185,9 +174,15 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 }
 
 type checker struct {
-	opts     CheckOptions
-	wf       *Workflow
-	findings []Finding
+	// opts are the options Check was given, which the checker only reads.
+	opts CheckOptions
+	// params and resFields are the params and the fields of res of each
+	// action, by its name: those of opts, with those of each external
+	// action added as its action.yml is read.
+	params    map[string][]string
+	resFields map[string][]string
+	wf        *Workflow
+	findings  []Finding
 	// lines are the lines of the keys of the workflow, by their path, such
 	// as jobs[0].steps[1].test, and of each job and step, by jobs[0] and
 	// jobs[0].steps[1].
@@ -197,6 +192,24 @@ type checker struct {
 	files []fileStart
 	// readManifests are the external actions whose action.yml was read.
 	readManifests map[string]bool
+}
+
+// newChecker returns a checker for opts, with its own copy of what it adds
+// to as it reads, so that the maps of opts are left as they were.
+func newChecker(opts CheckOptions) *checker {
+	c := &checker{
+		opts:      opts,
+		params:    maps.Clone(opts.Params),
+		resFields: maps.Clone(opts.ResFields),
+		lines:     map[string]int{},
+	}
+	if c.params == nil {
+		c.params = map[string][]string{}
+	}
+	if c.resFields == nil {
+		c.resFields = map[string][]string{}
+	}
+	return c
 }
 
 func (c *checker) add(severity string, line int, where, format string, args ...any) {

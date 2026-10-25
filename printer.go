@@ -237,7 +237,13 @@ func (p *Printer) LogError(format string, args ...any) {
 // LogWarn prints a warning to the error writer: something the user should
 // know about that does not make the run fail.
 func (p *Printer) LogWarn(format string, args ...any) {
-	p.Fprint(p.errWriter, colorWarning().Sprintf("[WARN] %s", fmt.Sprintf(format, args...))+"\n")
+	p.Fprint(p.errWriter, warnLine(fmt.Sprintf(format, args...)))
+}
+
+// warnLine returns msg as a line of warning, as LogWarn writes it, for what
+// warns without a Printer, such as Load.
+func warnLine(msg string) string {
+	return colorWarning().Sprintf("[WARN] %s", msg) + "\n"
 }
 
 // logTestError logs, in verbose mode, the error a test could not be

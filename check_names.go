@@ -195,7 +195,7 @@ func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
 		keys = nil
 	}
 	out := map[string][]string{}
-	for name, declared := range map[string]map[string][]string{"req": c.opts.ReqFields, "res": c.opts.ResFields} {
+	for name, declared := range map[string]map[string][]string{"req": c.opts.ReqFields, "res": c.resFields} {
 		fields, ok := declared[st.Uses]
 		if !ok {
 			continue
