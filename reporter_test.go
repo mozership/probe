@@ -439,3 +439,92 @@ func TestResult_notifyStepStart(t *testing.T) {
 	var none *Result
 	none.notifyStepStart("first", "step")
 }
+
+// newRichTestResult builds a Result whose jobs show what the report puts
+// under a step: an echo, a failure, a skipped step and a repeated one, with
+// jobs that ran at once and so overlap in time.
+func newRichTestResult(base time.Time) *Result {
+	rs := newTestResult(base)
+	rs.Jobs["first"].StepResults = append(rs.Jobs["first"].StepResults,
+		StepResult{Index: 1, Name: "Echoes", Status: StatusSuccess, Echo: "line 1\n  line 2", HasEcho: true},
+		StepResult{Index: 2, Name: "Later", Status: StatusSkipped},
+		StepResult{Index: 3, Name: "Untested", Status: StatusWarning},
+	)
+	rs.Jobs["second"].StartTime = base.Add(-time.Second)
+	rs.Jobs["second"].StepResults = []StepResult{
+		{Index: 0, Name: "Second Step", Status: StatusError, Test: "res.code == 200", Failure: &StepFailure{
+			Kind:     FailureAssertion,
+			Message:  "test evaluated to false",
+			Request:  map[string]any{"url": "/"},
+			Response: map[string]any{"code": 500},
+		}},
+		{Index: 1, Name: "Polled", Status: StatusWarning, RepeatCounter: &StepRepeatCounter{Name: "Polled", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3, Echoes: []string{"a", "", "c"}}},
+	}
+	return rs
+}
+
+// The buffered and the streamed report are the same bytes on stdout, the
+// header and the footer included, whatever order the jobs finish in: both
+// render the blocks and add up the totals of the footer the same way.
+func TestBufferedAndStreamedReportsAreIdentical(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	order := []string{"first", "second", "third"}
+	base := time.Unix(1700000000, 0)
+
+	for _, noColor := range []bool{true, false} {
+		color.NoColor = noColor
+
+		buffered := newBufferPrinter()
+		br := newBufferedReporter(buffered, newReportRenderer(order, nil, nil))
+		brs := newRichTestResult(base)
+		brs.SetReporter(br)
+		br.Start("Workflow", "does things")
+		for _, id := range order {
+			brs.notifyJobDone(id)
+		}
+		br.Finish(brs)
+
+		streamed := newBufferPrinter()
+		sr := newStreamReporter(streamed, newReportRenderer(order, nil, nil))
+		srs := newRichTestResult(base)
+		srs.SetReporter(sr)
+		sr.Start("Workflow", "does things")
+		for _, id := range []string{"second", "third", "first"} {
+			srs.notifyJobDone(id)
+		}
+		sr.Finish(srs)
+
+		got := streamed.outWriter.(*bytes.Buffer).String()
+		want := buffered.outWriter.(*bytes.Buffer).String()
+		if got != want {
+			t.Errorf("NoColor %v: streamed report differs from the buffered one\ngot:\n%s\nwant:\n%s", noColor, got, want)
+		}
+		// The second job started a second before the first, and the third
+		// ended three seconds after the first started.
+		if !strings.Contains(want, "Total workflow time: 4.00s") {
+			t.Errorf("NoColor %v: footer should tell the time from the earliest start to the latest end, got:\n%s", noColor, want)
+		}
+	}
+}
+
+// A step's status has one icon and one color, which the report and the
+// progress of a run both show it by.
+func TestStatusIcon(t *testing.T) {
+	tests := []struct {
+		status StatusType
+		icon   string
+		color  *color.Color
+	}{
+		{StatusSuccess, IconSuccess, colorSuccess()},
+		{StatusError, IconError, colorError()},
+		{StatusWarning, IconTriangle, colorNoTest()},
+		{StatusSkipped, IconSkip, colorInfo()},
+		{StatusType(99), "?", colorWarning()},
+	}
+	for _, tt := range tests {
+		icon, c := statusIcon(tt.status)
+		if icon != tt.icon || !c.Equals(tt.color) {
+			t.Errorf("statusIcon(%d) = %q, %v; want %q, %v", tt.status, icon, c, tt.icon, tt.color)
+		}
+	}
+}

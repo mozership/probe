@@ -310,7 +310,9 @@ func TestReportRenderer_writeFooter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			r.writeFooter(&output, tt.totalTime, tt.successCount, tt.totalJobs)
+			start := time.Unix(1700000000, 0)
+			totals := reportTotals{succeeded: tt.successCount, start: start, end: start.Add(time.Duration(tt.totalTime * float64(time.Second)))}
+			r.writeFooter(&output, totals, tt.totalJobs)
 
 			result := output.String()
 			for _, want := range tt.wantContains {

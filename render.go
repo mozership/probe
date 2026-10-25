@@ -200,17 +200,48 @@ func (r *reportRenderer) writeUnderJob(b *strings.Builder, text string) {
 	b.WriteString("\n")
 }
 
+// reportTotals are what the footer of a report tells of the jobs whose
+// blocks it ends: how many of them succeeded, and the time from the
+// earliest start of one to the latest end, which is the time of the
+// workflow, as jobs run at once. The buffered and the streamed report
+// both add their jobs to one, so that their footers are the same.
+type reportTotals struct {
+	succeeded  int
+	start, end time.Time
+}
+
+// add counts jr in the totals. Callers hold jr.mutex.
+func (t *reportTotals) add(jr *JobResult) {
+	if jr.Succeeded() {
+		t.succeeded++
+	}
+	if t.start.IsZero() || jr.StartTime.Before(t.start) {
+		t.start = jr.StartTime
+	}
+	if t.end.IsZero() || jr.EndTime.After(t.end) {
+		t.end = jr.EndTime
+	}
+}
+
+// seconds is the time of the workflow in seconds, 0 before a job is added.
+func (t reportTotals) seconds() float64 {
+	if t.start.IsZero() || t.end.IsZero() {
+		return 0
+	}
+	return t.end.Sub(t.start).Seconds()
+}
+
 // writeFooter writes the line that ends the report: the time of the
-// workflow and how many of its jobs failed.
-func (r *reportRenderer) writeFooter(b *strings.Builder, totalTime float64, successCount, totalJobs int) {
-	if successCount == totalJobs {
+// workflow and how many of its totalJobs jobs failed, of the totals t.
+func (r *reportRenderer) writeFooter(b *strings.Builder, t reportTotals, totalJobs int) {
+	if t.succeeded == totalJobs {
 		r.fprintf(b, "Total workflow time: %.2fs %s\n",
-			totalTime,
+			t.seconds(),
 			colorSuccess().Sprintf(IconSuccess+"All jobs succeeded"))
 	} else {
-		failedCount := totalJobs - successCount
+		failedCount := totalJobs - t.succeeded
 		r.fprintf(b, "Total workflow time: %.2fs %s\n",
-			totalTime,
+			t.seconds(),
 			colorError().Sprintf(IconError+"%d job(s) failed", failedCount))
 	}
 }
@@ -255,26 +286,21 @@ func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, stat
 	}
 }
 
-// jobText returns the block of a job: the status line followed by
-// its step results. It also reports whether the job counts as successful and
-// the time range it covered, so that both the buffered and the streaming
-// report can build the same footer.
-func (r *reportRenderer) jobText(jr *JobResult) (string, bool, time.Time, time.Time) {
+// jobText returns the block of a job: the status line followed by its step
+// results. It adds the job to totals, as it was when its block was
+// rendered, for the footer.
+func (r *reportRenderer) jobText(jr *JobResult, totals *reportTotals) string {
 	jr.mutex.Lock()
 	defer jr.mutex.Unlock()
 
 	var output strings.Builder
 
 	duration := jr.EndTime.Sub(jr.StartTime)
-
-	// A skipped job did not fail.
-	status := jr.Status
-	succeeded := jr.Succeeded()
-
-	r.writeJobStatus(&output, jr.JobName, status, duration.Seconds())
+	r.writeJobStatus(&output, jr.JobName, jr.Status, duration.Seconds())
 	r.writeUnderJob(&output, r.stepResultsText(jr.JobID, jr.StepResults)+r.repeatTestText("repeat test", jr.RepeatTest)+r.repeatTestText("baseline test", jr.BaselineTest))
+	totals.add(jr)
 
-	return output.String(), succeeded, jr.StartTime, jr.EndTime
+	return output.String()
 }
 
 // reportText returns the report of rs: the block of each job, in order,
@@ -285,36 +311,13 @@ func (r *reportRenderer) reportText(rs *Result) string {
 	}
 
 	var output strings.Builder
-	successCount := 0
-	var earliestStart, latestEnd time.Time
-
+	var totals reportTotals
 	for _, jobID := range r.order {
 		if jr, exists := rs.Jobs[jobID]; exists {
-			block, succeeded, start, end := r.jobText(jr)
-
-			// Track earliest start and latest end time for wall clock calculation
-			if earliestStart.IsZero() || start.Before(earliestStart) {
-				earliestStart = start
-			}
-			if latestEnd.IsZero() || end.After(latestEnd) {
-				latestEnd = end
-			}
-
-			if succeeded {
-				successCount++
-			}
-
-			output.WriteString(block)
+			output.WriteString(r.jobText(jr, &totals))
 		}
 	}
-
-	// Calculate actual wall clock time (for parallel jobs)
-	var totalTime float64
-	if !earliestStart.IsZero() && !latestEnd.IsZero() {
-		totalTime = latestEnd.Sub(earliestStart).Seconds()
-	}
-
-	r.writeFooter(&output, totalTime, successCount, len(rs.Jobs))
+	r.writeFooter(&output, totals, len(rs.Jobs))
 
 	return output.String()
 }
@@ -397,19 +400,19 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 				ps += colorDim().Sprintf(" (%s)", timing)
 			}
 
+			icon, c := statusIcon(stepResult.Status)
+			mark := c.Sprint(icon)
 			switch stepResult.Status {
-			case StatusSuccess:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorSuccess().Sprintf(IconSuccess), waitPrefix, stepResult.Name, ps)
+			case StatusSuccess, StatusWarning:
+				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
 			case StatusError:
 				if why := r.failureText(stepResult.Failure, stepResult.Test); why != "" {
-					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps, why)
+					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, mark, waitPrefix, stepResult.Name, ps, why)
 				} else {
-					r.fprintf(&output, "%s %s %s%s%s\n", num, colorError().Sprintf(IconError), waitPrefix, stepResult.Name, ps)
+					r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
 				}
-			case StatusWarning:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorNoTest().Sprintf(IconTriangle), waitPrefix, stepResult.Name, ps)
 			case StatusSkipped:
-				r.fprintf(&output, "%s %s %s%s%s\n", num, colorInfo().Sprintf(IconSkip), waitPrefix, colorDim().Sprintf("%s", stepTitle(stepResult)), ps)
+				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, colorDim().Sprintf("%s", stepTitle(stepResult)), ps)
 			}
 
 			if stepResult.Report != "" {
@@ -436,6 +439,25 @@ func writeEcho(b *strings.Builder, echo string) {
 	// color is put on, and the line break is added after.
 	echo = strings.TrimRight(indentDetail(echo), " \n\t\r")
 	b.WriteString(colorInfo().Sprint(echo) + "\n")
+}
+
+// statusIcon returns the icon of a step of status, as the report and the
+// progress of a run show it, and its color. The icon ends with the space
+// that sets it apart in the report; the progress trims it. A status the
+// report does not know is shown by a question mark.
+func statusIcon(status StatusType) (string, *color.Color) {
+	switch status {
+	case StatusSuccess:
+		return IconSuccess, colorSuccess()
+	case StatusError:
+		return IconError, colorError()
+	case StatusWarning:
+		return IconTriangle, colorNoTest()
+	case StatusSkipped:
+		return IconSkip, colorInfo()
+	default:
+		return "?", colorWarning()
+	}
 }
 
 // stepTitle returns how a step is named in the report and in the progress

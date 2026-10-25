@@ -134,14 +134,13 @@ type StreamReporter struct {
 	order   []string
 	index   map[string]int
 
-	mu            sync.Mutex
-	labels        map[string]string
-	labelWidth    int
-	cursor        int
-	ready         map[string]*JobResult
-	succeeded     int
-	earliestStart time.Time
-	latestEnd     time.Time
+	mu         sync.Mutex
+	labels     map[string]string
+	labelWidth int
+	cursor     int
+	ready      map[string]*JobResult
+	// totals are those of the jobs printed so far, for the footer.
+	totals reportTotals
 }
 
 // newStreamReporter creates a reporter that flushes job blocks, which render
@@ -191,19 +190,7 @@ func (r *StreamReporter) StepStart(jobID, stepName string) {
 }
 
 func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
-	var icon string
-	switch sr.Status {
-	case StatusSuccess:
-		icon = colorSuccess().Sprint(strings.TrimSpace(IconSuccess))
-	case StatusError:
-		icon = colorError().Sprint(strings.TrimSpace(IconError))
-	case StatusWarning:
-		icon = colorNoTest().Sprint(strings.TrimSpace(IconTriangle))
-	case StatusSkipped:
-		icon = colorInfo().Sprint(strings.TrimSpace(IconSkip))
-	default:
-		icon = colorWarning().Sprint("?")
-	}
+	icon, c := statusIcon(sr.Status)
 
 	suffix := ""
 	if sr.RepeatCounter != nil {
@@ -213,7 +200,7 @@ func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
 		suffix = colorDim().Sprintf(" (%s)", sr.RT)
 	}
 
-	r.progress(jobID, icon, stepTitle(sr), suffix)
+	r.progress(jobID, c.Sprint(strings.TrimSpace(icon)), stepTitle(sr), suffix)
 }
 
 func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
@@ -253,13 +240,8 @@ func (r *StreamReporter) Finish(rs *Result) {
 	}
 	r.flushLocked()
 
-	var totalTime float64
-	if !r.earliestStart.IsZero() && !r.latestEnd.IsZero() {
-		totalTime = r.latestEnd.Sub(r.earliestStart).Seconds()
-	}
-
 	var output strings.Builder
-	r.render.writeFooter(&output, totalTime, r.succeeded, len(rs.Jobs))
+	r.render.writeFooter(&output, r.totals, len(rs.Jobs))
 	r.printer.Fprint(r.printer.outWriter, output.String())
 }
 
@@ -281,17 +263,7 @@ func (r *StreamReporter) flushLocked() {
 // writeJobLocked renders one job block and folds it into the footer totals.
 // Callers must hold r.mu.
 func (r *StreamReporter) writeJobLocked(jr *JobResult) {
-	block, succeeded, start, end := r.render.jobText(jr)
-	if succeeded {
-		r.succeeded++
-	}
-	if r.earliestStart.IsZero() || start.Before(r.earliestStart) {
-		r.earliestStart = start
-	}
-	if r.latestEnd.IsZero() || end.After(r.latestEnd) {
-		r.latestEnd = end
-	}
-	r.printer.Fprint(r.printer.outWriter, block)
+	r.printer.Fprint(r.printer.outWriter, r.render.jobText(jr, &r.totals))
 }
 
 // progress writes one live line to stderr. The report on stdout only grows a
