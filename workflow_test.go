@@ -1641,6 +1641,84 @@ func TestWorkflow_Start_TwiceReportsBothRuns(t *testing.T) {
 	}
 }
 
+// A run that passes after one that failed, on the same workflow, has the exit
+// status of a run that passed.
+func TestWorkflow_Start_TwiceAfterFailure(t *testing.T) {
+	runner := NewMockActionRunner()
+	runner.SetError("hello", errors.New("boom"))
+	w := &Workflow{
+		Name: "rerun",
+		Jobs: []Job{{ID: "a", Name: "A", Steps: []*Step{{Name: "greet", Uses: "hello", actionRunner: runner}}}},
+	}
+
+	first := startCapturing(t, w, OutputModeStream)
+	if w.exitStatus == 0 {
+		t.Fatalf("exit status of the first run = 0, want it failed:\n%s", first)
+	}
+
+	delete(runner.Errors, "hello")
+	second := startCapturing(t, w, OutputModeStream)
+	if w.exitStatus != 0 {
+		t.Errorf("exit status of the second run = %d, want 0:\n%s", w.exitStatus, second)
+	}
+}
+
+// The outputs a run published are not there for a later run on the same
+// workflow to read.
+func TestWorkflow_Start_TwiceDoesNotShareOutputs(t *testing.T) {
+	writer := NewMockActionRunner()
+	writer.SetResult("hello", map[string]any{"res": map[string]any{"tok": "first"}, "status": 0})
+	w := &Workflow{
+		Name: "rerun",
+		Jobs: []Job{{ID: "writer", Name: "Writer", Steps: []*Step{{
+			Name:         "publish",
+			Uses:         "hello",
+			Outputs:      map[string]string{"tok": "res.tok"},
+			actionRunner: writer,
+		}}}},
+	}
+	first := startCapturing(t, w, OutputModeStream)
+	if w.exitStatus != 0 {
+		t.Fatalf("exit status of the first run = %d, want 0:\n%s", w.exitStatus, first)
+	}
+
+	// The second run has only a job that runs unless outputs.tok is set.
+	reader := NewMockActionRunner()
+	w.Jobs = []Job{{ID: "reader", Name: "Reader", Steps: []*Step{{
+		Name:         "read",
+		Uses:         "hello",
+		SkipIf:       "outputs.tok != nil",
+		actionRunner: reader,
+	}}}}
+	second := startCapturing(t, w, OutputModeStream)
+	if len(reader.Calls["hello"]) != 1 {
+		t.Errorf("the reader was skipped, as outputs.tok was set by the first run:\n%s", second)
+	}
+}
+
+// The jobs one run was narrowed to are not all a later run on the same
+// workflow has.
+func TestWorkflow_Start_TwiceSelectsFromEveryJob(t *testing.T) {
+	w := newOrderTestWorkflow(true)
+
+	startCapturingWith(t, w, Config{Output: OutputModeStream, Jobs: []string{"a"}})
+	second := startCapturingWith(t, w, Config{Output: OutputModeStream})
+
+	for _, name := range []string{"Alpha", "Bravo", "Charlie"} {
+		if !strings.Contains(second, name) {
+			t.Errorf("the second run does not report %s:\n%s", name, second)
+		}
+	}
+	if len(w.Jobs) != 3 {
+		t.Errorf("the workflow has %d jobs after the runs, want 3", len(w.Jobs))
+	}
+
+	third := startCapturingWith(t, w, Config{Output: OutputModeStream, Jobs: []string{"b"}})
+	if strings.Contains(third, "Alpha") || !strings.Contains(third, "Bravo") {
+		t.Errorf("a run narrowed to b should report Bravo alone:\n%s", third)
+	}
+}
+
 // stripDurations removes the measured times so that two runs of the same
 // workflow can be compared.
 func stripDurations(report string) string {

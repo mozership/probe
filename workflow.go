@@ -93,6 +93,14 @@ func (w *Workflow) Start(c Config) error {
 	if found := w.problems(); len(found) > 0 {
 		return problemsError(found)
 	}
+	// What a run finds out is its own: a workflow started again starts
+	// with no job failed, no outputs and every job of it, whatever the run
+	// before was narrowed to. The jobs are put back as Start returns,
+	// since what a run reads them from is the workflow.
+	atomic.StoreInt32(&w.failed, 0)
+	w.outputs = NewOutputs()
+	w.selection = nil
+	defer func(jobs []Job) { w.Jobs = jobs }(w.Jobs)
 	// A run narrowed to some jobs is the run of a workflow of those jobs
 	// alone: the others are not run, reported or counted, and the actions
 	// and files only they use are not fetched or read.
@@ -159,11 +167,6 @@ func (w *Workflow) Start(c Config) error {
 
 	startedAt := time.Now()
 	reporter.Start(w.Name, w.Description)
-
-	// Initialize shared outputs
-	if w.outputs == nil {
-		w.outputs = NewOutputs()
-	}
 
 	w.given = c.Vars
 	vars, err := w.evalVars()
