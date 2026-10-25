@@ -2033,7 +2033,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 			},
 		},
 	}
-	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+	NewExecutor(job).appendRepeatStepResults(ctx)
 
 	steps := result.Jobs[job.ID].StepResults
 	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
@@ -2056,7 +2056,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	ctx.repeat.counters = map[int]StepRepeatCounter{
 		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
 	}
-	NewExecutor(&Workflow{}, job).appendRepeatStepResults(ctx)
+	NewExecutor(job).appendRepeatStepResults(ctx)
 	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {
 		t.Errorf("message = %q, want the three runs counted", got)
 	}
