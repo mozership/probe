@@ -447,6 +447,14 @@ func (e *Expr) Eval(input string, env any) (any, error) {
 // executeWithTimeout runs program against env, and returns an error instead
 // of its value when it panics or runs for longer than evaluationTimeout.
 func executeWithTimeout(program *vm.Program, env any) (any, error) {
+	return withTimeout(func() (any, error) { return ex.Run(program, env) })
+}
+
+// withTimeout returns what run returns, or an error when run panics or runs
+// for longer than evaluationTimeout. expr recovers a panic of the program it
+// runs and returns it as an error, so a panic is recovered here only should
+// one get past it; left alone, it would end the process.
+func withTimeout(run func() (any, error)) (any, error) {
 	type result struct {
 		output any
 		err    error
@@ -463,7 +471,7 @@ func executeWithTimeout(program *vm.Program, env any) (any, error) {
 			}
 		}()
 
-		output, err := ex.Run(program, env)
+		output, err := run()
 		resultCh <- result{output, err}
 	}()
 

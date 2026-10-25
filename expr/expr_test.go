@@ -883,23 +883,101 @@ func TestErrorHandling(t *testing.T) {
 	})
 }
 
+// shortenTimeout sets evaluationTimeout to d for the rest of the test. The
+// tests that call it do not run in parallel, as evaluationTimeout is shared.
+func shortenTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	saved := evaluationTimeout
+	evaluationTimeout = d
+	t.Cleanup(func() { evaluationTimeout = saved })
+}
+
+// blockingEnv returns an environment whose function wait returns only once
+// the test is over, so that an expression that calls it outlasts any timeout.
+func blockingEnv(t *testing.T) map[string]any {
+	t.Helper()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	return map[string]any{
+		"wait": func() bool {
+			<-release
+			return true
+		},
+	}
+}
+
 func TestTimeoutProtection(t *testing.T) {
-	t.Run("prevents infinite loops", func(t *testing.T) {
-		expr := &Expr{}
-
-		// This test is tricky because we need an expression that would loop
-		// but expr-lang is designed to be safe. Let's test the timeout mechanism
-		// by using a mock timeout scenario
-		start := time.Now()
-		_, err := expr.Eval("true", map[string]any{})
-		duration := time.Since(start)
-
-		// The expression should complete quickly (not timeout)
-		if err != nil {
-			t.Errorf("simple expression should not error: %v", err)
+	t.Run("an expression that finishes in time has its value", func(t *testing.T) {
+		got, err := (&Expr{}).Eval("1 + 1", map[string]any{})
+		if err != nil || got != 2 {
+			t.Errorf("Eval = %#v, %v, want 2", got, err)
 		}
-		if duration > time.Second {
-			t.Errorf("simple expression took too long: %v", duration)
+	})
+
+	t.Run("an expression that runs too long times out", func(t *testing.T) {
+		shortenTimeout(t, 20*time.Millisecond)
+		got, err := (&Expr{}).Eval("wait()", blockingEnv(t))
+		if err == nil || !strings.Contains(err.Error(), "SECURITY: expression evaluation timed out after 20ms") {
+			t.Fatalf("Eval = %#v, %v, want a timeout", got, err)
+		}
+		if got != nil {
+			t.Errorf("expected no value with the timeout, got %#v", got)
+		}
+	})
+
+	t.Run("a template that runs too long times out", func(t *testing.T) {
+		shortenTimeout(t, 20*time.Millisecond)
+		got, err := (&Expr{}).EvalTemplate("a {{ wait() }} b", blockingEnv(t))
+		var tErr *TemplateError
+		if !errors.As(err, &tErr) || tErr.Template != "{{ wait() }}" {
+			t.Fatalf("EvalTemplate = %q, %v, want a TemplateError naming the template", got, err)
+		}
+		if !strings.Contains(err.Error(), "timed out") {
+			t.Errorf("expected a timeout, got %v", err)
+		}
+		if got != "" {
+			t.Errorf("expected no string with the timeout, got %q", got)
+		}
+	})
+
+	t.Run("a function that panics is an error, which expr recovers", func(t *testing.T) {
+		env := map[string]any{"boom": func() bool { panic("boom") }}
+		got, err := (&Expr{}).Eval("boom()", env)
+		if err == nil || !strings.Contains(err.Error(), "boom") {
+			t.Fatalf("Eval = %#v, %v, want the panic as an error", got, err)
+		}
+	})
+}
+
+func TestWithTimeout(t *testing.T) {
+	t.Run("returns what run returns", func(t *testing.T) {
+		want := errors.New("failed")
+		got, err := withTimeout(func() (any, error) { return 1, want })
+		if got != 1 || !errors.Is(err, want) {
+			t.Errorf("withTimeout = %#v, %v, want 1, %v", got, err, want)
+		}
+	})
+
+	t.Run("a panic is an error", func(t *testing.T) {
+		got, err := withTimeout(func() (any, error) { panic("lost") })
+		if err == nil || err.Error() != "expression execution panicked: lost" {
+			t.Errorf("withTimeout = %#v, %v, want the panic as an error", got, err)
+		}
+		if got != nil {
+			t.Errorf("expected no value with the panic, got %#v", got)
+		}
+	})
+
+	t.Run("a run that outlasts the timeout", func(t *testing.T) {
+		shortenTimeout(t, time.Millisecond)
+		release := make(chan struct{})
+		defer close(release)
+		got, err := withTimeout(func() (any, error) {
+			<-release
+			return 1, nil
+		})
+		if err == nil || err.Error() != "SECURITY: expression evaluation timed out after 1ms" {
+			t.Errorf("withTimeout = %#v, %v, want a timeout", got, err)
 		}
 	})
 }
