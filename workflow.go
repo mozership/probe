@@ -18,7 +18,6 @@ import (
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
 )
 
@@ -481,7 +480,7 @@ func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobSc
 			Printer:      w.printer,
 			Result:       rs,
 			JobScheduler: scheduler,
-			background:   procgroup.NewTracker(),
+			background:   newBackground(),
 			cleanups:     newCleanups(w.runID, w.printer, c.Trace),
 			baseDir:      w.basePath,
 			runID:        w.runID,

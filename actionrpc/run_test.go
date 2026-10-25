@@ -193,7 +193,7 @@ func TestRunExecutableStopsAnActionThatHangs(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("RunExecutable() error = %v, want ctx's", err)
 	}
-	if took := stopped.Sub(at); took > StopGrace+5*time.Second {
+	if took := stopped.Sub(at); took > TermGrace+5*time.Second {
 		t.Errorf("RunExecutable() returned %s after ctx was done", took)
 	}
 
@@ -433,8 +433,8 @@ func TestCleanupExecutableKillsAnActionThatHangs(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("CleanupExecutable() error = %v, want the deadline exceeded", err)
 	}
-	if took := stopped.Sub(at); took >= StopGrace {
-		t.Errorf("CleanupExecutable() returned %s after the deadline, want less than the grace of %s", took, StopGrace)
+	if took := stopped.Sub(at); took >= TermGrace {
+		t.Errorf("CleanupExecutable() returned %s after the deadline, want less than the grace of %s", took, TermGrace)
 	}
 
 	data, err := os.ReadFile(pidfile)
