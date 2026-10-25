@@ -443,7 +443,7 @@ jobs:
 				t.Fatal(err)
 			}
 			vars := map[string]any{"bad": bad}
-			err = p.workflow.checkEmbeddedJobs(builtinNames, vars)
+			err = checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, builtinNames, vars)
 			switch {
 			case tt.wantErr == "" && err != nil:
 				t.Errorf("err = %v, want none", err)
@@ -453,11 +453,11 @@ jobs:
 			// The vars are those it is given, which the run evaluated: with
 			// another file under the same var, that file is the one read.
 			if tt.path == "{{vars.bad}}" {
-				if err := p.workflow.checkEmbeddedJobs(builtinNames, map[string]any{"bad": good}); err != nil {
+				if err := checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, builtinNames, map[string]any{"bad": good}); err != nil {
 					t.Errorf("err = %v, want the file the vars name read", err)
 				}
 			}
-			if err := p.workflow.checkEmbeddedJobs(nil, vars); err != nil {
+			if err := checkEmbeddedJobs(p.workflow.Jobs, p.workflow.named, nil, vars); err != nil {
 				t.Errorf("err = %v, want none without the names of the actions of Probe", err)
 			}
 		})

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/vareval"
 )
 
 // graphBuilder resolves the files that embedded steps run, for Workflow.Graph.
@@ -16,12 +17,20 @@ type graphBuilder struct {
 // vars returns the workflow's evaluated vars, evaluating them on first use.
 func (b *graphBuilder) vars() map[string]any {
 	if b.evaluatedVars == nil {
-		vars, err := b.workflow.evalVars()
+		vars, err := b.workflow.varsWithOwnEnv()
 		if err == nil {
 			b.evaluatedVars = vars
 		}
 	}
 	return b.evaluatedVars
+}
+
+// varsWithOwnEnv evaluates the vars of the workflow with its own
+// environment and no vars given, as vareval.Eval does, for the graph drawn
+// of it before any run. A run evaluates them with what it is given, in
+// workflowRun.evalVars.
+func (w *Workflow) varsWithOwnEnv() (map[string]any, error) {
+	return vareval.Eval(w.Vars, nil, w.Env())
 }
 
 // expandPath expands template variables in the path using evaluated workflow vars
@@ -93,35 +102,4 @@ func (b *graphBuilder) step(st *Step) dag.Step {
 		s.EmbeddedSteps = append(s.EmbeddedSteps, name)
 	}
 	return s
-}
-
-// eachEmbeddedStep calls visit for each step of the job file st embeds, when
-// st is a step of the embedded action, and of the job files those steps
-// embed in turn, with the path of the file as it is written and the position
-// of the step in it. seen holds the files read, each of which is read once,
-// so that job files that embed one another end.
-//
-// Only what can be told before a run is read: a path that is a template is
-// not followed, and nor is a file that cannot be read.
-func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
-	file, ok := embeddedJobFile(st)
-	if !ok || expr.HasTemplate(file) {
-		return
-	}
-	abs, err := filepath.Abs(file)
-	if err != nil || seen[abs] {
-		return
-	}
-	seen[abs] = true
-	job, err := ReadJobFile(file, nil)
-	if err != nil {
-		return
-	}
-	for i, es := range job.Steps {
-		if es == nil {
-			continue
-		}
-		visit(file, i, es)
-		eachEmbeddedStep(es, seen, visit)
-	}
 }
