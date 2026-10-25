@@ -175,11 +175,20 @@ func TestScheduler_Runnable(t *testing.T) {
 	})
 }
 
+// The jobs not started are told in the order they were added, without
+// those running, over or skipped.
 func TestScheduler_Pending(t *testing.T) {
-	s := newScheduler(t, Job{ID: "c"}, Job{ID: "a"}, Job{ID: "b"}, Job{ID: "d"})
+	s := newScheduler(t,
+		Job{ID: "c"},
+		Job{ID: "a"},
+		Job{ID: "b"},
+		Job{ID: "d"},
+		Job{ID: "e", Needs: []string{"d"}},
+	)
 	s.Start("b")
-	s.Finish("d", true)
-	if got, want := s.Pending(), []string{"a", "c"}; !slices.Equal(got, want) {
+	s.Finish("d", false)
+	s.SkipBlocked()
+	if got, want := s.Pending(), []string{"c", "a"}; !slices.Equal(got, want) {
 		t.Errorf("Pending() = %v, want %v", got, want)
 	}
 }

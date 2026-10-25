@@ -126,8 +126,9 @@ func (s *Scheduler) Start(id string) {
 	s.status[id] = running
 }
 
-// Finish marks the job of id as over, and whether it succeeded. A job is
-// finished once, when all of its runs are done.
+// Finish marks the job of id as over, and whether it succeeded. The jobs
+// that need it can start from then on, so it is called once, when nothing
+// more of the job is to be done.
 func (s *Scheduler) Finish(id string, success bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -187,18 +188,18 @@ func (s *Scheduler) succeededLocked(id string) bool {
 	return s.status[id] == finished && s.results[id]
 }
 
-// Pending returns the jobs that have not started, sorted.
+// Pending returns the jobs that have not started, in the order they were
+// added.
 func (s *Scheduler) Pending() []string {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
 	var ids []string
-	for id, st := range s.status {
-		if st == pending {
+	for _, id := range s.order {
+		if s.status[id] == pending {
 			ids = append(ids, id)
 		}
 	}
-	slices.Sort(ids)
 	return ids
 }
 
