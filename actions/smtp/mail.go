@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net/smtp"
 	"os"
 	"time"
 )
@@ -18,7 +17,6 @@ type Mail struct {
 	MailFrom         string
 	RcptTo           []string
 	Data             []byte
-	Auth             smtp.Auth
 	StartTLSDisabled bool
 	// StartTLSRequired fails the session when the server does not offer
 	// STARTTLS, instead of going on in plain text.
@@ -80,14 +78,6 @@ func (m *Mail) Send() error {
 			}
 		case m.StartTLSRequired:
 			return errors.New("starttls error: the server does not offer STARTTLS")
-		}
-	}
-	if m.Auth != nil && c.ext != nil {
-		if _, ok := c.ext["AUTH"]; !ok {
-			return errors.New("smtp: server doesn't support AUTH")
-		}
-		if err = c.Auth(m.Auth); err != nil {
-			return fmt.Errorf("smtp-auth error: %w", err)
 		}
 	}
 

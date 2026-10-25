@@ -30,7 +30,6 @@ type Probe struct {
 }
 
 type Config struct {
-	Log io.Writer
 	// Warn is where what is found as the workflow is loaded, and does not
 	// keep it from running, is written; nil for nowhere.
 	Warn    io.Writer
@@ -80,7 +79,6 @@ func New(path string, v bool) *Probe {
 	return &Probe{
 		FilePath: path,
 		Config: Config{
-			Log:     os.Stdout,
 			Warn:    os.Stderr,
 			Verbose: v,
 			Timing:  false,
@@ -142,13 +140,11 @@ func (p *Probe) loadGraph() error {
 func (p *Probe) Load() error {
 	files, err := p.yamlFiles()
 	if err != nil {
-		return NewFileError("load_yaml_files", "failed to locate YAML files", err).
-			WithContext("workflow_path", p.FilePath)
+		return NewFileError("load_yaml_files", "failed to locate YAML files", err)
 	}
 	y, data, err := p.readYamlFiles(files)
 	if err != nil {
-		return NewFileError("read_yaml_files", "failed to read YAML files", err).
-			WithContext("files", files)
+		return NewFileError("read_yaml_files", "failed to read YAML files", err)
 	}
 	if p.Config.Warn != nil {
 		for _, r := range redefinedJobs(files, data) {
@@ -159,8 +155,7 @@ func (p *Probe) Load() error {
 	v := validator.New()
 	dec := yaml.NewDecoder(bytes.NewReader([]byte(y)), yaml.Validator(v), yaml.AllowDuplicateMapKey())
 	if err = dec.Decode(&p.workflow); err != nil {
-		return NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err).
-			WithContext("workflow_path", p.FilePath)
+		return NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}
 
 	// Set base path for resolving relative paths in embedded actions
@@ -179,8 +174,7 @@ func (p *Probe) Load() error {
 	if p.aliasProblems != nil {
 		*p.aliasProblems = problems
 	} else if len(problems) > 0 {
-		return NewConfigurationError("resolve_alias", "failed to resolve the names of external actions", problems[0]).
-			WithContext("workflow_path", p.FilePath)
+		return NewConfigurationError("resolve_alias", "failed to resolve the names of external actions", problems[0])
 	}
 
 	p.setDefaultsToSteps()

@@ -338,7 +338,7 @@ func TestJob_handleSkip(t *testing.T) {
 	}
 }
 
-func TestJob_RunIndependently_Success(t *testing.T) {
+func TestJob_RunStandalone_Success(t *testing.T) {
 	// Test with empty steps - should succeed but with no actual work
 	job := &Job{
 		Name:  "Empty Test Job",
@@ -347,28 +347,28 @@ func TestJob_RunIndependently_Success(t *testing.T) {
 
 	vars := map[string]any{"test_var": "test_value"}
 	printer := newBufferPrinter()
-	success, outputs, report, errorMsg, duration := job.RunIndependently(vars, printer, "test-job")
+	run := job.RunStandalone(vars, printer, "test-job", "")
 
 	// Empty job should succeed
-	if !success {
-		t.Errorf("Expected empty job to succeed, but it failed with error: %s", errorMsg)
+	if !run.Success {
+		t.Errorf("Expected empty job to succeed, but it failed with error: %v", run.Err)
 	}
 
-	if outputs == nil {
+	if run.Outputs == nil {
 		t.Errorf("Expected outputs to be non-nil")
 	}
 
 	// Report may be empty for jobs with no steps
-	if report == "" && len(job.Steps) > 0 {
+	if run.Report == "" && len(job.Steps) > 0 {
 		t.Errorf("Expected non-empty report for job with steps")
 	}
 
-	if duration <= 0 {
-		t.Errorf("Expected positive duration, got: %v", duration)
+	if run.Duration <= 0 {
+		t.Errorf("Expected positive duration, got: %v", run.Duration)
 	}
 }
 
-func TestJob_RunIndependently_Failure(t *testing.T) {
+func TestJob_RunStandalone_Failure(t *testing.T) {
 	// Test with step that returns error via MockActionRunner
 	mock := NewMockActionRunner()
 	testErr := fmt.Errorf("mock action execution failed")
@@ -388,28 +388,29 @@ func TestJob_RunIndependently_Failure(t *testing.T) {
 
 	vars := map[string]any{"test_var": "test_value"}
 	printer := newBufferPrinter()
-	success, outputs, report, errorMsg, duration := job.RunIndependently(vars, printer, "test-job")
+	run := job.RunStandalone(vars, printer, "test-job", "")
 
-	// Job with nonexistent action should fail
-	if success {
-		t.Errorf("Expected job with invalid action to fail, but it succeeded")
+	// Job with a failing action should fail
+	if run.Success {
+		t.Errorf("Expected job with failing action to fail, but it succeeded")
 	}
 
-	if errorMsg == "" {
-		t.Errorf("Expected error message for failed job")
+	// A step that fails is no error of the job, which ran as written.
+	if run.Err != nil {
+		t.Errorf("Expected no error for a job whose step failed, got: %v", run.Err)
 	}
 
-	if outputs == nil {
+	if run.Outputs == nil {
 		t.Errorf("Expected outputs to be non-nil even for failed job")
 	}
 
-	if duration <= 0 {
-		t.Errorf("Expected positive duration, got: %v", duration)
+	if run.Duration <= 0 {
+		t.Errorf("Expected positive duration, got: %v", run.Duration)
 	}
 
 	// The step's result tells the action's error, as it is.
-	if !strings.Contains(report, "mock action execution failed") {
-		t.Errorf("Expected the report to contain the action's error, but got: %s", report)
+	if !strings.Contains(run.Report, "mock action execution failed") {
+		t.Errorf("Expected the report to contain the action's error, but got: %s", run.Report)
 	}
 
 	// Outside a verbose run the error is not also told as it happens.
@@ -422,7 +423,7 @@ func TestJob_RunIndependently_Failure(t *testing.T) {
 	}
 }
 
-func TestJob_RunIndependently_Parameters(t *testing.T) {
+func TestJob_RunStandalone_Parameters(t *testing.T) {
 	// Test that the function accepts and handles parameters correctly
 	job := &Job{
 		Name:  "Parameter Test Job",
@@ -459,28 +460,28 @@ func TestJob_RunIndependently_Parameters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
 			printer.verbose = tt.verbose
-			success, outputs, report, errorMsg, duration := job.RunIndependently(tt.vars, printer, tt.jobID)
+			run := job.RunStandalone(tt.vars, printer, tt.jobID, "")
 
 			// Empty job should succeed regardless of parameters
-			if !success {
-				t.Errorf("Expected job to succeed with parameters %v, but failed: %s", tt.vars, errorMsg)
+			if !run.Success {
+				t.Errorf("Expected job to succeed with parameters %v, but failed: %v", tt.vars, run.Err)
 			}
 
-			if outputs == nil {
+			if run.Outputs == nil {
 				t.Errorf("Expected non-nil outputs")
 			}
 
-			if duration <= 0 {
+			if run.Duration <= 0 {
 				t.Errorf("Expected positive duration")
 			}
 
 			// Basic type checks - Report may be empty for jobs with no steps
-			if report == "" && len(job.Steps) > 0 {
+			if run.Report == "" && len(job.Steps) > 0 {
 				t.Errorf("Expected non-empty report for job with steps")
 			}
 
-			if errorMsg != "" {
-				t.Errorf("Expected no error message for successful job, got: %s", errorMsg)
+			if run.Err != nil {
+				t.Errorf("Expected no error for successful job, got: %v", run.Err)
 			}
 		})
 	}
@@ -488,7 +489,7 @@ func TestJob_RunIndependently_Parameters(t *testing.T) {
 
 // A job run outside a workflow, as an embedded one is, hides the credentials
 // its steps pass to actions, as a workflow does.
-func TestJob_RunIndependently_HidesCredentials(t *testing.T) {
+func TestJob_RunStandalone_HidesCredentials(t *testing.T) {
 	step := &Step{
 		Name: "login",
 		Uses: "hello",
@@ -502,7 +503,7 @@ func TestJob_RunIndependently_HidesCredentials(t *testing.T) {
 	if printer.Masker() != nil {
 		t.Fatal("the printer already has a masker; the test needs one without")
 	}
-	job.RunIndependently(map[string]any{}, printer, "embedded")
+	job.RunStandalone(map[string]any{}, printer, "embedded", "")
 
 	if got := printer.Masker().String("sent inner-only-pass"); got != "sent <redacted>" {
 		t.Errorf("Masker().String() = %q, want the step's password hidden", got)
@@ -591,63 +592,6 @@ func TestJob_RunStandalone(t *testing.T) {
 			}
 			if run.Success != tt.wantSuccess {
 				t.Errorf("Success = %v, want %v", run.Success, tt.wantSuccess)
-			}
-		})
-	}
-}
-
-// RunIndependently keeps the messages it returned before RunStandalone
-// existed, since code outside probe may compare them.
-func TestJob_RunIndependently_ErrorMessages(t *testing.T) {
-	st := &Step{Name: "ng", Uses: "hello", Test: "false"}
-	st.actionRunner = NewMockActionRunner()
-	_, _, _, msg, _ := (&Job{Name: "j", Steps: []*Step{st}}).RunIndependently(map[string]any{}, newBufferPrinter(), "j")
-	if msg != "execution error in job_start: job execution failed" {
-		t.Errorf("failed step: errorMsg = %q", msg)
-	}
-
-	_, _, _, msg, _ = (&Job{Name: "j", Steps: []*Step{{ID: "Bad ID", Uses: "hello"}}}).RunIndependently(map[string]any{}, newBufferPrinter(), "j")
-	if !strings.HasPrefix(msg, "execution error in job_start: step validation failed") {
-		t.Errorf("invalid step: errorMsg = %q", msg)
-	}
-}
-
-// RunIndependently resolves an external action only when a step runs it, as
-// it did before RunStandalone resolved them up front.
-func TestJob_RunIndependently_ResolvesActionsWhenRun(t *testing.T) {
-	missing := func() *Step { return &Step{Name: "missing", Uses: "./no-such-action", Test: "true"} }
-
-	tests := []struct {
-		name        string
-		job         *Job
-		wantSuccess bool
-		wantMsg     string
-	}{
-		{
-			name:        "a skipped job",
-			job:         &Job{Name: "j", SkipIf: "true", Steps: []*Step{missing()}},
-			wantSuccess: true,
-		},
-		{
-			name: "a skipped step",
-			job: &Job{Name: "j", Steps: []*Step{func() *Step {
-				st := missing()
-				st.SkipIf = "true"
-				return st
-			}()}},
-			wantSuccess: true,
-		},
-		{
-			name:    "a step that runs the action",
-			job:     &Job{Name: "j", Steps: []*Step{missing()}},
-			wantMsg: "execution error in job_start: job execution failed",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			success, _, _, msg, _ := tt.job.RunIndependently(map[string]any{}, newBufferPrinter(), "j")
-			if success != tt.wantSuccess || msg != tt.wantMsg {
-				t.Errorf("RunIndependently() = %v, %q; want %v, %q", success, msg, tt.wantSuccess, tt.wantMsg)
 			}
 		})
 	}

@@ -61,16 +61,6 @@ const (
 	IconRetry    = "⟳"
 )
 
-// LogLevel defines different logging levels
-type LogLevel int
-
-const (
-	LogLevelDebug LogLevel = iota
-	LogLevelInfo
-	LogLevelWarn
-	LogLevelError
-)
-
 // Printer implements PrintWriter for console print
 type Printer struct {
 	verbose   bool
