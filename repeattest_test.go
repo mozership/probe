@@ -88,9 +88,6 @@ func startComparedTo(t *testing.T, workflow *Workflow, runner ActionRunner, base
 	return r
 }
 
-// TestWorkflow_RepeatTestPassesOverFailedRuns passes a job one of whose runs
-// failed its test, as the test over the runs allows: the run is counted, and
-// neither the job nor its step fails for it.
 func TestEvalRepeatTest(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
@@ -142,6 +139,9 @@ func TestEvalRepeatTest(t *testing.T) {
 	}
 }
 
+// TestWorkflow_RepeatTestPassesOverFailedRuns passes a job one of whose runs
+// failed its test, as the test over the runs allows: the run is counted, and
+// neither the job nor its step fails for it.
 func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 	noColor := color.NoColor
 	color.NoColor = true

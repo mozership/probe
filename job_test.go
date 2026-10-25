@@ -2,7 +2,6 @@ package probe
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -855,8 +854,10 @@ func TestFirstRefusal(t *testing.T) {
 		want string
 	}{
 		{
+			// The kind and the message of a refusal, without the refusal
+			// itself, which reading the message would have taken for one.
 			name: "none refused",
-			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: failure(errors.New("refused: looks like one"))}}},
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: &StepFailure{Kind: FailureRefused, Message: "refused: x"}}}},
 		},
 		{
 			name: "the first of those refused",
