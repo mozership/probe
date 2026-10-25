@@ -84,6 +84,8 @@ Use `retry` for a transient failure and `timeout` for a step that may hang:
 - `repeat` with `async: true` starts a run of a job every `interval`, without waiting for the one before, which sends requests at a steady rate. It is for taking samples, not for load tests; see [Performance Testing](/guide/how-tos/performance-testing#load-tests).
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
 jobs:
   - name: Ping at 10 requests a second
     repeat:

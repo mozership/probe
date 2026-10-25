@@ -406,14 +406,14 @@ func TestCmd_check(t *testing.T) {
 		}
 		return path
 	}
-	clean := write("clean.yml", "name: clean\njobs:\n- name: J\n  steps:\n  - uses: hello\n    test: res.code == 0\n")
-	weak := write("weak.yml", "name: weak\njobs:\n- name: J\n  steps:\n  - uses: hello\n")
+	clean := write("clean.yml", "name: clean\njobs:\n- name: J\n  steps:\n  - uses: hello\n    test: res.status == 0\n")
+	weak := write("weak.yml", "name: weak\njobs:\n- name: J\n  steps:\n  - uses: shell\n    with:\n      cmd: echo\n")
 	broken := write("broken.yml", "name: broken\njobs:\n- name: J\n  steps:\n  - uses: htp\n    test: res.code == 0\n")
 	// A workflow split into three files, which only read together have
 	// what a workflow needs.
 	head := write("head.yml", "name: split\n")
 	vars := write("vars.yml", "vars:\n  who: x\n")
-	jobs := write("jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: hello\n    with:\n      name: \"{{vars.who}}\"\n    test: res.code == 0\n")
+	jobs := write("jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: hello\n    with:\n      name: \"{{vars.who}}\"\n    test: res.status == 0\n")
 	notes := write("notes.txt", "name: notes\n")
 
 	tests := []struct {

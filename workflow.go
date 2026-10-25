@@ -144,6 +144,12 @@ func (w *Workflow) Start(c Config) error {
 
 	// Install the masker before anything is printed, the header included.
 	w.printer.SetMasker(mask.New(w.Secrets, w.Env()))
+	// A secret too short to mask inside other text is shown there as it is.
+	// Say so once, by name, so that the user can lengthen it rather than
+	// trust it to be hidden.
+	for _, name := range w.printer.Masker().TooShort() {
+		w.printer.LogWarn("the secret %s is shorter than %d characters, so it is masked only where it is a whole value; use a value of at least %d characters", name, mask.MinLength, mask.MinLength)
+	}
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.

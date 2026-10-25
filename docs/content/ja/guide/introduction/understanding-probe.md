@@ -40,7 +40,7 @@ description: What this workflow does
 - 他のジョブと出力を共有
 - 独自の設定とコンテキストを持つ
 
-```yaml
+```yaml fragment
 jobs:
 - id: job-name
   name: Human-readable job name
@@ -62,7 +62,7 @@ jobs:
 ```yaml
 steps:
   - name: Step Name
-    action: http          # The action to execute
+    uses: http            # The action to execute
     with:                 # Parameters for the action
       url: https://api.example.com
       method: GET
@@ -93,13 +93,31 @@ steps:
 jobs:
 - id: frontend-check
   name: frontend-check
-  # ...             # at the same time
+  steps:            # at the same time
+    - name: Top page
+      uses: http
+      with:
+        method: GET
+        url: https://www.example.com/
+      test: res.code == 200
 - id: backend-check
   name: backend-check
-  # ...
+  steps:
+    - name: API health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health
+      test: res.code == 200
 - id: database-check
   name: database-check
-  # ...
+  steps:
+    - name: Database health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health/db
+      test: res.code == 200
 ```
 
 ### 依存関係による順次実行
@@ -111,19 +129,28 @@ jobs:
 - id: setup
   name: Setup Environment
   steps:
-    # Setup steps...
+    - name: Prepare
+      uses: hello
+      echo: Preparing the test data
 
 - id: test
   name: Run Tests
   needs: [setup]     # Wait for 'setup' to complete
   steps:
-    # Test steps...
+    - name: API health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health
+      test: res.code == 200
 
 - id: cleanup
   name: Clean Up
   needs: [test]      # Wait for 'test' to complete
   steps:
-    # Cleanup steps...
+    - name: Clean up
+      uses: hello
+      echo: Removing the test data
 ```
 
 ### データフロー
@@ -141,6 +168,7 @@ jobs:
       with:
         method: GET
         url: https://api.example.com/user/123
+      test: res.code == 200
       outputs:
         user_id: res.body.id
         user_name: res.body.name
@@ -164,6 +192,7 @@ Probeは動的な値とテストのために式を使用します。式は`{{}}`
 
 ```yaml
 - name: Greet User
+  uses: hello
   echo: "Hello {{outputs['previous-step'].username}}!"
 ```
 
@@ -288,16 +317,31 @@ Probeはエラーを処理するためのいくつかのメカニズムを提供
 対象が同じステップは1つのジョブにまとめます。ジョブは順に実行され、まとめて失敗する単位だからです。
 
 ```yaml
+vars:
+  db_dsn: "{{DB_DSN}}"
+
 jobs:
 - id: infrastructure-check
   name: Infrastructure Health Check
   steps:
     - name: Check Database
-      # ...
+      uses: db
+      with:
+        dsn: "{{vars.db_dsn}}"
+        query: SELECT 1
+      test: res.code == 0
     - name: Check Cache
-      # ...
+      uses: http
+      with:
+        method: GET
+        url: https://cache.example.com/health
+      test: res.code == 200
     - name: Check Load Balancer
-      # ...
+      uses: http
+      with:
+        method: GET
+        url: https://lb.example.com/health
+      test: res.code == 200
 ```
 
 ### 3. データ共有に出力を使用
@@ -313,12 +357,13 @@ jobs:
     url: https://config-service.example.com
   outputs:
     database_url: res.body.database_url
-    
+
 - name: Test Database Connection
   uses: http
   with:
     method: GET
     url: "{{outputs.config.database_url}}/health"
+  test: res.code == 200
 ```
 
 ### 4. 意味のあるテスト条件を追加

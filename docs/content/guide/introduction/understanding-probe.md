@@ -40,7 +40,7 @@ A **job** is a collection of steps that execute together. Jobs can:
 - Share outputs with other jobs
 - Have their own configuration and context
 
-```yaml
+```yaml fragment
 jobs:
 - id: job-name
   name: Human-readable job name
@@ -62,7 +62,7 @@ A **step** is the smallest unit of execution. Each step can:
 ```yaml
 steps:
   - name: Step Name
-    action: http          # The action to execute
+    uses: http            # The action to execute
     with:                 # Parameters for the action
       url: https://api.example.com
       method: GET
@@ -94,13 +94,31 @@ By default, jobs run in parallel for maximum efficiency:
 jobs:
 - id: frontend-check
   name: frontend-check
-  # ...             # at the same time
+  steps:            # at the same time
+    - name: Top page
+      uses: http
+      with:
+        method: GET
+        url: https://www.example.com/
+      test: res.code == 200
 - id: backend-check
   name: backend-check
-  # ...
+  steps:
+    - name: API health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health
+      test: res.code == 200
 - id: database-check
   name: database-check
-  # ...
+  steps:
+    - name: Database health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health/db
+      test: res.code == 200
 ```
 
 ### Sequential Execution with Dependencies
@@ -112,19 +130,28 @@ jobs:
 - id: setup
   name: Setup Environment
   steps:
-    # Setup steps...
+    - name: Prepare
+      uses: hello
+      echo: Preparing the test data
 
 - id: test
   name: Run Tests
   needs: [setup]     # Wait for 'setup' to complete
   steps:
-    # Test steps...
+    - name: API health
+      uses: http
+      with:
+        method: GET
+        url: https://api.example.com/health
+      test: res.code == 200
 
 - id: cleanup
   name: Clean Up
   needs: [test]      # Wait for 'test' to complete
   steps:
-    # Cleanup steps...
+    - name: Clean up
+      uses: hello
+      echo: Removing the test data
 ```
 
 ### Data Flow
@@ -142,6 +169,7 @@ jobs:
       with:
         method: GET
         url: https://api.example.com/user/123
+      test: res.code == 200
       outputs:
         user_id: res.body.id
         user_name: res.body.name
@@ -165,6 +193,7 @@ Use template expressions to insert dynamic values:
 
 ```yaml
 - name: Greet User
+  uses: hello
   echo: "Hello {{outputs['previous-step'].username}}!"
 ```
 
@@ -289,16 +318,31 @@ Names appear in the report, so they are what a failure is read by.
 Steps that share a subject belong in one job, because that is the unit that runs in order and fails together.
 
 ```yaml
+vars:
+  db_dsn: "{{DB_DSN}}"
+
 jobs:
 - id: infrastructure-check
   name: Infrastructure Health Check
   steps:
     - name: Check Database
-      # ...
+      uses: db
+      with:
+        dsn: "{{vars.db_dsn}}"
+        query: SELECT 1
+      test: res.code == 0
     - name: Check Cache
-      # ...
+      uses: http
+      with:
+        method: GET
+        url: https://cache.example.com/health
+      test: res.code == 200
     - name: Check Load Balancer
-      # ...
+      uses: http
+      with:
+        method: GET
+        url: https://lb.example.com/health
+      test: res.code == 200
 ```
 
 ### 3. Use Outputs for Data Sharing
@@ -314,12 +358,13 @@ A value needed later is published as an output rather than fetched again.
     url: https://config-service.example.com
   outputs:
     database_url: res.body.database_url
-    
+
 - name: Test Database Connection
   uses: http
   with:
     method: GET
     url: "{{outputs.config.database_url}}/health"
+  test: res.code == 200
 ```
 
 ### 4. Add Meaningful Test Conditions

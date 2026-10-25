@@ -44,3 +44,15 @@ func Serve() {
 func Keeps() []string {
 	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
 }
+
+// ReqFields returns the fields of the req the hello action returns besides
+// the keys of with, which it returns as req: none.
+func ReqFields() []string {
+	return []string{}
+}
+
+// ResFields returns the fields of the res the hello action returns besides
+// the keys of with, which it returns in res too: status and dump.
+func ResFields() []string {
+	return []string{"dump", "status"}
+}

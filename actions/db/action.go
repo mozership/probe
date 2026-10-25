@@ -80,3 +80,22 @@ func Keeps() []string {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// ReqFields returns the fields of the req the db action returns, those of
+// Req, and ResFields those of its res, those of Res, for probe check to
+// report a step that reads another.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the db action returns; see
+// ReqFields.
+func ResFields() []string {
+	return mapping.FieldTags(Res{})
+}
+
+// Required returns the keys of with the db action cannot run without: dsn
+// and query.
+func Required() [][]string {
+	return [][]string{{"dsn"}, {"query"}}
+}

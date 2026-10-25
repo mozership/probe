@@ -410,6 +410,122 @@ jobs:
 `,
 		},
 		{
+			name: "output names published twice or taken by a step id",
+			workflow: `name: names
+jobs:
+- name: Users
+  steps:
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /login
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      user: res.body.user
+  - name: Refresh
+    id: refresh
+    uses: http
+    with:
+      get: /refresh
+    test: res.code == 200 && outputs.login.token != "" && outputs.user != nil
+    outputs:
+      token: res.body.token
+      user: res.body.user
+  - name: Without an id
+    uses: http
+    with:
+      get: /again
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: Admin
+  steps:
+  - name: Admin login
+    id: admin
+    uses: http
+    with:
+      get: /admin
+    test: res.code == 200
+    outputs:
+      login: res.body.user
+  - name: Id only
+    id: session
+    uses: http
+    with:
+      get: /session
+    test: res.code == 200
+  - name: Named as an id that publishes nothing
+    uses: hello
+    outputs:
+      session: res.status
+`,
+			want: []want{
+				{SeverityWarning, 22, `outputs: user is also published by job 0 "Users", step 0 "Login", and outputs.user, which holds the value of whichever publishes it first, is read; read outputs.refresh.user for this one`},
+				{SeverityWarning, 29, `outputs: token is also published by job 0 "Users", step 0 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 39, `outputs: login is the id of job 0 "Users", step 0 "Login" too, so outputs.login is that step's outputs or this value, whichever is published first; give this output another name`},
+			},
+		},
+		{
+			name: "a step without an id whose name another step may take first",
+			workflow: `name: first
+jobs:
+- name: A
+  needs: [b]
+  steps:
+  - name: Later
+    uses: http
+    with:
+      get: /a
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+- name: B
+  id: b
+  steps:
+  - name: Without an id first
+    uses: http
+    with:
+      get: /b0
+    test: res.code == 200
+    outputs:
+      session: res.body.session
+  - name: Login
+    id: login
+    uses: http
+    with:
+      get: /b
+    test: res.code == 200
+    outputs:
+      token: res.body.token
+      session: res.body.session
+- name: C
+  steps:
+  - name: Parallel without an id
+    uses: http
+    with:
+      get: /c
+    test: res.code == 200
+    outputs:
+      code: res.code
+- name: D
+  steps:
+  - name: Parallel too
+    id: d
+    uses: http
+    with:
+      get: /d
+    test: res.code == 200
+    outputs:
+      code: res.code
+`,
+			want: []want{
+				{SeverityWarning, 12, `outputs: token is also published by job 1 "B", step 1 "Login", so outputs.token holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+				{SeverityWarning, 40, `outputs: code is also published by job 3 "D", step 0 "Parallel too", so outputs.code holds the value of whichever publishes it first, and this step has no id to read its own through; give it one`},
+			},
+		},
+		{
 			name: "steps nothing checks and tests that read nothing",
 			workflow: `name: tests
 jobs:
@@ -448,6 +564,9 @@ jobs:
   - name: Function only
     uses: hello
     test: len("abc") == 3
+  - name: Only an echo
+    uses: hello
+    echo: done
 `,
 			want: []want{
 				{SeverityWarning, 5, "nothing checks this step: it has no test"},
@@ -613,7 +732,7 @@ func TestCheck_WithoutActions(t *testing.T) {
 func TestCheck_FilesReadTogether(t *testing.T) {
 	dir := t.TempDir()
 	base := writeWorkflow(t, dir, "base.yml", "name: merged\nvars:\n  url: http://localhost") // no newline at the end
-	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: hello\n    tset: res.code == 0\n")
+	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: shell\n    tset: res.code == 0\n")
 
 	findings, err := Check(base+","+jobs, checkActions)
 	if err != nil {
@@ -1134,4 +1253,202 @@ jobs:
 		t.Fatal(err)
 	}
 	checkFindings(t, findings, nil)
+}
+
+// The fields of the built-in actions the checks of res and req are tested
+// against, as the actions declare them.
+var (
+	reqFields = map[string][]string{"http": {"url", "method", "headers", "body"}, "shell": {"cmd"}, "hello": {}}
+	resFields = map[string][]string{"http": {"status", "code", "headers", "body"}, "shell": {"code", "stdout", "stderr"}, "hello": {"dump", "status"}}
+)
+
+// TestCheck_ResultFields checks what the test, echo and outputs of a step
+// read under res and req against the fields its action returns, with those
+// the runner adds; and that its other fields, evaluated before it runs, do
+// not read them.
+func TestCheck_ResultFields(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: fields
+vars:
+  key: name
+jobs:
+- name: J
+  defaults:
+    hello:
+      shared: yes
+  steps:
+  - name: Request
+    uses: http
+    with:
+      url: http://localhost
+      method: GET
+    test: res.cod == 200 && res?.status_code == 200 && res["stdout"] != "" && res.rawbody != "" && res.body.anything == 1
+    echo: "{{ req.methd }} {{ res.json }}"
+    outputs:
+      size: res.body_size
+      items: filter(res.body.items, .size > 0)
+      first: all(res.headers, .x != res.header)
+  - name: Command
+    uses: shell
+    with:
+      cmd: echo
+    test: res.code == 0 && res.json.ok && res.body == "" && res.stdot != "" && res.status == 0
+  - name: Greet
+    uses: hello
+    with:
+      name: probe
+    test: res.name == "probe" && res.shared && res.nam != "" && req.status == 0 && res.status == 0
+  - name: Greet by a key known only as it runs
+    uses: hello
+    with:
+      "{{ vars.key }}": probe
+    test: res.anything == "probe"
+  - name: Too early
+    uses: shell
+    with:
+      cmd: "echo {{ res.code }}"
+    skipif: res.code != 0 || req.cmd == ""
+    wait: "{{ res.code }}s"
+    test: res.code == 0
+  - name: Let
+    uses: shell
+    with:
+      cmd: echo
+    test: let r = res; r.anything == 0 && res.code == 0
+`)
+	opts := checkActions
+	opts.ReqFields, opts.ResFields, opts.WithFields = reqFields, resFields, []string{"hello"}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 15, `test: res.cod is not a field the http action returns; did you mean "code"?`},
+		{SeverityError, 15, `test: res.status_code is not a field the http action returns; its res has body, code, headers, rawbody and status`},
+		{SeverityError, 15, `test: res.stdout is not a field the http action returns`},
+		{SeverityError, 16, `echo: req.methd is not a field the http action returns; did you mean "method"?`},
+		{SeverityError, 16, `echo: res.json is not a field the http action returns`},
+		{SeverityError, 18, `outputs.size: res.body_size is not a field the http action returns`},
+		{SeverityError, 20, `outputs.first: res.header is not a field the http action returns; did you mean "headers"?`},
+		{SeverityError, 25, `test: res.body is not a field the shell action returns; its res has code, json, stderr and stdout`},
+		{SeverityError, 25, `test: res.stdot is not a field the shell action returns; did you mean "stdout"?; its res has`},
+		{SeverityError, 25, `test: res.status is not a field the shell action returns; its res has code, json, stderr and stdout; the step's own status is read as status`},
+		{SeverityError, 30, `test: req.status is not a field the hello action returns; its req has name and shared`},
+		{SeverityError, 30, `test: res.nam is not a field the hello action returns; did you mean "name"?`},
+		{SeverityError, 39, `with: res is empty here, as the step has not run yet when its with is evaluated`},
+		{SeverityError, 40, `skipif: res is empty here`},
+		{SeverityError, 40, `skipif: req is empty here`},
+		{SeverityError, 41, `wait: res is empty here`},
+	})
+
+	// Without the fields of the actions, what a step reads is not checked,
+	// but what is read before it runs is.
+	findings, err = Check(path, checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 4 {
+		t.Errorf("findings = %v, want those of res and req read before the step runs alone", findings)
+	}
+}
+
+// TestCheck_Required reports a step whose with, the defaults merged into
+// it, lacks a key its action cannot run without.
+func TestCheck_Required(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: required
+vars:
+  key: query
+defaults:
+  db:
+    dsn: file:test.db
+jobs:
+- name: J
+  defaults:
+    http:
+      url: http://localhost
+  steps:
+  - name: No method
+    uses: http
+    with:
+      headers: {}
+    test: res.code == 200
+  - name: A shorthand
+    uses: http
+    with:
+      get: /users
+    test: res.code == 200
+  - name: The dsn of the defaults
+    uses: db
+    with:
+      query: SELECT 1
+    test: res.code == 0
+  - name: No query
+    uses: db
+    test: res.code == 0
+  - name: A key known only as it runs
+    uses: db
+    with:
+      "{{ vars.key }}": SELECT 1
+    test: res.code == 0
+- name: Without defaults
+  steps:
+  - name: Nothing
+    uses: http
+    test: res.code == 200
+  - name: No login
+    uses: db
+    test: res.code == 0
+`)
+	opts := checkActions
+	opts.Actions = append(opts.Actions, "db")
+	opts.Required = map[string][][]string{
+		"http": {{"url", "get", "post"}, {"method", "get", "post"}},
+		"db":   {{"query"}, {"password", "key_file"}},
+	}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 15, "with: the http action cannot run without method, or a key that stands for it, such as get, which neither the step nor its defaults give"},
+		{SeverityError, 25, "with: the db action cannot run without password or key_file, which"},
+		{SeverityError, 28, "with: the db action cannot run without query and password or key_file, which"},
+		{SeverityError, 38, "with: the http action cannot run without url and method, or a key that stands for them, such as get, which"},
+		{SeverityError, 41, "with: the db action cannot run without query and password or key_file, which"},
+	})
+}
+
+// TestCheck_ExternalRes checks what a step reads of the res of an external
+// action against the fields its action.yml declares, and warns of another,
+// as Probe does not know the action returns only those.
+func TestCheck_ExternalRes(t *testing.T) {
+	dir := t.TempDir()
+	for name, manifest := range map[string]string{
+		"declared": "runs:\n  using: binary\n  path: x\nres: [code, stdout]\n",
+		"silent":   "runs:\n  using: binary\n  path: x\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeWorkflow(t, filepath.Join(dir, name), "action.yml", manifest)
+	}
+	path := writeWorkflow(t, dir, "workflow.yml", `name: external
+jobs:
+- name: J
+  steps:
+  - uses: ./declared
+    test: res.code == 0 && res.json.ok && res.cod == 0 && req.anything == 1
+  - uses: ./silent
+    test: res.anything == 0
+`)
+	fields := map[string][]string{"http": resFields["http"]}
+	findings, err := Check(path, CheckOptions{Actions: []string{"http"}, ResFields: fields, Manifest: actionref.ReadManifest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityWarning, 6, `test: res.cod is not a field the ./declared action returns; did you mean "code"?`},
+	})
+	if len(fields) != 1 {
+		t.Errorf("Check changed the Fields it was given: %v", fields)
+	}
 }

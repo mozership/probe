@@ -43,3 +43,22 @@ func Serve() {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// ReqFields returns the fields of the req the imap action returns, those of
+// Req, and ResFields those of its res, those of Res, for probe check to
+// report a step that reads another.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the imap action returns; see
+// ReqFields.
+func ResFields() []string {
+	return mapping.FieldTags(Res{})
+}
+
+// Required returns the keys of with the imap action cannot run without:
+// host, username and password. port is 993 when it is not given.
+func Required() [][]string {
+	return [][]string{{"host"}, {"username"}, {"password"}}
+}

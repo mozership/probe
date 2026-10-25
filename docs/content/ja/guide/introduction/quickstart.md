@@ -26,50 +26,28 @@ name: My First Website Check
 description: Check if my website is responding correctly
 
 jobs:
-- name: Website Health Check
-  defaults:
-    http:
-      url: https://httpbin.org
-
+- id: health-check
+  name: Website Health Check
+  # 失敗したステップより後のステップをスキップする
+  fail_fast: true
   steps:
-  - name: Check Homepage
-    id: homepage
-    uses: http
-    with:
-      get: /status/200
-    test: res.code == 200
-    outputs:
-      code: res.code
+    - name: Check Homepage
+      uses: http
+      with:
+        url: https://httpbin.org/status/200
+        method: GET
+      test: res.code == 200
 
-  - name: Check API Endpoint
-    id: api
-    uses: http
-    with:
-      get: /json
-    test: |
-      res.code == 200 &&
-      match_json(res.body, vars.expected)
-    vars:
-      expected:
-        slideshow:
-          title: Sample Slide Show
-          author: Yours Truly
-          date: date of publication
-          slides:
-          - title: Wake up to WonderWidgets!
-            type: all
-          - title: Overview
-            type: all
-            items:
-            - "Why <em>WonderWidgets</em> are great"
-            - "Who <em>buys</em> WonderWidgets"
-    outputs:
-      code: res.code
+    - name: Check API Endpoint
+      uses: http
+      with:
+        url: https://httpbin.org/json
+        method: GET
+      test: res.code == 200 && res.body.slideshow != nil
 
-  - name: All Success Message
-    skipif: outputs.homepage.code != 200 || outputs.api.code != 200
-    uses: hello
-    echo: "🎉 All checks passed! Website is healthy."
+    - name: Success Message
+      uses: hello
+      echo: "✅ All checks passed! Website is healthy."
 ```
 
 ### 2. ワークフローの実行
@@ -86,13 +64,13 @@ $ probe my-first-workflow.yml
 My First Website Check
 Check if my website is responding correctly
 
-⏺ Website Health Check (Completed in 5.33s)
-  ⎿  0. ✔︎  Check Homepage
-     1. ✔︎  Check API Endpoint
-     2. ▲ All Success Message
-           🎉 All checks passed! Website is healthy.
+⏺ Website Health Check (Completed in 1.73s)
+  ⎿ 0. ✓  Check Homepage
+     1. ✓  Check API Endpoint
+     2. ✓  Success Message
+           ✅ All checks passed! Website is healthy.
 
-Total workflow time: 5.33s ✔︎ All jobs succeeded
+Total workflow time: 1.73s ✓ All jobs succeeded
 ```
 
 ### 3. 実行内容の理解
@@ -100,13 +78,11 @@ Total workflow time: 5.33s ✔︎ All jobs succeeded
 このワークフローが何をしているかを詳しく見てみましょう：
 
 1. **ワークフローメタデータ**: `name`と`description`でワークフローの内容を説明
-2. **ジョブ定義**: `name`と`defaults`でジョブ名とジョブ全体で適応するデフォルト設定をアクションごとに設定する
-3. **HTTPアクション**: `uses`の指定により2つのステップでHTTPリクエストを行い、エンドポイントをテスト
+2. **ジョブ定義**: `health-check`ジョブに実行するステップをまとめる
+3. **HTTPアクション**: 2つのステップでHTTPリクエストを行い、エンドポイントをテスト
 4. **テストアサーション**: 各HTTPステップにレスポンスを検証する`test`を含む
-5. **式評価**: `match_json`関数を使って変数`vars`で定義したjsonの一致検証
-6. **変数代入**: ジョブ間で使用できる変数`outputs`にアクション結果を代入
-7. **ステップスキップ**: `skipif`によって条件にマッチするとステップの実行をスキップする
-8. **エコー出力**: `echo`によって成功メッセージを表示
+5. **フェイルファスト**: `fail_fast: true`は失敗したステップより後のステップをスキップするので、成功メッセージは両方のチェックが通ったときだけ表示される
+6. **エコー出力**: `hello`アクションは何もせずに成功し、その`echo`でメッセージを表示
 
 ## 詳細出力の追加
 
@@ -117,6 +93,65 @@ $ probe my-first-workflow.yml --verbose
 ```
 
 これにより、各HTTPリクエストとレスポンスの詳細情報が表示されます。
+
+## よくある次の一歩
+
+最初のワークフローを育てるときの変更は、ほとんどが2つです。複数の環境に対して実行することと、チェックが失敗したときの動きを決めることです。
+
+### 複数の環境をチェックする
+
+ワークフローを変更して、異なる環境をチェックします：
+
+```yaml
+name: Multi-Environment Health Check
+description: Check health across multiple environments
+
+jobs:
+- id: production-check
+  name: Production Health Check
+  steps:
+    - name: Check Production API
+      uses: http
+      with:
+        url: https://api.myapp.com/health
+        method: GET
+      test: res.code == 200
+
+- id: staging-check
+  name: Staging Health Check
+  steps:
+    - name: Check Staging API
+      uses: http
+      with:
+        url: https://staging-api.myapp.com/health
+        method: GET
+      test: res.code == 200
+```
+
+### エラー処理を追加する
+
+プライマリサービスが失敗したときだけフォールバックをチェックします。実行は失敗したままなので失敗は隠れませんが、フォールバックが動いているかもわかります：
+
+```yaml
+- name: Check Service
+  id: primary
+  uses: http
+  with:
+    url: https://api.example.com/status
+    method: GET
+  test: res.code == 200
+  outputs:
+    code: res.code
+
+- name: Fallback Check
+  # プライマリサービスが200を返さなかったときだけ実行する
+  skipif: outputs.primary?.code == 200
+  uses: http
+  with:
+    url: https://backup-api.example.com/status
+    method: GET
+  test: res.code == 200
+```
 
 ## 次のステップ
 

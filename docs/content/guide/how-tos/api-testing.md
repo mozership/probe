@@ -61,12 +61,12 @@ jobs:
       uses: hello
       echo: |
         📊 API Test Results:
-          
+
         Posts Retrieved: {{outputs.post_count}}
         First Post ID: {{outputs.first_post_id}}
         Post Title: "{{outputs.post_title}}"
         Response Time: {{outputs.response_time}}ms
-          
+
         ✅ Basic API tests completed successfully
 ```
 
@@ -105,7 +105,7 @@ jobs:
         res.code == 201 &&
         res.body.id != nil &&
         res.body.title != nil &&
-        res.body.userId == {{vars.test_user_id}}
+        res.body.userId == int(vars.test_user_id)
       outputs:
         created_post_id: res.body.id
         created_title: res.body.title
@@ -120,7 +120,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.id == outputs.create.created_post_id &&
-        res.body.title == "{{outputs.create.created_title}}"
+        res.body.title == outputs.create.created_title
       outputs:
         read_success: true
 
@@ -189,20 +189,20 @@ jobs:
       uses: hello
       echo: |
         🔄 CRUD Operations Test Summary:
-          
+
         ✅ CREATE: Post ID {{outputs.create.created_post_id}} created
            Title: "{{outputs.create.created_title}}"
-          
+
         ✅ READ: Successfully retrieved created post
-          
+
         ✅ UPDATE: Title updated to "{{outputs.update.updated_title}}"
-          
+
         ✅ PATCH: Title patched to "{{outputs.patched_title}}"
-          
+
         ✅ DELETE: Post deletion {{outputs.deleted ? "successful" : "failed"}}
-          
+
         ✅ VERIFY: Deletion {{outputs.deletion_verified ? "verified (404)" : "not verified"}}
-          
+
         All CRUD operations completed successfully!
 ```
 
@@ -225,6 +225,7 @@ vars:
   test_password: "{{TEST_PASSWORD ?? 'test_password_123'}}"
   client_id: "{{CLIENT_ID}}"
   client_secret: "{{CLIENT_SECRET}}"
+  expired_token: "{{EXPIRED_TOKEN ?? ''}}"
 
 jobs:
 - id: authentication-flow
@@ -271,7 +272,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.id != nil &&
-        res.body.email == "{{vars.test_username}}"
+        res.body.email == vars.test_username
       outputs:
         user_id: res.body.id
         user_email: res.body.email
@@ -310,7 +311,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.access_token != nil &&
-        res.body.access_token != "{{outputs.login.access_token}}"
+        res.body.access_token != outputs.login.access_token
       outputs:
         new_access_token: res.body.access_token
 
@@ -354,6 +355,7 @@ jobs:
     # Test with expired token (if available)
     - name: Test Expired Token
       uses: http
+      skipif: vars.expired_token == ""
       with:
         method: GET
         url: "{{vars.api_base_url}}/user/profile"
@@ -371,24 +373,24 @@ jobs:
       uses: hello
       echo: |
         🔐 Authentication & Authorization Test Results:
-          
+
         AUTHENTICATION FLOW:
-        ✅ Login: {{outputs['authentication-flow'].access_token ? "Token obtained" : "Failed"}}
-        ✅ Profile Access: {{outputs['authentication-flow'].user_email ? "Success" : "Failed"}}
-        ✅ Protected Resource: {{outputs['authentication-flow'].protected_data_accessible ? "Accessible" : "Failed"}}
-        ✅ Token Refresh: {{outputs['authentication-flow'].new_access_token ? "Success" : "Failed"}}
-        ✅ New Token Valid: {{outputs['authentication-flow'].new_token_valid ? "Yes" : "No"}}
-          
+        ✅ Login: {{outputs.login.access_token != nil ? "Token obtained" : "Failed"}}
+        ✅ Profile Access: {{outputs.profile.user_email != nil ? "Success" : "Failed"}}
+        ✅ Protected Resource: {{outputs.protected_data_accessible ? "Accessible" : "Failed"}}
+        ✅ Token Refresh: {{outputs.refresh.new_access_token != nil ? "Success" : "Failed"}}
+        ✅ New Token Valid: {{outputs.new_token_valid ? "Yes" : "No"}}
+
         SECURITY VALIDATION:
-        ✅ No Auth Rejected: {{outputs['unauthorized-access-test'].no_auth_rejected ? "Yes (401)" : "Security Issue!"}}
-        ✅ Invalid Token Rejected: {{outputs['unauthorized-access-test'].invalid_token_rejected ? "Yes (401)" : "Security Issue!"}}
-        {{vars.expired_token ? "✅ Expired Token Rejected: " + (outputs['unauthorized-access-test'].expired_token_rejected ? "Yes (401)" : "Security Issue!") : ""}}
-          
+        ✅ No Auth Rejected: {{outputs.no_auth_rejected ? "Yes (401)" : "Security Issue!"}}
+        ✅ Invalid Token Rejected: {{outputs.invalid_token_rejected ? "Yes (401)" : "Security Issue!"}}
+        {{vars.expired_token != "" ? "✅ Expired Token Rejected: " + (outputs.expired_token_rejected ? "Yes (401)" : "Security Issue!") : ""}}
+
         USER INFORMATION:
-        User ID: {{outputs['authentication-flow'].user_id}}
-        Email: {{outputs['authentication-flow'].user_email}}
-        Name: {{outputs['authentication-flow'].user_name}}
-        Token Expires In: {{outputs['authentication-flow'].expires_in}} seconds
+        User ID: {{outputs.profile.user_id}}
+        Email: {{outputs.profile.user_email}}
+        Name: {{outputs.profile.user_name}}
+        Token Expires In: {{outputs.login.expires_in}} seconds
 ```
 
 ### API Key Authentication
@@ -446,7 +448,7 @@ jobs:
           X-API-Key: "{{vars.api_key}}"
       test: |
         res.code == 200 &&
-        res.body.tier == "{{vars.rate_limit_tier}}" &&
+        res.body.tier == vars.rate_limit_tier &&
         res.body.requests_remaining > 0
       outputs:
         requests_remaining: res.body.requests_remaining
@@ -469,11 +471,11 @@ jobs:
       uses: hello
       echo: |
         🔑 API Key Authentication Results:
-          
+
         Header Authentication: {{outputs.header_auth_success ? "✅ Success" : "❌ Failed"}}
         Query Authentication: {{outputs.query_auth_success ? "✅ Success" : "❌ Failed"}}
         Invalid Key Rejected: {{outputs.invalid_key_rejected ? "✅ Yes" : "❌ Security Issue"}}
-          
+
         Rate Limiting:
         Tier: {{vars.rate_limit_tier}}
         Requests Remaining: {{outputs.requests_remaining}}/{{outputs.requests_per_hour}}
@@ -495,6 +497,7 @@ description: Validate API responses against expected schemas
 
 vars:
   API_BASE_URL: https://api.yourservice.com
+  api_token: "{{API_TOKEN}}"
 
 jobs:
 - id: response-validation
@@ -505,7 +508,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/users"
+        url: "{{vars.API_BASE_URL}}/users"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
@@ -513,23 +516,23 @@ jobs:
         res.body != nil &&
         res.body.data != nil &&
         len(res.body.data) > 0 &&
-          
-        # Validate response structure
+
+        // Validate response structure
         res.body.meta != nil &&
         res.body.meta.total != nil &&
         res.body.meta.page != nil &&
         res.body.meta.per_page != nil &&
-          
-        # Validate first user object
+
+        // Validate first user object
         res.body.data[0].id != nil &&
         res.body.data[0].email != nil &&
         res.body.data[0].name != nil &&
         res.body.data[0].created_at != nil &&
-          
-        # Validate data types
-        typeof(res.body.data[0].id) == "number" &&
-        typeof(res.body.data[0].email) == "string" &&
-        typeof(res.body.data[0].active) == "boolean"
+
+        // Validate data types
+        type(res.body.data[0].id) == "float" &&
+        type(res.body.data[0].email) == "string" &&
+        type(res.body.data[0].active) == "bool"
       outputs:
         total_users: res.body.meta.total
         users_per_page: res.body.meta.per_page
@@ -540,24 +543,24 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/users/{{outputs.users.first_user_id}}"
+        url: "{{vars.API_BASE_URL}}/users/{{outputs.users.first_user_id}}"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
         res.body.user != nil &&
-          
-        # Validate required fields
+
+        // Validate required fields
         res.body.user.id == outputs.users.first_user_id &&
-        res.body.user.email == "{{outputs.users.first_user_email}}" &&
+        res.body.user.email == outputs.users.first_user_email &&
         res.body.user.profile != nil &&
-          
-        # Validate nested objects
+
+        // Validate nested objects
         res.body.user.profile.first_name != nil &&
         res.body.user.profile.last_name != nil &&
         res.body.user.preferences != nil &&
-          
-        # Validate arrays
+
+        // Validate arrays
         res.body.user.roles != nil &&
         len(res.body.user.roles) > 0 &&
         res.body.user.permissions != nil
@@ -570,23 +573,23 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/users/{{outputs.users.first_user_id}}/orders"
+        url: "{{vars.API_BASE_URL}}/users/{{outputs.users.first_user_id}}/orders"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
         res.body.orders != nil &&
-          
-        # Validate all orders belong to the user
+
+        // Validate all orders belong to the user
         all(res.body.orders, #.user_id == outputs.users.first_user_id) &&
-          
-        # Validate order structure
+
+        // Validate order structure
         all(res.body.orders, #.id != nil &&
           #.total != nil &&
           #.status != nil &&
           #.created_at != nil) &&
-          
-        # Validate business logic
+
+        // Validate business logic
         all(res.body.orders, #.total >= 0) &&
         all(filter(res.body.orders, #.status == "completed"), #.completed_at != nil)
       outputs:
@@ -598,18 +601,18 @@ jobs:
       uses: hello
       echo: |
         📋 Data Validation Results:
-          
+
         USER LIST VALIDATION:
         ✅ Response Structure: Valid pagination metadata
         ✅ User Objects: All required fields present
         ✅ Data Types: Correct types for all fields
         Total Users: {{outputs.users.total_users}}
         Users Per Page: {{outputs.users.users_per_page}}
-          
+
         USER DETAILS VALIDATION:
         ✅ User Profile: {{outputs.profile_complete ? "Complete" : "Incomplete"}}
         ✅ Security: {{len(outputs.user_roles)}} roles, {{outputs.user_permissions_count}} permissions
-          
+
         DATA CONSISTENCY:
         ✅ Orders: {{outputs.order_count}} total orders
         ✅ Completed: {{outputs.completed_orders}} completed orders
@@ -627,6 +630,9 @@ description: Test error handling and response formats
 
 vars:
   API_BASE_URL: https://api.yourservice.com
+  api_token: "{{API_TOKEN}}"
+  USER_TOKEN: "{{USER_TOKEN}}"
+  LIMITED_TOKEN: "{{LIMITED_TOKEN}}"
 
 jobs:
 - id: error-response-tests
@@ -636,7 +642,7 @@ jobs:
     - name: Test Bad Request
       uses: http
       with:
-        url: "{{vars.api_base_url}}/users"
+        url: "{{vars.API_BASE_URL}}/users"
         method: POST
         headers:
           Content-Type: "application/json"
@@ -662,7 +668,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/admin/users"
+        url: "{{vars.API_BASE_URL}}/admin/users"
       test: |
         res.code == 401 &&
         res.body.error != nil &&
@@ -676,7 +682,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/admin/users"
+        url: "{{vars.API_BASE_URL}}/admin/users"
         headers:
           Authorization: "Bearer {{vars.USER_TOKEN}}"  # Non-admin token
       test: |
@@ -692,7 +698,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/users/99999999"
+        url: "{{vars.API_BASE_URL}}/users/99999999"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
@@ -707,7 +713,7 @@ jobs:
     - name: Test Unprocessable Entity
       uses: http
       with:
-        url: "{{vars.api_base_url}}/users"
+        url: "{{vars.API_BASE_URL}}/users"
         method: POST
         headers:
           Content-Type: "application/json"
@@ -730,11 +736,11 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/high-rate-endpoint"
+        url: "{{vars.API_BASE_URL}}/high-rate-endpoint"
         headers:
           Authorization: "Bearer {{vars.LIMITED_TOKEN}}"
       test: |
-        res.status in [200, 429] &&
+        res.code in [200, 429] &&
         (res.code == 429 ? 
           res.body.error.code == "rate_limit_exceeded" &&
           res.headers["Retry-After"] != nil :
@@ -747,21 +753,21 @@ jobs:
       uses: hello
       echo: |
         🚨 Error Response Validation Results:
-          
+
         400 Bad Request: ✅ Proper validation error format
           Error Code: {{outputs.error_code}}
           Validation Issues: {{len(outputs.validation_errors)}}
-          
+
         401 Unauthorized: {{outputs.auth_error_proper ? "✅ Proper format" : "❌ Issues detected"}}
-          
+
         403 Forbidden: {{outputs.permission_error_proper ? "✅ Proper format" : "❌ Issues detected"}}
-          
+
         404 Not Found: {{outputs.not_found_error_proper ? "✅ Proper format" : "❌ Issues detected"}}
-          
+
         422 Unprocessable: {{outputs.duplicate_email_handled ? "✅ Business logic validated" : "❌ Issues detected"}}
-          
+
         429 Rate Limited: {{outputs.rate_limiting_works ? "✅ Rate limiting active" : "ℹ️ No rate limit hit"}}
-          
+
         All error responses follow consistent format and provide helpful information.
 ```
 
@@ -790,7 +796,7 @@ jobs:
       id: register
       uses: http
       with:
-        url: "{{vars.api_base_url}}/auth/register"
+        url: "{{vars.API_BASE_URL}}/auth/register"
         method: POST
         headers:
           Content-Type: "application/json"
@@ -813,11 +819,11 @@ jobs:
         access_token: res.body.access_token
 
     - name: Email Verification Check
-      id: user-registration-flow
+      id: verify-email
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/user/profile"
+        url: "{{vars.API_BASE_URL}}/user/profile"
         headers:
           Authorization: "Bearer {{outputs.register.access_token}}"
       test: |
@@ -836,7 +842,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/products?category=electronics&limit=10"
+        url: "{{vars.API_BASE_URL}}/products?category=electronics&limit=10"
       test: |
         res.code == 200 &&
         len(res.body.products) > 0 &&
@@ -851,11 +857,11 @@ jobs:
       id: add-cart
       uses: http
       with:
-        url: "{{vars.api_base_url}}/cart/items"
+        url: "{{vars.API_BASE_URL}}/cart/items"
         method: POST
         headers:
           Content-Type: "application/json"
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
         body: |
           {
             "product_id": {{outputs.browse.first_product_id}},
@@ -871,13 +877,13 @@ jobs:
         cart_total: res.body.cart_total
 
     - name: View Cart
-      id: shopping-flow
+      id: view-cart
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/cart"
+        url: "{{vars.API_BASE_URL}}/cart"
         headers:
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
       test: |
         res.code == 200 &&
         len(res.body.items) == 1 &&
@@ -894,11 +900,11 @@ jobs:
       id: discount
       uses: http
       with:
-        url: "{{vars.api_base_url}}/cart/discount"
+        url: "{{vars.API_BASE_URL}}/cart/discount"
         method: POST
         headers:
           Content-Type: "application/json"
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
         body: |
           {
             "code": "TESTDISCOUNT10"
@@ -907,7 +913,7 @@ jobs:
         res.code == 200 &&
         res.body.discount_applied == true &&
         res.body.discount_amount > 0 &&
-        res.body.new_total < outputs['shopping-flow'].cart_total
+        res.body.new_total < outputs['add-cart'].cart_total
       outputs:
         discount_applied: res.code == 200
         discount_amount: res.body.discount_amount
@@ -917,11 +923,11 @@ jobs:
       id: payment
       uses: http
       with:
-        url: "{{vars.api_base_url}}/payment-methods"
+        url: "{{vars.API_BASE_URL}}/payment-methods"
         method: POST
         headers:
           Content-Type: "application/json"
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
         body: |
           {
             "type": "credit_card",
@@ -942,11 +948,11 @@ jobs:
       id: order
       uses: http
       with:
-        url: "{{vars.api_base_url}}/orders"
+        url: "{{vars.API_BASE_URL}}/orders"
         method: POST
         headers:
           Content-Type: "application/json"
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
         body: |
           {
             "payment_method_id": {{outputs.payment.payment_method_id}},
@@ -969,17 +975,17 @@ jobs:
         order_total: res.body.order.total
 
     - name: Verify Order Processing
-      id: checkout-flow
+      id: verify-order
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/orders/{{outputs.order.order_id}}"
+        url: "{{vars.API_BASE_URL}}/orders/{{outputs.order.order_id}}"
         headers:
-          Authorization: "Bearer {{outputs['user-registration-flow'].access_token}}"
+          Authorization: "Bearer {{outputs.register.access_token}}"
       test: |
         res.code == 200 &&
         res.body.order.id == outputs.order.order_id &&
-        res.body.order.user_id == outputs['user-registration-flow'].user_id &&
+        res.body.order.user_id == outputs.register.user_id &&
         len(res.body.order.items) > 0
       outputs:
         order_verified: true
@@ -993,33 +999,33 @@ jobs:
       echo: |
         🛒 E-commerce Workflow Test Results:
         =====================================
-          
+
         USER REGISTRATION:
-        ✅ User Created: {{outputs['user-registration-flow'].user_email}}
+        ✅ User Created: {{outputs.register.user_email}}
         ✅ Authentication: Token obtained
-        ✅ Email Verification: {{outputs['user-registration-flow'].verification_pending ? "Pending (as expected)" : "Issue detected"}}
-          
+        ✅ Email Verification: {{outputs['verify-email'].verification_pending ? "Pending (as expected)" : "Issue detected"}}
+
         SHOPPING EXPERIENCE:
-        ✅ Product Browse: {{outputs['shopping-flow'].available_products}} products found
-        ✅ Add to Cart: Product ID {{outputs['shopping-flow'].first_product_id}} added
-        ✅ Cart Verification: {{outputs['shopping-flow'].cart_verified ? "Confirmed" : "Failed"}}
-        Cart Total: ${{outputs['shopping-flow'].cart_total}}
-          
+        ✅ Product Browse: {{outputs.browse.available_products}} products found
+        ✅ Add to Cart: Product ID {{outputs.browse.first_product_id}} added
+        ✅ Cart Verification: {{outputs['view-cart'].cart_verified ? "Confirmed" : "Failed"}}
+        Cart Total: ${{outputs['add-cart'].cart_total}}
+
         CHECKOUT PROCESS:
-        {{outputs['checkout-flow'].discount_applied ? "✅ Discount Applied: $" + outputs['checkout-flow'].discount_amount + " off" : "ℹ️ No discount applied"}}
+        {{outputs.discount.discount_applied ? "✅ Discount Applied: $" + string(outputs.discount.discount_amount) + " off" : "ℹ️ No discount applied"}}
         ✅ Payment Method: Added (ending in 1111)
-        ✅ Order Created: Order ID {{outputs['checkout-flow'].order_id}}
-        ✅ Order Status: {{outputs['checkout-flow'].order_status}}
-        ✅ Order Verified: {{outputs['checkout-flow'].order_verified ? "Confirmed" : "Failed"}}
-        Final Total: ${{outputs['checkout-flow'].order_total}}
-          
+        ✅ Order Created: Order ID {{outputs.order.order_id}}
+        ✅ Order Status: {{outputs.order.order_status}}
+        ✅ Order Verified: {{outputs['verify-order'].order_verified ? "Confirmed" : "Failed"}}
+        Final Total: ${{outputs.order.order_total}}
+
         🎉 Complete e-commerce workflow tested successfully!
         User can register, browse, shop, and checkout without issues.
 ```
 
 ## Performance and Load Testing
 
-`res.time` is available in every test, so response time can be asserted alongside correctness.
+`rt.sec` is available in every test, so response time can be asserted alongside correctness.
 
 ### Response Time Testing
 
@@ -1033,6 +1039,7 @@ vars:
   API_BASE_URL: https://api.yourservice.com
   PERFORMANCE_THRESHOLD_MS: 1000
   ACCEPTABLE_THRESHOLD_MS: 2000
+  api_token: "{{API_TOKEN}}"
 
 jobs:
 - id: response-time-tests
@@ -1043,7 +1050,7 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/ping"
+        url: "{{vars.API_BASE_URL}}/ping"
       test: |
         res.code == 200 &&
         (rt.sec * 1000) < 500
@@ -1056,39 +1063,39 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/users?limit=100"
+        url: "{{vars.API_BASE_URL}}/users?limit=100"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
-        (rt.sec * 1000) < {{vars.PERFORMANCE_THRESHOLD_MS}}
+        (rt.sec * 1000) < int(vars.PERFORMANCE_THRESHOLD_MS)
       outputs:
         query_time: (rt.sec * 1000)
         query_performance: |
-          {{(rt.sec * 1000) < 500 ? "excellent" : 
-            (rt.sec * 1000) < 1000 ? "good" : 
-            (rt.sec * 1000) < 2000 ? "acceptable" : "poor"}}
+          (rt.sec * 1000) < 500 ? "excellent" :
+            (rt.sec * 1000) < 1000 ? "good" :
+            (rt.sec * 1000) < 2000 ? "acceptable" : "poor"
 
     - name: Complex Aggregation Test
       id: aggregation
       uses: http
       with:
         method: GET
-        url: "{{vars.api_base_url}}/analytics/summary"
+        url: "{{vars.API_BASE_URL}}/analytics/summary"
         headers:
           Authorization: "Bearer {{vars.api_token}}"
       test: |
         res.code == 200 &&
-        (rt.sec * 1000) < {{vars.ACCEPTABLE_THRESHOLD_MS}}
+        (rt.sec * 1000) < int(vars.ACCEPTABLE_THRESHOLD_MS)
       outputs:
         aggregation_time: (rt.sec * 1000)
-        aggregation_acceptable: (rt.sec * 1000) < {{vars.ACCEPTABLE_THRESHOLD_MS}}
+        aggregation_acceptable: (rt.sec * 1000) < int(vars.ACCEPTABLE_THRESHOLD_MS)
 
     - name: File Upload Test
       id: upload
       uses: http
       with:
-        url: "{{vars.api_base_url}}/files/upload"
+        url: "{{vars.API_BASE_URL}}/files/upload"
         method: POST
         headers:
           Authorization: "Bearer {{vars.api_token}}"
@@ -1097,7 +1104,7 @@ jobs:
           --boundary123
           Content-Disposition: form-data; name="file"; filename="test.txt"
           Content-Type: text/plain
-            
+
           This is a test file for upload performance testing.
           It contains multiple lines of text to simulate a real file.
           --boundary123--
@@ -1112,18 +1119,18 @@ jobs:
       uses: hello
       echo: |
         ⚡ API Performance Test Results:
-          
+
         ENDPOINT PERFORMANCE:
         Ping: {{outputs.ping_time}}ms {{outputs.ping_fast ? "(🚀 Fast)" : "(⚡ OK)"}}
         Database Query: {{outputs.query_time}}ms ({{outputs.query_performance}})
         Complex Aggregation: {{outputs.aggregation_time}}ms {{outputs.aggregation_acceptable ? "(✅ Acceptable)" : "(⚠️ Slow)"}}
         File Upload: {{outputs.upload_time}}ms {{outputs.upload_acceptable ? "(✅ Acceptable)" : "(⚠️ Slow)"}}
-          
+
         PERFORMANCE CLASSIFICATION:
         {{outputs.ping_time < 200 && outputs.query_time < 500 && outputs.aggregation_time < 1000 ? "🟢 EXCELLENT - All endpoints performing optimally" : ""}}
         {{outputs.ping_time < 500 && outputs.query_time < 1000 && outputs.aggregation_time < 2000 ? "🟡 GOOD - Performance within acceptable ranges" : ""}}
         {{outputs.aggregation_time > 2000 || outputs.upload_time > 5000 ? "🔴 NEEDS ATTENTION - Some endpoints are slow" : ""}}
-          
+
         RECOMMENDATIONS:
         {{outputs.query_time > 800 ? "• Consider database query optimization" : ""}}
         {{outputs.aggregation_time > 1500 ? "• Review aggregation query efficiency" : ""}}
@@ -1138,13 +1145,13 @@ The points below cover how tests are structured, where their data comes from, wh
 
 Grouping cases into jobs by what they cover makes a failure locatable.
 
-```yaml
+```yaml fragment
 # Good: Organized test structure
 jobs:
-  authentication:     # Group related tests
-  crud-operations:    # Clear test categories
-  error-handling:     # Logical organization
-  performance:        # Separate concerns
+- name: authentication     # Group related tests
+- name: crud-operations    # Clear test categories
+- name: error-handling     # Logical organization
+- name: performance        # Separate concerns
 ```
 
 ### 2. Data Management
@@ -1176,12 +1183,12 @@ A response has more than a status code, and the other parts are where regression
 ```yaml
 # Good: Validate multiple aspects
 test: |
-  res.code == 200 &&                    # HTTP status
-  res.headers["Content-Type"] contains "json" &&  # Content type
-  res.body.id != nil &&                  # Required fields
-  typeof(res.body.id) == "number" &&      # Data types
-  res.body.email contains "@" &&         # Data format
-  (rt.sec * 1000) < 1000                         # Performance
+  res.code == 200 &&                              // HTTP status
+  res.headers["Content-Type"] contains "json" &&  // Content type
+  res.body.id != nil &&                           // Required fields
+  type(res.body.id) == "float" &&                 // Data types
+  res.body.email contains "@" &&                  // Data format
+  (rt.sec * 1000) < 1000                          // Performance
 ```
 
 ### 4. Error Handling

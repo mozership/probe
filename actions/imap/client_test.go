@@ -1766,3 +1766,12 @@ func TestFetchErrors(t *testing.T) {
 		})
 	}
 }
+
+// port is 993 when it is not given, as the reference has it, rather than a
+// key the action cannot run without.
+func TestRequestPortDefault(t *testing.T) {
+	_, err := Request(map[string]any{"host": "127.0.0.1", "username": "user", "password": "pass", "tls": false, "timeout": "1s"})
+	if err == nil || !strings.Contains(err.Error(), "127.0.0.1:993") {
+		t.Errorf("err = %v, want the action to connect to port 993, and fail to", err)
+	}
+}

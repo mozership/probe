@@ -76,18 +76,24 @@ The HTTP action provides a rich response object:
 ```yaml
 # Available response properties:
 test: |
-  res.code == 200 &&                    # HTTP status code
-  (rt.sec * 1000) < 1000 &&                      # Response time in milliseconds
-  res.body_size < 10000 &&               # Response body size in bytes
-  res.headers["Content-Type"] == "application/json" &&  # Response headers
-  res.body.success == true &&            # Parsed JSON body (if applicable)
-  res.body contains "success"           # Response body as text
+  res.code == 200 &&                    // HTTP status code
+  (rt.sec * 1000) < 1000 &&                      // Response time in milliseconds
+  len(res.rawbody) < 10000 &&         // Unparsed body size in bytes
+  res.headers["Content-Type"] == "application/json" &&  // Response headers
+  res.body.success == true &&            // Parsed JSON body (if applicable)
+  res.rawbody contains "success"        // Unparsed body as text
 ```
 
 #### Common HTTP Patterns
 
 **API Authentication:**
 ```yaml
+name: API authentication
+vars:
+  api_base_url: "{{API_BASE_URL}}"
+  api_username: "{{API_USERNAME}}"
+  api_password: "{{API_PASSWORD}}"
+
 jobs:
 - id: api-test
   name: api-test
@@ -133,7 +139,7 @@ jobs:
       --boundary123
       Content-Disposition: form-data; name="file"; filename="test.txt"
       Content-Type: text/plain
-      
+
       This is test file content
       --boundary123--
   test: res.code == 201
@@ -196,7 +202,7 @@ Every field the action accepts, in one step.
       BUILD_VERSION: "{{vars.version}}"
   test: res.code == 0 && res.stdout contains "Deploy successful"
   outputs:
-    deploy_time: res.rt
+    deploy_time: rt.duration
     deploy_log: res.stdout
 ```
 
@@ -207,11 +213,11 @@ The exit code and both output streams are available to the test.
 ```yaml
 # Available response properties:
 test: |
-  res.code == 0 &&                         # Exit code (0 = success)
-  res.stdout contains "success" &&        # Standard output
-  res.stderr == "" &&                      # Standard error (empty = no errors)
-  req.cmd == "npm run build" &&           # Original command
-  req.shell == "/bin/bash"                # Shell used for execution
+  res.code == 0 &&                         // Exit code (0 = success)
+  res.stdout contains "success" &&        // Standard output
+  res.stderr == "" &&                      // Standard error (empty = no errors)
+  req.cmd == "npm run build" &&           // Original command
+  req.shell == "/bin/bash"                // Shell used for execution
 ```
 
 #### Common Shell Patterns
@@ -298,57 +304,25 @@ test: status == 0 && res.message != nil
 
 ### SMTP Action
 
-The `smtp` action enables email sending capabilities for notifications and alerts.
+The `smtp` action delivers generated messages to an SMTP server, to measure and exercise delivery. The body is generated, and `length` sets its size.
 
 ```yaml
 - name: Send Email Notification
   uses: smtp
   with:
-    addr: "smtp.gmail.com              # SMTP server host:587                         # SMTP server port"
-    from: alerts@mycompany.com        # Sender email address
-    to: ["admin@mycompany.com", "team@mycompany.com"]  # Recipients
-    subject: "System Alert: {{vars.alert_type}}"       # Email subject
+    addr: "smtp.example.com:587"      # SMTP server host:port
+    from: alerts@mycompany.com        # Envelope sender
+    to: "admin@mycompany.com, team@mycompany.com"  # Recipients, separated by commas
+    subject: "System Alert: {{vars.alert_type}}"       # Subject line
     session: 1
     message: 1
     length: 500
-  echo: |                           # Email body (plain text or HTML)
-  test: res.code == "sent"
+  test: res.code == 0 && res.sent > 0
   outputs:
-    message_id: res.message_id
-    recipients_count: res.recipients_count
+    sent_count: res.sent              # Messages accepted by the server
 ```
 
-**SMTP Configuration Examples:**
-
-**Gmail:**
-```yaml
-with:
-  host: smtp.gmail.com
-  port: 587
-  username: "your-email@gmail.com"
-  password: "your-app-password"
-  tls: true
-```
-
-**AWS SES:**
-```yaml
-with:
-  host: email-smtp.us-east-1.amazonaws.com
-  port: 587
-  username: "{{vars.aws_ses_username}}"
-  password: "{{vars.aws_ses_password}}"
-  tls: true
-```
-
-**Office 365:**
-```yaml
-with:
-  host: smtp.office365.com
-  port: 587
-  username: "your-email@company.com"
-  password: "{{vars.o365_password}}"
-  tls: true
-```
+The action has no parameters for authentication, and a connection that starts in TLS, as on port 465, is not supported, so it suits a server that accepts mail without logging in, such as one under test. `starttls` and `insecure_skip_tls` set how it uses `STARTTLS`. See the [SMTP action](/reference/actions/smtp) for every parameter.
 
 ## Advanced Action Usage
 
@@ -359,6 +333,12 @@ Beyond a single call, actions are used in combination: handling their failures, 
 Implement robust error handling for action failures:
 
 ```yaml
+name: Resilient HTTP check
+vars:
+  primary_url: "{{PRIMARY_URL}}"
+  secondary_url: "{{SECONDARY_URL}}"
+  smtp_host: "{{SMTP_HOST}}"
+
 jobs:
 - id: resilient-http-check
   name: resilient-http-check
@@ -389,6 +369,7 @@ jobs:
 
     - name: Alert on Total Failure
       uses: smtp
+      skipif: (outputs.primary?.primary_healthy ?? false) || (outputs.secondary?.secondary_healthy ?? false)
       with:
         addr: "{{vars.smtp_host}}:587"
         from: "alerts@company.com"
@@ -397,14 +378,15 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         CRITICAL ALERT: All monitored endpoints are down
-          
+
         Primary Endpoint: FAILED
         Secondary Endpoint: FAILED
-          
+
         Time: {{unixtime()}}
-          
+
         Immediate investigation required!
 ```
 
@@ -413,6 +395,13 @@ jobs:
 Combine actions to create complex workflows:
 
 ```yaml
+name: Comprehensive API testing
+vars:
+  api_url: "{{API_URL}}"
+  client_id: "{{CLIENT_ID}}"
+  client_secret: "{{CLIENT_SECRET}}"
+  smtp_host: "{{SMTP_HOST}}"
+
 jobs:
 - id: comprehensive-api-test
   name: Comprehensive API Testing
@@ -466,6 +455,7 @@ jobs:
     # 4. Performance validation
     - name: Validate Performance
       uses: smtp
+      skipif: (outputs.functional?.test_duration ?? 0) < 2000
       with:
         addr: "{{vars.smtp_host}}:587"
         from: "performance@company.com"
@@ -474,21 +464,23 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         Performance Alert
-          
+
         API Version: {{outputs.health.api_version}}
         Response Time: {{outputs.functional.test_duration}}ms
         Expected: < 2000ms
-          
+
         Please investigate performance degradation.
 
-        uccess notification
+
+    # 5. Success notification
     - name: Success Report
       uses: hello
       echo: |
         ✅ API Test Suite Completed Successfully
-          
+
         Health Check: ✅ (v{{outputs.health.api_version}})
         Authentication: ✅ (expires in {{outputs.auth.token_expires}}s)
         Functionality: ✅ ({{outputs.functional.test_duration}}ms)
@@ -500,6 +492,11 @@ jobs:
 Configure actions dynamically based on runtime conditions:
 
 ```yaml
+name: Adaptive monitoring
+vars:
+  config_service_url: "{{CONFIG_SERVICE_URL}}"
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: adaptive-monitoring
   name: adaptive-monitoring
@@ -519,10 +516,10 @@ jobs:
     - name: Environment-Specific Health Check
       id: health
       uses: http
-      timeout: "{{outputs.vars.environment == 'production' ? '5s' : '30s'}}"
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+        timeout: "{{outputs.env.environment == 'production' ? '5s' : '30s'}}"
       test: res.code == 200
       outputs:
         service_status: res.body.status
@@ -530,22 +527,24 @@ jobs:
 
     - name: Conditional Alert
       uses: smtp
+      skipif: outputs.health?.error_count == 0
       with:
-        addr: "{{outputs.vars.smtp_config.host}}:{{outputs.vars.smtp_config.port}}"
+        addr: "{{outputs.env.smtp_config.host}}:{{outputs.env.smtp_config.port}}"
         from: "monitoring@company.com"
-        to: "{{outputs.vars.environment == 'production' ? ['ops@company.com', 'management@company.com'] : ['dev@company.com']}}"
-        subject: "{{outputs.vars.environment == 'production' ? 'PRODUCTION' : 'NON-PROD'}} Alert: Service Errors Detected"
+        to: "{{outputs.env.environment == 'production' ? 'ops@company.com, management@company.com' : 'dev@company.com'}}"
+        subject: "{{outputs.env.environment == 'production' ? 'PRODUCTION' : 'NON-PROD'}} Alert: Service Errors Detected"
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         Service Error Alert
-          
-        Environment: {{outputs.vars.environment}}
+
+        Environment: {{outputs.env.environment}}
         Service Status: {{outputs.health.service_status}}
         Error Count: {{outputs.health.error_count}}
-          
-        {{outputs.vars.environment == "production" ? "IMMEDIATE ACTION REQUIRED" : "Please investigate when convenient"}}
+
+        {{outputs.env.environment == "production" ? "IMMEDIATE ACTION REQUIRED" : "Please investigate when convenient"}}
 ```
 
 ## Action Architecture Deep Dive
@@ -799,7 +798,7 @@ An action can also live outside Probe, in a repository of its own. Probe downloa
 
 ```yaml
 - name: Ask the API who I am
-  uses: github.com/mozership/probe-graphql@<40-character commit SHA>
+  uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
   with:
     url: https://api.example.com/graphql
     query: '{ viewer { login } }'
@@ -823,7 +822,7 @@ A workflow that uses an external action in several steps can give it a name once
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@<40-character commit SHA> # v0.2.0
+  graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
 
 jobs:
 - name: Who am I
@@ -883,6 +882,7 @@ runs:
 | `runs.checksums` | SHA-256 digest of the executable for each `<os>_<arch>`, in lowercase hex |
 | `guard` | The kinds of guard the action keeps to itself: `read-only`, `allow-host` or both. Probe takes the action at its word and runs it under a guard of those kinds. Without it, the action is refused under any guard unless `--allow-action` names it. See [Guard](/guide/concepts/guard) |
 | `params` | The keys the action takes in `with`, for `probe check` to report a key it does not take. Without it, `with` is not checked; `[]` takes no key |
+| `res` | The top-level fields of the `res` the action returns, such as `[code, body]`, for `probe check` to warn of a step that reads another. Without it, what a step reads of `res` is not checked; `[]` declares no field, so every read is warned of |
 | `cleanup` | `true` for an action that Probe is to call once the workflow is over, for it to remove what its steps left behind. Without it, the action is not called. See [Cleaning Up After a Run](#cleaning-up-after-a-run) |
 
 `runs` takes exactly one of `url` and `path`. With `url`, a checksum for the running platform is required, and a download with another digest is refused. The digest is checked again each time the executable is started. The commit in `uses` fixes `action.yml`, and `action.yml` fixes the digest, so the commit decides exactly which executable runs.
@@ -951,9 +951,9 @@ probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
 
-The name, the description, `guard`, `params` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
+The name, the description, `guard`, `params`, `res` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
 
-For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params` and `cleanup`, and commit it; the first release then puts its tag and digests in:
+For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params`, `res` and `cleanup`, and commit it; the first release then puts its tag and digests in:
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml

@@ -61,14 +61,13 @@ test: |
 テスト式は包括的なレスポンスデータにアクセスできます：
 
 ```yaml
-# HTTP レスポンステストコンテキスト
+# HTTPレスポンステストコンテキスト
 test: |
-  res.code == 200 &&           # HTTP ステータスコード
-  (rt.sec * 1000) < 1000 &&             # レスポンス時間（ミリ秒）
-  res.body_size > 0 &&           # レスポンスボディサイズ（バイト）
-  res.headers["Content-Type"] == "application/json" &&  # レスポンスヘッダー
-  res.body.status == "healthy" && # 解析された JSON レスポンス
-  res.body contains "success"   # テキストとしてのレスポンスボディ
+  res.code == 200 &&           // HTTP ステータスコード
+  (rt.sec * 1000) < 1000 &&             // レスポンス時間（ミリ秒）
+  len(res.rawbody ?? res.body) > 0 &&  // レスポンスボディの長さ
+  res.headers["Content-Type"] == "application/json" &&  // レスポンスヘッダー
+  res.body.status == "healthy"  // 解析された JSON レスポンス
 ```
 
 ## HTTPレスポンステスト
@@ -89,7 +88,7 @@ test: res.code >= 200 && res.code < 300
 # 複数の許可されるコード
 test: res.code in [200, 201, 202]
 
-# クライアント vs サーバーエラー
+# クライアントエラーとサーバーエラー
 test: res.code < 400  # 成功またはリダイレクト
 test: res.code >= 400 && res.code < 500  # クライアントエラー
 test: res.code >= 500  # サーバーエラー
@@ -103,7 +102,7 @@ test: res.code >= 500  # サーバーエラー
 # パフォーマンス検証
 test: (rt.sec * 1000) < 1000                    # 1秒以内にレスポンス必要
 test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500  # レスポンス時間範囲
-test: (rt.sec * 1000) < {{vars.MAX_RESPONSE_TIME || 2000}}  # 設定可能な閾値
+test: (rt.sec * 1000) < int(vars.MAX_RESPONSE_TIME ?? 2000)  # 設定可能な閾値
 
 # パフォーマンスカテゴリ
 test: |
@@ -116,19 +115,19 @@ test: |
 
 ### レスポンスサイズ検証
 
-`res.body_size`を使うと、ボディが空の場合と、想定よりはるかに大きい場合を検出できます。
+ボディの長さ`len(res.rawbody ?? res.body)`を使うと、ボディが空の場合と、想定よりはるかに大きい場合を検出できます。`res.rawbody`はレスポンスがJSONだったときのパース前のボディで、それ以外のときは`res.body`がボディそのものです。
 
 ```yaml
 # コンテンツ存在
-test: res.body_size > 0                    # コンテンツあり
-test: res.body_size > 100                  # 最小コンテンツサイズ
-test: res.body_size < 1048576             # 最大 1MB レスポンス
+test: len(res.rawbody ?? res.body) > 0  # コンテンツあり
+test: len(res.rawbody ?? res.body) > 100  # 最小コンテンツサイズ
+test: len(res.rawbody ?? res.body) < 1048576  # 最大1MBレスポンス
 
 # サイズベース検証
 test: |
   res.code == 200 &&
-  res.body_size > 50 &&                   # 空のエラーメッセージでない
-  res.body_size < 100000                  # 予期せず大きくない
+  len(res.rawbody ?? res.body) > 50 &&  // 空のエラーメッセージでない
+  len(res.rawbody ?? res.body) < 100000  // 予期せず大きくない
 ```
 
 ### ヘッダー検証
@@ -156,7 +155,7 @@ test: res.headers["X-Rate-Limit-Remaining"] > "10"
 # カスタムヘッダー
 test: |
   "X-Request-Id" in res.headers &&
-  len(res.headers["X-Request-Id"]) == 36  # UUID形式
+  len(res.headers["X-Request-Id"]) == 36  // UUID形式
 ```
 
 ## JSONレスポンステスト
@@ -168,7 +167,7 @@ test: |
 ボディがパースされていれば、テストはフィールド名をたどって中身を参照できます。
 
 ```yaml
-# JSON 構造検証
+# JSON構造検証
 test: |
   res.code == 200 &&
   res.body != nil &&
@@ -185,16 +184,16 @@ test: |
 
 ### データタイプ検証
 
-`typeof`を使うと、フィールドが存在するかだけでなく、クライアントが期待する型で返っているかを検証できます。
+`type`を使うと、フィールドが存在するかだけでなく、クライアントが期待する型で返っているかを検証できます。JSONの数値は`float`、オブジェクトは`map`として読まれます。
 
 ```yaml
 # タイプチェック
 test: |
-  typeof(res.body.id) == "number" &&
-  typeof(res.body.name) == "string" &&
-  typeof(res.body.active) == "boolean" &&
-  typeof(res.body.tags) == "array" &&
-  typeof(res.body.metadata) == "object"
+  type(res.body.id) == "float" &&
+  type(res.body.name) == "string" &&
+  type(res.body.active) == "bool" &&
+  type(res.body.tags) == "array" &&
+  type(res.body.metadata) == "map"
 
 # 値制約
 test: |
@@ -245,9 +244,7 @@ test: |
 test: |
   all(res.body.data.orders, #.id != nil &&
     len(#.items) > 0 &&
-    #all(.items, #.product_id != nil &&
-      #.quantity > 0 && 
-      #.price > 0) &&
+    all(#.items, #.product_id != nil && #.quantity > 0 && #.price > 0) &&
     #.total == sum(map(#.items, #.quantity * #.price)))
 ```
 
@@ -272,7 +269,7 @@ test: lower(res.body) contains "error"
 test: |
   res.body contains "status" &&
   res.body contains "healthy" &&
-  !res.body contains "error"
+  !(res.body contains "error")
 ```
 
 ### 正規表現テスト
@@ -283,17 +280,17 @@ test: |
 # レスポンス内のメール検証
 test: res.body matches "user-\\d+@example\\.com"
 
-# URL パターン検証
+# URLパターン検証
 test: res.body matches "https://[a-zA-Z0-9.-]+/api/v\\d+/"
 
 # データフォーマット検証
 test: |
-  res.body matches "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z"  # ISO タイムスタンプ
+  res.body matches "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z"  // ISO タイムスタンプ
 
-# データ抽出と検証
+# バージョンとそのメジャー番号
 test: |
   res.body matches "Version: v\\d+\\.\\d+\\.\\d+" &&
-  res.body.extract("v(\\d+)\\.(\\d+)\\.(\\d+)")[1] >= "2"  # メジャーバージョン >= 2
+  res.body matches "Version: v([2-9]|[1-9][0-9]+)\\."  // メジャーバージョン2以上
 ```
 
 ### コンテンツ長と品質
@@ -308,9 +305,9 @@ test: |
 
 # コンテンツ品質チェック
 test: |
-  len(split(res.body, "\\n")) > 5 &&           # 複数行コンテンツ
-  !res.body contains "Lorem ipsum" &&          # プレースホルダーテキストでない
-  len(split(res.body, " ")) > 20               # 実質的なコンテンツ
+  len(split(res.body, "\n")) > 5 &&           // 複数行コンテンツ
+  !(res.body contains "Lorem ipsum") &&          // プレースホルダーテキストでない
+  len(split(res.body, " ")) > 20               // 実質的なコンテンツ
 ```
 
 ## 高度なテストパターン
@@ -326,16 +323,16 @@ test: |
 test: |
   res.code == 200 &&
   (vars.NODE_ENV == "development" ? 
-    (rt.sec * 1000) < 5000 :           # 開発環境では緩い設定
-    (rt.sec * 1000) < 1000             # プロダクション用は厳格
+    (rt.sec * 1000) < 5000 :           // 開発環境では緩い設定
+    (rt.sec * 1000) < 1000             // プロダクション用は厳格
   )
 
 # 機能フラグテスト
 test: |
   res.code == 200 &&
   (res.body.features.beta_enabled == true ?
-    res.body.beta_data != nil :    # ベータ機能にはデータが必要
-    res.body.beta_data == nil      # ベータ機能は存在しないべき
+    res.body.beta_data != nil :    // ベータ機能にはデータが必要
+    res.body.beta_data == nil      // ベータ機能は存在しないべき
   )
 ```
 
@@ -344,6 +341,9 @@ test: |
 ステップは先行するステップの出力に対しても検証できます。2つのエンドポイントの結果が一致するかはこの方法で確認します。
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: data-consistency-test
   name: data-consistency-test
@@ -366,7 +366,7 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: |
         res.code == 200 &&
-        len(res.body.users) == outputs['user-count'].total_users  # 整合性チェック
+        len(res.body.users) == outputs['user-count'].total_users  // 整合性チェック
       outputs:
         user_list: res.body.users
 
@@ -394,22 +394,22 @@ jobs:
   test: |
     res.code == 200 &&
     res.body.order != nil &&
-    
-    # 注文合計が品目の合計と等しい
+
+    // 注文合計が品目の合計と等しい
     res.body.order.total == 
       sum(map(res.body.order.line_items, #.quantity * #.price)) &&
-    
-    # 税計算が正しい（8%税率を想定）
+
+    // 税計算が正しい（8%税率を想定）
     res.body.order.tax_amount == 
-      round(Math) / 100 &&
-    
-    # 送料が正しく適用される
+      round(res.body.order.subtotal * 0.08 * 100) / 100 &&
+
+    // 送料が正しく適用される
     (res.body.order.subtotal >= 100 ? 
-      res.body.order.shipping_cost == 0 :     # $100以上は送料無料
-      res.body.order.shipping_cost == 9.99    # 標準送料
+      res.body.order.shipping_cost == 0 :     // $100以上は送料無料
+      res.body.order.shipping_cost == 9.99    // 標準送料
     ) &&
-    
-    # 最終合計計算
+
+    // 最終合計計算
     res.body.order.total == 
       res.body.order.subtotal + res.body.order.tax_amount + res.body.order.shipping_cost
 ```
@@ -441,7 +441,7 @@ jobs:
     method: GET
     url: "{{vars.API_URL}}/rate-limited-endpoint"
   test: |
-    res.code in [200, 429] &&  # 成功またはレート制限
+    res.code in [200, 429] &&  // 成功またはレート制限
     (res.code == 429 ? 
       "Retry-After" in res.headers && 
       res.body.error == "rate_limit_exceeded" :
@@ -470,14 +470,15 @@ jobs:
   with:
     url: "{{vars.API_URL}}/users"
     method: POST
+    # nameは最大長、ageは上限境界、scoreは下限境界
     body: |
       {
-        "name": "{{random_str(255)}}",  # 最大長
-        "age": 150,                     # 上限境界
-        "score": 0                      # 下限境界
+        "name": "{{random_str(255)}}",
+        "age": 150,
+        "score": 0
       }
   test: |
-    res.code in [201, 400] &&  # 作成成功またはバリデーションエラー
+    res.code in [201, 400] &&  // 作成成功またはバリデーションエラー
     (res.code == 400 ? 
       res.body.validation_errors != nil :
       res.body.user.id != nil
@@ -493,6 +494,9 @@ jobs:
 検証をジョブに分ければ、軽いものを先に実行し、重いものが始まる前に打ち切れます。
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: smoke-tests
   name: Smoke Tests
@@ -538,6 +542,11 @@ jobs:
 スイート全体では、検証対象ごとにケースをまとめ、最初に取得した認証情報を以降のステップへ引き継ぎます。
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  TEST_USERNAME: "{{TEST_USERNAME}}"
+  TEST_PASSWORD: "{{TEST_PASSWORD}}"
+
 jobs:
 - id: api-test-suite
   name: Comprehensive API Test Suite
@@ -576,7 +585,7 @@ jobs:
         res.code == 401 &&
         res.body.error == "invalid_credentials"
 
-    # CRUD 操作テスト
+    # CRUD操作テスト
     - name: Create User
       id: create-user
       uses: http
@@ -610,7 +619,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.user.id == outputs['create-user'].user_id &&
-        res.body.user.email == "{{outputs['create-user'].user_email}}"
+        res.body.user.email == outputs['create-user'].user_email
 
     - name: Update User
       uses: http
@@ -648,7 +657,7 @@ jobs:
 
 ## パフォーマンステスト
 
-`res.time`により応答時間も通常の検証として書けます。正しさだけでなく、時間の上限もワークフローで守らせられます。
+`rt`により応答時間も通常の検証として書けます。正しさだけでなく、時間の上限もワークフローで守らせられます。
 
 ### レスポンス時間ベンチマーク
 
@@ -662,16 +671,16 @@ jobs:
     url: "{{vars.API_URL}}/performance-test"
   test: |
     res.code == 200 &&
-    
-    # 段階的パフォーマンス期待値
+
+    // 段階的パフォーマンス期待値
     (vars.NODE_ENV == "production" ? 
-      (rt.sec * 1000) < 500 :              # プロダクション: < 500ms
-      (rt.sec * 1000) < 2000               # 非プロダクション: < 2s
+      (rt.sec * 1000) < 500 :              // プロダクション: < 500ms
+      (rt.sec * 1000) < 2000               // 非プロダクション: < 2s
     ) &&
-    
-    # 追加パフォーマンスメトリクス
-    res.body.query_time < 100 &&    # データベースクエリ時間
-    res.body.render_time < 50       # テンプレートレンダー時間
+
+    // 追加パフォーマンスメトリクス
+    res.body.query_time < 100 &&    // データベースクエリ時間
+    res.body.render_time < 50       // テンプレートレンダー時間
   outputs:
     response_time: (rt.sec * 1000)
     query_time: res.body.query_time
@@ -691,19 +700,19 @@ jobs:
   test: |
     res.code == 200 &&
     res.body.test_completed == true &&
-    
-    # 成功率要件
+
+    // 成功率要件
     res.body.success_rate >= 0.95 &&
-    
-    # パフォーマンスパーセンタイル
+
+    // パフォーマンスパーセンタイル
     res.body.percentiles.p50 < 1000 &&
     res.body.percentiles.p95 < 2000 &&
     res.body.percentiles.p99 < 5000 &&
-    
-    # エラー率制限
+
+    // エラー率制限
     res.body.error_rate < 0.05 &&
-    
-    # 重大なエラーがない
+
+    // 重大なエラーがない
     res.body.critical_errors == 0
 ```
 
@@ -759,10 +768,10 @@ jobs:
     method: GET
     url: "{{vars.API_URL}}/users?search='; DROP TABLE users; --"
   test: |
-    res.code in [200, 400] &&  # フィルタされるか拒否される
-    !res.body contains "sql" && # SQL エラーメッセージなし
-    !res.body contains "syntax" &&
-    res.body.error != "internal_server_error"  # サーバーエラーを起こさない
+    res.code in [200, 400] &&  // フィルタされるか拒否される
+    !(res.body contains "sql") && // SQL エラーメッセージなし
+    !(res.body contains "syntax") &&
+    res.body.error != "internal_server_error"  // サーバーエラーを起こさない
 
 - name: Test XSS Protection
   uses: http
@@ -776,8 +785,8 @@ jobs:
   test: |
     res.code in [201, 400] &&
     (res.code == 201 ? 
-      !res.body.comment.content contains "<script>" :  # サニタイズされるべき
-      res.body.validation_errors != nil               # または拒否される
+      !(res.body.comment.content contains "<script>") :  // サニタイズされるべき
+      res.body.validation_errors != nil               // または拒否される
     )
 ```
 
@@ -803,48 +812,92 @@ jobs:
       }
   # 明確な検証ポイント付き包括的テスト
   test: |
-    res.code == 201 &&                                    # 1. 作成成功
-    res.body.user.id != nil &&                            # 2. ユーザーID割り当て
-    res.body.user.email != nil &&                         # 3. メール保存
-    res.body.user.password == nil &&                      # 4. パスワード未返却
-    res.body.user.created_at != nil &&                    # 5. タイムスタンプ記録
-    res.body.user.email_verified == false &&               # 6. 初期未認証メール
-    res.body.verification_email_sent == true &&            # 7. 認証トリガー
-    "Location" in res.headers &&                         # 8. Location ヘッダー存在
-    res.headers["Location"] contains "/users/"             # 9. 正しいリダイレクトパス
+    res.code == 201 &&                                    // 1. 作成成功
+    res.body.user.id != nil &&                            // 2. ユーザーID割り当て
+    res.body.user.email != nil &&                         // 3. メール保存
+    res.body.user.password == nil &&                      // 4. パスワード未返却
+    res.body.user.created_at != nil &&                    // 5. タイムスタンプ記録
+    res.body.user.email_verified == false &&               // 6. 初期未認証メール
+    res.body.verification_email_sent == true &&            // 7. 認証トリガー
+    "Location" in res.headers &&                         // 8. Location ヘッダー存在
+    res.headers["Location"] contains "/users/"             // 9. 正しいリダイレクトパス
   outputs:
     user_id: res.body.user.id
     user_email: res.body.user.email
-    test_summary: |
-      Registration test completed:
-      - User ID: {{res.body.user.id}}
-      - Email: {{res.body.user.email}}
-      - Verification: {{res.body.verification_email_sent ? "Sent" : "Failed"}}
-      - Response time: {{rt.duration}}
+  echo: |
+    Registration test completed:
+    - User ID: {{res.body.user.id}}
+    - Email: {{res.body.user.email}}
+    - Verification: {{res.body.verification_email_sent ? "Sent" : "Failed"}}
+    - Response time: {{rt.duration}}
 ```
 
 ### テスト結果集約
 
-他のジョブに依存する最後のジョブを置けば、それぞれのステータスを読んで1つの要約を出力できます。
+他のジョブを`needs`に指定した最後のジョブを置けば、各ジョブのステップが公開した値を読んで1つの要約を出力できます。`always: true`を付けると、どれかが失敗しても実行されます。`?? false`は、接続できず何も公開しなかったステップに備えたものです。
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  NODE_ENV: "{{NODE_ENV ?? 'development'}}"
+
 jobs:
+- id: smoke-tests
+  name: Smoke Tests
+  steps:
+    - name: Basic Connectivity
+      id: smoke
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/ping"
+      test: res.code == 200
+      outputs:
+        passed: res.code == 200
+
+- id: functional-tests
+  name: Functional Tests
+  steps:
+    - name: User Management
+      id: functional
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/users"
+      test: res.code == 200
+      outputs:
+        passed: res.code == 200
+
+- id: security-tests
+  name: Security Tests
+  steps:
+    - name: Unauthorized Access
+      id: security
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/admin/users"
+      test: res.code == 401
+      outputs:
+        passed: res.code == 401
+
 - id: test-summary
   name: Test Results Summary
   needs: [smoke-tests, functional-tests, security-tests]
+  always: true
   steps:
     - name: Generate Test Report
       uses: hello
       echo: |
         Test Execution Summary
-        =====================
-          
-          
-        Overall Result: {{
-        }}
-          
-        Execution Time: {{unixtime()}}
-        Test Environment: {{vars.NODE_ENV || "development"}}
+        ======================
+
+        Smoke: {{(outputs.smoke?.passed ?? false) ? "passed" : "failed"}}
+        Functional: {{(outputs.functional?.passed ?? false) ? "passed" : "failed"}}
+        Security: {{(outputs.security?.passed ?? false) ? "passed" : "failed"}}
+
+        Finished At: {{unixtime()}}
+        Test Environment: {{vars.NODE_ENV}}
 ```
 
 ## ベストプラクティス
@@ -893,7 +946,7 @@ test: |
 # 良い例: 環境固有のパフォーマンス閾値
 test: |
   res.code == 200 &&
-  (rt.sec * 1000) < {{vars.MAX_RESPONSE_TIME || 2000}}
+  (rt.sec * 1000) < int(vars.MAX_RESPONSE_TIME ?? 2000)
 ```
 
 ### 4. 保守しやすいテスト式

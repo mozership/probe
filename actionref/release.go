@@ -165,6 +165,9 @@ func (m *Manifest) encode() []byte {
 	if m.Params != nil {
 		fmt.Fprintf(&b, "params: %s\n", flowList(m.Params))
 	}
+	if m.Res != nil {
+		fmt.Fprintf(&b, "res: %s\n", flowList(m.Res))
+	}
 	if m.Cleanup {
 		b.WriteString("cleanup: true\n")
 	}
@@ -246,6 +249,9 @@ description: ""
 # The keys the action takes in with, for probe check to report any other.
 # Without params, with is not checked.
 # params: [name]
+# The fields of res the action returns, for probe check to report a step
+# that reads another. Without res, what a step reads of res is not checked.
+# res: [code, body]
 # Whether Probe calls the action once a run is over, for it to remove what
 # its steps left behind, such as a server they started.
 # cleanup: true

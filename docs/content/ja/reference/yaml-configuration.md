@@ -6,26 +6,26 @@ Probeがワークフローファイルから読み取るキー、式が評価さ
 
 以下の雛形は、ワークフローファイルに書けるプロパティと、それぞれの位置を示しています。
 
-```yaml
+```yaml fragment
 name: string                  # 必須: ワークフロー名
 description: string           # 任意: ワークフローの説明
 vars:                         # 任意: ワークフロー変数
   key: value
 secrets:                      # 任意: 出力で伏せる環境変数
   - NAME
-defaults:                     # 任意: すべてのジョブに効く、アクションごとの with の既定値
+defaults:                     # 任意: すべてのジョブに効く、アクションごとのwithの既定値
   http:
     url: string
 actions:                      # 任意: 外部アクションに付ける名前
   name: string
 jobs:                         # 必須: ジョブのリスト
   - name: string              # 必須: ジョブ名
-    id: string                # 任意: ジョブ ID。needs から参照する
+    id: string                # 任意: ジョブID。needsから参照する
     needs: [job-id, ...]      # 任意: 依存するジョブ
     always: boolean           # 任意: 依存先のジョブが失敗しても実行する
     skipif: expression        # 任意: 真ならジョブをスキップ
     fail_fast: boolean        # 任意: 失敗したステップより後のステップをスキップ
-    defaults:                 # 任意: アクションごとの with の既定値
+    defaults:                 # 任意: アクションごとのwithの既定値
       http:
         url: string
     repeat:                   # 任意: ジョブを繰り返す
@@ -37,8 +37,8 @@ jobs:                         # 必須: ジョブのリスト
       baseline_test: expression # 任意: 以前の実行と比べるアサーション
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
-        id: string            # 任意: ステップ ID。outputs をこの ID から読める
-        uses: string          # 必須: アクション名、または actions で付けた名前
+        id: string            # 任意: ステップID。outputsをこのIDから読める
+        uses: string          # 必須: アクション名、またはactionsで付けた名前
         with:                 # 任意: アクション引数
           key: value
         test: expression      # 任意: アサーション
@@ -146,11 +146,13 @@ vars:
 
 列挙した変数の値が現れる箇所には、代わりに`<secret:NAME>`と書きます。対象は、端末のレポート、ステップ名、`echo`、失敗したステップについて表示するリクエストとレスポンス、`--verbose`の出力、アクション自身のログ、`--report`で書き出すファイルです。エラーメッセージで引用符に囲まれたときやJSONに埋め込まれたときのエスケープされた形も伏せます。ステップ、テスト、outputsは本来の値をそのまま使い、変わるのは表示だけです。
 
-設定されていない名前や空文字列の名前は、伏せる値が無いので無視します。短い値は現れるたびに置き換えるため、`1`のような値を指定すると出力中のすべての`1`が伏せられます。
+設定されていない名前や空文字列の名前は、伏せる値が無いので無視します。`1`、`ok`、`dev`のような4文字未満の値は、リクエストやレスポンスのヘッダやフィールドがその値だけを持つときのように、値全体がそれと一致する箇所でだけ伏せ、ほかの文字列の中では伏せません。現れるたびに置き換えると無関係な単語の一部まで消えて出力が読めなくなり、しかも消えた文字から値がわかってしまうためです。そうした変数ごとに一度だけ、`[WARN] the secret PIN is shorter than 4 characters, so it is masked only where it is a whole value; use a value of at least 4 characters`のような警告を標準エラー出力に出します。警告は変数の名前を示し、値は示しません。出力に出してはいけない資格情報には、もっと長い値を使ってください。
 
 `secrets`とは別に、`Authorization`、`Proxy-Authorization`、`Cookie`、`Set-Cookie`ヘッダの値は常に`<redacted>`と表示します。ログインのステップが返し、後のリクエストで送るトークンのように、実行中に得た値は`secrets`に書けませんが、これらのヘッダのどれかで送られます。Probeはアクションがこれらの値を送る直前と受け取った時点で値を記録し、以降はアクション自身のログも含めて伏せます。
 
-アクションに渡す資格情報も同じです。`with`のどの階層にあっても`password`、`key_passphrase`、`secret_access_key`、`session_token`の値は`<redacted>`と表示します。`dsn`や`url`に書いた`redis://user:password@host`のようなURLは、パスワードの部分だけを伏せ、それ以外はそのまま表示します。そのため、ステップに直接書いたパスワードは、`secrets`に書かなくても`--verbose`の出力やアクションのログに出ません。こうした値のテンプレートを評価できなかった場合、エラーには`with.password`のように値の場所を示しますが、理由は示しません。テンプレートにもエラーの文面にも資格情報が含まれうるためです。`url`がこの扱いになるのは、`redis://app:{{vars.pw}}@host`のようにテンプレートがユーザー情報の部分にある場合だけです。`url`のそれ以外の場所にあるテンプレートのエラーは表示します。
+アクションに渡す資格情報も同じです。`with`のどの階層にあっても`password`、`key_passphrase`、`secret_access_key`、`session_token`の値は`<redacted>`と表示します。`dsn`や`url`に書いた`redis://user:password@host`のようなURLは、パスワードの部分だけを伏せ、それ以外はそのまま表示します。そのため、ステップに直接書いたパスワードは、`secrets`に書かなくても`--verbose`の出力やアクションのログに出ません。こうして記録した資格情報のうち4文字未満のものは、短い`secrets`の値と同じ理由で、ログのようなほかの文字列の中では伏せません。ただし、ヘッダやフィールドの名前で判断する箇所、URLのパスワードの部分、値全体が一致する箇所では、値の長さにかかわらず`<redacted>`と表示します。こうした値のテンプレートを評価できなかった場合、エラーには`with.password`のように値の場所を示しますが、理由は示しません。テンプレートにもエラーの文面にも資格情報が含まれうるためです。`url`がこの扱いになるのは、`redis://app:{{vars.pw}}@host`のようにテンプレートがユーザー情報の部分にある場合だけです。`url`のそれ以外の場所にあるテンプレートのエラーは表示します。
+
+Probeが表示したり書き出したりするものに含まれるURLのパスワードも、長さやURLの出どころにかかわらず`<redacted>`と表示します。ドライバのエラーに含まれる`postgres://app:pw@db/main`や、レスポンスボディに含まれる`https://x-access-token:abc@github.com/o/r`は、`postgres://app:<redacted>@db/main`や`https://x-access-token:<redacted>@github.com/o/r`になります。パスワードとみなすのは、ユーザー情報の最初のコロンの後から、ホストの前にある最後の`@`までです。そのため、`@`を含むパスワードもすべて伏せます。エスケープしていない`/`、`?`、`#`を含むパスワードは、そこでホストが終わるとみなすため認識しません。URLの規則どおり、`%2F`、`%3F`、`%23`とパーセントエンコードして書いてください。パラメータ`password`、`passwd`、`pass`、`pwd`、`secret`、`client_secret`、`token`、`access_token`、`refresh_token`、`id_token`、`api_key`、`apikey`、`X-Amz-Security-Token`、`X-Amz-Signature`、`X-Goog-Signature`、`sig`と、上に挙げた資格情報のヘッダやフィールドと同じ名前のパラメータの値も、名前の大文字と小文字を区別せずに同じように伏せます。対象はURLのクエリと、OAuthのインプリシットフローが`#access_token=…`を返すフラグメントです。`jdbc:postgresql://db/app?user=app&password=pw`は`jdbc:postgresql://db/app?user=app&password=<redacted>`になります。パラメータの区切りは`&`のほか、JSONが書く`\u0026`、HTMLが書く`&amp;`も認識します。値は次の区切り、`#`、またはURLの後の空白か引用符で終わります。`jdbc:sqlserver://host;password=pw`のように`;`で区切ったパラメータは認識しません。ユーザー名、ホスト、ほかのパラメータ、URLの残りの部分はそのまま表示します。URLの中にある`secrets`の値は、ここでも`<secret:NAME>`と表示します。フォームのボディのように`://`や`@`がパーセントエンコードされたURLは、URLとして認識しません。
 
 ### `defaults`
 
@@ -160,6 +162,12 @@ vars:
 ベースURLやDSNのようにどのジョブも使う接続先は、ジョブごとではなくここに一度だけ書きます：
 
 ```yaml
+vars:
+  user: "{{DB_USER}}"
+  host: "{{DB_HOST}}"
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 defaults:
   db:
     dsn: "postgres://{{vars.user}}@{{vars.host}}/app"
@@ -183,7 +191,7 @@ jobs:
         headers:
           authorization: "Bearer {{vars.token}}"
     steps:
-      - name: List users          # 既定の url に、両方のヘッダーを付けて送る
+      - name: List users          # 既定のurlに、両方のヘッダーを付けて送る
         uses: http
         with:
           get: /users
@@ -229,7 +237,7 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 
 ## ジョブ
 
-`jobs`はジョブ名からジョブ定義へのマップです。ジョブは順に実行するステップをまとめ、依存先を宣言します。
+`jobs`はジョブ定義のリストです。ジョブは順に実行するステップをまとめ、依存先を宣言します。
 
 ### ジョブのプロパティ
 
@@ -275,6 +283,10 @@ jobs:
 ジョブは、`needs`に書いたジョブが失敗したとき、または同じ理由でスキップされたときにスキップされます。`always: true`を付けたジョブは、`needs`のジョブがどう終わったかにかかわらず、すべてが終わり次第実行されます。他のジョブが作ったものを片付けるジョブに必要な動作です。これがないと、失敗した実行はテスト用のデータベースやファイルを残し、次の実行はそれらが残っているために失敗します。
 
 ```yaml
+vars:
+  admin_dsn: "{{ADMIN_DSN}}"
+  test_dsn: "{{TEST_DSN}}"
+
 jobs:
   - id: setup
     name: Setup
@@ -320,6 +332,10 @@ jobs:
 ブール式です。真と評価されるとジョブをスキップします。
 
 ```yaml
+vars:
+  environment: "{{ENVIRONMENT}}"
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Production only
     skipif: vars.environment != "production"
@@ -327,8 +343,9 @@ jobs:
       - name: Check
         uses: http
         with:
-          url: "{{vars.api_url}}/health"
           method: GET
+          url: "{{vars.api_url}}/health"
+        test: res.code == 200
 ```
 
 #### `fail_fast`
@@ -339,11 +356,14 @@ jobs:
 jobs:
   - name: Orders
     fail_fast: true
+    defaults:
+      db:
+        dsn: "file:./orders.db"
     steps:
       - name: Create the table
         uses: db
         with:
-          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+          query: CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, total INTEGER)
         test: res.code == 0
 
       - name: Insert an order          # テーブルを作れなかったときはスキップ
@@ -365,6 +385,10 @@ jobs:
 ジョブ内の該当アクションを使うステップの`with`にマージされる既定値です。ステップ側の指定が優先され、ここでの指定は、すべてのジョブが共有する[ワークフローの`defaults`](#defaults)より優先されます。キーはステップが`uses`に書くものです。組み込みアクションの名前、完全な形の外部アクション、[`actions`](#actions)で付けた名前のどれかです。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 jobs:
   - name: API checks
     defaults:
@@ -377,7 +401,7 @@ jobs:
       - name: Health
         uses: http
         with:
-          get: /health        # 既定の url からの相対パス
+          get: /health        # 既定のurlからの相対パス
         test: res.code == 200
 ```
 
@@ -405,6 +429,9 @@ jobs:
 | `baseline_test` | Expression | 任意 | すべての回が終わった後に、各ステップの回の集計と、[`--baseline`](/ja/reference/cli-reference#--baseline)で指定した実行の集計に対して評価する。指定がなければスキップする。[以前の実行と比べるテスト](#以前の実行と比べるテスト)を参照 |
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Poll until ready
     repeat:
@@ -414,8 +441,8 @@ jobs:
       - name: Check
         uses: http
         with:
-          url: "{{vars.api_url}}/status"
           method: GET
+          url: "{{vars.api_url}}/status"
         test: res.code == 200
 ```
 
@@ -428,6 +455,9 @@ jobs:
 `repeat.test`がなければ、ステップが失敗した回が1回でもあるとジョブは失敗します。`repeat.test`は、すべての回が終わった後に各ステップの回の集計に対して評価され、これだけでジョブの成否が決まります。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -470,6 +500,9 @@ jobs:
 `repeat.baseline_test`は、各回を以前の実行（[`--baseline`](/ja/reference/cli-reference#--baseline)で指定したレポート）と比べます。すべての回が終わった後、`repeat.test`の次に評価します。`repeat.test`が読めるものに加えて、`baseline.steps`の下で、以前の実行における同じジョブのステップを`id`で読めます。
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -577,8 +610,8 @@ steps:
   - name: Flaky endpoint
     uses: http
     with:
-      url: "{{vars.api_url}}/slow"
       method: GET
+      url: "{{vars.api_url}}/slow"
     test: res.code == 200
     retry:
       max_attempts: 3
@@ -598,8 +631,8 @@ steps:
       - path: /metrics
       - path: /version
     with:
-      url: "{{vars.api_url}}{{vars.path}}"
       method: GET
+      url: "{{vars.api_url}}{{vars.path}}"
     test: res.code == 200
 ```
 
@@ -693,7 +726,7 @@ Goのduration文字列か、秒数の数値で指定します。
 ```yaml
 timeout: "30s"
 timeout: "5m"
-interval: 10        # 10 秒
+interval: 10        # 10秒
 ```
 
 ### 式とテンプレート
@@ -723,7 +756,7 @@ skipif: vars.environment == "local"
 | ステップの`echo` | 本文の代わりにエラーを表示し、ステップの結果は変わりません |
 
 ```yaml
-# 先行するステップが outputs.login を出力していなければ、ステップは失敗する
+# 先行するステップがoutputs.loginを出力していなければ、ステップは失敗する
 headers:
   authorization: "Bearer {{outputs.login.token}}"
 

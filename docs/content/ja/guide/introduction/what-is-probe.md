@@ -63,30 +63,28 @@ Goで開発されており、実行時の依存がありません。1つのコ�
 まずは最もシンプルな例から始めましょう。以下のYAMLファイルを作成します：
 
 ```yaml
-name: My Workflow
+name: Hello World Workflow
 
 jobs:
 - name: My First Job
   steps:
   - name: Say Hello
-    uses: shell
-    with:
-      cmd: echo "Hello, World!"
-    test: res.code == 0
-    echo: "{{ res.stdout }}"
+    uses: hello
+    wait: 1s
+    echo: "Hello, World!"
 ```
 
 このワークフローをファイルに保存して実行します：
 
 ```bash
 $ probe hello-world.yml
-My Workflow
+Hello World Workflow
 
-⏺ My First Job (Completed in 0.02s)
-  ⎿  0. ✔︎  Say Hello
+⏺ My First Job (Completed in 1.07s)
+  ⎿  0. ✓  🕐︎1s → Say Hello
            Hello, World!
 
-Total workflow time: 0.02s ✔︎ All jobs succeeded
+Total workflow time: 1.07s ✓ All jobs succeeded
 ```
 
 ### より実践的な例：API監視

@@ -63,12 +63,11 @@ Test expressions have access to comprehensive response data:
 ```yaml
 # HTTP Response Testing Context
 test: |
-  res.code == 200 &&           # HTTP status code
-  (rt.sec * 1000) < 1000 &&             # Response time in milliseconds
-  res.body_size > 0 &&           # Response body size in bytes
-  res.headers["Content-Type"] == "application/json" &&  # Response headers
-  res.body.status == "healthy" && # Parsed JSON response
-  res.body contains "success"   # Response body as text
+  res.code == 200 &&           // HTTP status code
+  (rt.sec * 1000) < 1000 &&             // Response time in milliseconds
+  len(res.rawbody ?? res.body) > 0 &&  // Response body length
+  res.headers["Content-Type"] == "application/json" &&  // Response headers
+  res.body.status == "healthy"  // Parsed JSON response
 ```
 
 ## HTTP Response Testing
@@ -87,7 +86,7 @@ test: res.code == 200
 test: res.code >= 200 && res.code < 300
 
 # Multiple acceptable codes
-test: res.status in [200, 201, 202]
+test: res.code in [200, 201, 202]
 
 # Client vs server errors
 test: res.code < 400  # Success or redirect
@@ -103,7 +102,7 @@ test: res.code >= 500  # Server error
 # Performance validation
 test: (rt.sec * 1000) < 1000                    # Must respond within 1 second
 test: (rt.sec * 1000) >= 100 && (rt.sec * 1000) <= 500  # Response time range
-test: (rt.sec * 1000) < {{vars.MAX_RESPONSE_TIME || 2000}}  # Configurable threshold
+test: (rt.sec * 1000) < int(vars.MAX_RESPONSE_TIME ?? 2000)  # Configurable threshold
 
 # Performance categories
 test: |
@@ -116,19 +115,19 @@ test: |
 
 ### Response Size Validation
 
-`res.body_size` catches an empty body and a response that came back far larger than expected.
+The length of the body, `len(res.rawbody ?? res.body)`, catches an empty body and a response that came back far larger than expected. `res.rawbody` is the unparsed body when the response was JSON, and `res.body` is the body itself otherwise.
 
 ```yaml
 # Content presence
-test: res.body_size > 0                    # Has content
-test: res.body_size > 100                  # Minimum content size
-test: res.body_size < 1048576             # Maximum 1MB response
+test: len(res.rawbody ?? res.body) > 0  # Has content
+test: len(res.rawbody ?? res.body) > 100  # Minimum content size
+test: len(res.rawbody ?? res.body) < 1048576  # Maximum 1MB response
 
 # Size-based validation
 test: |
   res.code == 200 &&
-  res.body_size > 50 &&                   # Not empty error message
-  res.body_size < 100000                  # Not unexpectedly large
+  len(res.rawbody ?? res.body) > 50 &&  // Not empty error message
+  len(res.rawbody ?? res.body) < 100000  // Not unexpectedly large
 ```
 
 ### Header Validation
@@ -156,7 +155,7 @@ test: res.headers["X-Rate-Limit-Remaining"] > "10"
 # Custom headers
 test: |
   "X-Request-Id" in res.headers &&
-  len(res.headers["X-Request-Id"]) == 36  # UUID format
+  len(res.headers["X-Request-Id"]) == 36  // UUID format
 ```
 
 ## JSON Response Testing
@@ -185,16 +184,16 @@ test: |
 
 ### Data Type Validation
 
-`typeof` asserts that a field came back as the type the client expects, not merely that it is present.
+`type` asserts that a field came back as the type the client expects, not merely that it is present. A JSON number is read as `float` and an object as `map`.
 
 ```yaml
 # Type checking
 test: |
-  typeof(res.body.id) == "number" &&
-  typeof(res.body.name) == "string" &&
-  typeof(res.body.active) == "boolean" &&
-  typeof(res.body.tags) == "array" &&
-  typeof(res.body.metadata) == "object"
+  type(res.body.id) == "float" &&
+  type(res.body.name) == "string" &&
+  type(res.body.active) == "bool" &&
+  type(res.body.tags) == "array" &&
+  type(res.body.metadata) == "map"
 
 # Value constraints
 test: |
@@ -245,9 +244,7 @@ test: |
 test: |
   all(res.body.data.orders, #.id != nil &&
     len(#.items) > 0 &&
-    #all(.items, #.product_id != nil &&
-      #.quantity > 0 && 
-      #.price > 0) &&
+    all(#.items, #.product_id != nil && #.quantity > 0 && #.price > 0) &&
     #.total == sum(map(#.items, #.quantity * #.price)))
 ```
 
@@ -272,7 +269,7 @@ test: lower(res.body) contains "error"
 test: |
   res.body contains "status" &&
   res.body contains "healthy" &&
-  !res.body contains "error"
+  !(res.body contains "error")
 ```
 
 ### Regular Expression Testing
@@ -288,12 +285,12 @@ test: res.body matches "https://[a-zA-Z0-9.-]+/api/v\\d+/"
 
 # Data format validation
 test: |
-  res.body matches "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z"  # ISO timestamp
+  res.body matches "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z"  // ISO timestamp
 
-# Extract and validate data
+# Version and its major number
 test: |
   res.body matches "Version: v\\d+\\.\\d+\\.\\d+" &&
-  res.body.extract("v(\\d+)\\.(\\d+)\\.(\\d+)")[1] >= "2"  # Major version >= 2
+  res.body matches "Version: v([2-9]|[1-9][0-9]+)\\."  // Major version 2 or later
 ```
 
 ### Content Length and Quality
@@ -308,9 +305,9 @@ test: |
 
 # Content quality checks
 test: |
-  len(split(res.body, "\\n")) > 5 &&           # Multi-line content
-  !res.body contains "Lorem ipsum" &&          # Not placeholder text
-  len(split(res.body, " ")) > 20               # Substantial content
+  len(split(res.body, "\n")) > 5 &&           // Multi-line content
+  !(res.body contains "Lorem ipsum") &&          // Not placeholder text
+  len(split(res.body, " ")) > 20               // Substantial content
 ```
 
 ## Advanced Testing Patterns
@@ -326,16 +323,16 @@ A test is an expression, so it can pick its own threshold from the environment i
 test: |
   res.code == 200 &&
   (vars.NODE_ENV == "development" ? 
-    (rt.sec * 1000) < 5000 :           # More lenient for dev
-    (rt.sec * 1000) < 1000             # Strict for production
+    (rt.sec * 1000) < 5000 :           // More lenient for dev
+    (rt.sec * 1000) < 1000             // Strict for production
   )
 
 # Feature flag testing
 test: |
   res.code == 200 &&
   (res.body.features.beta_enabled == true ?
-    res.body.beta_data != nil :    # Beta features should have data
-    res.body.beta_data == nil      # Beta features should be absent
+    res.body.beta_data != nil :    // Beta features should have data
+    res.body.beta_data == nil      // Beta features should be absent
   )
 ```
 
@@ -344,6 +341,9 @@ test: |
 A step can assert against an earlier step's outputs, which is how two endpoints are checked for agreement.
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: data-consistency-test
   name: data-consistency-test
@@ -366,7 +366,7 @@ jobs:
         url: "{{vars.API_URL}}/users"
       test: |
         res.code == 200 &&
-        len(res.body.users) == outputs['user-count'].total_users  # Consistency check
+        len(res.body.users) == outputs['user-count'].total_users  // Consistency check
       outputs:
         user_list: res.body.users
 
@@ -394,22 +394,22 @@ Some rules hold between fields rather than in any one of them, such as a total t
   test: |
     res.code == 200 &&
     res.body.order != nil &&
-    
-    # Order total equals sum of line items
+
+    // Order total equals sum of line items
     res.body.order.total == 
       sum(map(res.body.order.line_items, #.quantity * #.price)) &&
-    
-    # Tax calculation is correct (assuming 8% tax rate)
+
+    // Tax calculation is correct (assuming 8% tax rate)
     res.body.order.tax_amount == 
-      round(Math) / 100 &&
-    
-    # Shipping is applied correctly
+      round(res.body.order.subtotal * 0.08 * 100) / 100 &&
+
+    // Shipping is applied correctly
     (res.body.order.subtotal >= 100 ? 
-      res.body.order.shipping_cost == 0 :     # Free shipping over $100
-      res.body.order.shipping_cost == 9.99    # Standard shipping
+      res.body.order.shipping_cost == 0 :     // Free shipping over $100
+      res.body.order.shipping_cost == 9.99    // Standard shipping
     ) &&
-    
-    # Final total calculation
+
+    // Final total calculation
     res.body.order.total == 
       res.body.order.subtotal + res.body.order.tax_amount + res.body.order.shipping_cost
 ```
@@ -441,7 +441,7 @@ Here the failing response is the expected one, so the test asserts on the error 
     method: GET
     url: "{{vars.API_URL}}/rate-limited-endpoint"
   test: |
-    res.status in [200, 429] &&  # Either success or rate limited
+    res.code in [200, 429] &&  // Either success or rate limited
     (res.code == 429 ? 
       "Retry-After" in res.headers && 
       res.body.error == "rate_limit_exceeded" :
@@ -470,14 +470,15 @@ Input at the edge of what is allowed is where validation tends to break, so it i
   with:
     url: "{{vars.API_URL}}/users"
     method: POST
+    # name at its maximum length, age at the upper boundary, score at the lower
     body: |
       {
-        "name": "{{random_str(255)}}",  # Maximum length
-        "age": 150,                     # Upper boundary
-        "score": 0                      # Lower boundary
+        "name": "{{random_str(255)}}",
+        "age": 150,
+        "score": 0
       }
   test: |
-    res.status in [201, 400] &&  # Either created or validation error
+    res.code in [201, 400] &&  // Either created or validation error
     (res.code == 400 ? 
       res.body.validation_errors != nil :
       res.body.user.id != nil
@@ -493,6 +494,9 @@ As a workflow grows, the question becomes what to check where. The patterns belo
 Splitting the checks into jobs lets the cheap ones run first and stop the run before the expensive ones start.
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: smoke-tests
   name: Smoke Tests
@@ -538,6 +542,11 @@ jobs:
 A full suite groups the cases by what they cover and carries the credentials obtained at the start through the rest of the run.
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  TEST_USERNAME: "{{TEST_USERNAME}}"
+  TEST_PASSWORD: "{{TEST_PASSWORD}}"
+
 jobs:
 - id: api-test-suite
   name: Comprehensive API Test Suite
@@ -610,7 +619,7 @@ jobs:
       test: |
         res.code == 200 &&
         res.body.user.id == outputs['create-user'].user_id &&
-        res.body.user.email == "{{outputs['create-user'].user_email}}"
+        res.body.user.email == outputs['create-user'].user_email
 
     - name: Update User
       uses: http
@@ -648,7 +657,7 @@ jobs:
 
 ## Performance Testing
 
-`res.time` makes response time an ordinary assertion, so a workflow can hold a service to a time budget as well as a correctness one.
+`rt` makes response time an ordinary assertion, so a workflow can hold a service to a time budget as well as a correctness one.
 
 ### Response Time Benchmarks
 
@@ -662,16 +671,16 @@ A benchmark pairs the correctness assertion with the time it is allowed to take.
     url: "{{vars.API_URL}}/performance-test"
   test: |
     res.code == 200 &&
-    
-    # Tiered performance expectations
+
+    // Tiered performance expectations
     (vars.NODE_ENV == "production" ? 
-      (rt.sec * 1000) < 500 :              # Production: < 500ms
-      (rt.sec * 1000) < 2000               # Non-production: < 2s
+      (rt.sec * 1000) < 500 :              // Production: < 500ms
+      (rt.sec * 1000) < 2000               // Non-production: < 2s
     ) &&
-    
-    # Additional performance metrics
-    res.body.query_time < 100 &&    # Database query time
-    res.body.render_time < 50       # Template render time
+
+    // Additional performance metrics
+    res.body.query_time < 100 &&    // Database query time
+    res.body.render_time < 50       // Template render time
   outputs:
     response_time: (rt.sec * 1000)
     query_time: res.body.query_time
@@ -691,19 +700,19 @@ When load is generated elsewhere, Probe reads the results back and asserts on th
   test: |
     res.code == 200 &&
     res.body.test_completed == true &&
-    
-    # Success rate requirements
+
+    // Success rate requirements
     res.body.success_rate >= 0.95 &&
-    
-    # Performance percentiles
+
+    // Performance percentiles
     res.body.percentiles.p50 < 1000 &&
     res.body.percentiles.p95 < 2000 &&
     res.body.percentiles.p99 < 5000 &&
-    
-    # Error rate limits
+
+    // Error rate limits
     res.body.error_rate < 0.05 &&
-    
-    # No critical errors
+
+    // No critical errors
     res.body.critical_errors == 0
 ```
 
@@ -759,10 +768,10 @@ Hostile input should be rejected or neutralised, and either outcome is acceptabl
     method: GET
     url: "{{vars.API_URL}}/users?search='; DROP TABLE users; --"
   test: |
-    res.status in [200, 400] &&  # Either filtered or rejected
-    !res.body contains "sql" && # No SQL error messages
-    !res.body contains "syntax" &&
-    res.body.error != "internal_server_error"  # Should not cause server error
+    res.code in [200, 400] &&  // Either filtered or rejected
+    !(res.body contains "sql") && // No SQL error messages
+    !(res.body contains "syntax") &&
+    res.body.error != "internal_server_error"  // Should not cause server error
 
 - name: Test XSS Protection
   uses: http
@@ -774,10 +783,10 @@ Hostile input should be rejected or neutralised, and either outcome is acceptabl
         "content": "<script>alert('xss')</script>"
       }
   test: |
-    res.status in [201, 400] &&
+    res.code in [201, 400] &&
     (res.code == 201 ? 
-      !res.body.comment.content contains "<script>" :  # Should be sanitized
-      res.body.validation_errors != nil               # Or rejected
+      !(res.body.comment.content contains "<script>") :  // Should be sanitized
+      res.body.validation_errors != nil               // Or rejected
     )
 ```
 
@@ -803,48 +812,92 @@ The step name and the assertions together should say what the case was, so a fai
       }
   # Comprehensive test with clear validation points
   test: |
-    res.code == 201 &&                                    # 1. Successful creation
-    res.body.user.id != nil &&                            # 2. User ID assigned
-    res.body.user.email != nil &&                         # 3. Email stored
-    res.body.user.password == nil &&                      # 4. Password not returned
-    res.body.user.created_at != nil &&                    # 5. Timestamp recorded
-    res.body.user.email_verified == false &&               # 6. Email unverified initially
-    res.body.verification_email_sent == true &&            # 7. Verification triggered
-    "Location" in res.headers &&                         # 8. Location header present
-    res.headers["Location"] contains "/users/"             # 9. Correct redirect path
+    res.code == 201 &&                                    // 1. Successful creation
+    res.body.user.id != nil &&                            // 2. User ID assigned
+    res.body.user.email != nil &&                         // 3. Email stored
+    res.body.user.password == nil &&                      // 4. Password not returned
+    res.body.user.created_at != nil &&                    // 5. Timestamp recorded
+    res.body.user.email_verified == false &&               // 6. Email unverified initially
+    res.body.verification_email_sent == true &&            // 7. Verification triggered
+    "Location" in res.headers &&                         // 8. Location header present
+    res.headers["Location"] contains "/users/"             // 9. Correct redirect path
   outputs:
     user_id: res.body.user.id
     user_email: res.body.user.email
-    test_summary: |
-      Registration test completed:
-      - User ID: {{res.body.user.id}}
-      - Email: {{res.body.user.email}}
-      - Verification: {{res.body.verification_email_sent ? "Sent" : "Failed"}}
-      - Response time: {{rt.duration}}
+  echo: |
+    Registration test completed:
+    - User ID: {{res.body.user.id}}
+    - Email: {{res.body.user.email}}
+    - Verification: {{res.body.verification_email_sent ? "Sent" : "Failed"}}
+    - Response time: {{rt.duration}}
 ```
 
 ### Test Result Aggregation
 
-A final job that depends on the others can read their status and print one summary.
+A final job that needs the others can read what their steps published and print one summary. With `always: true` it runs even when one of them failed, and `?? false` covers a step that never connected and so published nothing.
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+  NODE_ENV: "{{NODE_ENV ?? 'development'}}"
+
 jobs:
+- id: smoke-tests
+  name: Smoke Tests
+  steps:
+    - name: Basic Connectivity
+      id: smoke
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/ping"
+      test: res.code == 200
+      outputs:
+        passed: res.code == 200
+
+- id: functional-tests
+  name: Functional Tests
+  steps:
+    - name: User Management
+      id: functional
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/users"
+      test: res.code == 200
+      outputs:
+        passed: res.code == 200
+
+- id: security-tests
+  name: Security Tests
+  steps:
+    - name: Unauthorized Access
+      id: security
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/admin/users"
+      test: res.code == 401
+      outputs:
+        passed: res.code == 401
+
 - id: test-summary
   name: Test Results Summary
   needs: [smoke-tests, functional-tests, security-tests]
+  always: true
   steps:
     - name: Generate Test Report
       uses: hello
       echo: |
         Test Execution Summary
-        =====================
-          
-          
-        Overall Result: {{
-        }}
-          
-        Execution Time: {{unixtime()}}
-        Test Environment: {{vars.NODE_ENV || "development"}}
+        ======================
+
+        Smoke: {{(outputs.smoke?.passed ?? false) ? "passed" : "failed"}}
+        Functional: {{(outputs.functional?.passed ?? false) ? "passed" : "failed"}}
+        Security: {{(outputs.security?.passed ?? false) ? "passed" : "failed"}}
+
+        Finished At: {{unixtime()}}
+        Test Environment: {{vars.NODE_ENV}}
 ```
 
 ## Best Practices
@@ -893,7 +946,7 @@ test: |
 # Good: Environment-specific performance thresholds
 test: |
   res.code == 200 &&
-  (rt.sec * 1000) < {{vars.MAX_RESPONSE_TIME || 2000}}
+  (rt.sec * 1000) < int(vars.MAX_RESPONSE_TIME ?? 2000)
 ```
 
 ### 4. Maintainable Test Expressions

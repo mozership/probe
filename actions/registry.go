@@ -128,6 +128,88 @@ func AllParams() map[string][]string {
 	return out
 }
 
+// reqFields and resFields are the fields of the req and the res each
+// built-in action returns, as its package declares them.
+var (
+	reqFields = map[string]func() []string{
+		"db":       db.ReqFields,
+		"dns":      dns.ReqFields,
+		"embedded": embedded.ReqFields,
+		"grpc":     grpc.ReqFields,
+		"hello":    hello.ReqFields,
+		"http":     http.ReqFields,
+		"imap":     imap.ReqFields,
+		"shell":    shell.ReqFields,
+		"smtp":     smtp.ReqFields,
+		"ssh":      ssh.ReqFields,
+	}
+	resFields = map[string]func() []string{
+		"db":       db.ResFields,
+		"dns":      dns.ResFields,
+		"embedded": embedded.ResFields,
+		"grpc":     grpc.ResFields,
+		"hello":    hello.ResFields,
+		"http":     http.ResFields,
+		"imap":     imap.ResFields,
+		"shell":    shell.ResFields,
+		"smtp":     smtp.ResFields,
+		"ssh":      ssh.ResFields,
+	}
+)
+
+// AllReqFields returns the fields of the req each built-in action returns,
+// by its name.
+func AllReqFields() map[string][]string {
+	return collect(reqFields)
+}
+
+// AllResFields returns the fields of the res each built-in action returns,
+// by its name.
+func AllResFields() map[string][]string {
+	return collect(resFields)
+}
+
+// WithFields returns the names of the built-in actions whose req and res
+// hold the keys of the step's with, besides the fields they declare: hello,
+// which returns what it is given.
+func WithFields() []string {
+	return []string{"hello"}
+}
+
+func collect(m map[string]func() []string) map[string][]string {
+	out := make(map[string][]string, len(m))
+	for name, f := range m {
+		out[name] = f()
+	}
+	return out
+}
+
+// required are the keys of with each built-in action cannot run without.
+// hello, which needs none, is left out.
+var required = map[string]func() [][]string{
+	"db":       db.Required,
+	"dns":      dns.Required,
+	"embedded": embedded.Required,
+	"grpc":     grpc.Required,
+	"http":     http.Required,
+	"imap":     imap.Required,
+	"shell":    shell.Required,
+	"smtp":     smtp.Required,
+	"ssh":      ssh.Required,
+}
+
+// AllRequired returns the keys of with each built-in action cannot run
+// without, by its name, each as the keys that stand for one another, such
+// as url and get for the http action, of which one is enough. An action
+// that needs none is left out.
+func AllRequired() map[string][][]string {
+	out := make(map[string][][]string, len(required))
+	for name, f := range required {
+		out[name] = f()
+	}
+	return out
+}
+
 // Lookup returns the serve function of a built-in action.
 func Lookup(name string) (func(), bool) {
 	// The embedded action runs steps of its own, so it is told which

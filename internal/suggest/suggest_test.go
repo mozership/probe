@@ -23,6 +23,15 @@ func TestClosest(t *testing.T) {
 	}
 }
 
+func TestWithin(t *testing.T) {
+	fields := []string{"code", "stderr", "stdout"}
+	for name, want := range map[string]string{"cod": "code", "Code": "code", "body": "", "stdot": "stdout"} {
+		if got := Within(name, fields, 1); got != want {
+			t.Errorf("Within(%q, %q, 1) = %q, want %q", name, fields, got, want)
+		}
+	}
+}
+
 func TestDistance(t *testing.T) {
 	tests := []struct {
 		a, b string

@@ -471,7 +471,7 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
 		Index:    st.idx,
 		ID:       st.repeatID(),
 		Name:     name,
-		HasTest:  st.checked(),
+		HasTest:  st.checked() || st.needsNoCheck(),
 		RT:       "",
 		WaitTime: st.getWaitTimeForDisplay(),
 		Test:     st.Test,
@@ -511,6 +511,8 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
 			jCtx.SetFailed()
 			jCtx.Result.recordFailure(st.failure.Kind)
 		}
+	} else if st.needsNoCheck() {
+		result.Status = StatusSuccess
 	} else {
 		result.Status = StatusWarning
 	}
@@ -591,7 +593,7 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	if !hasError && st.ctx.RT.Duration != "" {
 		counter.RTs = append(counter.RTs, st.ctx.RT.Sec)
 	}
-	if st.contractChecked() {
+	if st.contractChecked() || st.needsNoCheck() {
 		counter.Checked = true
 	}
 	if counter.Contract == nil {
@@ -640,6 +642,14 @@ func (st *stepRun) contractMatched() *report.Contract {
 // the action checked the response against.
 func (st *stepRun) checked() bool {
 	return st.Test != "" || st.contractChecked()
+}
+
+// needsNoCheck reports whether the step passes without being checked: a step
+// of the hello action, which does nothing that could fail, so that one there
+// for its echo, or to publish what it is given, is not counted as untested.
+// probe check does not warn of it either.
+func (st *stepRun) needsNoCheck() bool {
+	return st.Uses == "hello"
 }
 
 // contractFailure returns why the request or the response breaks its

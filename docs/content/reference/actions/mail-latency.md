@@ -52,3 +52,50 @@ The result points at the file that was written.
 | `rt.duration` | String | Time spent measuring, such as `"1.2ms"` |
 | `rt.sec` | Float | Time spent measuring in seconds |
 | `status` | Integer | `0` on success |
+
+## Examples
+
+Measuring after waiting for a message sent over SMTP to arrive:
+
+```yaml
+name: Mail latency
+vars:
+  smtp_addr: localhost:25
+  run_id: "{{random_str(8)}}"
+  maildir: /var/mail/probe
+jobs:
+- name: Mail delivery latency
+  steps:
+    - name: Send a probe mail
+      uses: smtp
+      with:
+        addr: "{{vars.smtp_addr}}"
+        from: "probe@example.com"
+        to: "probe@example.com"
+        subject: "probe {{vars.run_id}}"
+        session: 1
+        message: 1
+        length: 500
+      test: res.code == 0 && res.sent > 0
+
+    - name: Measure
+      id: latency
+      uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+      wait: 30s
+      with:
+        mail_dir: "{{vars.maildir}}/new"
+        output_dir: "./reports"
+      test: res.status == 0
+      outputs:
+        report: res.output_file
+
+    - name: Report
+      uses: hello
+      echo: "CSV: {{outputs.latency.report}}"
+```
+
+## See Also
+
+- **[SMTP](/reference/actions/smtp)** - Sending mail
+- **[IMAP](/reference/actions/imap)** - Working with mailboxes
+- **[YAML Configuration](/reference/yaml-configuration)** - Step properties

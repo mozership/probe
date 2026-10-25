@@ -9,13 +9,21 @@ import "strings"
 // half its length. One that differs from name only in case, as api_url does
 // from API_URL, is closest.
 func Closest(name string, allowed []string) string {
+	// A short name is close to too many others: x is two edits from rt.
+	return Within(name, allowed, min(2, len(name)/2))
+}
+
+// Within returns the name of allowed closest to name, when it is edits
+// edits from it at most, or differs from it only in case. It is for names
+// among which one two edits away is as likely another as the one meant, as
+// body is two from code.
+func Within(name string, allowed []string, edits int) string {
 	for _, a := range allowed {
 		if strings.EqualFold(name, a) {
 			return a
 		}
 	}
-	// A short name is close to too many others: x is two edits from rt.
-	best, bestDist := "", min(3, len(name)/2+1)
+	best, bestDist := "", edits+1
 	for _, a := range allowed {
 		if d := distance(name, a); d < bestDist {
 			best, bestDist = a, d

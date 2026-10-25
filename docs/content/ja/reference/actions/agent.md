@@ -119,8 +119,14 @@ APIキーはProbeの環境から読みます。Probeの出力で値を隠すよ�
 | `sakura` | `SAKURA_AI_ENGINE_TOKEN` | さくらのAI Engine。Chat Completionsで呼び出す。モデルごとに受け付けるパラメータが違うため`effort`は送らず、`vision`を`true`にしない限り画像も渡さない。`gpt-oss-120b`のようにツールを呼び出せるモデルを選ぶ |
 
 ```yaml
+name: Sign-up
+actions:
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
 secrets:
   - OPENAI_API_KEY
+  - TEST_PASSWORD
+vars:
+  test_password: "{{TEST_PASSWORD}}"
 jobs:
 - name: sign-up
   steps:
@@ -132,6 +138,11 @@ jobs:
       url: https://staging.example.com/
       task: Sign up with {secret:EMAIL} and the password {secret:PASSWORD}.
       expect: The dashboard greets the user.
+      secrets:
+        EMAIL: "qa+{{random_str(8)}}@example.com"
+        PASSWORD: "{{vars.test_password}}"
+    timeout: 5m
+    test: res.verdict == "pass"
 ```
 
 画像を読めないモデルは、ページを要素とテキストだけで読みます。スクリーンショットのツールは渡さず、ページ上の座標ではなく要素を操作し、ジャッジにも最後のページを画像として見せません。スクリーンショット自体は証拠として保存します。

@@ -6,7 +6,7 @@ This page documents every key Probe reads from a workflow file, the expression c
 
 The skeleton below shows every property a workflow file can carry and where each one belongs.
 
-```yaml
+```yaml fragment
 name: string                  # Required: workflow name
 description: string           # Optional: what the workflow does
 vars:                         # Optional: workflow variables
@@ -146,11 +146,13 @@ vars:
 
 Wherever the value of a listed variable would appear, Probe writes `<secret:NAME>` instead. That covers the report on the terminal, step names, `echo`, the request and response shown for a failed step, `--verbose` output, the log records of actions, and the files written by `--report`. The value is also hidden in the escaped forms it takes when it is quoted in an error message or encoded as JSON. Steps, tests and outputs still see the real value; only what is shown changes.
 
-A name that is not set, or set to an empty string, has nothing to hide and is skipped. A short value is replaced wherever it appears, so a secret such as `1` would hide every `1` in the output.
+A name that is not set, or set to an empty string, has nothing to hide and is skipped. A value shorter than 4 characters, such as `1`, `ok` or `dev`, is masked only where it is a whole value, such as a header or a field of a request or a response that holds nothing else, and not inside other text: replacing it wherever it appears would cut it out of unrelated words, which makes the output unreadable and gives the value away by the letters missing from them. Probe prints a warning to stderr once for each such secret, naming it but not showing its value, as `[WARN] the secret PIN is shorter than 4 characters, so it is masked only where it is a whole value; use a value of at least 4 characters`. Give such a credential a longer value if it must stay out of the output.
 
 Independently of `secrets`, the values of the `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers are always shown as `<redacted>`. A token obtained while the workflow runs, such as one returned by a login step and sent in a later request, is never listed in `secrets`, but it travels in one of these headers. Probe learns these values as an action is about to send or has received them, and hides them from then on, including in the action's own log records.
 
-The same goes for credentials passed to an action: the value of any `password`, `key_passphrase`, `secret_access_key` or `session_token` field, at any depth of `with`, is shown as `<redacted>`, and so is the password in a `dsn` or a `url`, such as `redis://user:password@host`, while the rest of the URL stays visible. A password written straight into a step therefore does not appear in `--verbose` output or an action's log records, even though it is not listed in `secrets`. When the template of such a value cannot be evaluated, the error names the value, as `with.password`, but does not say why, since the template and the error may each quote the credential. A `url` is treated so only when the template is in its user info, as in `redis://app:{{vars.pw}}@host`; the error of a template elsewhere in a `url` is shown.
+The same goes for credentials passed to an action: the value of any `password`, `key_passphrase`, `secret_access_key` or `session_token` field, at any depth of `with`, is shown as `<redacted>`, and so is the password in a `dsn` or a `url`, such as `redis://user:password@host`, while the rest of the URL stays visible. A password written straight into a step therefore does not appear in `--verbose` output or an action's log records, even though it is not listed in `secrets`. A credential learned this way that is shorter than 4 characters is, for the same reason as a short secret, not masked inside other text, such as a log record, but it is still shown as `<redacted>` under its header or field name, as the password of a URL, and where it is a whole value, whatever its length. When the template of such a value cannot be evaluated, the error names the value, as `with.password`, but does not say why, since the template and the error may each quote the credential. A `url` is treated so only when the template is in its user info, as in `redis://app:{{vars.pw}}@host`; the error of a template elsewhere in a `url` is shown.
+
+The password of any URL in what Probe shows or writes is shown as `<redacted>` as well, whatever its length and wherever the URL comes from: `postgres://app:pw@db/main` in a driver's error, or `https://x-access-token:abc@github.com/o/r` in a response body, comes out as `postgres://app:<redacted>@db/main` and `https://x-access-token:<redacted>@github.com/o/r`. The password is what follows the first colon of the user info, up to the last `@` before the host, so that a password holding an `@` is hidden whole. A password holding an unescaped `/`, `?` or `#` is not recognized, since the host is taken to end there: write it percent-encoded, as `%2F`, `%3F` and `%23`, as a URL requires anyway. The values of the parameters `password`, `passwd`, `pass`, `pwd`, `secret`, `client_secret`, `token`, `access_token`, `refresh_token`, `id_token`, `api_key`, `apikey`, `X-Amz-Security-Token`, `X-Amz-Signature`, `X-Goog-Signature` and `sig`, and of those named like the credential headers and fields above, are hidden the same way, whatever the case of their names, in the query of a URL and in its fragment, where the OAuth implicit flow returns `#access_token=…`: `jdbc:postgresql://db/app?user=app&password=pw` comes out as `jdbc:postgresql://db/app?user=app&password=<redacted>`. Parameters are separated by `&`, also as JSON writes it, `\u0026`, and as HTML does, `&amp;`. A value ends at the next of them, at a `#`, or at the space or quote after the URL. Parameters separated by `;`, as in `jdbc:sqlserver://host;password=pw`, are not recognized. The user name, the host, the other parameters and the rest of the URL stay visible, and a value listed in `secrets` that stands in a URL is still shown as `<secret:NAME>`. A URL whose `://` or `@` is percent-encoded, as in a form body, is not recognized as one.
 
 ### `defaults`
 
@@ -160,6 +162,12 @@ The same goes for credentials passed to an action: the value of any `password`, 
 A connection that every job uses, such as a base URL or a DSN, is written once here rather than in each job:
 
 ```yaml
+vars:
+  user: "{{DB_USER}}"
+  host: "{{DB_HOST}}"
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 defaults:
   db:
     dsn: "postgres://{{vars.user}}@{{vars.host}}/app"
@@ -229,7 +237,7 @@ A job file run by the [embedded](/reference/actions/embedded) action is read by 
 
 ## Jobs
 
-`jobs` is a map from job name to job definition. A job groups the steps that run in sequence, and declares what it depends on.
+`jobs` is a list of job definitions. A job groups the steps that run in sequence, and declares what it depends on.
 
 ### Job Properties
 
@@ -275,6 +283,10 @@ jobs:
 A job is skipped when a job it `needs` failed or was skipped for the same reason. With `always: true`, it runs once every job in `needs` is over, however each ended. That is what a job that removes what the others made needs: left without it, a failed run leaves its test database or its files behind, and the next run finds them.
 
 ```yaml
+vars:
+  admin_dsn: "{{ADMIN_DSN}}"
+  test_dsn: "{{TEST_DSN}}"
+
 jobs:
   - id: setup
     name: Setup
@@ -320,6 +332,10 @@ jobs:
 A boolean expression. The job is skipped when it evaluates to true.
 
 ```yaml
+vars:
+  environment: "{{ENVIRONMENT}}"
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Production only
     skipif: vars.environment != "production"
@@ -329,6 +345,7 @@ jobs:
         with:
           method: GET
           url: "{{vars.api_url}}/health"
+        test: res.code == 200
 ```
 
 #### `fail_fast`
@@ -339,11 +356,14 @@ The steps of a job run one after another, and a step runs whether or not the one
 jobs:
   - name: Orders
     fail_fast: true
+    defaults:
+      db:
+        dsn: "file:./orders.db"
     steps:
       - name: Create the table
         uses: db
         with:
-          query: CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)
+          query: CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, total INTEGER)
         test: res.code == 0
 
       - name: Insert an order          # skipped when the table was not created
@@ -365,6 +385,10 @@ jobs:
 Default parameters merged into the `with` of every step in the job that uses the matching action. A value set on the step wins, and a value set here wins over the [`defaults` of the workflow](#defaults), which every job shares. The key is what a step writes in `uses`: the name of a built-in action, an external action in full, or a name given under [`actions`](#actions).
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+  token: "{{API_TOKEN}}"
+
 jobs:
   - name: API checks
     defaults:
@@ -405,6 +429,9 @@ The `http` action requires a method. Either set `method` explicitly, or use the 
 | `baseline_test` | Expression | No | Checked once every run is over, against the runs of the steps and those of the run given by [`--baseline`](/reference/cli-reference#--baseline). Skipped when there is none. See [Test against an Earlier Run](#test-against-an-earlier-run) |
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Poll until ready
     repeat:
@@ -428,6 +455,9 @@ Each run's steps read the outputs that the earlier steps of the same run publish
 Without `repeat.test`, a run in which a step fails fails the job. `repeat.test` is checked once every run is over, against what the runs of each step came to, and decides alone whether the job passed:
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:
@@ -470,6 +500,9 @@ With `repeat.test`, the runs are counted and fail nothing by themselves:
 `repeat.baseline_test` compares the runs to those of an earlier run, the report given by [`--baseline`](/reference/cli-reference#--baseline). It is checked once every run is over, after `repeat.test`, and reads what that test reads and, under `baseline.steps`, the steps of the same job in the earlier run, by their `id`:
 
 ```yaml
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
   - name: Search
     repeat:

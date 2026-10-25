@@ -42,3 +42,21 @@ func Keeps() []string {
 func Params() []string {
 	return mapping.FieldTags(Req{})
 }
+
+// ReqFields returns the fields of the req the dns action returns, those of
+// Req, and ResFields those of its res, for probe check to report a step that
+// reads another.
+func ReqFields() []string {
+	return mapping.FieldTags(Req{})
+}
+
+// ResFields returns the fields of the res the dns action returns; see
+// ReqFields.
+func ResFields() []string {
+	return []string{"answers", "authoritative", "protocol", "rcode", "server", "values"}
+}
+
+// Required returns the keys of with the dns action cannot run without: name.
+func Required() [][]string {
+	return [][]string{{"name"}}
+}

@@ -9,12 +9,18 @@ Every Probe workflow consists of several key components:
 ```yaml
 name: Workflow Name                    # Required: Human-readable name
 description: What this workflow does   # Optional: Detailed description
-vars:                                   # Optional: Environment variables
+vars:                                  # Optional: Workflow variables
   API_BASE_URL: https://api.example.com
-jobs:                                 # Required: One or more jobs
-- id: job-name
-  name: job-name
-  # Job definition...
+jobs:                                  # Required: One or more jobs
+- id: api-check                        # Optional: ID that other jobs refer to
+  name: API Check                      # Required: Job name
+  steps:                               # Required: One or more steps
+    - name: Check API Health
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_BASE_URL}}/health"
+      test: res.code == 200
 ```
 
 ### Required Components
@@ -60,6 +66,10 @@ vars:
 **Defaults**: Set common `with` values for the steps of a job, keyed by action name. A top-level `defaults` sets them for every job, and a job's own come before it.
 
 ```yaml
+name: Health Check
+vars:
+  api_url: "{{API_URL}}"
+
 jobs:
 - name: Health Check
   defaults:
@@ -87,6 +97,8 @@ Steps execute sequentially, each depending on the previous one's success.
 ```yaml
 name: Database Migration
 description: Execute database schema changes in order
+vars:
+  DB_API: "{{DB_API}}"
 
 jobs:
 - id: migration
@@ -130,6 +142,10 @@ Multiple independent checks run simultaneously for efficiency.
 ```yaml
 name: Multi-Service Health Check
 description: Check health of all microservices in parallel
+vars:
+  USER_SERVICE_URL: "{{USER_SERVICE_URL}}"
+  PAYMENT_SERVICE_URL: "{{PAYMENT_SERVICE_URL}}"
+  NOTIFICATION_SERVICE_URL: "{{NOTIFICATION_SERVICE_URL}}"
 
 jobs:
 - id: user-service
@@ -175,6 +191,10 @@ Combines parallel and sequential execution with dependencies.
 ```yaml
 name: Application Deployment Validation
 description: Validate deployment across multiple stages
+vars:
+  DB_HEALTH_URL: "{{DB_HEALTH_URL}}"
+  REDIS_HEALTH_URL: "{{REDIS_HEALTH_URL}}"
+  API_URL: "{{API_URL}}"
 
 jobs:
   # Stage 1: Infrastructure checks (parallel)
@@ -254,7 +274,6 @@ jobs:
         url: https://us-east.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-east'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -269,7 +288,6 @@ jobs:
         url: https://us-west.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'us-west'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -284,7 +302,6 @@ jobs:
         url: https://eu.api.example.com/health
       test: res.code == 200
       outputs:
-        region: "'eu'"
         status: res.body.status
         response_time: (rt.sec * 1000)
 
@@ -297,11 +314,11 @@ jobs:
       uses: hello
       echo: |
         Regional Health Check Results:
-          
+
         US East: {{outputs['us-east-check'].status}} ({{outputs['us-east-check'].response_time}}ms)
         US West: {{outputs['us-west-check'].status}} ({{outputs['us-west-check'].response_time}}ms)
         Europe: {{outputs['eu-check'].status}} ({{outputs['eu-check'].response_time}}ms)
-          
+
         Total regions healthy: {{
           (outputs['us-east-check'].status == "healthy" ? 1 : 0) +
           (outputs['us-west-check'].status == "healthy" ? 1 : 0) +
@@ -359,13 +376,16 @@ description: Test core business functionality
 Design workflows that work across different environments using configuration merging.
 
 **base-monitoring.yml:**
-```yaml
+```yaml merge=monitoring base
 name: Service Monitoring
 description: Monitor critical services
+vars:
+  # Replaced by the vars of production.yml or staging.yml
+  API_BASE_URL: "{{API_BASE_URL}}"
 
 jobs:
 - id: api-check
-  name: api-check
+  name: API Check
   steps:
     - name: Check API Health
       uses: http
@@ -376,13 +396,13 @@ jobs:
 ```
 
 **production.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.production.example.com
 ```
 
 **staging.yml:**
-```yaml
+```yaml merge=monitoring
 vars:
   API_BASE_URL: https://api.staging.example.com
 ```
@@ -405,6 +425,10 @@ The techniques below let one file cover cases that would otherwise need several:
 A job is skipped when its `skipif` expression is true. The expression reads `vars` and the `outputs` of the jobs it depends on.
 
 ```yaml
+name: Conditional Diagnostics
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: health-check
   name: Basic Health Check
@@ -415,12 +439,14 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/health"
+      test: res.code == 200
       outputs:
         service_healthy: res.code == 200
 
 - name: Deep Diagnostic
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Run Diagnostics
       id: diagnostics
@@ -428,19 +454,19 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/diagnostics"
-      outputs:
-        diagnostics_ok: res.code == 200
+      test: res.code == 200
 
 - name: Send Alert
   needs: [health-check]
-  skipif: outputs['service-check'].service_healthy
+  always: true
+  skipif: outputs['service-check']?.service_healthy ?? false
   steps:
     - name: Critical Alert
       uses: hello
       echo: "CRITICAL: {{vars.service_url}} is not healthy"
 ```
 
-Because a failing job skips everything downstream of it, the health check publishes its result as an output rather than asserting it with `test`.
+The health check asserts its result with `test` and also publishes it as an output. A job whose needed job failed is skipped, so the two jobs that are there for a failed check have `always: true`. They read the output with `?.` and `??`, because a check that could not connect publishes none.
 
 
 ### 2. Dynamic Configuration
@@ -448,6 +474,12 @@ Because a failing job skips everything downstream of it, the health check publis
 Use expressions to make workflows adapt to runtime conditions.
 
 ```yaml
+name: Load Test
+vars:
+  load_test_url: "{{LOAD_TEST_URL}}"
+  load_test_users: "{{LOAD_TEST_USERS ?? 10}}"
+  load_test_duration: "{{LOAD_TEST_DURATION ?? 60}}"
+
 jobs:
 - id: load-test
   name: Load Testing
@@ -457,13 +489,13 @@ jobs:
       id: params
       echo: "Load test configuration determined"
       outputs:
-        concurrent_users: "{{vars.LOAD_TEST_USERS || 10}}"
-        test_duration: "{{vars.LOAD_TEST_DURATION || 60}}"
+        concurrent_users: int(vars.load_test_users)
+        test_duration: int(vars.load_test_duration)
 
     - name: Execute Load Test
       uses: http
       with:
-        url: "{{vars.LOAD_TEST_URL}}"
+        url: "{{vars.load_test_url}}"
         method: POST
         body: |
           {
@@ -475,30 +507,34 @@ jobs:
 
 ### 3. Workflow Composition
 
-Break complex workflows into reusable components.
+Break complex workflows into reusable components. Only one file can hold `jobs`, so the shared file keeps its job under a YAML anchor, and the workflow lists it among its own jobs.
 
 **common-setup.yml:**
-```yaml
-jobs:
-- id: setup
-  name: Common Setup
-  steps:
-    - name: Initialize Environment
-      uses: hello
-      id: setup
-      echo: "Environment initialized"
-      outputs:
-        timestamp: "{{unixtime()}}"
-        session_id: "{{random_str(8)}}"
+```yaml merge=composition base
+shared:
+  setup_job: &setup_job
+    id: setup
+    name: Common Setup
+    steps:
+      - name: Initialize Environment
+        uses: hello
+        id: setup
+        echo: "Environment initialized"
+        outputs:
+          timestamp: unixtime()
+          session_id: random_str(8)
 ```
 
 **main-workflow.yml:**
-```yaml
+```yaml merge=composition
 name: Complete System Test
 description: Full system validation with common setup
 
-# This will be merged with common-setup.yml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
+- *setup_job    # Defined in common-setup.yml
 - id: api-tests
   name: API Tests
   needs: [setup]
@@ -529,20 +565,38 @@ Use consistent, descriptive naming:
 ```yaml
 # Workflow names: Use Title Case
 name: Production API Health Check
+vars:
+  API_URL: "{{API_URL}}"
 
 # Job names: Descriptive and specific
 jobs:
 - id: user-authentication-test
   name: User Authentication Test
-  
+  steps:
+    # Step names: Action-oriented
+    - name: Verify User Login Endpoint
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/auth/login"
+      test: res.code == 200
+
 - id: database-connectivity-check
   name: Database Connectivity Check
+  steps:
+    - name: Test Database Connection Pool
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health/db-pool"
+      test: res.code == 200
 
-# Step names: Action-oriented
-steps:
-  - name: Verify User Login Endpoint
-  - name: Test Database Connection Pool
-  - name: Validate Cache Expiration
+    - name: Validate Cache Expiration
+      uses: http
+      with:
+        method: GET
+        url: "{{vars.API_URL}}/health/cache"
+      test: res.code == 200
 ```
 
 ### 2. Documentation
@@ -553,25 +607,25 @@ Include comprehensive documentation:
 name: E-commerce Checkout Flow Test
 description: |
   Validates the complete e-commerce checkout process including:
-  
+
   1. Product catalog browsing
   2. Shopping cart management  
   3. User authentication
   4. Payment processing
   5. Order confirmation
   6. Email notification delivery
-  
+
   This workflow simulates a real user journey from product selection
   to order completion, ensuring all critical business logic functions
   correctly.
-  
+
   Prerequisites:
   - Test user account with valid payment method
   - Product catalog populated with test data
   - Email service configured for notifications
-  
+
   Expected duration: 2-3 minutes
-  
+
   Failure scenarios tested:
   - Invalid payment information
   - Out of stock products
@@ -583,6 +637,11 @@ description: |
 Plan for failure scenarios:
 
 ```yaml
+name: Service Failover
+vars:
+  primary_service_url: "{{PRIMARY_SERVICE_URL}}"
+  fallback_service_url: "{{FALLBACK_SERVICE_URL}}"
+
 jobs:
 - id: primary-check
   name: Primary Service Check
@@ -592,46 +651,57 @@ jobs:
       uses: http
       with:
         method: GET
-        url: "{{vars.PRIMARY_SERVICE_URL}}"
+        url: "{{vars.primary_service_url}}"
       test: res.code == 200
+      outputs:
+        primary_healthy: res.code == 200
 
 - id: fallback-check
   name: Fallback Service Check
   steps:
     - name: Check Fallback Service
+      id: fallback
       uses: http
       with:
         method: GET
-        url: "{{vars.FALLBACK_SERVICE_URL}}"
+        url: "{{vars.fallback_service_url}}"
       test: res.code == 200
+      outputs:
+        fallback_healthy: res.code == 200
 
 - id: notification
   name: Send Notifications
   needs: [primary-check, fallback-check]
+  always: true    # Run even when a check failed
   steps:
     - name: Success Notification
       uses: hello
+      skipif: outputs.primary_healthy != true
       echo: "✅ Primary service is healthy"
-        
+
     - name: Fallback Notification
       uses: hello
+      skipif: outputs.primary_healthy == true || outputs.fallback_healthy != true
       echo: "⚠️ Primary service down, fallback operational"
-        
+
     - name: Critical Alert
       uses: hello
+      skipif: outputs.primary_healthy == true || outputs.fallback_healthy == true
       echo: "🚨 CRITICAL: Both primary and fallback services are down"
 ```
+
+With `always: true` the notification job runs even when a check failed. A check that could not connect publishes no output, which reads as nil, so the conditions compare with `true`, and each notification is skipped unless its case applies.
 
 ### 4. Performance Considerations
 
 Design workflows for optimal performance:
 
-```yaml
+```yaml fragment
 # Good: Parallel execution for independent operations
 jobs:
-  frontend-check:    # These run in parallel
-  backend-check:     # for better performance
-  database-check:
+- id: frontend-check   # These run in parallel
+- id: backend-check    # for better performance
+- id: database-check
 
 # Good: Efficient job dependencies
 jobs:
@@ -660,14 +730,14 @@ The three shapes below are the ones that make a workflow hard to change, and eac
 ### 1. Monolithic Workflows
 
 **Avoid:**
-```yaml
+```yaml fragment
 name: Everything Check
 jobs:
 - id: massive-job
   name: massive-job
   steps:
     - name: Check API
-    - name: Check Database  
+    - name: Check Database
     - name: Check Cache
     - name: Check Email
     - name: Check Files

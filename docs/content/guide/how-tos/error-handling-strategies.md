@@ -22,8 +22,9 @@ vars:
 jobs:
 - id: critical-operations
   name: Critical Operations
+  # Fail fast for critical operations
+  fail_fast: true
   steps:
-    # Fail fast for critical operations
     - name: Critical Database Check
       uses: http
       with:
@@ -67,21 +68,23 @@ jobs:
       outputs:
         notifications_available: res.code == 200
 
-    # Conditional logic based on service availability
+    # Conditional logic based on service availability.
+    # A step whose request did not get through publishes no outputs,
+    # so each one is read with a default.
     - name: Service Availability Report
       uses: hello
       echo: |
         🔧 Service Availability Report:
-          
-        Analytics Service: {{outputs.analytics_available ? "✅ Available" : "❌ Unavailable"}}
-        {{outputs.analytics_error ? "Error Code: " + outputs.analytics_error : ""}}
-          
-        Notification Service: {{outputs.notifications_available ? "✅ Available" : "❌ Unavailable"}}
-          
+
+        Analytics Service: {{(outputs.analytics_available ?? false) ? "✅ Available" : "❌ Unavailable"}}
+        {{outputs.analytics_error != nil ? "Error: " + outputs.analytics_error : ""}}
+
+        Notification Service: {{(outputs.notifications_available ?? false) ? "✅ Available" : "❌ Unavailable"}}
+
         Impact Assessment:
-        {{!outputs.analytics_available ? "• Analytics features may be limited" : ""}}
-        {{!outputs.notifications_available ? "• User notifications may be delayed" : ""}}
-        {{outputs.analytics_available && outputs.notifications_available ? "• All optional services operational" : ""}}
+        {{!(outputs.analytics_available ?? false) ? "• Analytics features may be limited" : ""}}
+        {{!(outputs.notifications_available ?? false) ? "• User notifications may be delayed" : ""}}
+        {{(outputs.analytics_available ?? false) && (outputs.notifications_available ?? false) ? "• All optional services operational" : ""}}
 ```
 
 ### Graceful Degradation
@@ -121,6 +124,7 @@ jobs:
       id: secondary
       uses: http
       timeout: 15s
+      skipif: outputs.primary?.success ?? false
       with:
         method: GET
         url: "{{vars.SECONDARY_API_URL}}/data"
@@ -135,6 +139,7 @@ jobs:
       id: cache
       uses: http
       timeout: 5s
+      skipif: (outputs.primary?.success ?? false) || (outputs.secondary?.success ?? false)
       with:
         method: GET
         url: "{{vars.CACHE_API_URL}}/cached-data"
@@ -149,6 +154,7 @@ jobs:
     - name: Static Fallback
       id: fallback
       uses: http
+      skipif: (outputs.primary?.success ?? false) || (outputs.secondary?.success ?? false) || (outputs.cache?.success ?? false)
       with:
         method: GET
         url: "{{vars.FALLBACK_API_URL}}/static-data"
@@ -159,30 +165,32 @@ jobs:
         data: res.body
         static_data: true
 
+    # A skipped step, or one whose request did not get through,
+    # publishes no outputs, so outputs.<id> is nil for it
     - name: Service Resolution Summary
       uses: hello
       echo: |
         🎯 Service Resolution Summary:
-          
+
         Resolution Path:
-        {{outputs.primary.success ? "✅ Primary Service (optimal)" : "❌ Primary Service failed/slow (" + outputs.primary.response_time + "ms)"}}
-        {{outputs.secondary.success ? "✅ Secondary Service (backup)" : (!outputs.primary.success ? "❌ Secondary Service failed" : "")}}
-        {{outputs.cache.success ? "✅ Cache Service (degraded)" : (!outputs.primary.success && !outputs.secondary.success ? "❌ Cache Service failed" : "")}}
-        {{outputs.fallback.success ? "✅ Static Fallback (minimal)" : (!outputs.primary.success && !outputs.secondary.success && !outputs.cache.success ? "❌ All services failed" : "")}}
-          
+        {{(outputs.primary?.success ?? false) ? "✅ Primary Service (optimal)" : "❌ Primary Service failed/slow (" + (outputs.primary != nil ? string(int(outputs.primary.response_time)) + "ms" : "no response") + ")"}}
+        {{outputs.secondary == nil ? "" : outputs.secondary.success ? "✅ Secondary Service (backup)" : "❌ Secondary Service failed"}}
+        {{outputs.cache == nil ? "" : outputs.cache.success ? "✅ Cache Service (degraded)" : "❌ Cache Service failed"}}
+        {{outputs.fallback == nil ? "" : outputs.fallback.success ? "✅ Static Fallback (minimal)" : "❌ All services failed"}}
+
         Final Status: {{
-          outputs.primary.success ? "🟢 Optimal Performance" :
-          outputs.secondary.success ? "🟡 Backup Service Active" :
-          outputs.cache.success ? "🟠 Degraded Mode (cached data)" :
-          outputs.fallback.success ? "🔴 Minimal Functionality (static data)" :
+          (outputs.primary?.success ?? false) ? "🟢 Optimal Performance" :
+          (outputs.secondary?.success ?? false) ? "🟡 Backup Service Active" :
+          (outputs.cache?.success ?? false) ? "🟠 Degraded Mode (cached data)" :
+          (outputs.fallback?.success ?? false) ? "🔴 Minimal Functionality (static data)" :
           "🚨 Total Service Failure"
         }}
-          
+
         Data Source: {{
-          outputs.primary.success ? "Live Primary" :
-          outputs.secondary.success ? "Live Secondary" :
-          outputs.cache.success ? "Cached (may be stale)" :
-          outputs.fallback.success ? "Static Fallback" :
+          (outputs.primary?.success ?? false) ? "Live Primary" :
+          (outputs.secondary?.success ?? false) ? "Live Secondary" :
+          (outputs.cache?.success ?? false) ? "Cached (may be stale)" :
+          (outputs.fallback?.success ?? false) ? "Static Fallback" :
           "None Available"
         }}
 ```
@@ -218,14 +226,15 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 1
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : nil'
+        error_code: 'res.code != 200 ? res.code : nil'
 
-    # Second attempt (2-second delay)
+    # Second attempt (2-second delay), skipped once an attempt succeeded
     - name: Retry Attempt 1 (2s delay)
       id: attempt2
       uses: http
+      wait: 2s
+      skipif: outputs.attempt1?.success ?? false
       timeout: 15s
       with:
         method: GET
@@ -233,14 +242,15 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 2
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : nil'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # Third attempt (4-second delay)
     - name: Retry Attempt 2 (4s delay)
       id: attempt3
       uses: http
+      wait: 4s
+      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false)
       timeout: 20s
       with:
         method: GET
@@ -248,14 +258,15 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 3
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : nil'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # Final attempt (8-second delay)
     - name: Final Attempt (8s delay)
       id: attempt4
       uses: http
+      wait: 8s
+      skipif: (outputs.attempt1?.success ?? false) || (outputs.attempt2?.success ?? false) || (outputs.attempt3?.success ?? false)
       timeout: 30s
       with:
         method: GET
@@ -263,34 +274,35 @@ jobs:
       test: res.code == 200
       outputs:
         success: res.code == 200
-        attempt_number: 4
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : nil'
+        error_code: 'res.code != 200 ? res.code : nil'
 
+    # An attempt that was skipped, or whose request did not get through,
+    # publishes no outputs, so outputs.<id> is nil for it
     - name: Retry Summary
       uses: hello
       echo: |
         🔄 Retry Pattern Results:
-          
+
         Attempt History:
-        1. Initial: {{outputs.attempt1.success ? "✅ Success (" + outputs.attempt1.response_time + "ms)" : "❌ Failed (HTTP " + outputs.attempt1.error_code + ")"}}
-        {{outputs.attempt2 ? "2. Retry 1: " + (outputs.attempt2.success ? "✅ Success (" + outputs.attempt2.response_time + "ms)" : "❌ Failed (HTTP " + outputs.attempt2.error_code + ")") : ""}}
-        {{outputs.attempt3 ? "3. Retry 2: " + (outputs.attempt3.success ? "✅ Success (" + outputs.attempt3.response_time + "ms)" : "❌ Failed (HTTP " + outputs.attempt3.error_code + ")") : ""}}
-        {{outputs.attempt4 ? "4. Final: " + (outputs.attempt4.success ? "✅ Success (" + outputs.attempt4.response_time + "ms)" : "❌ Failed (HTTP " + outputs.attempt4.error_code + ")") : ""}}
-          
+        1. Initial: {{outputs.attempt1 == nil ? "❌ No response" : outputs.attempt1.success ? "✅ Success (" + string(int(outputs.attempt1.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt1.error_code) + ")"}}
+        {{outputs.attempt2 == nil ? "" : "2. Retry 1: " + (outputs.attempt2.success ? "✅ Success (" + string(int(outputs.attempt2.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt2.error_code) + ")")}}
+        {{outputs.attempt3 == nil ? "" : "3. Retry 2: " + (outputs.attempt3.success ? "✅ Success (" + string(int(outputs.attempt3.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt3.error_code) + ")")}}
+        {{outputs.attempt4 == nil ? "" : "4. Final: " + (outputs.attempt4.success ? "✅ Success (" + string(int(outputs.attempt4.response_time)) + "ms)" : "❌ Failed (HTTP " + string(outputs.attempt4.error_code) + ")")}}
+
         Final Result: {{
-          outputs.attempt1.success ? "✅ Success on first attempt" :
-          outputs.attempt2.success ? "✅ Success on retry 1" :
-          outputs.attempt3.success ? "✅ Success on retry 2" :
-          outputs.attempt4.success ? "✅ Success on final attempt" :
+          (outputs.attempt1?.success ?? false) ? "✅ Success on first attempt" :
+          (outputs.attempt2?.success ?? false) ? "✅ Success on retry 1" :
+          (outputs.attempt3?.success ?? false) ? "✅ Success on retry 2" :
+          (outputs.attempt4?.success ?? false) ? "✅ Success on final attempt" :
           "❌ All attempts failed"
         }}
-          
+
         {{
-          outputs.attempt1.success ? "" :
-          outputs.attempt2.success ? "Service recovered after transient failure" :
-          outputs.attempt3.success ? "Service required multiple retries" :
-          outputs.attempt4.success ? "Service barely recoverable" :
+          (outputs.attempt1?.success ?? false) ? "" :
+          (outputs.attempt2?.success ?? false) ? "Service recovered after transient failure" :
+          (outputs.attempt3?.success ?? false) ? "Service required multiple retries" :
+          (outputs.attempt4?.success ?? false) ? "Service barely recoverable" :
           "Service appears to be down"
         }}
 ```
@@ -305,6 +317,8 @@ description: Implement circuit breaker for fault isolation
 
 vars:
   MONITORED_SERVICE_URL: https://api.monitored.service.com
+  MONITORING_API_URL: "{{MONITORING_API_URL}}"
+  SERVICE_NAME: "{{SERVICE_NAME}}"
   CIRCUIT_BREAKER_THRESHOLD: 5
   CIRCUIT_RECOVERY_TIME: 300  # 5 minutes
 
@@ -333,10 +347,10 @@ jobs:
       echo: "Evaluating circuit breaker state"
       outputs:
         # Circuit is open if too many recent failures
-        circuit_open: "{{outputs['circuit-status'].failure_count >= vars.CIRCUIT_BREAKER_THRESHOLD}}"
+        circuit_open: outputs['circuit-status'].failure_count >= int(vars.CIRCUIT_BREAKER_THRESHOLD)
         # Allow probe if circuit has been open long enough
-        time_since_failure: "{{unixtime() - outputs['circuit-status'].last_failure_time}}"
-        should_probe: "{{(unixtime() - outputs['circuit-status'].last_failure_time) > vars.CIRCUIT_RECOVERY_TIME}}"
+        time_since_failure: unixtime() - outputs['circuit-status'].last_failure_time
+        should_probe: (unixtime() - outputs['circuit-status'].last_failure_time) > int(vars.CIRCUIT_RECOVERY_TIME)
 
 - id: service-test
   name: Service Test with Circuit Breaker
@@ -347,6 +361,7 @@ jobs:
       id: normal-test
       uses: http
       timeout: 10s
+      skipif: outputs.decision.circuit_open
       with:
         method: GET
         url: "{{vars.MONITORED_SERVICE_URL}}/health"
@@ -354,13 +369,14 @@ jobs:
       outputs:
         test_successful: res.code == 200
         response_time: (rt.sec * 1000)
-        error_code: 'res.code != 200 ? res.status : nil'
+        error_code: 'res.code != 200 ? res.code : nil'
 
     # Probe test when circuit is open but recovery time has passed
     - name: Circuit Recovery Probe
       id: probe-test
       uses: http
       timeout: 5s
+      skipif: '!outputs.decision.circuit_open || !outputs.decision.should_probe'
       with:
         method: GET
         url: "{{vars.MONITORED_SERVICE_URL}}/ping"  # Lighter probe
@@ -369,9 +385,11 @@ jobs:
         probe_successful: res.code == 200
         response_time: (rt.sec * 1000)
 
-    # Update circuit breaker state
+    # Update circuit breaker state, unless the circuit is open and no probe was due.
+    # A test whose request did not get through publishes no outputs, and counts as failed.
     - name: Update Circuit Breaker
       uses: http
+      skipif: outputs.decision.circuit_open && !outputs.decision.should_probe
       with:
         url: "{{vars.MONITORING_API_URL}}/circuit-breaker/{{vars.SERVICE_NAME}}/update"
         method: POST
@@ -380,12 +398,12 @@ jobs:
         body: |
           {
             "test_result": {{
-              outputs['normal-test'] ? outputs['normal-test'].test_successful :
-              outputs['probe-test'] ? outputs['probe-test'].probe_successful : false
+              outputs['normal-test']?.test_successful ??
+              outputs['probe-test']?.probe_successful ?? false
             }},
             "response_time": {{
-              outputs['normal-test'] ? outputs['normal-test'].response_time :
-              outputs['probe-test'] ? outputs['probe-test'].response_time : nil
+              outputs['normal-test']?.response_time ??
+              outputs['probe-test']?.response_time ?? "null"
             }},
             "timestamp": {{unixtime()}}
           }
@@ -395,22 +413,22 @@ jobs:
       uses: hello
       echo: |
         ⚡ Circuit Breaker Status Report:
-          
+
         Previous State:
-        Circuit State: {{outputs['circuit-breaker-check'].circuit_state}}
-        Failure Count: {{outputs['circuit-breaker-check'].failure_count}}
-        Time Since Last Failure: {{outputs['circuit-breaker-check'].time_since_failure}} seconds
-          
+        Circuit State: {{outputs['circuit-status'].circuit_state}}
+        Failure Count: {{outputs['circuit-status'].failure_count}}
+        Time Since Last Failure: {{outputs.decision.time_since_failure}} seconds
+
         Current Test:
-        {{outputs['normal-test'] ? "Normal Test: " + (outputs['normal-test'].test_successful ? "✅ Passed" : "❌ Failed (HTTP " + outputs['normal-test'].error_code + ")") : ""}}
-        {{outputs['probe-test'] ? "Recovery Probe: " + (outputs['probe-test'].probe_successful ? "✅ Passed" : "❌ Failed") : ""}}
-        {{outputs['circuit-breaker-check'].circuit_open && !outputs['circuit-breaker-check'].should_probe ? "⏸️ Circuit Open - Skipping test (recovery time not reached)" : ""}}
-          
+        {{outputs['normal-test'] != nil ? "Normal Test: " + (outputs['normal-test'].test_successful ? "✅ Passed" : "❌ Failed (HTTP " + string(outputs['normal-test'].error_code) + ")") : ""}}
+        {{outputs['probe-test'] != nil ? "Recovery Probe: " + (outputs['probe-test'].probe_successful ? "✅ Passed" : "❌ Failed") : ""}}
+        {{outputs.decision.circuit_open && !outputs.decision.should_probe ? "⏸️ Circuit Open - Skipping test (recovery time not reached)" : ""}}
+
         Circuit Action: {{
-          outputs['normal-test'].test_successful ? "✅ Circuit remains closed" :
-          outputs['probe-test'].probe_successful ? "🟢 Circuit should close (service recovered)" :
-          outputs['probe-test'] && !outputs['probe-test'].probe_successful ? "🔴 Circuit remains open (service still failing)" :
-          outputs['normal-test'] && !outputs['normal-test'].test_successful ? "🔴 Circuit should open (service failing)" :
+          (outputs['normal-test']?.test_successful ?? false) ? "✅ Circuit remains closed" :
+          (outputs['probe-test']?.probe_successful ?? false) ? "🟢 Circuit should close (service recovered)" :
+          outputs.decision.circuit_open && outputs.decision.should_probe ? "🔴 Circuit remains open (service still failing)" :
+          !outputs.decision.circuit_open ? "🔴 Circuit should open (service failing)" :
           "⏸️ No test performed"
         }}
 ```
@@ -432,6 +450,10 @@ vars:
   SERVICE_HEALTH_URL: https://user-service.yourcompany.com/health
   ADMIN_API_URL: https://admin.yourcompany.com/api
   RECOVERY_ATTEMPTS: 3
+  SMTP_HOST: "{{SMTP_HOST}}"
+  ENVIRONMENT: "{{ENVIRONMENT}}"
+  DASHBOARD_URL: "{{DASHBOARD_URL}}"
+  RUNBOOK_URL: "{{RUNBOOK_URL}}"
 
 jobs:
 - id: health-monitoring
@@ -448,15 +470,16 @@ jobs:
       test: res.code == 200
       outputs:
         healthy: res.code == 200
-        status_code: res.status
+        status_code: res.code
         response_time: (rt.sec * 1000)
-        error_details: 'res.code != 200 ? res.body : nil'
+        error_details: 'res.code != 200 ? (res.rawbody ?? res.body) : nil'
 
     # Step 2: Detailed diagnostics if unhealthy
     - name: Service Diagnostics
       id: diagnostics
       uses: http
       timeout: 45s
+      skipif: outputs['health-check']?.healthy ?? false
       with:
         method: GET
         url: "{{vars.SERVICE_HEALTH_URL}}/diagnostics"
@@ -468,9 +491,13 @@ jobs:
         active_connections: res.body.active_connections
         error_rate: res.body.error_rate_1min
 
+# The health check fails when the service is unhealthy, which would skip the
+# jobs that need it, so they run with always and skip themselves instead
 - id: automated-recovery
   name: Automated Recovery Procedures
   needs: [health-monitoring]
+  always: true
+  skipif: outputs['health-check']?.healthy ?? false
   steps:
     # Recovery Attempt 1: Graceful restart
     - name: Graceful Service Restart
@@ -494,7 +521,10 @@ jobs:
 
     # Wait and verify first restart
     - name: Verify Graceful Restart
+      id: verify-restart
       uses: http
+      wait: 30s
+      skipif: '!(outputs["restart-attempt-1"]?.restart_initiated ?? false)'
       timeout: 60s
       with:
         method: GET
@@ -507,6 +537,7 @@ jobs:
     - name: Force Service Restart
       id: restart-attempt-2
       uses: http
+      skipif: outputs['verify-restart']?.restart_successful ?? false
       with:
         url: "{{vars.ADMIN_API_URL}}/services/{{vars.SERVICE_NAME}}/restart"
         method: POST
@@ -523,7 +554,10 @@ jobs:
 
     # Verify force restart
     - name: Verify Force Restart
+      id: verify-force-restart
       uses: http
+      wait: 30s
+      skipif: '!(outputs["restart-attempt-2"]?.force_restart_initiated ?? false)'
       timeout: 60s
       with:
         method: GET
@@ -536,6 +570,7 @@ jobs:
     - name: Scale Up Service
       id: scale-up
       uses: http
+      skipif: (outputs['verify-restart']?.restart_successful ?? false) || (outputs['verify-force-restart']?.force_restart_successful ?? false)
       with:
         url: "{{vars.ADMIN_API_URL}}/services/{{vars.SERVICE_NAME}}/scale"
         method: POST
@@ -553,6 +588,7 @@ jobs:
 
     # Final health check
     - name: Final Health Verification
+      id: final-check
       uses: http
       timeout: 120s
       with:
@@ -565,45 +601,47 @@ jobs:
 - id: recovery-reporting
   name: Recovery Status Reporting
   needs: [health-monitoring, automated-recovery]
+  always: true
   steps:
     - name: Recovery Status Report
       uses: hello
       echo: |
         🏥 Service Recovery Report for {{vars.SERVICE_NAME}}:
         ================================================
-          
+
         INITIAL HEALTH CHECK:
-        Status: {{outputs['health-monitoring'].healthy ? "✅ Healthy" : "❌ Unhealthy (HTTP " + outputs['health-monitoring'].status_code + ")"}}
-        Response Time: {{outputs['health-monitoring'].response_time}}ms
-        {{outputs['health-monitoring'].error_details ? "Error Details: " + outputs['health-monitoring'].error_details : ""}}
-          
-        {{outputs['health-monitoring'].diagnostics_available ? "DIAGNOSTICS:" : ""}}
-        {{outputs['health-monitoring'].diagnostics_available ? "Memory Usage: " + outputs['health-monitoring'].memory_usage + "%" : ""}}
-        {{outputs['health-monitoring'].diagnostics_available ? "CPU Usage: " + outputs['health-monitoring'].cpu_usage + "%" : ""}}
-        {{outputs['health-monitoring'].diagnostics_available ? "Active Connections: " + outputs['health-monitoring'].active_connections : ""}}
-        {{outputs['health-monitoring'].diagnostics_available ? "Error Rate: " + outputs['health-monitoring'].error_rate + "/min" : ""}}
-          
+        Status: {{(outputs['health-check']?.healthy ?? false) ? "✅ Healthy" : "❌ Unhealthy (HTTP " + string(outputs['health-check']?.status_code ?? "no response") + ")"}}
+        Response Time: {{outputs['health-check']?.response_time ?? "-"}}ms
+        {{outputs['health-check']?.error_details != nil ? "Error Details: " + outputs['health-check'].error_details : ""}}
+
+        {{(outputs.diagnostics?.diagnostics_available ?? false) ? "DIAGNOSTICS:" : ""}}
+        {{(outputs.diagnostics?.diagnostics_available ?? false) ? "Memory Usage: " + string(outputs.diagnostics.memory_usage) + "%" : ""}}
+        {{(outputs.diagnostics?.diagnostics_available ?? false) ? "CPU Usage: " + string(outputs.diagnostics.cpu_usage) + "%" : ""}}
+        {{(outputs.diagnostics?.diagnostics_available ?? false) ? "Active Connections: " + string(outputs.diagnostics.active_connections) : ""}}
+        {{(outputs.diagnostics?.diagnostics_available ?? false) ? "Error Rate: " + string(outputs.diagnostics.error_rate) + "/min" : ""}}
+
         RECOVERY ACTIONS:
-        {{outputs['automated-recovery'].restart_initiated ? "1. Graceful Restart: " + (outputs['automated-recovery'].restart_successful ? "✅ Successful" : "❌ Failed") : "1. Graceful Restart: ⏸️ Not attempted"}}
-        {{outputs['automated-recovery'].force_restart_initiated ? "2. Force Restart: " + (outputs['automated-recovery'].force_restart_successful ? "✅ Successful" : "❌ Failed") : "2. Force Restart: ⏸️ Not attempted"}}
-        {{outputs['automated-recovery'].scale_up_initiated ? "3. Scale Up: ✅ Initiated" : "3. Scale Up: ⏸️ Not attempted"}}
-          
+        {{(outputs['restart-attempt-1']?.restart_initiated ?? false) ? "1. Graceful Restart: " + ((outputs['verify-restart']?.restart_successful ?? false) ? "✅ Successful" : "❌ Failed") : "1. Graceful Restart: ⏸️ Not attempted"}}
+        {{(outputs['restart-attempt-2']?.force_restart_initiated ?? false) ? "2. Force Restart: " + ((outputs['verify-force-restart']?.force_restart_successful ?? false) ? "✅ Successful" : "❌ Failed") : "2. Force Restart: ⏸️ Not attempted"}}
+        {{(outputs['scale-up']?.scale_up_initiated ?? false) ? "3. Scale Up: ✅ Initiated" : "3. Scale Up: ⏸️ Not attempted"}}
+
         FINAL STATUS:
-        Service Health: {{outputs['automated-recovery'].final_health_status ? "✅ Healthy" : "❌ Still Unhealthy"}}
-          
+        Service Health: {{(outputs['final-check']?.final_health_status ?? false) ? "✅ Healthy" : "❌ Still Unhealthy"}}
+
         RECOVERY RESULT: {{
-          outputs['health-monitoring'].healthy ? "ℹ️ No recovery needed - service was healthy" :
-          outputs['automated-recovery'].restart_successful ? "🟢 Recovered via graceful restart" :
-          outputs['automated-recovery'].force_restart_successful ? "🟡 Recovered via force restart" :
-          outputs['automated-recovery'].final_health_status ? "🟢 Recovered via scaling" :
+          (outputs['health-check']?.healthy ?? false) ? "ℹ️ No recovery needed - service was healthy" :
+          (outputs['verify-restart']?.restart_successful ?? false) ? "🟢 Recovered via graceful restart" :
+          (outputs['verify-force-restart']?.force_restart_successful ?? false) ? "🟡 Recovered via force restart" :
+          (outputs['final-check']?.final_health_status ?? false) ? "🟢 Recovered via scaling" :
           "🔴 Recovery failed - manual intervention required"
         }}
-          
-        {{!outputs['automated-recovery'].final_health_status && !outputs['health-monitoring'].healthy ? "🚨 ALERT: Service recovery failed - escalating to on-call team" : ""}}
+
+        {{!(outputs['final-check']?.final_health_status ?? false) && !(outputs['health-check']?.healthy ?? false) ? "🚨 ALERT: Service recovery failed - escalating to on-call team" : ""}}
 
     # Escalation notification if recovery failed
     - name: Escalation Alert
       uses: smtp
+      skipif: (outputs['health-check']?.healthy ?? false) || (outputs['final-check']?.final_health_status ?? false)
       with:
         addr: "{{vars.SMTP_HOST}}:587"
         from: "alerts@yourcompany.com"
@@ -612,33 +650,34 @@ jobs:
         session: 1
         message: 1
         length: 500
+      test: res.code == 0 && res.sent > 0
       echo: |
         CRITICAL SERVICE RECOVERY FAILURE
         =================================
-          
+
         Service: {{vars.SERVICE_NAME}}
         Time: {{unixtime()}}
         Environment: {{vars.ENVIRONMENT}}
-          
+
         Initial Problem:
-        - Health Check: Failed (HTTP {{outputs['health-monitoring'].status_code}})
-        - Response Time: {{outputs['health-monitoring'].response_time}}ms
-          
+        - Health Check: Failed (HTTP {{outputs['health-check']?.status_code ?? "no response"}})
+        - Response Time: {{outputs['health-check']?.response_time ?? "-"}}ms
+
         Recovery Attempts:
-        {{outputs['automated-recovery'].restart_initiated ? "- Graceful Restart: " + (outputs['automated-recovery'].restart_successful ? "Success" : "Failed") : "- Graceful Restart: Not attempted"}}
-        {{outputs['automated-recovery'].force_restart_initiated ? "- Force Restart: " + (outputs['automated-recovery'].force_restart_successful ? "Success" : "Failed") : "- Force Restart: Not attempted"}}
-        {{outputs['automated-recovery'].scale_up_initiated ? "- Scale Up: Initiated" : "- Scale Up: Not attempted"}}
-          
+        {{(outputs['restart-attempt-1']?.restart_initiated ?? false) ? "- Graceful Restart: " + ((outputs['verify-restart']?.restart_successful ?? false) ? "Success" : "Failed") : "- Graceful Restart: Not attempted"}}
+        {{(outputs['restart-attempt-2']?.force_restart_initiated ?? false) ? "- Force Restart: " + ((outputs['verify-force-restart']?.force_restart_successful ?? false) ? "Success" : "Failed") : "- Force Restart: Not attempted"}}
+        {{(outputs['scale-up']?.scale_up_initiated ?? false) ? "- Scale Up: Initiated" : "- Scale Up: Not attempted"}}
+
         Current Status: Service remains unhealthy
-          
+
         MANUAL INTERVENTION REQUIRED
-          
+
         Please investigate immediately:
         1. Check service logs
-        2. Verify infrastructure status  
+        2. Verify infrastructure status
         3. Consider emergency rollback
         4. Update incident status
-          
+
         Dashboard: {{vars.DASHBOARD_URL}}
         Runbook: {{vars.RUNBOOK_URL}}
 ```
@@ -657,6 +696,9 @@ description: Collect detailed error information for effective debugging
 
 vars:
   API_BASE_URL: https://api.yourservice.com
+  API_TOKEN: "{{API_TOKEN}}"
+  TEST_USER_ID: "{{TEST_USER_ID}}"
+  ENVIRONMENT: "{{ENVIRONMENT}}"
   CORRELATION_ID: "{{random_str(32)}}"
 
 jobs:
@@ -690,134 +732,138 @@ jobs:
       outputs:
         # Success indicators
         operation_successful: res.code == 200 && res.body.success == true
-          
+
         # Response metadata
-        status_code: res.status
+        status_code: res.code
         response_time: (rt.sec * 1000)
-        response_size: res.body_size
+        response_size: len(res.rawbody ?? res.body)
         content_type: res.headers["Content-Type"]
-          
+
         # Error context (only populated on failure)
-        error_message: 'res.code != 200 ? res.body.error.message : nil'
-        error_code: 'res.code != 200 ? res.body.error.code : nil'
-        error_details: 'res.code != 200 ? res.body.error.details : nil'
+        error_message: 'res.code != 200 ? res.body.error?.message : nil'
+        error_code: 'res.code != 200 ? res.body.error?.code : nil'
+        error_details: 'res.code != 200 ? res.body.error?.details : nil'
         trace_id: res.headers["X-Trace-Id"]
         request_id: res.headers["X-Request-Id"]
-          
+
         # Performance context
         server_response_time: res.headers["X-Response-Time"]
-        database_time: 'res.body.debug ? res.body.debug.database_time_ms : nil'
-        cache_hit: 'res.body.debug ? res.body.debug.cache_hit : nil'
-          
+        database_time: res.body.debug?.database_time_ms
+        cache_hit: res.body.debug?.cache_hit
+
         # Business context
-        affected_user: 'res.body.error ? res.body.error.affected_user : nil'
+        affected_user: res.body.error?.affected_user
         operation_id: res.body.operation_id
         retry_after: res.headers["Retry-After"]
 
+    # Runs only when the request got a response that was not a success
     - name: Error Analysis and Enrichment
       uses: hello
       id: error-analysis
+      skipif: outputs['api-test']?.operation_successful ?? true
       echo: "Analyzing error context"
       outputs:
         # Classify error type
         error_category: |
-          {{outputs['api-test'].status_code >= 500 ? "server_error" :
+          outputs['api-test'].status_code >= 500 ? "server_error" :
             outputs['api-test'].status_code == 429 ? "rate_limit" :
             outputs['api-test'].status_code >= 400 && outputs['api-test'].status_code < 500 ? "client_error" :
-            outputs['api-test'].status_code == 0 ? "network_error" : "unknown"}}
-          
+            "unknown"
+
         # Determine severity
         severity_level: |
-          {{outputs['api-test'].status_code >= 500 ? "high" :
+          outputs['api-test'].status_code >= 500 ? "high" :
             outputs['api-test'].status_code == 429 ? "medium" :
             outputs['api-test'].status_code >= 400 && outputs['api-test'].status_code < 500 ? "low" :
-            "critical"}}
-          
+            "critical"
+
         # Generate troubleshooting hints
         troubleshooting_hints: |
-          {{outputs['api-test'].status_code == 401 ? "Check authentication token expiry and permissions" :
+          outputs['api-test'].status_code == 401 ? "Check authentication token expiry and permissions" :
             outputs['api-test'].status_code == 403 ? "Verify user has required permissions for this operation" :
             outputs['api-test'].status_code == 404 ? "Confirm API endpoint exists and user/resource exists" :
             outputs['api-test'].status_code == 409 ? "Resource conflict - check for duplicate operations" :
             outputs['api-test'].status_code == 429 ? "Rate limit exceeded - implement backoff or check quota" :
             outputs['api-test'].status_code >= 500 ? "Server error - check application logs and infrastructure" :
-            "Network or timeout issue - verify connectivity and service availability"}}
-          
+            "Unexpected response - compare it with the API contract"
+
         # Context for debugging
         debug_context: |
-          Correlation ID: {{vars.CORRELATION_ID}}
-          Test User ID: {{vars.TEST_USER_ID}}
-          Request Timestamp: {{unixtime()}}
-          Environment: {{vars.ENVIRONMENT}}
+          "Correlation ID: " + vars.CORRELATION_ID + "\n" +
+          "Test User ID: " + vars.TEST_USER_ID + "\n" +
+          "Request Timestamp: " + string(unixtime()) + "\n" +
+          "Environment: " + vars.ENVIRONMENT
 
     - name: Detailed Error Report
       uses: hello
+      skipif: outputs['error-analysis'] == nil
       echo: |
         🔍 Comprehensive Error Analysis Report
         =====================================
-          
+
         ERROR OVERVIEW:
         Correlation ID: {{vars.CORRELATION_ID}}
         Error Category: {{outputs['error-analysis'].error_category}}
         Severity Level: {{outputs['error-analysis'].severity_level}}
         Timestamp: {{unixtime()}}
-          
+
         REQUEST DETAILS:
         URL: {{vars.API_BASE_URL}}/complex-operation
         Method: POST
         User ID: {{vars.TEST_USER_ID}}
         Content Type: {{outputs['api-test'].content_type}}
-          
+
         RESPONSE DETAILS:
         Status Code: {{outputs['api-test'].status_code}}
         Response Time: {{outputs['api-test'].response_time}}ms
         Response Size: {{outputs['api-test'].response_size}} bytes
         Server Response Time: {{outputs['api-test'].server_response_time}}ms
-          
+
         ERROR INFORMATION:
         Error Code: {{outputs['api-test'].error_code}}
         Error Message: {{outputs['api-test'].error_message}}
         Error Details: {{outputs['api-test'].error_details}}
-          
+
         TRACING INFORMATION:
         Trace ID: {{outputs['api-test'].trace_id}}
         Request ID: {{outputs['api-test'].request_id}}
         Operation ID: {{outputs['api-test'].operation_id}}
-          
+
         PERFORMANCE CONTEXT:
-        {{outputs['api-test'].database_time ? "Database Time: " + outputs['api-test'].database_time + "ms" : ""}}
-        {{outputs['api-test'].cache_hit ? "Cache Hit: " + outputs['api-test'].cache_hit : ""}}
-        {{outputs['api-test'].retry_after ? "Retry After: " + outputs['api-test'].retry_after + " seconds" : ""}}
-          
+        {{outputs['api-test'].database_time != nil ? "Database Time: " + string(outputs['api-test'].database_time) + "ms" : ""}}
+        {{outputs['api-test'].cache_hit != nil ? "Cache Hit: " + string(outputs['api-test'].cache_hit) : ""}}
+        {{outputs['api-test'].retry_after != nil ? "Retry After: " + outputs['api-test'].retry_after + " seconds" : ""}}
+
         BUSINESS CONTEXT:
-        {{outputs['api-test'].affected_user ? "Affected User: " + outputs['api-test'].affected_user : ""}}
-          
+        {{outputs['api-test'].affected_user != nil ? "Affected User: " + string(outputs['api-test'].affected_user) : ""}}
+
         TROUBLESHOOTING:
         {{outputs['error-analysis'].troubleshooting_hints}}
-          
+
         DEBUG CONTEXT:
         {{outputs['error-analysis'].debug_context}}
-          
+
         NEXT STEPS:
         1. Review application logs with Trace ID: {{outputs['api-test'].trace_id}}
         2. Check infrastructure metrics around {{unixtime()}}
         3. Validate request parameters and authentication
-        {{outputs['api-test'].retry_after ? "4. Retry after " + outputs['api-test'].retry_after + " seconds" : ""}}
+        {{outputs['api-test'].retry_after != nil ? "4. Retry after " + outputs['api-test'].retry_after + " seconds" : ""}}
         5. Escalate to development team if issue persists
 
     - name: Success Report
       uses: hello
+      skipif: '!(outputs["api-test"]?.operation_successful ?? false)'
       echo: |
         ✅ Operation Completed Successfully
-          
+
         Correlation ID: {{vars.CORRELATION_ID}}
         Response Time: {{outputs['api-test'].response_time}}ms
         Operation ID: {{outputs['api-test'].operation_id}}
-          
+
         Performance Metrics:
         Server Response Time: {{outputs['api-test'].server_response_time}}ms
-        {{outputs['api-test'].database_time ? "Database Time: " + outputs['api-test'].database_time + "ms" : ""}}
-        {{outputs['api-test'].cache_hit ? "Cache Hit: " + outputs['api-test'].cache_hit : ""}}
+        {{outputs['api-test'].database_time != nil ? "Database Time: " + string(outputs['api-test'].database_time) + "ms" : ""}}
+        {{outputs['api-test'].cache_hit != nil ? "Cache Hit: " + string(outputs['api-test'].cache_hit) : ""}}
 ```
 
 ## Best Practices
@@ -832,13 +878,13 @@ What to do about a failure depends on what kind it is, so the kind is derived fi
 # Good: Classify errors by type and severity
 outputs:
   error_type: |
-    {{res.code >= 500 ? "server_error" :
+    res.code >= 500 ? "server_error" :
       res.code == 429 ? "rate_limit" :
-      res.code >= 400 ? "client_error" : "network_error"}}
-  
+      res.code >= 400 ? "client_error" : "none"
+
   severity: |
-    {{res.code >= 500 ? "critical" :
-      res.code == 429 ? "warning" : "error"}}
+    res.code >= 500 ? "critical" :
+      res.code == 429 ? "warning" : "error"
 ```
 
 ### 2. Contextual Information
@@ -849,10 +895,10 @@ Record what identifies the failing request, because that is what makes it findab
 # Good: Capture comprehensive context
 outputs:
   error_context: |
-    Request ID: {{res.headers["X-Request-Id"]}}
-    Timestamp: {{unixtime()}}
-    User: {{vars.TEST_USER_ID}}
-    Operation: {{operation_name}}
+    "Request ID: " + (res.headers["X-Request-Id"] ?? "-") + "\n" +
+    "Timestamp: " + string(unixtime()) + "\n" +
+    "User: " + vars.TEST_USER_ID + "\n" +
+    "Operation: " + vars.operation_name
 ```
 
 ### 3. Recovery Strategy Selection
@@ -862,11 +908,12 @@ Once the failure is classified, the response follows from the class.
 ```yaml
 # Good: Choose recovery strategy based on error type
 - name: Recovery Strategy
+  uses: hello
   echo: |
     Recovery Strategy: {{
-      error_type == "rate_limit" ? "Wait and retry" :
-      error_type == "server_error" ? "Switch to backup service" :
-      error_type == "client_error" ? "Fix request and retry" :
+      outputs.error_type == "rate_limit" ? "Wait and retry" :
+      outputs.error_type == "server_error" ? "Switch to backup service" :
+      outputs.error_type == "client_error" ? "Fix request and retry" :
       "Investigate and escalate"
     }}
 ```
@@ -875,13 +922,13 @@ Once the failure is classified, the response follows from the class.
 
 Each job tries something cheaper than the next, and only the last one gives up.
 
-```yaml
+```yaml fragment
 # Good: Progressive error handling
 jobs:
-  quick-retry:      # Try immediate retry
-  fallback-service: # Try alternative service
-  cache-fallback:   # Use cached data
-  manual-escalation: # Alert humans
+- id: quick-retry        # Try immediate retry
+- id: fallback-service   # Try alternative service
+- id: cache-fallback     # Use cached data
+- id: manual-escalation  # Alert humans
 ```
 
 ## Common Error Scenarios
@@ -902,7 +949,6 @@ A timeout distinguishes an unreachable host from a slow one.
   test: res.code == 200
   outputs:
     connectivity_ok: res.code == 200
-    network_error: res.code == 0
 ```
 
 ### Authentication Failures
@@ -911,6 +957,7 @@ A 401 is rarely transient, so retrying it wastes time that reporting it would no
 
 ```yaml
 - name: Authentication Error Handler
+  uses: hello
   echo: |
     Authentication failed:
     1. Check token expiry
@@ -924,8 +971,13 @@ A 429 says when to try again, so the wait comes from the response rather than a 
 
 ```yaml
 - name: Rate Limit Handler
+  uses: http
+  with:
+    method: GET
+    url: "{{vars.api_url}}/data"
+  test: res.code != 429
   echo: |
-    Rate limit exceeded:
+    {{res.code == 429 ? "Rate limit exceeded" : "Within the rate limit"}}
     Retry after: {{res.headers["Retry-After"]}} seconds
     Current quota: {{res.headers["X-Rate-Limit-Remaining"]}}
 ```

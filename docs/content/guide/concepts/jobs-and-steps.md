@@ -17,12 +17,18 @@ A job definition takes the properties below.
 
 ```yaml
 jobs:
-- id: job-id
-  name: Human Readable Name # Optional: Display name
+- id: other-job
+  name: Other Job
+  steps:
+    - name: Prepare
+      uses: hello
+
+- id: job-id               # Optional: Identifier that needs refers to
+  name: Human Readable Name # Required: Display name
   needs: [other-job]       # Optional: Job dependencies
-  timeout: 300s            # Optional: Job timeout
   steps:                   # Required: Array of steps
-    # Step definitions...
+    - name: Say hello
+      uses: hello
 ```
 
 ### Job Lifecycle
@@ -41,6 +47,10 @@ Jobs progress through several states during execution:
 Use the `needs` keyword to create execution dependencies:
 
 ```yaml
+vars:
+  DB_API: "{{DB_API}}"
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: setup
   name: Environment Setup
@@ -99,9 +109,12 @@ jobs:
 
 A job runs unless its `skipif` expression is true. The expression can read `vars` and the `outputs` published by the jobs it depends on.
 
-Note that a failing job skips everything that depends on it. To branch on an outcome, publish the outcome as an output instead of asserting it with `test`.
+A failing job skips everything that depends on it, so Detailed Health Check needs no `skipif` of its own. A job with [`always`](/reference/yaml-configuration#always) runs once its `needs` are over, however they ended, and its `skipif` decides from what was published. `outputs.ping` is missing when the request itself failed, such as a refused connection, so `??` counts that as unresponsive.
 
 ```yaml
+vars:
+  service_url: "{{SERVICE_URL}}"
+
 jobs:
 - id: health-check
   name: Basic Health Check
@@ -112,12 +125,12 @@ jobs:
       with:
         method: GET
         url: "{{vars.service_url}}/ping"
+      test: res.code == 200
       outputs:
         service_responsive: res.code == 200
 
 - name: Detailed Health Check
   needs: [health-check]
-  skipif: "!outputs.ping.service_responsive"
   steps:
     - name: Deep Health Check
       uses: http
@@ -128,7 +141,8 @@ jobs:
 
 - name: Send Notification
   needs: [health-check]
-  skipif: outputs.ping.service_responsive
+  always: true
+  skipif: outputs.ping?.service_responsive ?? false
   steps:
     - name: Alert Team
       uses: hello
@@ -166,9 +180,9 @@ A step definition takes the properties below.
 
 ```yaml
 steps:
-  - name: Step Name          # Required: Descriptive name
+  - name: Step Name          # Optional: Descriptive name
     id: step-id             # Optional: Unique identifier for referencing
-    action: http            # Optional: Action to execute
+    uses: http              # Required: Action to execute
     with:                   # Optional: Action parameters
       url: https://api.example.com
       method: GET
@@ -206,17 +220,18 @@ Execute specific actions like HTTP requests:
 
 #### 2. Echo Steps
 
-Display messages or computed values:
+Display messages or computed values. Every step names an action, so a step that only prints uses `hello`:
 
 ```yaml
 - name: Display Results
+  uses: hello
   echo: |
     Test Results Summary:
-    
+
     User ID: {{outputs['previous-step'].user_id}}
     Email: {{outputs['previous-step'].user_email}}
     Last Login: {{outputs['previous-step'].last_login}}
-    
+
     Response Time: {{outputs['previous-step'].response_time}}ms
     Test Completed: {{unixtime()}}
 ```
@@ -244,6 +259,9 @@ Combine actions with echo messages:
 Steps within a job execute sequentially by default:
 
 ```yaml
+vars:
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: sequential-test
   name: Sequential Step Execution
@@ -323,9 +341,12 @@ The patterns below go beyond running steps in order: recovering from a failure, 
 
 ### 1. Error Recovery Patterns
 
-Implement robust error handling with recovery steps:
+Implement robust error handling with recovery steps. Each endpoint is tried only when those before it failed, and the report shows `-` for one that was not tried:
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: resilient-check
   name: Resilient Service Check
@@ -344,6 +365,7 @@ jobs:
     - name: Try Alternative Endpoint
       id: alt-attempt
       uses: http
+      skipif: outputs.primary_success ?? false
       timeout: 15s
       with:
         method: GET
@@ -355,6 +377,7 @@ jobs:
     - name: Fallback to Legacy Endpoint
       id: legacy-attempt
       uses: http
+      skipif: (outputs.primary_success ?? false) || (outputs.alt_success ?? false)
       timeout: 20s
       with:
         method: GET
@@ -367,15 +390,15 @@ jobs:
       uses: hello
       echo: |
         Service Health Check Results:
-          
-        Primary API (v1): {{outputs['primary-attempt'].primary_success ? "✅" : "❌"}}
-        Alternative API (v2): {{outputs['alt-attempt'].alt_success ? "✅" : "❌"}}
-        Legacy API: {{outputs['legacy-attempt'].legacy_success ? "✅" : "❌"}}
-          
+
+        Primary API (v1): {{(outputs.primary_success ?? false) ? "✅" : "❌"}}
+        Alternative API (v2): {{outputs.alt_success == nil ? "-" : outputs.alt_success ? "✅" : "❌"}}
+        Legacy API: {{outputs.legacy_success == nil ? "-" : outputs.legacy_success ? "✅" : "❌"}}
+
         Overall Status: {{
-          outputs['primary-attempt'].primary_success || 
-          outputs['alt-attempt'].alt_success || 
-          outputs['legacy-attempt'].legacy_success ? "HEALTHY" : "DOWN"
+          (outputs.primary_success ?? false) ||
+          (outputs.alt_success ?? false) ||
+          (outputs.legacy_success ?? false) ? "HEALTHY" : "DOWN"
         }}
 ```
 
@@ -384,6 +407,9 @@ jobs:
 Collect data across multiple steps for analysis:
 
 ```yaml
+vars:
+  BASE_URL: "{{BASE_URL}}"
+
 jobs:
 - id: performance-analysis
   name: Performance Analysis
@@ -397,7 +423,8 @@ jobs:
       test: res.code == 200
       outputs:
         homepage_time: (rt.sec * 1000)
-        homepage_size: res.body_size
+        # rawbody is a JSON body as received; any other body is res.body itself
+        homepage_size: len(res.rawbody ?? res.body)
 
     - name: Test API Endpoint
       id: api
@@ -408,7 +435,7 @@ jobs:
       test: res.code == 200
       outputs:
         api_time: (rt.sec * 1000)
-        api_size: res.body_size
+        api_size: len(res.rawbody ?? res.body)
 
     - name: Test Search Function
       id: search
@@ -419,31 +446,31 @@ jobs:
       test: res.code == 200
       outputs:
         search_time: (rt.sec * 1000)
-        search_size: res.body_size
+        search_size: len(res.rawbody ?? res.body)
 
     - name: Performance Summary
       uses: hello
       echo: |
         Performance Analysis Results:
-          
+
         Homepage:
           Response Time: {{outputs.homepage.homepage_time}}ms
           Size: {{outputs.homepage.homepage_size}} bytes
-            
+
         API Endpoint:
           Response Time: {{outputs.api.api_time}}ms
           Size: {{outputs.api.api_size}} bytes
-            
+
         Search Function:
           Response Time: {{outputs.search.search_time}}ms
           Size: {{outputs.search.search_size}} bytes
-            
+
         Average Response Time: {{
           (outputs.homepage.homepage_time + 
            outputs.api.api_time + 
            outputs.search.search_time) / 3
         }}ms
-          
+
         Total Data Transfer: {{
           outputs.homepage.homepage_size + 
           outputs.api.api_size + 
@@ -453,9 +480,12 @@ jobs:
 
 ### 3. Dynamic Step Configuration
 
-Configure steps based on runtime conditions:
+Configure steps based on runtime conditions. The first step reads the service's configuration, and the `skipif` of each later step decides from it whether that step applies:
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: adaptive-monitoring
   name: Adaptive Monitoring
@@ -480,8 +510,9 @@ jobs:
       test: res.code == 200
 
     - name: Detailed Monitoring
-      id: adaptive-monitoring
+      id: detailed
       uses: http
+      skipif: outputs.monitoring_level != "detailed"
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/metrics"
@@ -492,6 +523,7 @@ jobs:
 
     - name: Feature-Specific Tests
       uses: http
+      skipif: '!("beta" in (outputs.feature_flags ?? []))'
       with:
         method: GET
         url: "{{vars.SERVICE_URL}}/beta/features"
@@ -499,6 +531,9 @@ jobs:
 
     - name: Production Alerts
       uses: hello
+      skipif: |
+        outputs.environment != "production" ||
+        ((outputs.detailed?.cpu_usage ?? 0) < 80 && (outputs.detailed?.memory_usage ?? 0) < 80)
       echo: |
         🚨 PRODUCTION ALERT: High resource usage detected!
         CPU: {{outputs.detailed.cpu_usage}}%
@@ -543,19 +578,26 @@ steps:
 
 ### Job References
 
-Reference job results from other jobs:
+Reference job results from other jobs. API Functionality runs only once Database Connectivity has passed, and reads what its step published:
 
 ```yaml
+vars:
+  DB_API: "{{DB_API}}"
+  API_URL: "{{API_URL}}"
+
 jobs:
 - id: database-check
   name: Database Connectivity
   steps:
     - name: Test Database
+      id: db
       uses: http
       with:
         method: GET
         url: "{{vars.DB_API}}/ping"
       test: res.code == 200
+      outputs:
+        db_version: res.body.version
 
 - id: api-check
   name: API Functionality
@@ -568,9 +610,9 @@ jobs:
         url: "{{vars.API_URL}}/health"
       test: res.code == 200
 
-    - name: Skip Message
+    - name: Report
       uses: hello
-      echo: "Skipping API test due to database connectivity issues"
+      echo: "API checked against database {{outputs.db.db_version}}"
 ```
 
 ## Performance Optimization
@@ -582,6 +624,12 @@ A run is as slow as its longest chain of dependencies. Shortening that chain, an
 Structure jobs to run in parallel when possible:
 
 ```yaml
+vars:
+  FRONTEND_URL: "{{FRONTEND_URL}}"
+  BACKEND_URL: "{{BACKEND_URL}}"
+  DB_URL: "{{DB_URL}}"
+  APP_URL: "{{APP_URL}}"
+
 jobs:
   # These jobs can run in parallel (no dependencies)
 - id: frontend-test
@@ -632,6 +680,9 @@ jobs:
 Optimize step execution for better resource utilization:
 
 ```yaml
+vars:
+  SERVICE_URL: "{{SERVICE_URL}}"
+
 jobs:
 - id: efficient-monitoring
   name: Efficient Resource Monitoring
@@ -644,10 +695,13 @@ jobs:
         method: GET
         url: "{{vars.SERVICE_URL}}/ping"
       test: res.code == 200
+      outputs:
+        responsive: res.code == 200
 
     # Conditional expensive operations
     - name: Detailed Analysis
       uses: http
+      skipif: "!(outputs.responsive ?? false)"
       timeout: 30s                   # Longer timeout for detailed analysis
       with:
         method: GET
@@ -679,7 +733,7 @@ The points below cover how much to put in one job, how to name steps, and how fa
 
 Strike the right balance in job size:
 
-```yaml
+```yaml fragment
 # Good: Focused, cohesive jobs
 jobs:
 - id: authentication-tests

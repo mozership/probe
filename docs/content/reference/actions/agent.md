@@ -117,8 +117,14 @@ The action takes the API key from Probe's environment. List it under [`secrets`]
 | `sakura` | `SAKURA_AI_ENGINE_TOKEN` | The Sakura AI Engine, reached through Chat Completions. Its models differ in what they take, so `effort` is not sent, and they see no images unless `vision` is `true`. Choose one that calls tools, such as `gpt-oss-120b` |
 
 ```yaml
+name: Sign-up
+actions:
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
 secrets:
   - OPENAI_API_KEY
+  - TEST_PASSWORD
+vars:
+  test_password: "{{TEST_PASSWORD}}"
 jobs:
 - name: sign-up
   steps:
@@ -130,6 +136,11 @@ jobs:
       url: https://staging.example.com/
       task: Sign up with {secret:EMAIL} and the password {secret:PASSWORD}.
       expect: The dashboard greets the user.
+      secrets:
+        EMAIL: "qa+{{random_str(8)}}@example.com"
+        PASSWORD: "{{vars.test_password}}"
+    timeout: 5m
+    test: res.verdict == "pass"
 ```
 
 A model that sees no images reads the pages by their elements and text alone: it is not offered screenshots, acts on elements rather than points of the page, and the judge is not shown the final page as an image. The screenshots are still kept as evidence.
