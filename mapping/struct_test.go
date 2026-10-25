@@ -480,7 +480,7 @@ func TestMapToStructByTags_NumberKinds(t *testing.T) {
 			continue
 		}
 		field := reflect.ValueOf(got).FieldByNameFunc(func(name string) bool {
-			f, _ := reflect.TypeOf(got).FieldByName(name)
+			f, _ := reflect.TypeFor[dest]().FieldByName(name)
 			return f.Tag.Get("map") == tt.key
 		})
 		if v := field.Interface(); v != tt.want {
