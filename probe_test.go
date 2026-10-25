@@ -81,6 +81,23 @@ func TestNew(t *testing.T) {
 	}
 }
 
+// TestNew_LeavesEnvironment tests that New sets no environment variable, as
+// PROBE_TTY, which the CLI sets for the actions it runs: a constructor of
+// the library has no business changing the environment of the process.
+func TestNew_LeavesEnvironment(t *testing.T) {
+	t.Setenv("PROBE_TTY", "")
+	if err := os.Unsetenv("PROBE_TTY"); err != nil {
+		t.Fatal(err)
+	}
+	before := os.Environ()
+
+	_ = New("./test.yml", false)
+
+	if after := os.Environ(); !reflect.DeepEqual(after, before) {
+		t.Errorf("New() changed the environment from %v to %v", before, after)
+	}
+}
+
 func TestMergeDefaults(t *testing.T) {
 
 	tests := []struct {

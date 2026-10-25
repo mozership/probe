@@ -92,7 +92,11 @@ func (p *Printer) Masker() *mask.Masker {
 	return p.masker
 }
 
-// NewPrinter creates a new console print writer
+// NewPrinter creates a new console print writer. Its output is colored
+// whatever it is written to when FORCE_COLOR or PROBE_TTY is 1: the CLI sets
+// PROBE_TTY when its standard output is a terminal, for the printer of an
+// embedded job: that one runs in the process of an action, whose standard
+// output is not the terminal, and what it writes is printed by the run.
 func NewPrinter(verbose bool) *Printer {
 	if os.Getenv("FORCE_COLOR") == "1" || os.Getenv("PROBE_TTY") == "1" {
 		color.NoColor = false
