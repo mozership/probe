@@ -977,6 +977,40 @@ runs:
   test: res.message == "Hello, probe!"
 ```
 
+#### Reading Parameters into a Struct
+
+`actionrpc` reads the parameters of a step into a struct as the built-in actions read theirs, by the `map` tags of its fields:
+
+| Function | What it does |
+|----------|--------------|
+| `actionrpc.DecodeParams(with, &req)` | Fills `req` from `with`. A field tagged `validate:"required"` must be given. A number field takes a number or a decimal string that fits it, and refuses a fraction or a value out of range; a bool field takes a bool, `0` or `1`, or a string such as `"true"`; a `map[string]string` field takes strings, numbers and bools as their text and `null` as an empty string, and refuses a list or a map. The error names the field |
+| `actionrpc.EncodeResult(res)` | Turns a struct into the map `Run` returns, keyed by the same tags |
+| `actionrpc.ParamNames(Req{})` | Lists the parameters a struct takes, in the order of its fields, such as for `params` in `action.yml` |
+| `actionrpc.ParseTimeout(v)` | Reads a timeout as the built-in actions do: `"30s"`, a number of seconds, or a numeric string, and refuses anything else and zero |
+
+```go
+type Req struct {
+    Name   string `map:"name" validate:"required"`
+    Repeat int    `map:"repeat"`
+}
+
+type Res struct {
+    Message string `map:"message"`
+}
+
+func (g *Greet) Run(with map[string]any) (map[string]any, error) {
+    req := Req{Repeat: 1}
+    if err := actionrpc.DecodeParams(with, &req); err != nil {
+        return nil, err
+    }
+    res, err := actionrpc.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
+    if err != nil {
+        return nil, err
+    }
+    return map[string]any{"req": with, "res": res, "status": 0}, nil
+}
+```
+
 ### Building a Custom Action into Probe
 
 A custom action can instead be built into Probe itself. Probe runs each built-in action in a process of its own, by starting its own executable again as `<executable> builtin-actions <name>`. Such an action therefore lives in your own build of Probe: a program that uses Probe as a library, serves your action under that subcommand, and hands the other names to the built-in actions.
