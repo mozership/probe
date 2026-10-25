@@ -368,7 +368,7 @@ func TestBuildReport_RepeatTestedStepFailedAndSkipped(t *testing.T) {
 		HasTest:       true,
 		Status:        StatusError,
 		RepeatCounter: &StepRepeatCounter{Name: "Query", FailureCount: 1, SkippedCount: 1, Tested: true},
-	})
+	}, nil)
 	if st.Status != report.Passed {
 		t.Errorf("status = %q, want %q", st.Status, report.Passed)
 	}
