@@ -1,7 +1,6 @@
 package probe
 
 import (
-	"fmt"
 	"testing"
 	"time"
 )
@@ -30,101 +29,6 @@ func TestStatusTypeConstants(t *testing.T) {
 				t.Errorf("StatusType constants should be unique, but %d and %d are both %d", i, j, status1)
 			}
 		}
-	}
-}
-
-func TestStepRepeatCounter(t *testing.T) {
-	tests := []struct {
-		name         string
-		successCount int
-		failureCount int
-		expected     string
-	}{
-		{
-			name:         "all success",
-			successCount: 100,
-			failureCount: 0,
-			expected:     "100/100 success (100.0%)",
-		},
-		{
-			name:         "partial success",
-			successCount: 80,
-			failureCount: 20,
-			expected:     "80/100 success (80.0%)",
-		},
-		{
-			name:         "all failure",
-			successCount: 0,
-			failureCount: 100,
-			expected:     "0/100 success (0.0%)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			counter := StepRepeatCounter{
-				SuccessCount: tt.successCount,
-				FailureCount: tt.failureCount,
-				Name:         "Test Step",
-			}
-
-			totalCount := counter.SuccessCount + counter.FailureCount
-			successRate := float64(counter.SuccessCount) / float64(totalCount) * 100
-			actual := fmt.Sprintf("%d/%d success (%.1f%%)",
-				counter.SuccessCount, totalCount, successRate)
-
-			if actual != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, actual)
-			}
-		})
-	}
-}
-
-func TestStepRepeatDisplayConditions(t *testing.T) {
-	tests := []struct {
-		name          string
-		repeatCurrent int
-		repeatTotal   int
-		shouldDisplay bool
-		description   string
-	}{
-		{
-			name:          "first execution",
-			repeatCurrent: 1,
-			repeatTotal:   10,
-			shouldDisplay: true,
-			description:   "should show initial message",
-		},
-		{
-			name:          "middle execution",
-			repeatCurrent: 5,
-			repeatTotal:   10,
-			shouldDisplay: false,
-			description:   "should not display in middle",
-		},
-		{
-			name:          "final execution",
-			repeatCurrent: 10,
-			repeatTotal:   10,
-			shouldDisplay: true,
-			description:   "should show final result",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test the display condition logic
-			totalCount := tt.repeatCurrent // Simulate counter state
-			isFirstExecution := totalCount == 1
-			isFinalExecution := tt.repeatCurrent == tt.repeatTotal
-
-			shouldDisplay := isFirstExecution || isFinalExecution
-
-			if shouldDisplay != tt.shouldDisplay {
-				t.Errorf("%s: expected shouldDisplay to be %v, got %v",
-					tt.description, tt.shouldDisplay, shouldDisplay)
-			}
-		})
 	}
 }
 

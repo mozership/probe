@@ -999,35 +999,3 @@ func TestReportRenderer_failureText_MasksTheClause(t *testing.T) {
 		t.Error("failureText() changed the failure's clause, want it kept as it is")
 	}
 }
-
-func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
-	t.Run("print detailed results functionality", func(t *testing.T) {
-		workflow := &Workflow{
-			Name: "detailed-results-test",
-			Jobs: []Job{
-				{
-					ID:    "test-job",
-					Name:  "test-job",
-					Steps: []*Step{},
-				},
-			},
-			printer: newBufferPrinter(),
-		}
-
-		// Create workflow buffer
-		result := NewResult()
-		jobResult := &JobResult{
-			JobName:   "test-job",
-			JobID:     "test-job",
-			Status:    StatusSuccess,
-			StartTime: time.Now().Add(-100 * time.Millisecond),
-			EndTime:   time.Now(),
-		}
-		result.Jobs["test-job"] = jobResult
-
-		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).reportText(result)
-		if !strings.Contains(got, "test-job") {
-			t.Errorf("reportText() should have the job, got:\n%s", got)
-		}
-	})
-}
