@@ -1,6 +1,7 @@
 package actionrpc
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -52,7 +53,7 @@ func TestClientRunStepGathersTheContract(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Client{client: directClient{&Server{Impl: &contractAction{check: tt.check, err: tt.err}}}}
 			got := &Contract{}
-			if _, _, err := c.RunStep(Call{With: map[string]any{}, Contract: got}); (err != nil) != (tt.err != nil) {
+			if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}, Contract: got}); (err != nil) != (tt.err != nil) {
 				t.Fatalf("RunStep() error = %v", err)
 			}
 			if !reflect.DeepEqual(got.Check(), tt.want) {
@@ -63,7 +64,7 @@ func TestClientRunStepGathersTheContract(t *testing.T) {
 
 	// A runner that does not hear of it is not told.
 	c := &Client{client: directClient{&Server{Impl: &contractAction{check: &ContractCheck{}}}}}
-	if _, _, err := c.RunStep(Call{With: map[string]any{}}); err != nil {
+	if _, _, err := c.RunStep(context.Background(), Call{With: map[string]any{}}); err != nil {
 		t.Errorf("RunStep() without Contract error = %v", err)
 	}
 }

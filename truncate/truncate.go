@@ -9,12 +9,8 @@ import (
 	"github.com/fatih/color"
 )
 
-const (
-	// MaxLogLength is the maximum length for log output to prevent log bloat
-	MaxLogLength = 200
-	// MaxLength is the maximum length for general string processing
-	MaxLength = 1000000
-)
+// MaxLogLength is the maximum length for log output to prevent log bloat
+const MaxLogLength = 200
 
 // Message returns the colored marker appended to a truncated value.
 func Message() string {
@@ -29,39 +25,12 @@ func String(s string, maxLen int) string {
 	return s[:maxLen] + Message()
 }
 
-// MapString truncates long values in map[string]string for logging
-func MapString(params map[string]string, maxLen int) map[string]string {
-	truncated := make(map[string]string)
-	for key, value := range params {
-		truncated[key] = String(value, maxLen)
-	}
-	return truncated
-}
-
-// Map truncates long values in map[string]any for logging
-//
-// Deprecated: use Value, which keeps the maps and lists in the values.
-func Map(params map[string]any, maxLen int) map[string]any {
-	truncated := make(map[string]any)
-	for key, value := range params {
-		switch v := value.(type) {
-		case string:
-			truncated[key] = String(v, maxLen)
-		default:
-			// For non-string values, convert to string first, then truncate
-			str := fmt.Sprintf("%v", v)
-			truncated[key] = String(str, maxLen)
-		}
-	}
-	return truncated
-}
-
 // Value truncates the long strings in v, a value an action logs, at any
 // depth, keeping its maps and lists as they are laid out, so that what logs
 // it shows them as such. A map comes back as a map[string]any and a list as
 // a []any, other than a []byte, which is left as it is, as are numbers and
 // booleans. Any other value, such as a struct, is turned into a string and
-// truncated, as Map does.
+// truncated.
 func Value(v any, maxLen int) any {
 	switch val := v.(type) {
 	case nil, bool, []byte,

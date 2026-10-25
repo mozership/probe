@@ -26,7 +26,7 @@ func loadWorkflow(t *testing.T, content string, more ...string) (*Probe, error) 
 	for i, c := range more {
 		paths = append(paths, writeWorkflow(t, dir, fmt.Sprintf("more%d.yml", i), c))
 	}
-	p := &Probe{FilePath: strings.Join(paths, ","), Config: Config{Log: os.Stdout, Actions: builtinNames}}
+	p := &Probe{FilePath: strings.Join(paths, ","), Config: Config{Actions: builtinNames}}
 	return p, p.Load()
 }
 
@@ -138,7 +138,7 @@ func TestLoad_ActionNamesRefused(t *testing.T) {
 func TestLoad_ActionNamesWithoutBuiltin(t *testing.T) {
 	dir := t.TempDir()
 	path := writeWorkflow(t, dir, "workflow.yml", "name: n\nactions:\n  http: ./greet\njobs:\n- name: J\n  steps:\n  - uses: http\n")
-	p := &Probe{FilePath: path, Config: Config{Log: os.Stdout}}
+	p := &Probe{FilePath: path, Config: Config{}}
 	if err := p.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ jobs:
 // under actions, and is refused, under a guard, by the action in full.
 func TestLoad_NamesForEmbeddedJobs(t *testing.T) {
 	redis := "github.com/mozership/probe-redis@" + aliasSHA
-	p := &Probe{Config: Config{Log: os.Stdout, Actions: builtinNames}}
+	p := &Probe{Config: Config{Actions: builtinNames}}
 	// Problems are collected, as probe check does, so that the wrong name
 	// does not end the load.
 	p.aliasProblems = &[]aliasProblem{}

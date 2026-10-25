@@ -8,34 +8,25 @@ import (
 	"time"
 )
 
-// Executor handles job execution with buffered output
+// Executor runs a job: once, or as many times as its repeat says, and then
+// records what the runs came to on the job's result.
 type Executor struct {
-	workflow *Workflow
-	job      *Job
+	job *Job
 }
 
-// NewExecutor creates a new job executor
-func NewExecutor(w *Workflow, job *Job) *Executor {
-	return &Executor{
-		workflow: w,
-		job:      job,
-	}
+// NewExecutor returns an Executor that runs job.
+func NewExecutor(job *Job) *Executor {
+	return &Executor{job: job}
 }
 
-// Execute runs a job with buffered output
-func (e *Executor) Execute(ctx JobContext) bool {
+// Run runs the job and records its result, and reports whether it passed.
+// A job that did not pass is the caller's to fail the workflow for.
+func (e *Executor) Run(ctx JobContext) bool {
 	jr := ctx.Result.Jobs[e.job.ID]
-
 	jr.mutex.Lock()
 	jr.StartTime = time.Now()
 	jr.mutex.Unlock()
 
-	// Use the existing buffered execution logic
-	return e.executeWithBuffering(ctx)
-}
-
-// executeWithBuffering contains the buffered execution logic
-func (e *Executor) executeWithBuffering(ctx JobContext) bool {
 	ctx = e.setupContext(ctx)
 
 	overallSuccess := e.executeJobRepeatLoop(ctx)
@@ -115,7 +106,6 @@ func (e *Executor) executeJobRepeatLoop(ctx JobContext) bool {
 
 		if err != nil || (failed && !ctx.countedOnly()) {
 			overallSuccess = false
-			e.workflow.SetExitStatus(true)
 		}
 
 		ctx.JobScheduler.IncrementRepeatCounter(jobID)
@@ -172,7 +162,6 @@ func (e *Executor) executeJobRepeatLoopAsync(ctx JobContext) bool {
 
 			if err != nil || (failed && !execCtx.countedOnly()) {
 				overallSuccess.Store(false)
-				e.workflow.SetExitStatus(true)
 			}
 		}(current, e.job)
 
@@ -230,84 +219,91 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	ctx.Result.notifyJobDone(jobID)
 }
 
-// appendRepeatStepResults appends the final results of repeat step executions to buffer.
-// The counters are kept by where each step is written and which entry of
-// its iteration it ran with (Step.counterKey), so that a run does not count
-// for another step when an iteration comes to another number of entries in
-// each run. They are read in the order of those keys, which is the order the
-// steps ran in, and numbered from there as the steps of any job are.
+// appendRepeatStepResults adds a result for each step of the repeated job,
+// made from the step's counter, to the job's result. The counters are kept
+// by where each step is written and which entry of its iteration it ran with
+// (Step.counterKey), so that a run does not count for another step when an
+// iteration comes to another number of entries in each run. They are read in
+// the order of those keys, which is the order the steps ran in, and numbered
+// from there as the steps of any job are.
 //
 // It returns the counters, for the test of the job over its runs.
 func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter {
-	jobID := e.job.ID
-
 	rep := ctx.repeat
-	rep.mu.Lock()
-	indexes := make([]int, 0, len(rep.counters))
-	for i := range rep.counters {
-		indexes = append(indexes, i)
-	}
-	sort.Ints(indexes)
-	counters := make([]StepRepeatCounter, len(indexes))
-	for n, i := range indexes {
-		counter := rep.counters[i]
-		// Ensure RepeatTotal is set (in case it wasn't set earlier)
-		if counter.RepeatTotal == 0 {
-			counter.RepeatTotal = rep.total
-			rep.counters[i] = counter
+	counters := rep.snapshotCounters()
+	if ctx.Result != nil {
+		for n, counter := range counters {
+			ctx.Result.AddStepResult(e.job.ID, repeatStepResult(n, counter, rep.reads[counter.ID]))
 		}
-		counter.Warmup = rep.warmup
-		counter.Tested = rep.tested
+	}
+	return counters
+}
+
+// snapshotCounters returns a copy of the counter of each step, in the order
+// of their keys, with what the runs share filled in: the total of the runs
+// counted, the warmup runs and whether the job is tested over its runs.
+//
+// The copy is shallow: its fields can be set apart from the stored counter,
+// but its Failure, Contract, RTs and EchoOutputs are the stored counter's,
+// so what they point to is not to be changed through it.
+func (r *jobRepeat) snapshotCounters() []StepRepeatCounter {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	keys := make([]int, 0, len(r.counters))
+	for k := range r.counters {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	counters := make([]StepRepeatCounter, len(keys))
+	for n, k := range keys {
+		counter := r.counters[k]
+		if counter.RepeatTotal == 0 {
+			counter.RepeatTotal = r.total
+		}
+		counter.Warmup = r.warmup
+		counter.Tested = r.tested
 		counters[n] = counter
 	}
-	rep.mu.Unlock()
+	return counters
+}
 
-	// Create StepResults for repeat steps and add them to Result
-	for n := range indexes {
-		counter := counters[n]
-		hasTest := counter.Test != "" || counter.Checked || rep.reads[counter.ID]
-
-		// Determine status based on repeat counter results
-		var status StatusType
-		if counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0 {
-			// Never run - skipped in every run, after a step that failed
-			status = StatusSkipped
-		} else if counter.FailureCount == 0 {
-			// No failures - success
-			status = StatusSuccess
-		} else if counter.SuccessCount == 0 {
-			// All failures - error
-			status = StatusError
-		} else {
-			// Mixed results - warning
-			status = StatusWarning
-		}
-
-		// Create StepResult with repeat counter
-		stepResult := StepResult{
-			Index:         n,
-			ID:            counter.ID,
-			Name:          counter.Name,
-			Status:        status,
-			HasTest:       hasTest,
-			RepeatCounter: &counter,
-			Test:          counter.Test,
-			Contract:      counter.Contract,
-		}
-		if counter.Failure != nil {
-			f := *counter.Failure
-			// The runs the step was not run in are runs of the job too, as
-			// the count in the report files has them.
-			f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
-				counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount, f.Message)
-			stepResult.Failure = &f
-		}
-
-		// Add step result to workflow buffer
-		if ctx.Result != nil {
-			ctx.Result.AddStepResult(jobID, stepResult)
-		}
+// repeatStepResult returns the result of the step at index, made from its
+// counter over the runs of the job. readByTest is whether a test of the job
+// over its runs reads the step, which gives the step a test as its own does.
+//
+// The step is skipped when it ran in no run, passed when it failed in none,
+// failed when it passed in none, and warned of otherwise. Its failure is the
+// first run's, with the number of runs it failed in.
+func repeatStepResult(index int, counter StepRepeatCounter, readByTest bool) StepResult {
+	var status StatusType
+	switch {
+	case counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0:
+		status = StatusSkipped
+	case counter.FailureCount == 0:
+		status = StatusSuccess
+	case counter.SuccessCount == 0:
+		status = StatusError
+	default:
+		status = StatusWarning
 	}
 
-	return counters
+	result := StepResult{
+		Index:         index,
+		ID:            counter.ID,
+		Name:          counter.Name,
+		Status:        status,
+		HasTest:       counter.Test != "" || counter.Checked || readByTest,
+		RepeatCounter: &counter,
+		Test:          counter.Test,
+		Contract:      counter.Contract,
+	}
+	if counter.Failure != nil {
+		f := *counter.Failure
+		// The runs the step was not run in are runs of the job too, as the
+		// count in the report files has them.
+		f.Message = fmt.Sprintf("%d of %d iterations failed; the first: %s",
+			counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount, f.Message)
+		result.Failure = &f
+	}
+	return result
 }

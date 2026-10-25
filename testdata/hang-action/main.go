@@ -1,7 +1,8 @@
 // Command hang-action serves an action that never returns, for tests of how
 // a runner gives up on one. It writes its process ID to the file with.pidfile
 // names, and on SIGTERM writes the file next to it with ".term" added before
-// it exits.
+// it exits. Its cleanup never returns either, and takes the run ID as the
+// file to write its process ID to.
 package main
 
 import (
@@ -24,11 +25,24 @@ type action struct{}
 
 func (action) Run(with map[string]any) (map[string]any, error) {
 	path, _ := with["pidfile"].(string)
+	if err := hang(path); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (action) Cleanup(call actionrpc.CleanupCall) error {
+	return hang(call.RunID)
+}
+
+// hang writes the process ID to the file at path and never returns, unless
+// it cannot write it.
+func hang(path string) error {
 	mu.Lock()
 	pidfile = path
 	mu.Unlock()
 	if err := os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
-		return nil, err
+		return err
 	}
 	select {}
 }

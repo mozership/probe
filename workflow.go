@@ -14,7 +14,6 @@ import (
 	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/vareval"
@@ -298,26 +297,6 @@ func (w *Workflow) checkAllJobs(builtin []string) error {
 	return nil
 }
 
-// checkCycle refuses jobs whose needs are in a cycle, as a run does.
-func (w *Workflow) checkCycle() error {
-	byID := make(map[string]*Job, len(w.Jobs))
-	ids := make([]string, len(w.Jobs))
-	for i := range w.Jobs {
-		byID[w.Jobs[i].ID] = &w.Jobs[i]
-		ids[i] = w.Jobs[i].ID
-	}
-	cycle := dag.DetectCycleFn(ids, func(id string) []string {
-		if j, ok := byID[id]; ok {
-			return j.Needs
-		}
-		return nil
-	})
-	if cycle != nil {
-		return fmt.Errorf("circular dependency detected: %s", strings.Join(cycle, " -> "))
-	}
-	return nil
-}
-
 // jobNamer returns the name of the job of each id, with the templates in it
 // evaluated with vars where they can be: a name that reads more than the
 // vars, such as repeat_index, is as written.
@@ -338,15 +317,33 @@ func (w *Workflow) jobNamer(vars map[string]any) func(id string) string {
 	}
 }
 
-// initJobScheduler creates and sets up the job scheduler with dependencies
-func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+// newScheduler returns a scheduler of the workflow's jobs, added in the
+// order they are written.
+func (w *Workflow) newScheduler() (*JobScheduler, error) {
 	scheduler := NewJobScheduler()
-
-	// Add all jobs to scheduler
 	for i := range w.Jobs {
 		if err := scheduler.AddJob(&w.Jobs[i]); err != nil {
 			return nil, err
 		}
+	}
+	return scheduler, nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
+// that is no job is not refused.
+func (w *Workflow) checkCycle() error {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return err
+	}
+	return scheduler.checkCircularDependencies()
+}
+
+// initJobScheduler creates and sets up the job scheduler with dependencies
+func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate dependencies
@@ -430,9 +427,7 @@ func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, do
 		go func(j *Job) {
 			defer func() { done <- struct{}{} }()
 
-			executor := NewExecutor(w, j)
-			success := executor.Execute(ctx)
-			if !success {
+			if !NewExecutor(j).Run(ctx) {
 				w.SetExitStatus(true)
 			}
 		}(job)
@@ -529,8 +524,7 @@ func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, 
 			}
 			m, err := actionref.ReadManifest(st.Uses, baseDir)
 			if err != nil {
-				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err).
-					WithContext("uses", st.Uses)
+				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err)
 			}
 			// What this action.yml declares replaces any declaration the guard
 			// came with, even when it declares nothing: a job of the embedded
@@ -541,8 +535,7 @@ func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, 
 				continue
 			}
 			if _, err := actionref.Resolve(st.Uses, baseDir); err != nil {
-				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err).
-					WithContext("uses", st.Uses)
+				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err)
 			}
 		}
 	}
@@ -560,10 +553,7 @@ func checkBuiltinUses(job *Job, builtin []string) error {
 		if actionref.IsExternal(st.Uses) || slices.Contains(builtin, st.Uses) {
 			continue
 		}
-		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin))).
-			WithContext("uses", st.Uses).
-			WithContext("job", job.Name).
-			WithContext("step", i)
+		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin)))
 	}
 	return nil
 }
@@ -620,10 +610,7 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 				if found != nil || actionref.IsExternal(uses) || slices.Contains(builtin, uses) {
 					return
 				}
-				found = NewConfigurationError("resolve_action", "failed to resolve an action of an embedded job", fmt.Errorf("%s, step %d: %w", file, i, unknownAction(uses, builtin))).
-					WithContext("uses", uses).
-					WithContext("path", file).
-					WithContext("step", i)
+				found = NewConfigurationError("resolve_action", "failed to resolve an action of an embedded job", fmt.Errorf("%s, step %d: %w", file, i, unknownAction(uses, builtin)))
 			})
 			if found != nil {
 				return found

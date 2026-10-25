@@ -48,14 +48,10 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	return ret, nil, err
 }
 
-func Serve() {
-	ServeWithActions(nil, nil)
-}
-
-// ServeWithActions is Serve for an action that knows builtin, the names of
-// the actions of Probe: a job that uses any other name is stopped before
-// its first step, and told which name. A step of one of needsNoCheck that
-// has no test is not counted as untested.
+// ServeWithActions serves the embedded action, which knows builtin, the
+// names of the actions of Probe: a job that uses any other name is stopped
+// before its first step, and told which name. A step of one of needsNoCheck
+// that has no test is not counted as untested.
 func ServeWithActions(builtin, needsNoCheck []string) {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log, builtin: builtin, needsNoCheck: needsNoCheck}
