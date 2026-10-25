@@ -45,7 +45,7 @@ jobs:
 	for _, msg := range []string{
 		`job 1 "Second": step 0: invalid step ID 'Bad.Id'`,
 		`job 1 "Second", step 1 "Bad test": test:`,
-		`job 1 "Second", step 2 "Bad wait": wait: invalid wait format: soon`,
+		`job 1 "Second", step 2 "Bad wait": wait: invalid wait soon: use a duration`,
 	} {
 		if !strings.Contains(err.Error(), msg) {
 			t.Errorf("Do() error = %v, want it to say %q", err, msg)
@@ -103,7 +103,7 @@ func TestWaitProblems(t *testing.T) {
 		{wait: "500ms"},
 		{wait: "3"},
 		{wait: "{{ vars.wait }}"},
-		{wait: "soon", want: "wait: invalid wait format: soon"},
+		{wait: "soon", want: "wait: invalid wait soon: use a duration"},
 		{wait: "{{ vars. }}", want: "wait: template {{ vars. }}"},
 	}
 	for _, tt := range tests {

@@ -64,6 +64,17 @@ func TestStep_parseWaitDuration(t *testing.T) {
 			expected: 0,
 			hasError: true,
 		},
+		{name: "zero", wait: "0", expected: 0},
+		{name: "zero duration", wait: "0s", expected: 0},
+		{name: "fractional seconds", wait: "1.5", expected: 1500 * time.Millisecond},
+		{name: "spaces around", wait: " 2 ", expected: 2 * time.Second},
+		{name: "a nanosecond", wait: "1ns", expected: time.Nanosecond},
+		{name: "negative seconds", wait: "-1", hasError: true},
+		{name: "negative duration", wait: "-1s", hasError: true},
+		{name: "below a nanosecond", wait: "0.0000000001", hasError: true},
+		{name: "the most seconds a duration holds", wait: "9223372036", expected: 9223372036 * time.Second},
+		{name: "too many seconds for a duration", wait: "9223372037", hasError: true},
+		{name: "too long a duration", wait: "2562048h", hasError: true},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +157,10 @@ func TestStep_getWaitTimeForDisplay(t *testing.T) {
 			wait:     "invalid",
 			expected: "",
 		},
+		{name: "zero", wait: "0", expected: "0s"},
+		{name: "minutes in seconds", wait: "1m30s", expected: "90s"},
+		{name: "fractional seconds", wait: "1.5", expected: "1.5s"},
+		{name: "negative returns empty", wait: "-1s", expected: ""},
 		{
 			name:     "template not evaluated returns empty",
 			wait:     "{{ vars.wait }}",
@@ -234,7 +249,7 @@ func TestStep_prepare_WaitThatIsNoTime(t *testing.T) {
 		want string
 	}{
 		{name: "a template that cannot be evaluated", wait: "{{1 +}}s", want: "wait expression evaluation error: "},
-		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait format: soon"},
+		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait soon: use a duration"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

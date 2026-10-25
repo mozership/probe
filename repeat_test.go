@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/goccy/go-yaml"
 )
 
 // Test Interval YAML unmarshaling
@@ -60,6 +62,21 @@ func TestIntervalUnmarshal(t *testing.T) {
 			expected: 0,
 			hasError: true,
 		},
+		{name: "zero", input: 0, expected: 0},
+		{name: "zero string", input: "0", expected: 0},
+		{name: "zero duration string", input: "0s", expected: 0},
+		{name: "fractional seconds are kept", input: 1.5, expected: 1500 * time.Millisecond},
+		{name: "fractional seconds string", input: "0.25", expected: 250 * time.Millisecond},
+		{name: "a nanosecond", input: 1e-9, expected: time.Nanosecond},
+		{name: "below a nanosecond", input: 1e-10, hasError: true},
+		{name: "negative integer", input: -1, hasError: true},
+		{name: "negative float", input: -0.5, hasError: true},
+		{name: "negative string", input: "-1", hasError: true},
+		{name: "negative duration string", input: "-1s", hasError: true},
+		{name: "the most seconds a duration holds", input: uint64(9223372036), expected: 9223372036 * time.Second},
+		{name: "too many seconds for a duration", input: uint64(9223372037), hasError: true},
+		{name: "too many seconds as a float", input: 1e20, hasError: true},
+		{name: "null", input: nil, hasError: true},
 		{
 			name:     "invalid type",
 			input:    []string{"invalid"},
@@ -99,6 +116,49 @@ func TestIntervalUnmarshal(t *testing.T) {
 				t.Errorf("expected %v, got %v", tt.expected, interval.Duration)
 			}
 		})
+	}
+}
+
+// An Interval is read from YAML as it is written: the YAML decoder gives a
+// number as an int, a uint64 or a float64, which are all read as seconds.
+func TestIntervalFromYAML(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"i: 10", 10 * time.Second, false},
+		{"i: 0", 0, false},
+		{"i: 1.5", 1500 * time.Millisecond, false},
+		{"i: \"1.5\"", 1500 * time.Millisecond, false},
+		{"i: 500ms", 500 * time.Millisecond, false},
+		{"i: 9223372036", 9223372036 * time.Second, false},
+		{"i: 9223372037", 0, true},
+		{"i: 18446744073709551615", 0, true},
+		{"i: -1", 0, true},
+		{"i: -0.5", 0, true},
+		{"i: -1s", 0, true},
+		{"i: soon", 0, true},
+		{"i: true", 0, true},
+	}
+	for _, tt := range tests {
+		var v struct {
+			I Interval `yaml:"i"`
+		}
+		err := yaml.Unmarshal([]byte(tt.in), &v)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("%s = %v, want an error", tt.in, v.I.Duration)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tt.in, err)
+			continue
+		}
+		if v.I.Duration != tt.want {
+			t.Errorf("%s = %v, want %v", tt.in, v.I.Duration, tt.want)
+		}
 	}
 }
 

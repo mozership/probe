@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/fielderr"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
@@ -933,23 +933,14 @@ func sleepWithMessage(d time.Duration, m string, fn func(m string)) {
 	}
 }
 
-// parseWaitDuration parses wait string to time.Duration
+// parseWaitDuration reads the wait of a step, once its templates are
+// evaluated, as duration.Parse reads a duration. Zero waits for nothing.
 func parseWaitDuration(wait string) (time.Duration, error) {
-	// Check if it's a plain number (treat as seconds for backward compatibility)
-	if matched, _ := regexp.MatchString(`^\d+$`, wait); matched {
-		if seconds, err := strconv.Atoi(wait); err == nil {
-			return time.Duration(seconds) * time.Second, nil
-		}
-		return 0, fmt.Errorf("invalid wait value: %s", wait)
-	}
-
-	// Parse as duration string (e.g., "1s", "500ms", "2m")
-	duration, err := time.ParseDuration(wait)
+	d, err := duration.Parse(wait)
 	if err != nil {
-		return 0, fmt.Errorf("invalid wait format: %s", wait)
+		return 0, fmt.Errorf("invalid wait %s: %w", wait, err)
 	}
-
-	return duration, nil
+	return d, nil
 }
 
 // formatWaitTime formats duration for display

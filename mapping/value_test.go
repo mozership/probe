@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/internal/duration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestParseTimeout(t *testing.T) {
 		{"-1s", 0, true},
 		{true, 0, true},
 		{20_000_000_000, 0, true}, // would wrap to about 49 years
-		{int64(maxTimeoutSeconds) + 1, 0, true},
+		{int64(duration.MaxSeconds) + 1, 0, true},
 		{1e20, 0, true},
 		{"1e20", 0, true},
 		{"NaN", 0, true},
@@ -37,7 +38,7 @@ func TestParseTimeout(t *testing.T) {
 		{1e-10, 0, true},          // below a nanosecond: would truncate to zero
 		{"0.0000000001", 0, true}, // the same as a numeric string
 		{1e-9, time.Nanosecond, false},
-		{int64(maxTimeoutSeconds), time.Duration(maxTimeoutSeconds) * time.Second, false},
+		{int64(duration.MaxSeconds), time.Duration(duration.MaxSeconds) * time.Second, false},
 	}
 	for _, tt := range tests {
 		got, err := ParseTimeout(tt.in)

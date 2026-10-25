@@ -267,7 +267,7 @@ vars:
   wait: 1s
 `,
 			want: []want{
-				{SeverityError, 7, "wait: invalid wait format: soon"},
+				{SeverityError, 7, "wait: invalid wait soon: use a duration"},
 				{SeverityError, 15, "wait: template {{ vars. }}"},
 			},
 		},

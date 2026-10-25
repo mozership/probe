@@ -19,6 +19,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/binary"
 	"github.com/mozership/probe/internal/contractcheck"
+	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/mapping"
 )
@@ -93,20 +94,10 @@ func parseTimeout(s string) (time.Duration, error) {
 	if s == "" {
 		return DefaultTimeout, nil
 	}
-	if isZeroTimeout(s) {
+	if d, err := duration.Parse(s); err == nil && d == 0 {
 		return 0, nil
 	}
 	return mapping.ParseTimeout(s)
-}
-
-// isZeroTimeout reports whether s is a zero written as a duration, such as
-// "0s", or as a number, such as "0" or "0.0".
-func isZeroTimeout(s string) bool {
-	if d, err := time.ParseDuration(s); err == nil {
-		return d == 0
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	return err == nil && f == 0
 }
 
 // joinHeader returns h with the values of each header joined, as the result
