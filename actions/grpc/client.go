@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/mapping"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -280,11 +281,11 @@ func (r *Req) invokeMethod(ctx context.Context, conn *grpc.ClientConn, reflectio
 	if r.contract != nil {
 		switch {
 		case spec == nil:
-			definition = append(definition, violation("response", fmt.Sprintf("the .proto files declare no method %s in %s", r.Method, r.Service), "", ""))
+			definition = append(definition, contractcheck.Violation("response", fmt.Sprintf("the .proto files declare no method %s in %s", r.Method, r.Service), "", ""))
 		case server != nil:
 			definition = append(definition, r.contract.checkDefinition(spec, server)...)
 		case serviceDesc != nil:
-			definition = append(definition, violation("response", fmt.Sprintf("the server's definition of %s declares no method %s", serviceDesc.FullName(), r.Method), "the .proto files declare it", ""))
+			definition = append(definition, contractcheck.Violation("response", fmt.Sprintf("the server's definition of %s declares no method %s", serviceDesc.FullName(), r.Method), "the .proto files declare it", ""))
 		}
 	}
 
@@ -735,16 +736,8 @@ func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, error) {
 	// The violations, and what the call was matched to, are told to the
 	// runner, which takes them as the step's test, and are in res, for the
 	// step's own test to read.
-	if ret.Res.violations != nil {
-		call.Contract.Report(actionrpc.ContractCheckOf(ret.Res.violations, ret.Res.matched))
-	}
+	contractcheck.Report(call.Contract, mapRet, ret.Res.violations, ret.Res.matched)
 	if res, ok := mapRet["res"].(map[string]any); ok {
-		if ret.Res.violations != nil {
-			res["violations"] = ret.Res.violations
-		}
-		if ret.Res.matched != nil {
-			res["contract"] = ret.Res.matched
-		}
 		if ret.Res.messages != nil {
 			res["messages"] = ret.Res.messages
 		}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/mapping"
 )
@@ -566,17 +567,7 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	// The violations, and what the response was matched to, are told to
 	// the runner, which takes them as the step's test, and are in res, for
 	// the step's own test to read.
-	if ret.violations != nil {
-		call.Contract.Report(actionrpc.ContractCheckOf(ret.violations, ret.matched))
-	}
-	if res, ok := mapRet["res"].(map[string]any); ok {
-		if ret.violations != nil {
-			res["violations"] = ret.violations
-		}
-		if ret.matched != nil {
-			res["contract"] = ret.matched
-		}
-	}
+	contractcheck.Report(call.Contract, mapRet, ret.violations, ret.matched)
 
 	// A multipart request shows what was written in place of the body sent.
 	if multipartSpec != nil {
