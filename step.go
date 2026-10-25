@@ -13,6 +13,8 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/fielderr"
+	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -157,7 +159,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 		// error about another value cannot show them, and the details of a
 		// credential's own error are left out.
 		jCtx.Printer.Masker().Learn(expW)
-		return actionResult{}, redactCredentialErrors(prefixFieldErrors(err, "with."), st.With)
+		return actionResult{}, redactCredentialErrors(fielderr.Prefix(err, "with."), st.With)
 	}
 
 	st.given = expW
@@ -806,7 +808,7 @@ func (st *stepRun) SetCtx(j JobContext, override map[string]any) {
 		var errs []error
 		// Sorted so that the errors come in the same order on every run.
 		for _, k := range slices.Sorted(maps.Keys(st.Vars)) {
-			out, err := evalVar(ev, k, st.Vars[k], evalCtx)
+			out, err := vareval.EvalValue(ev, k, st.Vars[k], evalCtx)
 			if err != nil {
 				errs = append(errs, err)
 				continue

@@ -682,6 +682,43 @@ func TestDoCompletesWithinTimeout(t *testing.T) {
 	}
 }
 
+func TestDoReadsStructuredSyntaxBodiesAsText(t *testing.T) {
+	tests := []struct {
+		contentType string
+		body        string
+	}{
+		{"application/problem+json", `{"title":"Not Found","status":404}`},
+		{"application/vnd.api+json; charset=utf-8", `{"data":[]}`},
+		{"application/soap+xml", `<Envelope/>`},
+		{"image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg"/>`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			srv := httptest.NewServer(hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
+				w.Header().Set("Content-Type", tt.contentType)
+				w.WriteHeader(hp.StatusNotFound)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			req := NewReq()
+			req.URL = srv.URL
+
+			got, err := req.Do()
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if got.Res.Body != tt.body {
+				t.Errorf("expected the body %q, got %q", tt.body, got.Res.Body)
+			}
+			if got.Res.FilePath != "" {
+				t.Errorf("expected no file, got %q", got.Res.FilePath)
+			}
+		})
+	}
+}
+
 func TestDoRejectsInvalidTimeout(t *testing.T) {
 	req := NewReq()
 	req.URL = "http://localhost:8080/"
