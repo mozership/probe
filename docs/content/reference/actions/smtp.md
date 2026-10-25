@@ -56,7 +56,7 @@ What bounds the whole session is the step's own `timeout`, 5m by default, which 
     timeout: 5m
 ```
 
-The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80. Each message is sent with two more headers before these, `X-Send-Timestamp-Ns`, the time it was sent in Unix nanoseconds, and a `Message-ID` of its own, whose part before `@` is also added to the end of the subject as ` - <id>`.
+The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80. Each message is sent with two more headers before these, `X-Send-Timestamp-Ns`, the time it was sent in Unix nanoseconds, and a `Message-ID` of its own, whose part before `@` is also added to the end of the subject as ` - <id>`. The message is made once when the step starts sending, so every message of a step has the same `Date`, while `X-Send-Timestamp-Ns` is the time each one was sent.
 
 ## Response Object
 
