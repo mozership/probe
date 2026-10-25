@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/mozership/probe/internal/fielderr"
 )
 
 func TestOutputsFlatAccess(t *testing.T) {
@@ -331,7 +329,7 @@ func TestOutputsWarningsAndErrorsApart(t *testing.T) {
 	_ = outputs.Set("first", map[string]any{"second": "x", "token": "t"})
 	err := outputs.Set("second", map[string]any{"token": "u"})
 	var warnings, others int
-	for _, e := range fielderr.Unjoin(err) {
+	for _, e := range unwrapJoined(err) {
 		var taken *NameTakenError
 		if errors.As(e, &taken) {
 			warnings++

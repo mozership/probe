@@ -1,4 +1,4 @@
-package vars
+package vareval
 
 import (
 	"encoding/base64"
@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/expr"
-	"github.com/mozership/probe/internal/fielderr"
 )
 
 func TestEval(t *testing.T) {
@@ -20,7 +19,6 @@ func TestEval(t *testing.T) {
 		vars     map[string]any
 		env      map[string]string
 		expected map[string]any
-		err      string
 	}{
 		{
 			name: "use expr",
@@ -512,7 +510,7 @@ func TestEvalSkipsVarsReadingAFailedOne(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	errs := fielderr.Unjoin(err)
+	errs := unjoin(err)
 	if len(errs) != 2 {
 		t.Fatalf("expected the errors of base and list alone, got %d: %v", len(errs), err)
 	}
@@ -564,7 +562,7 @@ func TestEvalTemplateReadsAFailedVar(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Eval() = %#v, want an error", got)
 	}
-	errs := fielderr.Unjoin(err)
+	errs := unjoin(err)
 	if len(errs) != 1 || !strings.HasPrefix(errs[0].Error(), "vars.z: ") {
 		t.Errorf("errors = %v, want the error of z alone", errs)
 	}
@@ -636,4 +634,12 @@ func TestEvalOrder(t *testing.T) {
 	if want := []string{"a", "b", "c", "d"}; !reflect.DeepEqual(order, want) {
 		t.Errorf("evalOrder() = %q, want %q", order, want)
 	}
+}
+
+// unjoin returns the errors joined into err, or err alone.
+func unjoin(err error) []error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		return joined.Unwrap()
+	}
+	return []error{err}
 }

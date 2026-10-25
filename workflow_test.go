@@ -667,7 +667,7 @@ func TestEnv(t *testing.T) {
 
 // Test_evalVars checks that a workflow evaluates its vars with its
 // environment and the vars given, keeping the vars it writes as they are.
-// How vars are evaluated is tested in internal/vars.
+// How vars are evaluated is tested in internal/vareval.
 func Test_evalVars(t *testing.T) {
 	wf := &Workflow{
 		Name:  "Test",

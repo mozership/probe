@@ -8,13 +8,13 @@ import (
 	"github.com/mozership/probe/expr"
 )
 
-func TestUnjoin(t *testing.T) {
+func Test_unjoin(t *testing.T) {
 	a, b := errors.New("a"), errors.New("b")
-	if got := Unjoin(errors.Join(a, b)); !reflect.DeepEqual(got, []error{a, b}) {
-		t.Errorf("Unjoin(joined) = %v, want a and b", got)
+	if got := unjoin(errors.Join(a, b)); !reflect.DeepEqual(got, []error{a, b}) {
+		t.Errorf("unjoin(joined) = %v, want a and b", got)
 	}
-	if got := Unjoin(a); !reflect.DeepEqual(got, []error{a}) {
-		t.Errorf("Unjoin(a) = %v, want a alone", got)
+	if got := unjoin(a); !reflect.DeepEqual(got, []error{a}) {
+		t.Errorf("unjoin(a) = %v, want a alone", got)
 	}
 }
 
@@ -23,7 +23,7 @@ func TestUnjoin(t *testing.T) {
 func paths(t *testing.T, err error) [][2]string {
 	t.Helper()
 	var got [][2]string
-	for _, e := range Unjoin(err) {
+	for _, e := range unjoin(err) {
 		var fe *expr.FieldError
 		if errors.As(e, &fe) {
 			got = append(got, [2]string{fe.Path, fe.EvaluatedPath})

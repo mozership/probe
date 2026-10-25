@@ -17,7 +17,7 @@ import (
 	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/internal/vars"
+	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/procgroup"
 	"github.com/mozership/probe/report"
@@ -454,11 +454,11 @@ func (w *Workflow) Env() map[string]string {
 }
 
 // evalVars evaluates the vars of the workflow, with the vars the person
-// running it gave and the environment variables, as vars.Eval does. A var
+// running it gave and the environment variables, as vareval.Eval does. A var
 // whose template cannot be evaluated is an error, which stops the workflow
 // before any job starts.
 func (w *Workflow) evalVars() (map[string]any, error) {
-	return vars.Eval(w.Vars, w.given, w.Env())
+	return vareval.Eval(w.Vars, w.given, w.Env())
 }
 
 // maskedError shows err with the secrets masker knows hidden, and unwraps to

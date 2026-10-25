@@ -9,8 +9,8 @@ import (
 	"github.com/mozership/probe/expr"
 )
 
-// Unjoin returns the errors joined into err, or err alone.
-func Unjoin(err error) []error {
+// unjoin returns the errors joined into err, or err alone.
+func unjoin(err error) []error {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		return joined.Unwrap()
 	}
@@ -21,7 +21,7 @@ func Unjoin(err error) []error {
 // err, so that the path names the value from further up.
 func Prefix(err error, prefix string) error {
 	var errs []error
-	for _, e := range Unjoin(err) {
+	for _, e := range unjoin(err) {
 		var fe *expr.FieldError
 		if errors.As(e, &fe) {
 			evaluated := ""
@@ -45,7 +45,7 @@ func Rename(err error, from, to string) error {
 		return path
 	}
 	var errs []error
-	for _, e := range Unjoin(err) {
+	for _, e := range unjoin(err) {
 		var fe *expr.FieldError
 		if errors.As(e, &fe) {
 			evaluated := ""

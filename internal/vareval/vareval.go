@@ -1,7 +1,9 @@
-// Package vars evaluates the vars of a workflow: each var after the vars it
-// reads, so that a value such as random_str(8) is computed once, and a var
-// that reads itself through others is reported as a circular reference.
-package vars
+// Package vareval evaluates the templates in vars, those of a workflow and
+// those of a step. EvalValue evaluates one var, as a step evaluates each of
+// its vars. Eval evaluates the vars of a workflow with it, each var after the
+// vars it reads, so that a value such as random_str(8) is computed once, and
+// reports a var that reads itself through others as a circular reference.
+package vareval
 
 import (
 	"errors"
