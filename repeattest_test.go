@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -438,6 +440,37 @@ func TestBaselineRuns(t *testing.T) {
 	}
 	if got := baselineRuns(base, "none"); len(got) != 0 {
 		t.Errorf("baselineRuns() of a job the baseline has none of = %#v, want none", got)
+	}
+}
+
+// The fields probe check knows a step of a repeated job to have are those
+// the tests read when the job runs, under steps and under baseline.steps.
+func TestRepeatFieldsAreThoseTheTestsRead(t *testing.T) {
+	keys := func(v any) []string {
+		m, _ := v.(map[string]any)
+		return slices.Sorted(maps.Keys(m))
+	}
+	sorted := func(fields []string) []string {
+		return slices.Sorted(slices.Values(fields))
+	}
+
+	run := repeatRuns([]StepRepeatCounter{{ID: "s", SuccessCount: 1, RTs: []float64{0.1}}})["s"]
+	if got, want := keys(run), sorted(repeatRunFields); !slices.Equal(got, want) {
+		t.Errorf("fields of a step under steps = %v, want repeatRunFields %v", got, want)
+	}
+	if got, want := keys(run.(map[string]any)[runFieldRT]), sorted(repeatRTFields); !slices.Equal(got, want) {
+		t.Errorf("fields of rt under steps = %v, want repeatRTFields %v", got, want)
+	}
+
+	base := &report.Report{Jobs: []report.Job{{ID: "j", Steps: []report.Step{
+		{ID: "s", Repeat: &report.Repeat{Total: 1, Success: 1, Latency: &report.Latency{Count: 1}}},
+	}}}}
+	baseline := baselineRuns(base, "j")["s"]
+	if got, want := keys(baseline), sorted(baselineRunFields); !slices.Equal(got, want) {
+		t.Errorf("fields of a step under baseline.steps = %v, want baselineRunFields %v", got, want)
+	}
+	if got, want := keys(baseline.(map[string]any)[runFieldRT]), sorted(repeatRTFields); !slices.Equal(got, want) {
+		t.Errorf("fields of rt under baseline.steps = %v, want repeatRTFields %v", got, want)
 	}
 }
 
