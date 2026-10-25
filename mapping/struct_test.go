@@ -306,6 +306,10 @@ func TestFieldTags(t *testing.T) {
 			t.Errorf("FieldTags(%T) = %v, want %v", v, got, want)
 		}
 	}
+	type untagged struct{ Name string }
+	if got := FieldTags(untagged{}); got == nil || len(got) != 0 {
+		t.Errorf("FieldTags(untagged) = %#v, want empty and not nil", got)
+	}
 	if got := FieldTags("not a struct"); got != nil {
 		t.Errorf("FieldTags(string) = %v, want nil", got)
 	}

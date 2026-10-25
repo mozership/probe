@@ -61,13 +61,15 @@ func ServeWithActions(builtin []string) {
 //
 // Spec leaves Serve to the registry, which serves the action with
 // ServeWithActions to tell it the names of the actions of Probe.
-var Spec = actionspec.Spec{
-	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-	Params:    mapping.FieldTags(Req{}),
-	Contracts: actionspec.NoContracts,
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: mapping.FieldTags(Res{}),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  kind.Fields(Res{}),
-	Required:  [][]string{{"path"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"path"}},
+	}
 }

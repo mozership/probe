@@ -7,8 +7,6 @@
 package actions
 
 import (
-	"maps"
-	"slices"
 	"sort"
 
 	"github.com/mozership/probe/actions/db"
@@ -24,9 +22,11 @@ import (
 	"github.com/mozership/probe/internal/actionspec"
 )
 
-// specs maps the name of each built-in action to its declaration. The
-// embedded action is served by what init gives it.
-var specs = map[string]actionspec.Spec{
+// specs maps the name of each built-in action to the function that
+// declares it, which builds the declaration afresh on each call, so that
+// what each function of this package returns is held by nothing else. The
+// embedded action is declared by what init gives it.
+var specs = map[string]func() actionspec.Spec{
 	"db":       db.Spec,
 	"dns":      dns.Spec,
 	"embedded": embedded.Spec,
@@ -44,17 +44,19 @@ var specs = map[string]actionspec.Spec{
 // Names reads, as referring to Names there would be an initialization
 // cycle.
 func init() {
-	s := specs["embedded"]
-	s.Serve = func() { embedded.ServeWithActions(Names()) }
-	specs["embedded"] = s
+	specs["embedded"] = func() actionspec.Spec {
+		s := embedded.Spec()
+		s.Serve = func() { embedded.ServeWithActions(Names()) }
+		return s
+	}
 }
 
 // collect returns what get gives of the spec of each built-in action, by
 // its name, leaving out the actions for which it gives false.
 func collect[T any](get func(actionspec.Spec) (T, bool)) map[string]T {
 	out := make(map[string]T, len(specs))
-	for name, s := range specs {
-		if v, ok := get(s); ok {
+	for name, spec := range specs {
+		if v, ok := get(spec()); ok {
 			out[name] = v
 		}
 	}
@@ -66,7 +68,7 @@ func collect[T any](get func(actionspec.Spec) (T, bool)) map[string]T {
 // starts from.
 func Keeps() map[string][]string {
 	return collect(func(s actionspec.Spec) ([]string, bool) {
-		return slices.Clone(s.Keeps), len(s.Keeps) > 0
+		return s.Keeps, len(s.Keeps) > 0
 	})
 }
 
@@ -75,7 +77,7 @@ func Keeps() map[string][]string {
 // none.
 func Contracts() map[string][]string {
 	return collect(func(s actionspec.Spec) ([]string, bool) {
-		return slices.Clone(s.Contracts), len(s.Contracts) > 0
+		return s.Contracts, len(s.Contracts) > 0
 	})
 }
 
@@ -83,7 +85,7 @@ func Contracts() map[string][]string {
 // name, leaving out those that take any key.
 func AllParams() map[string][]string {
 	return collect(func(s actionspec.Spec) ([]string, bool) {
-		return slices.Clone(s.Params), !s.AnyParams
+		return s.Params, !s.AnyParams
 	})
 }
 
@@ -91,7 +93,7 @@ func AllParams() map[string][]string {
 // by its name.
 func AllReqFields() map[string][]string {
 	return collect(func(s actionspec.Spec) ([]string, bool) {
-		return slices.Clone(s.ReqFields), true
+		return s.ReqFields, true
 	})
 }
 
@@ -99,7 +101,7 @@ func AllReqFields() map[string][]string {
 // by its name.
 func AllResFields() map[string][]string {
 	return collect(func(s actionspec.Spec) ([]string, bool) {
-		return slices.Clone(s.ResFields), true
+		return s.ResFields, true
 	})
 }
 
@@ -109,7 +111,7 @@ func AllResFields() map[string][]string {
 // does not allow. A field left out may hold anything.
 func AllReqTypes() map[string]map[string]string {
 	return collect(func(s actionspec.Spec) (map[string]string, bool) {
-		return maps.Clone(s.ReqTypes), true
+		return s.ReqTypes, true
 	})
 }
 
@@ -117,7 +119,7 @@ func AllReqTypes() map[string]map[string]string {
 // action returns, by its name; see AllReqTypes.
 func AllResTypes() map[string]map[string]string {
 	return collect(func(s actionspec.Spec) (map[string]string, bool) {
-		return maps.Clone(s.ResTypes), true
+		return s.ResTypes, true
 	})
 }
 
@@ -127,7 +129,7 @@ func AllResTypes() map[string]map[string]string {
 func WithFields() []string {
 	var names []string
 	for _, name := range Names() {
-		if specs[name].WithFields {
+		if specs[name]().WithFields {
 			names = append(names, name)
 		}
 	}
@@ -140,18 +142,17 @@ func WithFields() []string {
 // that needs none is left out.
 func AllRequired() map[string][][]string {
 	return collect(func(s actionspec.Spec) ([][]string, bool) {
-		groups := make([][]string, len(s.Required))
-		for i, g := range s.Required {
-			groups[i] = slices.Clone(g)
-		}
-		return groups, len(s.Required) > 0
+		return s.Required, len(s.Required) > 0
 	})
 }
 
 // Lookup returns the serve function of a built-in action.
 func Lookup(name string) (func(), bool) {
-	s, ok := specs[name]
-	return s.Serve, ok
+	spec, ok := specs[name]
+	if !ok {
+		return nil, false
+	}
+	return spec().Serve, true
 }
 
 // Names returns the names of the built-in actions in alphabetical order.

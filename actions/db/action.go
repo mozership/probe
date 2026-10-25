@@ -74,14 +74,16 @@ func serve() {
 // Spec declares the db action. It keeps to every kind of guard: it runs
 // only a statement that reads under read-only, and connects only to a host
 // the guard allows. It cannot run without dsn and query.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-	Params:    mapping.FieldTags(Req{}),
-	Contracts: actionspec.NoContracts,
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: mapping.FieldTags(Res{}),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  kind.Fields(Res{}),
-	Required:  [][]string{{"dsn"}, {"query"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"dsn"}, {"query"}},
+	}
 }

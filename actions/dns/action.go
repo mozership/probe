@@ -37,21 +37,23 @@ func serve() {
 // Spec declares the dns action. It keeps to every kind of guard: a query
 // writes nothing, and it is sent only to a server the guard allows. It
 // cannot run without name.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-	Params:    mapping.FieldTags(Req{}),
-	Contracts: actionspec.NoContracts,
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: []string{"answers", "authoritative", "protocol", "rcode", "server", "values"},
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes: map[string]string{
-		"answers":       kind.List,
-		"authoritative": kind.Bool,
-		"protocol":      kind.String,
-		"rcode":         kind.String,
-		"server":        kind.String,
-		"values":        kind.List,
-	},
-	Required: [][]string{{"name"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: []string{"answers", "authoritative", "protocol", "rcode", "server", "values"},
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes: map[string]string{
+			"answers":       kind.List,
+			"authoritative": kind.Bool,
+			"protocol":      kind.String,
+			"rcode":         kind.String,
+			"server":        kind.String,
+			"values":        kind.List,
+		},
+		Required: [][]string{{"name"}},
+	}
 }

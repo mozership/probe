@@ -58,14 +58,16 @@ func serve() {
 // what it is about to do against one, so that a guard refuses it unless it
 // is allowed by name. It cannot run without host, username and password;
 // port is 993 when it is not given.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     actionspec.KeepsNone,
-	Params:    mapping.FieldTags(Req{}),
-	Contracts: actionspec.NoContracts,
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: mapping.FieldTags(Res{}),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  kind.Fields(Res{}),
-	Required:  [][]string{{"host"}, {"username"}, {"password"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     actionspec.KeepsNone(),
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"host"}, {"username"}, {"password"}},
+	}
 }

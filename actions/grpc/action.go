@@ -59,16 +59,18 @@ func serve() {
 // for a call checked against .proto files, and messages and complete, for
 // one whose responses stream. It cannot run without addr, service and
 // method.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-	Params:    append(mapping.FieldTags(Req{}), "proto"),
-	Contracts: []string{"proto"},
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations"),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  resTypes(),
-	Required:  [][]string{{"addr"}, {"service"}, {"method"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    append(mapping.FieldTags(Req{}), "proto"),
+		Contracts: []string{"proto"},
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations"),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  resTypes(),
+		Required:  [][]string{{"addr"}, {"service"}, {"method"}},
+	}
 }
 
 // resTypes returns the kinds of the fields of Res and of those the action

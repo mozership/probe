@@ -13,7 +13,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actiontest.CheckFields(t, Spec.ReqFields, Spec.ResFields, with, ret)
+	actiontest.CheckFields(t, Spec().ReqFields, Spec().ResFields, with, ret)
 	if res, _ := ret["res"].(map[string]any); res["name"] != "probe" {
 		t.Errorf("res = %v, want the keys of with in it", res)
 	}
@@ -23,7 +23,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 // declared whatever with gives under their names, which the action returns
 // in res too.
 func TestTypesHoldOverWith(t *testing.T) {
-	kinds := actiontest.NewKinds(t, Spec.ReqTypes, Spec.ResTypes)
+	kinds := actiontest.NewKinds(t, Spec().ReqTypes, Spec().ResTypes)
 	for _, with := range []map[string]any{
 		{"name": "probe"},
 		{"status": "ok", "dump": "yes"},

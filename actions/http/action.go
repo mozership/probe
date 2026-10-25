@@ -79,16 +79,18 @@ func joinHeader(h hp.Header) map[string]any {
 // fields of Req, multipart, for a request that sends one, which may hold
 // anything; its res holds, besides the fields of Res, violations and
 // contract, for a response checked against an OpenAPI document.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
-	Params:    params(),
-	Contracts: []string{"openapi"},
-	ReqFields: append(mapping.FieldTags(Req{}), "multipart"),
-	ResFields: append(mapping.FieldTags(Res{}), "contract", "violations"),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  resTypes(),
-	Required:  required(),
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    params(),
+		Contracts: []string{"openapi"},
+		ReqFields: append(mapping.FieldTags(Req{}), "multipart"),
+		ResFields: append(mapping.FieldTags(Res{}), "contract", "violations"),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  resTypes(),
+		Required:  required(),
+	}
 }
 
 // params returns the keys the action takes in with: those of Req, the

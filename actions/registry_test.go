@@ -1,14 +1,17 @@
 package actions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 )
 
@@ -289,32 +292,81 @@ func TestLookup(t *testing.T) {
 // guards it keeps to, is told apart from one that keeps to none.
 func TestSpecsDeclareEveryField(t *testing.T) {
 	for _, name := range Names() {
-		if missing := specs[name].Undeclared(); len(missing) > 0 {
+		if missing := specs[name]().Undeclared(); len(missing) > 0 {
 			t.Errorf("%s leaves %v undeclared", name, missing)
 		}
 	}
 }
 
-// Each function of the registry returns a copy of what the actions declare,
-// so that what a caller does with it changes no declaration.
+// spoil changes each element of the lists and maps in v, a value of what the
+// registry or a spec gives, so that a test can tell whether any of them is
+// held by what gives it.
+func spoil(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			e := v.MapIndex(k)
+			if e.Kind() == reflect.String {
+				v.SetMapIndex(k, reflect.ValueOf("spoiled"))
+				continue
+			}
+			spoil(e)
+		}
+	case reflect.Slice:
+		for i := range v.Len() {
+			spoil(v.Index(i))
+		}
+	case reflect.String:
+		v.SetString("spoiled")
+	case reflect.Struct:
+		for _, field := range v.Fields() {
+			if field.Kind() != reflect.String {
+				spoil(field)
+			}
+		}
+	}
+}
+
+// specString formats s, but for its serve function, as what a test compares
+// copies none of the lists and maps of s.
+func specString(s actionspec.Spec) string {
+	s.Serve = nil
+	return fmt.Sprintf("%+v", s)
+}
+
+// What the spec of each built-in action gives is built afresh on each call,
+// so that changing it changes no later call.
+func TestSpecsAreFresh(t *testing.T) {
+	for _, name := range Names() {
+		want := specString(specs[name]())
+		got := specs[name]()
+		spoil(reflect.ValueOf(&got).Elem())
+		if again := specString(specs[name]()); again != want {
+			t.Errorf("changing the spec of %s changed what it gives next: %s, want %s", name, again, want)
+		}
+	}
+}
+
+// Each function of the registry returns what nothing else holds, so that
+// what a caller does with it changes no later call, and so what a guard
+// keeps to under --read-only and --allow-host.
 func TestRegistryReturnsCopies(t *testing.T) {
-	Keeps()["http"][0] = "changed"
-	Contracts()["http"][0] = "changed"
-	AllParams()["http"][0] = "changed"
-	AllReqFields()["http"][0] = "changed"
-	AllResFields()["http"][0] = "changed"
-	AllReqTypes()["http"]["url"] = "changed"
-	AllResTypes()["http"]["code"] = "changed"
-	AllRequired()["http"][0][0] = "changed"
-	s := specs["http"]
-	for field, v := range map[string]string{
-		"Keeps": s.Keeps[0], "Contracts": s.Contracts[0], "Params": s.Params[0],
-		"ReqFields": s.ReqFields[0], "ResFields": s.ResFields[0],
-		"ReqTypes": s.ReqTypes["url"], "ResTypes": s.ResTypes["code"],
-		"Required": s.Required[0][0],
+	for name, get := range map[string]func() any{
+		"Keeps":        func() any { return Keeps() },
+		"Contracts":    func() any { return Contracts() },
+		"AllParams":    func() any { return AllParams() },
+		"AllReqFields": func() any { return AllReqFields() },
+		"AllResFields": func() any { return AllResFields() },
+		"AllReqTypes":  func() any { return AllReqTypes() },
+		"AllResTypes":  func() any { return AllResTypes() },
+		"AllRequired":  func() any { return AllRequired() },
+		"WithFields":   func() any { return WithFields() },
+		"Names":        func() any { return Names() },
 	} {
-		if v == "changed" {
-			t.Errorf("changing what the registry returns changed the %s of http", field)
+		want := fmt.Sprint(get())
+		spoil(reflect.ValueOf(get()))
+		if got := fmt.Sprint(get()); got != want {
+			t.Errorf("changing what %s returns changed what it returns next: %v, want %v", name, got, want)
 		}
 	}
 }

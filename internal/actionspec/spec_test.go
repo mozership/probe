@@ -8,14 +8,14 @@ import (
 func TestUndeclared(t *testing.T) {
 	full := Spec{
 		Serve:     func() {},
-		Keeps:     KeepsNone,
+		Keeps:     KeepsNone(),
 		Params:    []string{"url"},
-		Contracts: NoContracts,
+		Contracts: NoContracts(),
 		ReqFields: []string{},
 		ResFields: []string{"code"},
 		ReqTypes:  map[string]string{},
 		ResTypes:  map[string]string{},
-		Required:  NoneRequired,
+		Required:  NoneRequired(),
 	}
 	tests := []struct {
 		name string
@@ -41,13 +41,13 @@ func TestUndeclared(t *testing.T) {
 // The values that declare none of something are empty, so that they give
 // nothing, and not nil, so that they declare the field.
 func TestNoneIsDeclared(t *testing.T) {
-	if KeepsNone == nil || len(KeepsNone) != 0 {
-		t.Errorf("KeepsNone = %#v, want empty and not nil", KeepsNone)
+	if KeepsNone() == nil || len(KeepsNone()) != 0 {
+		t.Errorf("KeepsNone() = %#v, want empty and not nil", KeepsNone())
 	}
-	if NoContracts == nil || len(NoContracts) != 0 {
-		t.Errorf("NoContracts = %#v, want empty and not nil", NoContracts)
+	if NoContracts() == nil || len(NoContracts()) != 0 {
+		t.Errorf("NoContracts() = %#v, want empty and not nil", NoContracts())
 	}
-	if NoneRequired == nil || len(NoneRequired) != 0 {
-		t.Errorf("NoneRequired = %#v, want empty and not nil", NoneRequired)
+	if NoneRequired() == nil || len(NoneRequired()) != 0 {
+		t.Errorf("NoneRequired() = %#v, want empty and not nil", NoneRequired())
 	}
 }

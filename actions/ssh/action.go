@@ -49,14 +49,16 @@ func serve() {
 // what it is about to do against one, so that a guard refuses it unless it
 // is allowed by name. It cannot run without host, user and cmd, and password
 // or key_file, to log in with.
-var Spec = actionspec.Spec{
-	Serve:     serve,
-	Keeps:     actionspec.KeepsNone,
-	Params:    mapping.FieldTags(Req{}),
-	Contracts: actionspec.NoContracts,
-	ReqFields: mapping.FieldTags(Req{}),
-	ResFields: mapping.FieldTags(Res{}),
-	ReqTypes:  kind.Fields(Req{}),
-	ResTypes:  kind.Fields(Res{}),
-	Required:  [][]string{{"host"}, {"user"}, {"cmd"}, {"password", "key_file"}},
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     actionspec.KeepsNone(),
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"host"}, {"user"}, {"cmd"}, {"password", "key_file"}},
+	}
 }

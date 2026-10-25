@@ -2,12 +2,15 @@
 // serve it, the guards it keeps to, and what probe check knows of the keys
 // it takes and the fields it returns.
 //
-// Each built-in action declares one Spec in its own package, and the
-// registry in package actions maps the action names to them. Every field is
-// declared, an action that has none of something saying so with KeepsNone,
-// NoContracts, NoneRequired or AnyParams, so that one which forgets a field
-// is told apart from one that has nothing to give; Undeclared reports the
-// fields left out.
+// Each built-in action declares its Spec by a function in its own package,
+// which builds it afresh on each call, so that what one caller does with the
+// lists and maps of a Spec changes what no other is given. The registry in
+// package actions maps the action names to those functions.
+//
+// Every field is declared, an action that has none of something saying so
+// with KeepsNone, NoContracts, NoneRequired or AnyParams, so that one which
+// forgets a field is told apart from one that has nothing to give;
+// Undeclared reports the fields left out.
 package actionspec
 
 // Spec declares a built-in action.
@@ -21,7 +24,9 @@ type Spec struct {
 	// KeepsNone, and is refused under a guard unless it is allowed by name.
 	Keeps []string
 	// Params are the keys the action takes in with. An action that takes
-	// any key declares AnyParams instead and leaves Params nil.
+	// any key declares AnyParams instead and leaves Params nil. The fields
+	// of a Req, which mapping.FieldTags gives, declare Params even when
+	// none is tagged, as FieldTags then gives an empty list.
 	Params []string
 	// AnyParams says that the action takes any key in with, so that probe
 	// check refuses none.
@@ -50,14 +55,16 @@ type Spec struct {
 	Required [][]string
 }
 
-// KeepsNone, NoContracts and NoneRequired declare an action that keeps to
-// no guard, checks against no contract and needs no key of with. Each is
-// empty but not nil, which would leave the field undeclared.
-var (
-	KeepsNone    = []string{}
-	NoContracts  = []string{}
-	NoneRequired = [][]string{}
-)
+// KeepsNone declares an action that keeps to no guard. It is empty but not
+// nil, which would leave Keeps undeclared, as are NoContracts and
+// NoneRequired.
+func KeepsNone() []string { return []string{} }
+
+// NoContracts declares an action that checks a step against no contract.
+func NoContracts() []string { return []string{} }
+
+// NoneRequired declares an action that needs no key of with.
+func NoneRequired() [][]string { return [][]string{} }
 
 // Undeclared returns the names of the fields s leaves undeclared, in the
 // order Spec has them, or none when s declares every field. Params is

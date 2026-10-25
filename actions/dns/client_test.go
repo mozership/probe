@@ -490,7 +490,7 @@ func TestServers(t *testing.T) {
 
 func TestParams(t *testing.T) {
 	want := []string{"name", "type", "server", "protocol", "timeout"}
-	if got := Spec.Params; !reflect.DeepEqual(got, want) {
-		t.Errorf("Spec.Params = %v, want %v", got, want)
+	if got := Spec().Params; !reflect.DeepEqual(got, want) {
+		t.Errorf("Spec().Params = %v, want %v", got, want)
 	}
 }
