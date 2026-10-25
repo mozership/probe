@@ -5,6 +5,7 @@ package mapping
 import (
 	"fmt"
 	"maps"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -68,6 +69,68 @@ func fromAnySlice[T any](s []any) ([]T, error) {
 		res[i] = val
 	}
 	return res, nil
+}
+
+// boolParam reads a parameter for a bool field: a bool, a string that
+// strconv.ParseBool reads, such as "true" or "1", or the number 0 or 1,
+// which reads as the same string would. Anything else is an error, rather
+// than false.
+func boolParam(v any, key string) (bool, error) {
+	switch val := v.(type) {
+	case bool:
+		return val, nil
+	case string:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return false, fmt.Errorf("cannot convert '%s' to bool for field '%s'", val, key)
+		}
+		return b, nil
+	case int, int64, float64:
+		switch fmt.Sprint(val) {
+		case "0":
+			return false, nil
+		case "1":
+			return true, nil
+		}
+		return false, fmt.Errorf("cannot convert %v to bool for field '%s': use true or false", val, key)
+	default:
+		return false, fmt.Errorf("cannot convert %T to bool for field '%s'", v, key)
+	}
+}
+
+// intParam reads a parameter for an int field: an int, an int64, a float64
+// as JSON and protobuf give numbers, or a numeric string. A number that is
+// not whole or does not fit an int is an error, rather than cut down to
+// one: int64(2.5) is 2, and int64 of a float64 out of range is whatever the
+// platform makes of it.
+func intParam(v any, key string) (int64, error) {
+	switch val := v.(type) {
+	case int:
+		return int64(val), nil
+	case int64:
+		if val < math.MinInt || val > math.MaxInt {
+			return 0, fmt.Errorf("cannot convert %d to int for field '%s': out of range", val, key)
+		}
+		return val, nil
+	case float64:
+		if math.IsNaN(val) || math.IsInf(val, 0) || val != math.Trunc(val) {
+			return 0, fmt.Errorf("cannot convert %v to int for field '%s': not a whole number", val, key)
+		}
+		// float64(math.MaxInt) rounds up to a power of two, which is out of
+		// range, so the upper bound is exclusive.
+		if val < math.MinInt || val >= -float64(math.MinInt) {
+			return 0, fmt.Errorf("cannot convert %v to int for field '%s': out of range", val, key)
+		}
+		return int64(val), nil
+	case string:
+		n, err := strconv.ParseInt(val, 10, strconv.IntSize)
+		if err != nil {
+			return 0, fmt.Errorf("cannot convert '%s' to int for field '%s'", val, key)
+		}
+		return n, nil
+	default:
+		return 0, fmt.Errorf("cannot convert %T to int for field '%s'", v, key)
+	}
 }
 
 // MapToStructByTags converts a map[string]any to a struct using struct tags.
@@ -207,39 +270,18 @@ func MapToStructByTags(params map[string]any, dest any) error {
 			if v, ok := params[mapTag]; ok {
 				// set a value for a field
 				if field.CanSet() {
-					// Special handling for bool fields to handle string "false"/"true" from YAML
 					if field.Kind() == reflect.Bool {
-						switch val := v.(type) {
-						case bool:
-							field.SetBool(val)
-						case string:
-							if boolVal, err := strconv.ParseBool(val); err == nil {
-								field.SetBool(boolVal)
-							} else {
-								return fmt.Errorf("cannot convert '%s' to bool for field '%s'", val, mapTag)
-							}
-						default:
-							return fmt.Errorf("cannot convert %T to bool for field '%s'", v, mapTag)
+						b, err := boolParam(v, mapTag)
+						if err != nil {
+							return err
 						}
-						// Special handling for int fields to handle float64 from YAML/JSON
+						field.SetBool(b)
 					} else if field.Kind() == reflect.Int {
-						switch val := v.(type) {
-						case int:
-							field.SetInt(int64(val))
-						case int64:
-							field.SetInt(val)
-						case float64:
-							// YAML/JSON numbers are parsed as float64, convert to int
-							field.SetInt(int64(val))
-						case string:
-							if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
-								field.SetInt(intVal)
-							} else {
-								return fmt.Errorf("cannot convert '%s' to int for field '%s'", val, mapTag)
-							}
-						default:
-							return fmt.Errorf("cannot convert %T to int for field '%s'", v, mapTag)
+						n, err := intParam(v, mapTag)
+						if err != nil {
+							return err
 						}
+						field.SetInt(n)
 					} else {
 						// Type-safe assignment based on field type
 						fieldType := field.Type()

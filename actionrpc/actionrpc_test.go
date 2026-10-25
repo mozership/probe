@@ -280,6 +280,8 @@ func TestConvertFloatToInt(t *testing.T) {
 		{"string unchanged", "test", "test"},
 		{"bool unchanged", true, true},
 		{"int64 unchanged", int64(12345), int64(12345)},
+		{"float64 2^63 stays float64", float64(1 << 63), float64(1 << 63)},
+		{"float64 -2^63", float64(-1 << 63), int64(-1 << 63)},
 	}
 
 	for _, tt := range tests {

@@ -2,6 +2,7 @@ package mapping
 
 import (
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -314,4 +315,90 @@ func TestFieldTags(t *testing.T) {
 		t.Errorf("FieldTags(string) = %v, want nil", got)
 	}
 	_ = req{}.hidden
+}
+
+func TestMapToStructByTags_Int(t *testing.T) {
+	type dest struct {
+		N int `map:"n"`
+	}
+	tests := []struct {
+		in      any
+		want    int
+		wantErr string
+	}{
+		{in: 3, want: 3},
+		{in: int64(-3), want: -3},
+		{in: float64(3), want: 3},
+		{in: -0.0, want: 0},
+		{in: "42", want: 42},
+		{in: float64(-1 << 63), want: math.MinInt},
+		// A number that is not whole was cut down to one, so 2.5 was 2 and
+		// -0.5 was 0.
+		{in: 2.5, wantErr: "cannot convert 2.5 to int for field 'n': not a whole number"},
+		{in: -0.5, wantErr: "not a whole number"},
+		{in: math.NaN(), wantErr: "not a whole number"},
+		{in: math.Inf(1), wantErr: "not a whole number"},
+		// int64 of a float64 out of range is whatever the platform makes of
+		// it, such as MaxInt64 on arm64.
+		{in: 1e20, wantErr: "cannot convert 1e+20 to int for field 'n': out of range"},
+		{in: float64(1 << 63), wantErr: "out of range"},
+		{in: -1e20, wantErr: "out of range"},
+		{in: "2.5", wantErr: "cannot convert '2.5' to int for field 'n'"},
+		{in: "99999999999999999999", wantErr: "cannot convert '99999999999999999999' to int"},
+		{in: true, wantErr: "cannot convert bool to int for field 'n'"},
+	}
+	for _, tt := range tests {
+		var got dest
+		err := MapToStructByTags(map[string]any{"n": tt.in}, &got)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("%v (%T): error = %v, want %q", tt.in, tt.in, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil || got.N != tt.want {
+			t.Errorf("%v (%T): got %d, %v, want %d", tt.in, tt.in, got.N, err, tt.want)
+		}
+	}
+}
+
+func TestMapToStructByTags_Bool(t *testing.T) {
+	type dest struct {
+		B bool `map:"b"`
+	}
+	tests := []struct {
+		in      any
+		want    bool
+		wantErr string
+	}{
+		{in: true, want: true},
+		{in: false, want: false},
+		{in: "true", want: true},
+		{in: "false", want: false},
+		{in: "1", want: true},
+		{in: "0", want: false},
+		// A number reads as the string of it would, so 1 is true and 0 false.
+		{in: 1, want: true},
+		{in: int64(1), want: true},
+		{in: int64(0), want: false},
+		{in: float64(1), want: true},
+		{in: float64(0), want: false},
+		{in: int64(2), wantErr: "cannot convert 2 to bool for field 'b': use true or false"},
+		{in: 0.5, wantErr: "cannot convert 0.5 to bool for field 'b'"},
+		{in: "yes", wantErr: "cannot convert 'yes' to bool for field 'b'"},
+		{in: []any{}, wantErr: "cannot convert []interface {} to bool for field 'b'"},
+	}
+	for _, tt := range tests {
+		var got dest
+		err := MapToStructByTags(map[string]any{"b": tt.in}, &got)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("%v (%T): error = %v, want %q", tt.in, tt.in, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil || got.B != tt.want {
+			t.Errorf("%v (%T): got %v, %v, want %v", tt.in, tt.in, got.B, err, tt.want)
+		}
+	}
 }
