@@ -184,6 +184,53 @@ func TestEvalOrEvalTemplate(t *testing.T) {
 			expected: "true",
 			hasError: false,
 		},
+		// The inputs below hold braces that are not a template, or a
+		// template inside what reads as a string.
+		{
+			name:     "an opener that is never closed is an expression",
+			input:    "a {{ b",
+			hasError: true,
+		},
+		{
+			name:     "a closer alone is an expression",
+			input:    "a }}",
+			hasError: true,
+		},
+		{
+			name:     "an opener with no closer is an expression",
+			input:    "{{ x",
+			hasError: true,
+		},
+		{
+			name:     "a closer before an opener is returned as written",
+			input:    "}} {{",
+			expected: "}} {{",
+		},
+		{
+			name:     "braces in the string literals of an expression are returned as written",
+			input:    `"}}" + "{{"`,
+			expected: `"}}" + "{{"`,
+		},
+		{
+			name:     "a closer in an unclosed string literal is returned as written",
+			input:    `{{ "x }}`,
+			expected: `{{ "x }}`,
+		},
+		{
+			name:     "an opener in a string literal is an expression",
+			input:    `"{{"`,
+			expected: "{{",
+		},
+		{
+			name:     "a closer in the string literal of a template",
+			input:    `{{ "}}" }}`,
+			expected: "}}",
+		},
+		{
+			name:     "a template between quotes is evaluated",
+			input:    "'{{ 1 }}'",
+			expected: "'1'",
+		},
 	}
 
 	for _, tt := range tests {
