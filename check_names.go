@@ -188,7 +188,7 @@ func (c *checker) checkResults() {
 func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
 	keys := slices.Collect(maps.Keys(st.With))
 	if slices.Contains(c.opts.WithFields, st.Uses) {
-		if slices.ContainsFunc(keys, isTemplate) {
+		if slices.ContainsFunc(keys, expr.HasTemplate) {
 			return nil, false
 		}
 	} else {
@@ -233,7 +233,7 @@ func nameHint(name string, names []string) string {
 func varNames(vars map[string]any) []string {
 	names := make([]string, 0, len(vars))
 	for name := range vars {
-		if len(expr.TemplateExprs(name)) > 0 {
+		if expr.HasTemplate(name) {
 			return nil
 		}
 		names = append(names, name)

@@ -124,7 +124,7 @@ func templateProblems(path, where, field string, v any) []problem {
 // or when its templates do not parse. A wait a template gives is known only
 // when the step runs.
 func waitProblems(path, where, wait string) []problem {
-	if len(expr.TemplateExprs(wait)) > 0 {
+	if expr.HasTemplate(wait) {
 		return templateProblems(path, where, "wait", wait)
 	}
 	if wait == "" {

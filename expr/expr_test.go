@@ -202,19 +202,19 @@ func TestEvalOrEvalTemplate(t *testing.T) {
 			hasError: true,
 		},
 		{
-			name:     "a closer before an opener is returned as written",
+			name:     "a closer before an opener is an expression",
 			input:    "}} {{",
-			expected: "}} {{",
+			hasError: true,
 		},
 		{
-			name:     "braces in the string literals of an expression are returned as written",
+			name:     "braces in the string literals of an expression are an expression",
 			input:    `"}}" + "{{"`,
-			expected: `"}}" + "{{"`,
+			expected: "}}{{",
 		},
 		{
-			name:     "a closer in an unclosed string literal is returned as written",
+			name:     "a closer in an unclosed string literal is an expression",
 			input:    `{{ "x }}`,
-			expected: `{{ "x }}`,
+			hasError: true,
 		},
 		{
 			name:     "an opener in a string literal is an expression",

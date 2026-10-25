@@ -120,3 +120,29 @@ func TestReplaceTemplates(t *testing.T) {
 		}
 	}
 }
+
+func TestHasTemplate(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"no template", false},
+		{"", false},
+		{"{{a}}", true},
+		{"a {{ b }} c", true},
+		{"{{{a}}}", true},
+		{`{{ "}}" }}`, true},
+		{"'{{ 1 }}'", true},
+		{"left {{ open", false},
+		{"a }}", false},
+		{"}} {{", false},
+		{`"}}" + "{{"`, false},
+		{`{{ "x }}`, false},
+		{"{{ open, then {{ closed }}", true},
+	}
+	for _, tt := range tests {
+		if got := HasTemplate(tt.in); got != tt.want {
+			t.Errorf("HasTemplate(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}

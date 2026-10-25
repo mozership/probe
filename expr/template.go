@@ -112,3 +112,9 @@ func skipStringLiteral(s string, i int) (int, bool) {
 	}
 	return 0, false
 }
+
+// HasTemplate reports whether s holds a {{ }} template, as the evaluation of
+// s finds one: a "{{" that is never closed, or a "}}" alone, is text.
+func HasTemplate(s string) bool {
+	return len(findTemplates(s)) > 0
+}

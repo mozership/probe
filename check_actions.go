@@ -200,7 +200,7 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 	for _, key := range slices.Sorted(maps.Keys(with)) {
 		// A key that holds a template names its key only when it runs. One
 		// that holds an opener left unclosed is text, which is sent as it is.
-		if slices.Contains(params, key) || len(expr.TemplateExprs(key)) > 0 || !own(key) {
+		if slices.Contains(params, key) || expr.HasTemplate(key) || !own(key) {
 			continue
 		}
 		msg := fmt.Sprintf("%s: unknown key %q for the %s action", field, key, action)
@@ -219,7 +219,7 @@ func (c *checker) checkRequired() {
 	for i, job := range c.wf.Jobs {
 		for j, st := range job.Steps {
 			groups := c.opts.Required[st.Uses]
-			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), isTemplate) {
+			if len(groups) == 0 || slices.ContainsFunc(slices.Collect(maps.Keys(st.With)), expr.HasTemplate) {
 				continue
 			}
 			var missing [][]string

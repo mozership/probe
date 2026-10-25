@@ -105,7 +105,7 @@ func (b *graphBuilder) step(st *Step) dag.Step {
 // not followed, and nor is a file that cannot be read.
 func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
 	file, ok := embeddedJobFile(st)
-	if !ok || len(expr.TemplateExprs(file)) > 0 {
+	if !ok || expr.HasTemplate(file) {
 		return
 	}
 	abs, err := filepath.Abs(file)

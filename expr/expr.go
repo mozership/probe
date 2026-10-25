@@ -406,13 +406,17 @@ func (e *Expr) validateExpression(expression string) error {
 	return nil
 }
 
+// EvalOrEvalTemplate evaluates input as a template when it holds one, as
+// HasTemplate tells, and as an expression otherwise, and returns the value
+// as text. Braces that are not a template, such as those in the string
+// literals of "}}" + "{{", leave input an expression.
 func (e *Expr) EvalOrEvalTemplate(input string, env any) (string, error) {
 	// Security: Validate input expression
 	if err := e.validateExpression(input); err != nil {
 		return "", fmt.Errorf("expression validation failed: %w", err)
 	}
 
-	if strings.Contains(input, templateStart) && strings.Contains(input, templateEnd) {
+	if HasTemplate(input) {
 		return e.EvalTemplate(input, env)
 	}
 	output, err := e.Eval(input, env)
