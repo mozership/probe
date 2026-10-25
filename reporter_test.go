@@ -388,7 +388,7 @@ func TestBufferedReporter_PrintsOnFinish(t *testing.T) {
 }
 
 // TestPrinter_StepStartFallsBackToSpinner covers a printer with no reporter,
-// as used by Job.RunIndependently.
+// as used by Job.RunStandalone.
 func TestPrinter_StepStartFallsBackToSpinner(t *testing.T) {
 	p := newBufferPrinter()
 	if p.Reporter() != nil {

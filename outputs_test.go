@@ -20,15 +20,15 @@ func TestOutputsFlatAccess(t *testing.T) {
 	}
 
 	// Both access methods should work
-	stepOutputs, exists := outputs.Get("auth")
+	auth, exists := stepOutputs(outputs, "auth")
 	if !exists {
 		t.Fatal("Expected step 'auth' to exist")
 	}
-	if stepOutputs["token"] != "secret123" {
-		t.Errorf("Expected token 'secret123', got %v", stepOutputs["token"])
+	if auth["token"] != "secret123" {
+		t.Errorf("Expected token 'secret123', got %v", auth["token"])
 	}
 
-	flatToken, exists := outputs.GetFlat("token")
+	flatToken, exists := flatOutput(outputs, "token")
 	if !exists {
 		t.Fatal("Expected flat access to 'token' to exist")
 	}
@@ -36,7 +36,7 @@ func TestOutputsFlatAccess(t *testing.T) {
 		t.Errorf("Expected flat token 'secret123', got %v", flatToken)
 	}
 
-	flatUserID, exists := outputs.GetFlat("user_id")
+	flatUserID, exists := flatOutput(outputs, "user_id")
 	if !exists {
 		t.Fatal("Expected flat access to 'user_id' to exist")
 	}
@@ -69,7 +69,7 @@ func TestOutputsFlatAccess(t *testing.T) {
 	}
 
 	// Flat access for "token" should still point to original
-	flatToken, exists = outputs.GetFlat("token")
+	flatToken, exists = flatOutput(outputs, "token")
 	if !exists {
 		t.Fatalf("Expected flat access to 'token' to still exist. Current data: %+v", outputs.data)
 	}
@@ -78,7 +78,7 @@ func TestOutputsFlatAccess(t *testing.T) {
 	}
 
 	// Step-based access should NOT work for conflicting step because flat data takes priority
-	tokenStepOutputs, exists := outputs.Get("token")
+	tokenStepOutputs, exists := stepOutputs(outputs, "token")
 	if exists {
 		t.Errorf("Expected step 'token' to NOT exist due to flat data conflict, but got: %+v", tokenStepOutputs)
 	}
@@ -95,7 +95,7 @@ func TestOutputsFlatAccess(t *testing.T) {
 	}
 
 	// Original flat access should be preserved
-	flatToken, exists = outputs.GetFlat("token")
+	flatToken, exists = flatOutput(outputs, "token")
 	if !exists {
 		t.Fatal("Expected flat access to 'token' to still exist")
 	}
@@ -104,7 +104,7 @@ func TestOutputsFlatAccess(t *testing.T) {
 	}
 
 	// New non-conflicting output should be accessible via flat access
-	flatName, exists := outputs.GetFlat("name")
+	flatName, exists := flatOutput(outputs, "name")
 	if !exists {
 		t.Fatal("Expected flat access to 'name' to exist")
 	}
@@ -112,17 +112,10 @@ func TestOutputsFlatAccess(t *testing.T) {
 		t.Errorf("Expected flat name 'john_doe', got %v", flatName)
 	}
 
-	// Check conflicts
-	conflicts := outputs.GetConflicts()
-	if len(conflicts["token"]) != 2 {
-		t.Errorf("Expected 2 conflicts for 'token', got %v", conflicts["token"])
-	}
-
-	expectedSteps := map[string]bool{"auth": true, "profile": true}
-	for _, stepID := range conflicts["token"] {
-		if !expectedSteps[stepID] {
-			t.Errorf("Unexpected step in conflicts: %s", stepID)
-		}
+	// The later publisher's value is read through its id
+	profile, exists := stepOutputs(outputs, "profile")
+	if !exists || profile["token"] != "profile_token" {
+		t.Errorf("Expected outputs.profile.token 'profile_token', got %v", profile["token"])
 	}
 }
 
@@ -185,13 +178,13 @@ func TestOutputsNoFlatAccessForStepIDConflict(t *testing.T) {
 	}
 
 	// Flat access to "token" should not work because "token" is a step ID
-	_, exists := outputs.GetFlat("token")
+	_, exists := flatOutput(outputs, "token")
 	if exists {
 		t.Error("Expected flat access to 'token' to not exist due to step ID conflict")
 	}
 
 	// Step-based access should still work
-	tokenStep, exists := outputs.Get("token")
+	tokenStep, exists := stepOutputs(outputs, "token")
 	if !exists {
 		t.Fatal("Expected step 'token' to exist")
 	}
@@ -199,7 +192,7 @@ func TestOutputsNoFlatAccessForStepIDConflict(t *testing.T) {
 		t.Errorf("Expected step token value 'step_value', got %v", tokenStep["value"])
 	}
 
-	authStep, exists := outputs.Get("auth")
+	authStep, exists := stepOutputs(outputs, "auth")
 	if !exists {
 		t.Fatal("Expected step 'auth' to exist")
 	}
@@ -234,7 +227,7 @@ func TestOutputsConflictWarning(t *testing.T) {
 	}
 
 	// Flat access should still work
-	flatFoo, exists := outputs.GetFlat("foo")
+	flatFoo, exists := flatOutput(outputs, "foo")
 	if !exists {
 		t.Error("Expected flat access to 'foo' to still work")
 	}
@@ -243,7 +236,7 @@ func TestOutputsConflictWarning(t *testing.T) {
 	}
 
 	// Step-based access should not work due to conflict
-	_, exists = outputs.Get("foo")
+	_, exists = stepOutputs(outputs, "foo")
 	if exists {
 		t.Error("Expected step-based access to 'foo' to fail due to conflict")
 	}
@@ -258,11 +251,11 @@ func TestOutputsFirstPublisherKeepsName(t *testing.T) {
 			t.Errorf("Unexpected warning for %s: %v", step, err)
 		}
 	}
-	if v, _ := outputs.GetFlat("token"); v != "a" {
+	if v, _ := flatOutput(outputs, "token"); v != "a" {
 		t.Errorf("flat token = %v, want a", v)
 	}
 	for _, step := range []string{"a", "b", "c"} {
-		if got, _ := outputs.Get(step); got["token"] != step {
+		if got, _ := stepOutputs(outputs, step); got["token"] != step {
 			t.Errorf("outputs.%s.token = %v, want %s", step, got["token"], step)
 		}
 	}
@@ -277,7 +270,7 @@ func TestOutputsSameStepAgain(t *testing.T) {
 			t.Fatalf("run %d: unexpected warning: %v", i, err)
 		}
 	}
-	if v, _ := outputs.GetFlat("count"); v != 3 {
+	if v, _ := flatOutput(outputs, "count"); v != 3 {
 		t.Errorf("flat count = %v, want 3", v)
 	}
 }
@@ -299,7 +292,7 @@ func TestOutputsNameTakenByStepID(t *testing.T) {
 	if msg := taken.Error(); !strings.Contains(msg, "has the name of the step 'token'") || !strings.Contains(msg, "give the step an id") {
 		t.Errorf("warning = %q, want it to name the step and the way to read the value", msg)
 	}
-	if got, _ := outputs.Get("token"); got["value"] != "v" {
+	if got, _ := stepOutputs(outputs, "token"); got["value"] != "v" {
 		t.Errorf("outputs.token = %v, want the step's outputs", got)
 	}
 }
@@ -352,10 +345,10 @@ func TestRunOutputs(t *testing.T) {
 	}
 
 	// The run sees the parent's outputs and its own
-	if v, _ := run.GetFlat("base"); v != "b" {
+	if v, _ := flatOutput(run, "base"); v != "b" {
 		t.Errorf("run base = %v, want the parent's", v)
 	}
-	if got, _ := run.Get("pub"); got["v"] != "run" {
+	if got, _ := stepOutputs(run, "pub"); got["v"] != "run" {
 		t.Errorf("run pub.v = %v, want its own", got["v"])
 	}
 	if all := run.GetAll(); all["base"] != "b" || all["v"] != "run" {
@@ -363,7 +356,7 @@ func TestRunOutputs(t *testing.T) {
 	}
 
 	// The parent does not see the run's until it is published
-	if _, ok := parent.Get("pub"); ok {
+	if _, ok := stepOutputs(parent, "pub"); ok {
 		t.Error("parent has the run's outputs before publish")
 	}
 
@@ -374,17 +367,17 @@ func TestRunOutputs(t *testing.T) {
 	if !errors.As(err, &taken) {
 		t.Errorf("SetFlat() = %v, want a name-taken warning", err)
 	}
-	if v, _ := run.GetFlat("token"); v != "parent-token" {
+	if v, _ := flatOutput(run, "token"); v != "parent-token" {
 		t.Errorf("run token = %v, want the parent's", v)
 	}
 
 	if err := parent.publish(run); err == nil {
 		t.Error("publish() gave no warning for the taken name")
 	}
-	if got, _ := parent.Get("pub"); got["v"] != "run" {
+	if got, _ := stepOutputs(parent, "pub"); got["v"] != "run" {
 		t.Errorf("parent pub.v = %v after publish, want the run's", got["v"])
 	}
-	if v, _ := parent.GetFlat("v"); v != "run" {
+	if v, _ := flatOutput(parent, "v"); v != "run" {
 		t.Errorf("parent v = %v after publish, want the run's", v)
 	}
 }
@@ -396,10 +389,10 @@ func TestOutputs_SetFlat(t *testing.T) {
 	if err := o.SetFlat("job_0.step_0", map[string]any{"pid": 1}); err != nil {
 		t.Fatalf("SetFlat() error = %v", err)
 	}
-	if v, ok := o.GetFlat("pid"); !ok || v != 1 {
-		t.Errorf("GetFlat(pid) = %v, %v, want 1", v, ok)
+	if v, ok := flatOutput(o, "pid"); !ok || v != 1 {
+		t.Errorf("outputs.pid = %v, %v, want 1", v, ok)
 	}
-	if _, ok := o.Get(""); ok {
+	if _, ok := stepOutputs(o, ""); ok {
 		t.Error("the outputs are kept under an empty id")
 	}
 
@@ -407,8 +400,8 @@ func TestOutputs_SetFlat(t *testing.T) {
 	if err := o.SetFlat("job_0.step_0", map[string]any{"pid": 2}); err != nil {
 		t.Fatalf("SetFlat() again error = %v", err)
 	}
-	if v, _ := o.GetFlat("pid"); v != 2 {
-		t.Errorf("GetFlat(pid) = %v, want the step's latest, 2", v)
+	if v, _ := flatOutput(o, "pid"); v != 2 {
+		t.Errorf("outputs.pid = %v, want the step's latest, 2", v)
 	}
 
 	// Another step of the same position in another job does not.
@@ -417,7 +410,24 @@ func TestOutputs_SetFlat(t *testing.T) {
 	if !errors.As(err, &taken) || !strings.Contains(err.Error(), "give the step an id to read this one through it") {
 		t.Errorf("SetFlat() of another step error = %v, want the name taken", err)
 	}
-	if v, _ := o.GetFlat("pid"); v != 2 {
-		t.Errorf("GetFlat(pid) = %v, want the first step's, 2", v)
+	if v, _ := flatOutput(o, "pid"); v != 2 {
+		t.Errorf("outputs.pid = %v, want the first step's, 2", v)
 	}
+}
+
+// stepOutputs returns the outputs of the step stepID as an expression reads
+// them, as outputs.<step_id>.
+func stepOutputs(o *Outputs, stepID string) (map[string]any, bool) {
+	outputs, ok := o.GetAll()[stepID].(map[string]any)
+	return outputs, ok
+}
+
+// flatOutput returns the output name as an expression reads it, as
+// outputs.<name>, unless the name holds a step's outputs.
+func flatOutput(o *Outputs, name string) (any, bool) {
+	v, ok := o.GetAll()[name]
+	if _, isStep := v.(map[string]any); isStep {
+		return nil, false
+	}
+	return v, ok
 }

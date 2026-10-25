@@ -192,41 +192,6 @@ func (e *NameTakenError) Error() string {
 	return e.msg
 }
 
-// Get retrieves outputs for a step (existing functionality)
-func (o *Outputs) Get(stepID string) (map[string]any, bool) {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	value, exists := o.lookupLocked(stepID)
-	if !exists {
-		return nil, false
-	}
-
-	if outputs, ok := value.(map[string]any); ok {
-		return outputs, true
-	}
-
-	return nil, false
-}
-
-// GetFlat retrieves output by name directly (new functionality)
-func (o *Outputs) GetFlat(outputName string) (any, bool) {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	value, exists := o.lookupLocked(outputName)
-	if !exists {
-		return nil, false
-	}
-
-	// If it's a map[string]any, it's step-based data, not flat data
-	if _, isMap := value.(map[string]any); isMap {
-		return nil, false
-	}
-
-	return value, true
-}
-
 // GetAll returns all outputs (safe copy for expression evaluation). A run's
 // own outputs stand in front of its parent's.
 func (o *Outputs) GetAll() map[string]any {
@@ -251,53 +216,4 @@ func (o *Outputs) GetAll() map[string]any {
 	}
 
 	return copy
-}
-
-// GetAllWithFlat returns all outputs including flat access for expression evaluation
-func (o *Outputs) GetAllWithFlat() map[string]any {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	copy := make(map[string]any)
-
-	for k, v := range o.data {
-		if stepOutputs, ok := v.(map[string]any); ok {
-			// This is step-based data, create a deep copy
-			copyOutputs := make(map[string]any)
-			maps.Copy(copyOutputs, stepOutputs)
-			copy[k] = copyOutputs
-		} else {
-			// This is flat data, copy directly
-			copy[k] = v
-		}
-	}
-
-	return copy
-}
-
-// GetConflicts returns information about conflicted output names
-func (o *Outputs) GetConflicts() map[string][]string {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	conflicts := make(map[string][]string)
-	outputUsage := make(map[string][]string)
-
-	// Scan all step-based outputs
-	for stepID, value := range o.data {
-		if stepOutputs, ok := value.(map[string]any); ok {
-			for outputName := range stepOutputs {
-				outputUsage[outputName] = append(outputUsage[outputName], stepID)
-			}
-		}
-	}
-
-	// Find conflicts (output names used by multiple steps)
-	for outputName, stepIDs := range outputUsage {
-		if len(stepIDs) > 1 {
-			conflicts[outputName] = stepIDs
-		}
-	}
-
-	return conflicts
 }

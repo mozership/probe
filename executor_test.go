@@ -152,7 +152,7 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 
 func TestJobExecutor_Integration_WithMockJob(t *testing.T) {
 	// Test that the executor can handle basic job execution scenarios
-	// without relying on the actual job.Start() method which has plugin dependencies
+	// without running the job, whose actions are plugins
 
 	t.Run("executor creation and interface compliance", func(t *testing.T) {
 		workflow := &Workflow{Name: "test-workflow"}
@@ -254,7 +254,7 @@ func TestExecutor_AsyncRepeat_HandleSkipNoDataRace(t *testing.T) {
 // any concurrent mutation of shared *Step / *Job state is reported as a race.
 //
 // Before the fix, every goroutine spawned by the async repeat loop called
-// e.job.Start on the same *Job, which in turn mutated j.Name (expandJobName)
+// e.job.run on the same *Job, which in turn mutated j.Name (expandJobName)
 // and st.Expr / st.ctx / st.startedAt / st.err / st.retryAttempt on the same
 // *Step instances.
 func TestExecutor_AsyncRepeat_NoDataRace(t *testing.T) {
