@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/procgroup"
 )
 
@@ -93,8 +94,8 @@ type runEnv struct {
 	Printer *Printer
 	// Result for managing job-level output
 	Result *Result
-	// Job scheduler for managing job dependencies and execution
-	JobScheduler *JobScheduler
+	// scheduler tells which jobs can start, and is told when each is over
+	scheduler *schedule.Scheduler
 	// Processes that steps left running in the background, stopped once the
 	// workflow is over
 	background *procgroup.Tracker

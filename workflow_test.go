@@ -1636,7 +1636,7 @@ func TestWorkflow_startJobsWithDependenciesStopsWhenNothingCanRun(t *testing.T) 
 		t.Fatal(err)
 	}
 	// a is taken for running, but nothing runs it.
-	scheduler.StartJob("a")
+	scheduler.Start("a")
 
 	errc := make(chan error, 1)
 	go func() { errc <- w.startJobsWithDependencies(w.newJobContext(Config{}, nil, scheduler)) }()
