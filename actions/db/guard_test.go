@@ -21,6 +21,12 @@ func TestReqCheckGuard(t *testing.T) {
 		{name: "SHOW", guard: readOnly, query: "SHOW TABLES"},
 		{name: "EXPLAIN", guard: readOnly, query: "EXPLAIN SELECT 1"},
 		{name: "WITH", guard: readOnly, query: "WITH x AS (SELECT 1) SELECT * FROM x"},
+		{name: "DESC", guard: readOnly, query: "DESC users"},
+		{name: "DESCRIBE", guard: readOnly, query: "describe users"},
+		{name: "SELECT with no space before what it selects", guard: readOnly, query: "SELECT*FROM users"},
+		{name: "a word that only starts with SELECT", guard: readOnly, query: "SELECTED users", refused: "the statement SELECTED may write"},
+		{name: "a leading parenthesis", guard: readOnly, query: "(SELECT 1)", refused: "the statement (SELECT may write"},
+		{name: "a leading comment", guard: readOnly, query: "-- a comment\nSELECT 1", refused: "the statement -- may write"},
 		{name: "a comment", guard: readOnly, query: "SELECT 1 -- a comment\n, 2 /* another */"},
 		{name: "a blank query", guard: readOnly, query: " ; ", refused: "the query holds no statement"},
 		{name: "a semicolon in a string", guard: readOnly, query: "SELECT 'a;b'", refused: "the query holds a semicolon"},
@@ -178,6 +184,46 @@ func TestReqCheckGuardMySQLAddress(t *testing.T) {
 		}
 		if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 			t.Errorf("checkGuard(%s) = %v, want a refusal saying %q", tt.dsn, err, tt.refused)
+		}
+	}
+}
+
+func TestFirstVerb(t *testing.T) {
+	tests := []struct {
+		query string
+		verb  string
+		rows  bool
+	}{
+		{query: "SELECT * FROM users", verb: "SELECT", rows: true},
+		{query: "select 1", verb: "SELECT", rows: true},
+		{query: "  \n\tselect 1", verb: "SELECT", rows: true},
+		{query: "SELECT*FROM users", verb: "SELECT", rows: true},
+		{query: "SELECT(1)", verb: "SELECT", rows: true},
+		{query: "SHOW TABLES", verb: "SHOW", rows: true},
+		{query: "DESCRIBE users", verb: "DESCRIBE", rows: true},
+		{query: "DESC users", verb: "DESC", rows: true},
+		{query: "desc\nusers", verb: "DESC", rows: true},
+		{query: "EXPLAIN SELECT 1", verb: "EXPLAIN", rows: true},
+		{query: "WITH x AS (SELECT 1) SELECT * FROM x", verb: "WITH", rows: true},
+		{query: "SELECT", verb: "SELECT", rows: true},
+		{query: "INSERT INTO users VALUES (1)", verb: "INSERT", rows: false},
+		{query: "update users set a = 1", verb: "UPDATE", rows: false},
+		{query: "SELECTED", verb: "SELECTED", rows: false},
+		{query: "SHOWX", verb: "SHOWX", rows: false},
+		{query: "DESC_TABLE users", verb: "DESC_TABLE", rows: false},
+		{query: "(SELECT 1)", verb: "", rows: false},
+		{query: "-- a comment\nSELECT 1", verb: "", rows: false},
+		{query: "/* a comment */ SELECT 1", verb: "", rows: false},
+		{query: "", verb: "", rows: false},
+		{query: "  ", verb: "", rows: false},
+	}
+	for _, tt := range tests {
+		verb := firstVerb(tt.query)
+		if verb != tt.verb {
+			t.Errorf("firstVerb(%q) = %q, want %q", tt.query, verb, tt.verb)
+		}
+		if got := returnsRows(verb); got != tt.rows {
+			t.Errorf("returnsRows(%q) = %v, want %v", verb, got, tt.rows)
 		}
 	}
 }
