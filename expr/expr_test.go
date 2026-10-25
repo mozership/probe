@@ -303,6 +303,29 @@ func TestCustomFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("match_json and diff_json with an invalid regex", func(t *testing.T) {
+		for _, fn := range []string{"match_json", "diff_json"} {
+			t.Run(fn, func(t *testing.T) {
+				expr := &Expr{}
+				input := fn + `(src, {"x": "/[/"})`
+				env := map[string]any{"src": map[string]any{"x": "abc"}}
+
+				_, err := expr.Eval(input, env)
+				if err == nil {
+					t.Fatalf("expected error for invalid regex")
+				}
+				msg := err.Error()
+				if strings.Contains(msg, "panicked") {
+					t.Errorf("expected a regex error, got a panic: %v", msg)
+				}
+				want := fn + ": invalid regex at key 'x'"
+				if !strings.Contains(msg, want) {
+					t.Errorf("error = %q, want containing %q", msg, want)
+				}
+			})
+		}
+	})
+
 	t.Run("custom function with wrong parameters", func(t *testing.T) {
 		expr := &Expr{}
 		input := "match_json(src)"
