@@ -3,7 +3,7 @@ package actionrpc
 import (
 	"sync"
 
-	"github.com/mozership/probe/pb"
+	"github.com/mozership/probe/internal/pb"
 )
 
 // Violation is what a contract does not allow in a request or a response.

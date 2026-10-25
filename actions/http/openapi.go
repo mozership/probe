@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/internal/body"
 	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/pb33f/libopenapi"
 	validator "github.com/pb33f/libopenapi-validator"
@@ -365,7 +365,7 @@ func responseOf(op *v3.Operation, code int) (string, *v3.Response) {
 // mediaSchema returns the schema content declares for contentType, when it
 // is JSON, or nil.
 func mediaSchema(content *orderedmap.Map[string, *v3.MediaType], contentType string) *base.Schema {
-	if content == nil || !binary.IsJSONMediaType(contentType) {
+	if content == nil || !body.IsJSON(contentType) {
 		return nil
 	}
 	want, _, _ := mime.ParseMediaType(contentType)

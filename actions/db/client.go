@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"

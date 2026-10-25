@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/mozership/probe/jsonutil"
+	"github.com/mozership/probe/internal/jsonutil"
 )
 
 // actionResult is what an action returned for a step. An action sends it as

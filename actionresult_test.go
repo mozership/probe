@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/expr"
-	"github.com/mozership/probe/jsonutil"
+	"github.com/mozership/probe/internal/jsonutil"
 )
 
 func TestReadActionResult(t *testing.T) {

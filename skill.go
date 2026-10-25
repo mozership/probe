@@ -6,7 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/mozership/probe/safefile"
+	"github.com/mozership/probe/internal/safefile"
 )
 
 // skill is the agent skill in skills/probe/SKILL.md. It lives there so that

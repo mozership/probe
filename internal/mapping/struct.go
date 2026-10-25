@@ -37,28 +37,24 @@ func (e *ValidationError) AddMessage(s string) {
 	e.messages = append(e.messages, s)
 }
 
-// mergeStringMaps merges two string maps, where values from 'over' override values from 'base'.
-// Only string values from 'over' are included; non-string values are ignored.
+// mergeStringMaps returns a new map of base with the values of over put
+// over it, each written as StringMap writes it.
 //
 // Example:
 //
 //	base := map[string]string{"a": "1", "b": "2"}
-//	over := map[string]any{"b": "overridden", "c": "3", "d": 123}
-//	result := mergeStringMaps(base, over)
-//	// result: map[string]string{"a": "1", "b": "overridden", "c": "3"}
-//	// Note: "d": 123 is ignored because it's not a string
-func mergeStringMaps(base map[string]string, over map[string]any) map[string]string {
-	res := make(map[string]string)
-
-	maps.Copy(res, base)
-
-	for k, v := range over {
-		if value, ok := v.(string); ok {
-			res[k] = value
-		}
+//	over := map[string]any{"b": "overridden", "c": 3, "d": nil}
+//	result, err := mergeStringMaps(base, over)
+//	// result: map[string]string{"a": "1", "b": "overridden", "c": "3", "d": ""}
+func mergeStringMaps(base map[string]string, over map[string]any) (map[string]string, error) {
+	strs, err := StringMap(over)
+	if err != nil {
+		return nil, err
 	}
-
-	return res
+	res := make(map[string]string, len(base)+len(strs))
+	maps.Copy(res, base)
+	maps.Copy(res, strs)
+	return res, nil
 }
 
 func fromAnySlice[T any](s []any) ([]T, error) {
@@ -365,7 +361,10 @@ func MapToStructByTags(params map[string]any, dest any) error {
 				return fmt.Errorf("expected map[string]any for field '%s'", mapTag)
 			} else {
 				existingMap := field.Interface().(map[string]string)
-				mergedMap := mergeStringMaps(existingMap, v)
+				mergedMap, err := mergeStringMaps(existingMap, v)
+				if err != nil {
+					return fmt.Errorf("%w in field '%s'", err, mapTag)
+				}
 				field.Set(reflect.ValueOf(mergedMap))
 			}
 
