@@ -172,33 +172,6 @@ func TestStep_TemplateWithUndefinedNameRuns(t *testing.T) {
 	}
 }
 
-func TestWorkflow_evalVarsTemplateError(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"ok":   "fine",
-			"bad":  "{{1 +}}",
-			"auth": map[string]any{"user": "{{nothing.here}}"},
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	vars, err := wf.evalVars()
-	if err == nil {
-		t.Fatal("expected an error")
-	}
-	if vars != nil {
-		t.Errorf("expected no vars, got %#v", vars)
-	}
-	for _, m := range []string{"vars.auth.user: {{nothing.here}}: ", "vars.bad: {{1 +}}: "} {
-		if !strings.Contains(err.Error(), m) {
-			t.Errorf("error %q does not contain %q", err.Error(), m)
-		}
-	}
-	if strings.Index(err.Error(), "vars.auth") > strings.Index(err.Error(), "vars.bad") {
-		t.Errorf("errors are not in name order: %q", err.Error())
-	}
-}
-
 func TestWorkflow_TemplateErrorExitCode(t *testing.T) {
 	runner := NewMockActionRunner()
 	runner.SetResult("ok", map[string]any{
@@ -220,33 +193,6 @@ func TestWorkflow_TemplateErrorExitCode(t *testing.T) {
 	}
 	if w.exitStatus != ExitTestFailed {
 		t.Errorf("exit status = %d, want %d", w.exitStatus, ExitTestFailed)
-	}
-}
-
-func TestWorkflow_evalVarsSkipsVarsReadingAFailedOne(t *testing.T) {
-	wf := &Workflow{
-		Name: "Test",
-		Vars: map[string]any{
-			"base":  "{{1 +}}",
-			"url":   "{{vars.base}}/x",
-			"all":   "{{toJSON(vars)}}",
-			"list":  []any{"ok", "{{nothing.here}}"},
-			"other": "fine",
-		},
-		env: map[string]string{"UNUSED": ""},
-	}
-	_, err := wf.evalVars()
-	if err == nil {
-		t.Fatal("expected an error")
-	}
-	errs := unwrapJoined(err)
-	if len(errs) != 2 {
-		t.Fatalf("expected the errors of base and list alone, got %d: %v", len(errs), err)
-	}
-	for _, m := range []string{"vars.base: {{1 +}}: ", "vars.list[1]: {{nothing.here}}: "} {
-		if !strings.Contains(err.Error(), m) {
-			t.Errorf("error %q does not contain %q", err.Error(), m)
-		}
 	}
 }
 

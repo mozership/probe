@@ -13,6 +13,8 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/fielderr"
+	"github.com/mozership/probe/internal/vars"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -157,7 +159,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 		// error about another value cannot show them, and the details of a
 		// credential's own error are left out.
 		jCtx.Printer.Masker().Learn(expW)
-		return actionResult{}, redactCredentialErrors(prefixFieldErrors(err, "with."), st.With)
+		return actionResult{}, redactCredentialErrors(fielderr.Prefix(err, "with."), st.With)
 	}
 
 	st.given = expW
@@ -806,7 +808,7 @@ func (st *stepRun) SetCtx(j JobContext, override map[string]any) {
 		var errs []error
 		// Sorted so that the errors come in the same order on every run.
 		for _, k := range slices.Sorted(maps.Keys(st.Vars)) {
-			out, err := evalVar(ev, k, st.Vars[k], evalCtx)
+			out, err := vars.EvalValue(ev, k, st.Vars[k], evalCtx)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -1168,7 +1170,7 @@ var errCredentialTemplate = errors.New("the template could not be evaluated; the
 // of redis://app:{{vars.pw}}@host does.
 func redactCredentialErrors(err error, with map[string]any) error {
 	var errs []error
-	for _, e := range unwrapJoined(err) {
+	for _, e := range fielderr.Unjoin(err) {
 		var fe *expr.FieldError
 		// A key named by a template is a credential when it comes to name
 		// one, as a header named by a var may. Only a template that could
@@ -1256,14 +1258,6 @@ func failureKindOf(err error) string {
 	return FailureAction
 }
 
-// unwrapJoined returns the errors joined into err, or err alone.
-func unwrapJoined(err error) []error {
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		return joined.Unwrap()
-	}
-	return []error{err}
-}
-
 // saveOutputs evaluates and saves step outputs to JobContext
 func (st *stepRun) saveOutputs(jCtx *JobContext) {
 	if len(st.Outputs) == 0 {
@@ -1287,7 +1281,7 @@ func (st *stepRun) saveOutputs(jCtx *JobContext) {
 		// A step id taken by an output name is an error: the step's outputs
 		// cannot be read through it.
 		if err := st.publishOutputs(jCtx, outputs); err != nil {
-			for _, e := range unwrapJoined(err) {
+			for _, e := range fielderr.Unjoin(err) {
 				var taken *NameTakenError
 				if errors.As(e, &taken) {
 					jCtx.Printer.LogWarn("%v", taken)
