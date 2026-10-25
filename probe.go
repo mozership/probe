@@ -69,6 +69,9 @@ type Config struct {
 	// they need and those that always run after them; all jobs when it is
 	// empty.
 	Jobs []string
+	// ActionRunner runs the action of each step. When it is nil, each runs
+	// in a process of its own, as PluginActionRunner runs it.
+	ActionRunner ActionRunner
 }
 
 func New(path string, v bool) *Probe {

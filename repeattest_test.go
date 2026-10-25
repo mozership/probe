@@ -44,9 +44,9 @@ func TestRepeatRuns(t *testing.T) {
 	}
 }
 
-// repeatTestWorkflow is a job of runs of one step that answers as runner
-// does, with test as the test over its runs.
-func repeatTestWorkflow(runner *timedRunner, count int, test string) *Workflow {
+// repeatTestWorkflow is a job of count runs of one step, with test as the
+// test over its runs.
+func repeatTestWorkflow(count int, test string) *Workflow {
 	return &Workflow{
 		Name: "Repeat test",
 		Vars: map[string]any{"rate": 0.75},
@@ -54,24 +54,25 @@ func repeatTestWorkflow(runner *timedRunner, count int, test string) *Workflow {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: count, Test: test},
-			Steps:  []*Step{{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 }
 
-// startWithReport starts the workflow with a JSON report and returns it.
-func startWithReport(t *testing.T, workflow *Workflow) report.Report {
+// startWithReport starts the workflow with a JSON report, its actions run by
+// runner, and returns it.
+func startWithReport(t *testing.T, workflow *Workflow, runner ActionRunner) report.Report {
 	t.Helper()
-	return startComparedTo(t, workflow, nil)
+	return startComparedTo(t, workflow, runner, nil)
 }
 
-// startComparedTo starts the workflow with a JSON report, compared to
-// baseline, the report of an earlier run, and returns it.
-func startComparedTo(t *testing.T, workflow *Workflow, baseline *report.Report) report.Report {
+// startComparedTo is startWithReport with the report compared to baseline,
+// the report of an earlier run.
+func startComparedTo(t *testing.T, workflow *Workflow, runner ActionRunner, baseline *report.Report) report.Report {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}, Baseline: baseline}); err != nil {
+	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}, Baseline: baseline, ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -99,9 +100,9 @@ func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 		{"res": map[string]any{"code": 200}, "rt": "30ms"},
 		{"res": map[string]any{"code": 200}, "rt": "40ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 4, "steps.query.success_rate >= vars.rate && steps.query.rt.max < 0.05")
+	workflow := repeatTestWorkflow(4, "steps.query.success_rate >= vars.rate && steps.query.rt.max < 0.05")
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if workflow.exitStatus != ExitOK {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
 	}
@@ -136,9 +137,9 @@ func TestWorkflow_RepeatTestFails(t *testing.T) {
 		nil,
 		{"res": map[string]any{"code": 200}, "rt": "400ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 3, "steps.query.rt.p95 < 0.3")
+	workflow := repeatTestWorkflow(3, "steps.query.rt.p95 < 0.3")
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if workflow.exitStatus != ExitTestFailed {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
 	}
@@ -172,9 +173,9 @@ func TestWorkflow_RepeatTestFails(t *testing.T) {
 // be evaluated, as a step whose test cannot be is.
 func TestWorkflow_RepeatTestError(t *testing.T) {
 	runner := &timedRunner{answers: []map[string]any{nil, nil}}
-	workflow := repeatTestWorkflow(runner, 2, "steps.query.rt.p95 < 0.3")
+	workflow := repeatTestWorkflow(2, "steps.query.rt.p95 < 0.3")
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if workflow.exitStatus != ExitTestFailed {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
 	}
@@ -189,9 +190,9 @@ func TestWorkflow_RepeatTestOfOneRun(t *testing.T) {
 	runner := &timedRunner{answers: []map[string]any{
 		{"res": map[string]any{"code": 500}, "rt": "10ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 1, "steps.query.runs == 1 && steps.query.failure == 1")
+	workflow := repeatTestWorkflow(1, "steps.query.runs == 1 && steps.query.failure == 1")
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if workflow.exitStatus != ExitOK {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
 	}
@@ -204,10 +205,10 @@ func TestWorkflow_RepeatTestOfOneRun(t *testing.T) {
 // its test over its runs holds: the runs are only counted when they ran.
 func TestWorkflow_RepeatTestCannotStart(t *testing.T) {
 	runner := &timedRunner{answers: []map[string]any{nil, nil}}
-	workflow := repeatTestWorkflow(runner, 2, "true")
+	workflow := repeatTestWorkflow(2, "true")
 	workflow.Jobs[0].Name = "{{ nofunc() }}"
 
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if workflow.exitStatus != ExitConfigError {
@@ -222,10 +223,10 @@ func TestWorkflow_RepeatTestReadsStepWithoutID(t *testing.T) {
 		{"res": map[string]any{"code": 200}, "rt": "10ms"},
 		{"res": map[string]any{"code": 200}, "rt": "10ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 2, "steps.step_0.runs == 2")
+	workflow := repeatTestWorkflow(2, "steps.step_0.runs == 2")
 	workflow.Jobs[0].Steps[0].ID = ""
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if rt := r.Jobs[0].RepeatTest; rt == nil || rt.Status != report.Passed {
 		t.Errorf("repeat_test = %+v, want it passed", rt)
 	}
@@ -248,11 +249,11 @@ func TestWorkflow_RepeatTestAfterSkippedRuns(t *testing.T) {
 			runner := &timedRunner{answers: []map[string]any{
 				{"res": map[string]any{"code": 200}, "rt": "10ms"},
 			}}
-			workflow := repeatTestWorkflow(runner, 3, tt.test)
+			workflow := repeatTestWorkflow(3, tt.test)
 			workflow.Jobs[0].SkipIf = "outputs.query?.done == true"
 			workflow.Jobs[0].Steps[0].Outputs = map[string]string{"done": "true"}
 
-			r := startWithReport(t, workflow)
+			r := startWithReport(t, workflow, runner)
 			if workflow.exitStatus != tt.exit {
 				t.Errorf("exit status = %d, want %d", workflow.exitStatus, tt.exit)
 			}
@@ -268,12 +269,12 @@ func TestWorkflow_RepeatTestAfterSkippedRuns(t *testing.T) {
 func TestWorkflow_RepeatTestOfSkippedJob(t *testing.T) {
 	for _, async := range []bool{false, true} {
 		t.Run(fmt.Sprintf("async %v", async), func(t *testing.T) {
-			workflow := repeatTestWorkflow(&timedRunner{}, 2, "false")
+			workflow := repeatTestWorkflow(2, "false")
 			workflow.Jobs[0].SkipIf = "true"
 			workflow.Jobs[0].Repeat.Async = async
 			workflow.Jobs[0].Repeat.Interval = Interval{Duration: time.Millisecond}
 
-			r := startWithReport(t, workflow)
+			r := startWithReport(t, workflow, &timedRunner{})
 			if workflow.exitStatus != ExitOK {
 				t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitOK)
 			}
@@ -288,13 +289,13 @@ func TestWorkflow_RepeatTestOfSkippedJob(t *testing.T) {
 // in which a step without an id would be read by the id another step has.
 func TestWorkflowStartRefusesRepeatTestIDCollision(t *testing.T) {
 	runner := &timedRunner{answers: []map[string]any{nil, nil, nil, nil}}
-	workflow := repeatTestWorkflow(runner, 2, "steps.step_0.success_rate == 1")
+	workflow := repeatTestWorkflow(2, "steps.step_0.success_rate == 1")
 	workflow.Jobs[0].Steps = []*Step{
-		{Name: "Unnamed", Uses: "http", actionRunner: runner},
-		{Name: "Named", ID: "step_0", Uses: "http", actionRunner: runner},
+		{Name: "Unnamed", Uses: "http"},
+		{Name: "Named", ID: "step_0", Uses: "http"},
 	}
 
-	err := workflow.Start(Config{})
+	err := workflow.Start(Config{ActionRunner: runner})
 	if err == nil || !strings.Contains(err.Error(), "steps 0 and 1 are both read as steps.step_0") {
 		t.Errorf("Start() = %v, want the steps read by one id refused", err)
 	}
@@ -344,10 +345,10 @@ func TestWorkflow_RepeatTestChecksStepWithoutTest(t *testing.T) {
 		{"res": map[string]any{"code": 200}, "rt": "10ms"},
 		{"res": map[string]any{"code": 200}, "rt": "10ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 2, "steps.query.rt.p95 < 0.3")
+	workflow := repeatTestWorkflow(2, "steps.query.rt.p95 < 0.3")
 	workflow.Jobs[0].Steps[0].Test = ""
 
-	r := startWithReport(t, workflow)
+	r := startWithReport(t, workflow, runner)
 	if st := r.Jobs[0].Steps[0]; st.Status != report.Passed {
 		t.Errorf("step status = %q, want %q", st.Status, report.Passed)
 	}
@@ -470,11 +471,11 @@ func TestWorkflow_BaselineTest(t *testing.T) {
 				{"res": map[string]any{"code": 200}, "rt": "10ms"},
 				{"res": map[string]any{"code": 200}, "rt": "20ms"},
 			}}
-			workflow := repeatTestWorkflow(runner, 2, "")
+			workflow := repeatTestWorkflow(2, "")
 			workflow.Jobs[0].Repeat.BaselineTest = test
 			workflow.Jobs[0].Steps[0].Test = ""
 
-			r := startComparedTo(t, workflow, tt.baseline)
+			r := startComparedTo(t, workflow, runner, tt.baseline)
 			if workflow.exitStatus != tt.exit {
 				t.Errorf("exit status = %d, want %d", workflow.exitStatus, tt.exit)
 			}
@@ -520,13 +521,13 @@ func TestWorkflow_BaselineTestLeavesFailedRunsToTest(t *testing.T) {
 		{"res": map[string]any{"code": 200}, "rt": "10ms"},
 		{"res": map[string]any{"code": 500}, "rt": "10ms"},
 	}}
-	workflow := repeatTestWorkflow(runner, 2, "")
+	workflow := repeatTestWorkflow(2, "")
 	workflow.Jobs[0].Repeat.BaselineTest = "steps.query.runs == baseline.steps.query.runs"
 	base := &report.Report{RunID: "run-1", StartedAt: time.Now(), Jobs: []report.Job{{ID: "search", Steps: []report.Step{{
 		ID: "query", Repeat: &report.Repeat{Total: 2, Success: 2},
 	}}}}}
 
-	r := startComparedTo(t, workflow, base)
+	r := startComparedTo(t, workflow, runner, base)
 	if workflow.exitStatus != ExitTestFailed {
 		t.Errorf("exit status = %d, want %d", workflow.exitStatus, ExitTestFailed)
 	}

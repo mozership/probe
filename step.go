@@ -25,20 +25,19 @@ const (
 )
 
 type Step struct {
-	Name         string            `yaml:"name"`
-	ID           string            `yaml:"id,omitempty"`
-	Uses         string            `yaml:"uses" validate:"required"`
-	With         map[string]any    `yaml:"with"`
-	Test         string            `yaml:"test"`
-	Echo         string            `yaml:"echo"`
-	Vars         map[string]any    `yaml:"vars"`
-	Iteration    Iteration         `yaml:"iteration"`
-	Wait         string            `yaml:"wait,omitempty"`
-	SkipIf       string            `yaml:"skipif,omitempty"`
-	Outputs      map[string]string `yaml:"outputs,omitempty"`
-	Retry        *StepRetry        `yaml:"retry,omitempty"`
-	Timeout      Interval          `yaml:"timeout,omitempty"`
-	actionRunner ActionRunner      `yaml:"-"`
+	Name      string            `yaml:"name"`
+	ID        string            `yaml:"id,omitempty"`
+	Uses      string            `yaml:"uses" validate:"required"`
+	With      map[string]any    `yaml:"with"`
+	Test      string            `yaml:"test"`
+	Echo      string            `yaml:"echo"`
+	Vars      map[string]any    `yaml:"vars"`
+	Iteration Iteration         `yaml:"iteration"`
+	Wait      string            `yaml:"wait,omitempty"`
+	SkipIf    string            `yaml:"skipif,omitempty"`
+	Outputs   map[string]string `yaml:"outputs,omitempty"`
+	Retry     *StepRetry        `yaml:"retry,omitempty"`
+	Timeout   Interval          `yaml:"timeout,omitempty"`
 }
 
 // stepRun is one run of a step: with one entry of its iteration, in one run
@@ -164,10 +163,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 
 	st.given = expW
 
-	runner := st.actionRunner
-	if runner == nil {
-		runner = &PluginActionRunner{} // Default to plugin execution
-	}
+	runner := jCtx.runner()
 	st.attempt = 1
 
 	// An action that does not keep to every kind of guard the run is under
@@ -230,7 +226,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}, Contract: &actionrpc.Contract{}}
 	go func() {
 		defer done()
-		ret, state, err := runAction(runner, st.Uses, call, opts)
+		ret, state, err := runner.Run(st.Uses, call, opts)
 		// One left running is stopped once the run is over, whether or not
 		// the action failed after it started it.
 		for _, p := range call.Processes.List() {

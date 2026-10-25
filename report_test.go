@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 
 	"github.com/mozership/probe/expr"
@@ -228,7 +229,7 @@ func TestJSONSafeMap(t *testing.T) {
 // TestWorkflow_StartWritesReports runs a workflow end to end and checks the
 // report files reflect what each step did.
 func TestWorkflow_StartWritesReports(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{
 		"req": map[string]any{"path": "/ok"},
 		"res": map[string]any{"code": 200},
@@ -246,17 +247,17 @@ func TestWorkflow_StartWritesReports(t *testing.T) {
 				ID:   "checks",
 				Name: "Checks",
 				Steps: []*Step{
-					{Name: "Passes", Uses: "ok", Test: "res.code == 200", actionRunner: runner},
-					{Name: "Fails", Uses: "ok", Test: "res.code == 201", actionRunner: runner},
-					{Name: "Hidden", Uses: "secret", Test: "res.code == 200", actionRunner: runner},
-					{Name: "Errors", Uses: "down", actionRunner: runner},
+					{Name: "Passes", Uses: "ok", Test: "res.code == 200"},
+					{Name: "Fails", Uses: "ok", Test: "res.code == 201"},
+					{Name: "Hidden", Uses: "secret", Test: "res.code == 200"},
+					{Name: "Errors", Uses: "down"},
 				},
 			},
 			{
 				ID:    "later",
 				Name:  "Later",
 				Needs: []string{"checks"},
-				Steps: []*Step{{Name: "Never", Uses: "ok", actionRunner: runner}},
+				Steps: []*Step{{Name: "Never", Uses: "ok"}},
 			},
 		},
 		printer: newBufferPrinter(),
@@ -267,7 +268,7 @@ func TestWorkflow_StartWritesReports(t *testing.T) {
 	junitPath := filepath.Join(dir, "junit.xml")
 	mdPath := filepath.Join(dir, "report.md")
 
-	err := workflow.Start(Config{Reports: []report.Target{
+	err := workflow.Start(Config{ActionRunner: runner, Reports: []report.Target{
 		{Format: report.JSON, Path: jsonPath},
 		{Format: report.JUnit, Path: junitPath},
 		{Format: report.Markdown, Path: mdPath},
@@ -460,15 +461,15 @@ type timedRunner struct {
 	answers []map[string]any
 }
 
-func (r *timedRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *timedRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	a := r.answers[r.calls]
 	r.calls++
 	if a == nil {
-		return nil, errors.New("connection refused")
+		return nil, nil, errors.New("connection refused")
 	}
-	return a, nil
+	return a, nil, nil
 }
 
 // TestWorkflow_RepeatReportsLatency repeats a step whose action takes another
@@ -488,13 +489,13 @@ func TestWorkflow_RepeatReportsLatency(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 4},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner, Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -542,8 +543,8 @@ func TestWorkflow_RepeatComparesToBaseline(t *testing.T) {
 			Name:   "Search",
 			Repeat: &Repeat{Count: 2},
 			Steps: []*Step{
-				{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200", actionRunner: runner},
-				{Name: "Again", Uses: "http", Test: "res.code == 200", actionRunner: runner},
+				{Name: "Query", ID: "query", Uses: "http", Test: "res.code == 200"},
+				{Name: "Again", Uses: "http", Test: "res.code == 200"},
 			},
 		}},
 		printer: newBufferPrinter(),
@@ -558,7 +559,7 @@ func TestWorkflow_RepeatComparesToBaseline(t *testing.T) {
 	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	cfg := Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}, Baseline: baseline}
+	cfg := Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}, Baseline: baseline, ActionRunner: runner}
 	if err := workflow.Start(cfg); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -601,7 +602,7 @@ func TestWorkflow_RepeatLatencyLeavesOutRetriedError(t *testing.T) {
 			Name:   "Search",
 			Repeat: &Repeat{Count: 2},
 			Steps: []*Step{{
-				Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner,
+				Name: "Query", Uses: "http", Test: "res.code == 200",
 				Retry: &StepRetry{MaxAttempts: 2},
 			}},
 		}},
@@ -609,7 +610,7 @@ func TestWorkflow_RepeatLatencyLeavesOutRetriedError(t *testing.T) {
 	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner, Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -645,13 +646,13 @@ func TestWorkflow_RepeatLeavesOutWarmup(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 3, Warmup: 2},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner, Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if workflow.exitStatus != ExitOK {
@@ -695,12 +696,12 @@ func TestWorkflow_RepeatWarmupLeavesExitStatus(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 1, Warmup: 1},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if workflow.exitStatus != ExitTestFailed {
@@ -720,13 +721,13 @@ func TestWorkflow_RepeatOnlyWarmup(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 0, Warmup: 1},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
-	if err := workflow.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner, Reports: []report.Target{{Format: report.JSON, Path: jsonPath}}}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if runner.calls != 1 {
@@ -752,7 +753,7 @@ func TestWorkflow_RepeatOnlyWarmup(t *testing.T) {
 // fails: the error is told once, under the step's count, rather than once
 // for each run as it happens.
 func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetError("http", errors.New(`Get "http://127.0.0.1:1/x": connection refused`))
 	workflow := &Workflow{
 		Name: "Repeat",
@@ -760,11 +761,11 @@ func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
 			ID:     "search",
 			Name:   "Search",
 			Repeat: &Repeat{Count: 3},
-			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200", actionRunner: runner}},
+			Steps:  []*Step{{Name: "Query", Uses: "http", Test: "res.code == 200"}},
 		}},
 		printer: newBufferPrinter(),
 	}
-	if err := workflow.Start(Config{}); err != nil {
+	if err := workflow.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -798,8 +799,8 @@ func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
 			ID:   "report",
 			Name: "Report",
 			Steps: []*Step{
-				{Name: "Echo", Uses: "hello", Echo: "done", actionRunner: runner},
-				{Name: "Unchecked", Uses: "http", actionRunner: runner},
+				{Name: "Echo", Uses: "hello", Echo: "done"},
+				{Name: "Unchecked", Uses: "http"},
 			},
 		}
 		if count > 0 {
@@ -807,7 +808,7 @@ func TestWorkflow_HelloPassesWithoutTest(t *testing.T) {
 		}
 		workflow := &Workflow{Name: "Hello", Jobs: []Job{job}, printer: newBufferPrinter()}
 
-		r := startWithReport(t, workflow)
+		r := startWithReport(t, workflow, runner)
 		steps := r.Jobs[0].Steps
 		if steps[0].Status != report.Passed {
 			t.Errorf("count %d: hello step = %q, want %q", count, steps[0].Status, report.Passed)

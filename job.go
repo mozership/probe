@@ -384,12 +384,17 @@ type JobRun struct {
 // A local action is resolved relative to baseDir, the directory of the file
 // the job comes from, or to the working directory when baseDir is empty.
 func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDir string, opts ...StandaloneOption) JobRun {
+	run, _ := j.runStandalone(vars, printer, jobID, baseDir, newStandaloneConfig(opts), true)
+	return run
+}
+
+// newStandaloneConfig returns the configuration opts set.
+func newStandaloneConfig(opts []StandaloneOption) standaloneConfig {
 	cfg := standaloneConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	run, _ := j.runStandalone(vars, printer, jobID, baseDir, cfg, true)
-	return run
+	return cfg
 }
 
 // StandaloneOption changes how RunStandalone runs a job.
@@ -402,6 +407,16 @@ type standaloneConfig struct {
 	builtin []string
 	// cleanups are those of the run the job is part of.
 	cleanups *actionrpc.Cleanups
+	// runner runs the actions of the job's steps; nil for the default.
+	runner ActionRunner
+}
+
+// WithActionRunner runs the actions of the job's steps with r, as
+// Config.ActionRunner does those of a workflow.
+func WithActionRunner(r ActionRunner) StandaloneOption {
+	return func(c *standaloneConfig) {
+		c.runner = r
+	}
 }
 
 // WithCleanups runs the job as part of a run that cleans up once it is over,
@@ -458,8 +473,8 @@ func WithBuiltinActions(names []string) StandaloneOption {
 // Unlike RunStandalone, it resolves an external action only when a step runs
 // it, as it did before RunStandalone existed: a skipped job or step does not
 // need its action, and one that cannot be resolved fails its step.
-func (j *Job) RunIndependently(vars map[string]any, printer *Printer, jobID string) (bool, map[string]any, string, string, time.Duration) {
-	run, failed := j.runStandalone(vars, printer, jobID, "", standaloneConfig{}, false)
+func (j *Job) RunIndependently(vars map[string]any, printer *Printer, jobID string, opts ...StandaloneOption) (bool, map[string]any, string, string, time.Duration) {
+	run, failed := j.runStandalone(vars, printer, jobID, "", newStandaloneConfig(opts), false)
 	errorMsg := ""
 	switch {
 	case run.Err != nil:
@@ -512,8 +527,9 @@ func (j *Job) runStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config: Config{
-				Verbose: printer.verbose,
-				Guard:   cfg.guard,
+				Verbose:      printer.verbose,
+				Guard:        cfg.guard,
+				ActionRunner: cfg.runner,
 			},
 			Printer:    printer,
 			Result:     result,

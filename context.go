@@ -101,6 +101,15 @@ type runEnv struct {
 	actions map[string]string
 }
 
+// runner returns the ActionRunner the steps of the run run their actions
+// with: the one the run was given, or a PluginActionRunner.
+func (e *runEnv) runner() ActionRunner {
+	if e.ActionRunner == nil {
+		return &PluginActionRunner{}
+	}
+	return e.ActionRunner
+}
+
 // jobRepeat is what the runs of a repeated job share: how they are counted,
 // and the counts of each step over them.
 type jobRepeat struct {

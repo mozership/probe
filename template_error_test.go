@@ -20,7 +20,7 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 	t.Helper()
 
 	calls := 0
-	step.actionRunner = &CountingMockActionRunner{
+	runner := &callCountingRunner{
 		result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}},
 		callCount: &calls,
 	}
@@ -30,6 +30,7 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
+			Config:  Config{ActionRunner: runner},
 			Printer: newBufferPrinter(),
 			Result:  rs,
 		},
@@ -173,7 +174,7 @@ func TestStep_TemplateWithUndefinedNameRuns(t *testing.T) {
 }
 
 func TestWorkflow_TemplateErrorExitCode(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{
 		"req": map[string]any{},
 		"res": map[string]any{"code": 200},
@@ -181,14 +182,13 @@ func TestWorkflow_TemplateErrorExitCode(t *testing.T) {
 	w := &Workflow{
 		Name: "exit",
 		Jobs: []Job{{Name: "a", Steps: []*Step{{
-			Name:         "s",
-			Uses:         "ok",
-			With:         map[string]any{"url": "{{outputs.missing.url}}"},
-			actionRunner: runner,
+			Name: "s",
+			Uses: "ok",
+			With: map[string]any{"url": "{{outputs.missing.url}}"},
 		}}}},
 		printer: newBufferPrinter(),
 	}
-	if err := w.Start(Config{}); err != nil {
+	if err := w.Start(Config{ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if w.exitStatus != ExitTestFailed {
@@ -198,10 +198,10 @@ func TestWorkflow_TemplateErrorExitCode(t *testing.T) {
 
 // templateErrorOutput runs w with a JSON report and returns everything it
 // printed and wrote, and the report.
-func templateErrorOutput(t *testing.T, w *Workflow) (string, report.Report) {
+func templateErrorOutput(t *testing.T, w *Workflow, runner ActionRunner) (string, report.Report) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "report.json")
-	if err := w.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
+	if err := w.Start(Config{Reports: []report.Target{{Format: report.JSON, Path: path}}, ActionRunner: runner}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -219,7 +219,7 @@ func templateErrorOutput(t *testing.T, w *Workflow) (string, report.Report) {
 }
 
 func TestWorkflow_TemplateErrorHidesCredentials(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}})
 	w := &Workflow{
 		Name: "credentials",
@@ -234,7 +234,6 @@ func TestWorkflow_TemplateErrorHidesCredentials(t *testing.T) {
 						"password": "{{ 'literal-pw' + outputs.login.token }}",
 						"headers":  map[string]any{"cookie": []any{"{{ 'cookie-pw' + outputs.login.token }}"}},
 					},
-					actionRunner: runner,
 				},
 				{
 					Name: "a credential quoted by the error of another value",
@@ -243,14 +242,13 @@ func TestWorkflow_TemplateErrorHidesCredentials(t *testing.T) {
 						"password": "{{vars.pw}}",
 						"port":     "{{parse_int(vars.pw)}}",
 					},
-					actionRunner: runner,
 				},
 			},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	out, r := templateErrorOutput(t, w)
+	out, r := templateErrorOutput(t, w, runner)
 	for _, leak := range []string{"literal-pw", "cookie-pw", "learned-pw"} {
 		if strings.Contains(out, leak) {
 			t.Errorf("%q leaked into the output:\n%s", leak, out)
@@ -272,10 +270,10 @@ func TestWorkflow_TemplateErrorHidesCredentials(t *testing.T) {
 // user info is hidden, while that of a template elsewhere in a URL, which
 // most are, is kept.
 func TestWorkflow_TemplateErrorHidesURLPassword(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}})
 	step := func(name string, with map[string]any) *Step {
-		return &Step{Name: name, Uses: "ok", With: with, actionRunner: runner}
+		return &Step{Name: name, Uses: "ok", With: with}
 	}
 	w := &Workflow{
 		Name: "credentials",
@@ -295,7 +293,7 @@ func TestWorkflow_TemplateErrorHidesURLPassword(t *testing.T) {
 		printer: newBufferPrinter(),
 	}
 
-	out, r := templateErrorOutput(t, w)
+	out, r := templateErrorOutput(t, w, runner)
 	for _, leak := range []string{"url-pw", "slash/pw", "user-pw", "learned-pw"} {
 		if strings.Contains(out, leak) {
 			t.Errorf("%q leaked into the output:\n%s", leak, out)
@@ -352,15 +350,16 @@ func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
 		Retry:     &StepRetry{MaxAttempts: 3},
 		Test:      "true",
 		Iteration: Iteration{Entries: []map[string]any{{"k": map[string]any{"y": 1}}, {}}},
-		actionRunner: &CountingMockActionRunner{
-			result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}, "rt": "10ms"},
-			callCount: &calls,
-		},
 	}}}
+	runner := &callCountingRunner{
+		result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}, "rt": "10ms"},
+		callCount: &calls,
+	}
 	rs := NewResult()
 	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
 	ctx := JobContext{
 		runEnv: &runEnv{
+			Config:  Config{ActionRunner: runner},
 			Printer: newBufferPrinter(),
 			Result:  rs,
 		},
@@ -389,7 +388,7 @@ func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
 func TestWorkflow_RepeatKeepsFailureKind(t *testing.T) {
 	for _, async := range []bool{false, true} {
 		t.Run(map[bool]string{false: "sync", true: "async"}[async], func(t *testing.T) {
-			runner := NewMockActionRunner()
+			runner := newMockRunner()
 			runner.SetResult("ok", map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}})
 			runner.SetError("down", errors.New("connection refused"))
 			w := &Workflow{
@@ -398,14 +397,14 @@ func TestWorkflow_RepeatKeepsFailureKind(t *testing.T) {
 					Name:   "job",
 					Repeat: &Repeat{Count: 2, Interval: Interval{Duration: time.Millisecond}, Async: async},
 					Steps: []*Step{
-						{Name: "template", Uses: "ok", With: map[string]any{"url": "{{outputs.a.b}}"}, actionRunner: runner},
-						{Name: "action", Uses: "down", Test: "res.code == 200", actionRunner: runner},
-						{Name: "assertion", Uses: "ok", Test: "res.code == 500", actionRunner: runner},
+						{Name: "template", Uses: "ok", With: map[string]any{"url": "{{outputs.a.b}}"}},
+						{Name: "action", Uses: "down", Test: "res.code == 200"},
+						{Name: "assertion", Uses: "ok", Test: "res.code == 500"},
 					},
 				}},
 				printer: newBufferPrinter(),
 			}
-			_, r := templateErrorOutput(t, w)
+			_, r := templateErrorOutput(t, w, runner)
 
 			want := []string{FailureTemplate, FailureAction, FailureAssertion}
 			for i, st := range r.Jobs[0].Steps {
@@ -429,7 +428,7 @@ func TestWorkflow_RepeatKeepsFailureKind(t *testing.T) {
 // comes from a var, has the details of its error hidden as one under the
 // header written so does, while the error names the key as written.
 func TestWorkflow_TemplateErrorHidesCredentialsUnderAKeyTemplate(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}})
 	w := &Workflow{
 		Name: "credentials",
@@ -442,13 +441,12 @@ func TestWorkflow_TemplateErrorHidesCredentialsUnderAKeyTemplate(t *testing.T) {
 				With: map[string]any{
 					"headers": map[string]any{"{{ vars.header }}": "{{ 'Bearer literal-token' + outputs.login.token }}"},
 				},
-				actionRunner: runner,
 			}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	out, r := templateErrorOutput(t, w)
+	out, r := templateErrorOutput(t, w, runner)
 	if strings.Contains(out, "literal-token") {
 		t.Errorf("the credential leaked into the output:\n%s", out)
 	}
@@ -463,7 +461,7 @@ func TestWorkflow_TemplateErrorHidesCredentialsUnderAKeyTemplate(t *testing.T) {
 // template that could not be evaluated: it was, and its error holds no
 // credential.
 func TestWorkflow_KeyCollisionUnderACredentialIsShown(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}})
 	w := &Workflow{
 		Name: "collision",
@@ -479,13 +477,12 @@ func TestWorkflow_KeyCollisionUnderACredentialIsShown(t *testing.T) {
 						"{{ vars.header }}": "Bearer other-token",
 					},
 				},
-				actionRunner: runner,
 			}},
 		}},
 		printer: newBufferPrinter(),
 	}
 
-	_, r := templateErrorOutput(t, w)
+	_, r := templateErrorOutput(t, w, runner)
 	want := `with.headers.{{ vars.header }}: key {{ vars.header }} comes to the same key as "authorization"`
 	if msg := r.Jobs[0].Steps[0].Failure.Message; !strings.Contains(msg, want) {
 		t.Errorf("failure message %q does not contain %q", msg, want)
