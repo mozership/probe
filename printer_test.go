@@ -2,6 +2,7 @@ package probe
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -349,6 +350,36 @@ func TestPrinter_generateLogError(t *testing.T) {
 		})
 	}
 }
+
+// LogError writes to the error writer, as the other Log methods do, so that
+// a printer's errors go where its writers say, with secrets hidden, and none
+// into the report.
+func TestPrinterLogErrorWritesToTheErrorWriter(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	p := newBufferPrinter()
+	m := mask.New(nil, nil)
+	m.Learn(map[string]any{"password": "hunter2-secret"})
+	p.SetMasker(m)
+	p.LogError("could not connect with %s", "hunter2-secret")
+	p.verbose = true
+	p.logTestError("res.code == 200", errors.New("no such field"))
+
+	got := p.errWriter.(*bytes.Buffer).String()
+	for _, want := range []string{"[ERROR] could not connect with", "[ERROR] Test Error: no such field", "[ERROR] Input: res.code == 200"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the error writer lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "hunter2-secret") {
+		t.Errorf("the error writer shows the secret:\n%s", got)
+	}
+	if out := p.outWriter.(*bytes.Buffer).String(); out != "" {
+		t.Errorf("the out writer got %q, want nothing", out)
+	}
+}
+
 func TestPrinter_generateJobStatus(t *testing.T) {
 	// Disable color output for consistent testing
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
