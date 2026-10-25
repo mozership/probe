@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
@@ -89,6 +91,57 @@ func startComparedTo(t *testing.T, workflow *Workflow, runner ActionRunner, base
 // TestWorkflow_RepeatTestPassesOverFailedRuns passes a job one of whose runs
 // failed its test, as the test over the runs allows: the run is counted, and
 // neither the job nor its step fails for it.
+func TestEvalRepeatTest(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	env := repeatTestEnv{Steps: map[string]any{"search": map[string]any{"success": 3}}}
+	tests := []struct {
+		name        string
+		test        string
+		wantPassed  bool
+		wantKind    string
+		wantMessage string
+		wantOutput  string
+	}{
+		{name: "a test that holds", test: "steps.search.success == 3", wantPassed: true},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError},
+		{name: "a test that is not a boolean", test: "steps.search.success", wantKind: FailureTestType, wantMessage: "test evaluated to 3 (int), not a boolean", wantOutput: typeMismatchDetail("steps.search.success", 3)},
+		{name: "a test that is false", test: "steps.search.success == 4", wantKind: FailureAssertion, wantMessage: "test evaluated to false: steps.search.success == 4 (steps.search.success = 3)", wantOutput: "       failed: steps.search.success == 4\n         steps.search.success = 3\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			printer.SetMasker(mask.New(nil, nil))
+			ctx := JobContext{runEnv: &runEnv{Printer: printer}}
+
+			res := evalRepeatTest(ctx, tt.test, env)
+			if res.Test != tt.test || res.Passed != tt.wantPassed {
+				t.Fatalf("result = %+v, want the test, passed: %v", res, tt.wantPassed)
+			}
+			if tt.wantPassed {
+				if res.Failure != nil || res.Output != "" {
+					t.Errorf("result = %+v, want no failure", res)
+				}
+				return
+			}
+			if res.Failure == nil || res.Failure.Kind != tt.wantKind {
+				t.Fatalf("failure = %+v, want %s", res.Failure, tt.wantKind)
+			}
+			if tt.wantKind == FailureTestError {
+				_, err := (&expr.Expr{}).Eval(tt.test, env)
+				tt.wantMessage, tt.wantOutput = err.Error(), testErrorDetail(err)
+			}
+			if res.Failure.Message != tt.wantMessage {
+				t.Errorf("message = %q, want %q", res.Failure.Message, tt.wantMessage)
+			}
+			if res.Output != tt.wantOutput {
+				t.Errorf("output = %q, want %q", res.Output, tt.wantOutput)
+			}
+		})
+	}
+}
+
 func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 	noColor := color.NoColor
 	color.NoColor = true

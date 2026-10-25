@@ -732,49 +732,63 @@ func (st *stepRun) evalTest() (any, error) {
 }
 
 func (st *stepRun) DoTest(printer *Printer) (string, bool) {
-	st.failure = nil
-
-	exprOut, err := st.evalTest()
-	if err != nil {
-		st.failure = &StepFailure{Kind: FailureTestError, Message: err.Error()}
-		printer.logTestError(st.Test, err)
-		return testErrorDetail(err), false
+	// Which condition of the test is false is told with what it compared,
+	// unless the action keeps its response out of the report.
+	dump, isBool := st.ctx.Res["dump"].(bool)
+	passed, failure, detail := evaluateTest(st.expr, st.Test, st.ctx, printer, isBool && !dump)
+	st.failure = failure
+	// A verbose run shows what a test came to when it came to a boolean.
+	if printer.verbose && (failure == nil || failure.Kind == FailureAssertion) {
+		printer.PrintTestResult(passed, st.Test, st.ctx)
 	}
-
-	boolOutput, boolOk := exprOut.(bool)
-	if !boolOk {
-		st.failure = &StepFailure{
-			Kind:    FailureTestType,
-			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", exprOut, exprOut),
-		}
-		printer.LogDebug("%s", typeMismatchText(st.Test, exprOut))
-		return typeMismatchDetail(st.Test, exprOut), false
+	if passed {
+		return "", true
 	}
-
-	if printer.verbose {
-		printer.PrintTestResult(boolOutput, st.Test, st.ctx)
-	}
-
-	if !boolOutput {
-		// Which condition of the test is false is told with what it
-		// compared, unless the action keeps its response out of the report.
-		message := "test evaluated to false"
-		var detail string
-		if clause, ok := st.expr.FalseClause(st.Test, st.ctx); ok {
-			if dump, isBool := st.ctx.Res["dump"].(bool); isBool && !dump {
-				clause.Operands = nil
-			}
-			// The message is cut before the report masks it, so the
-			// secrets are hidden here, in the values themselves.
-			clause = maskClause(printer.Masker(), clause)
-			message += ": " + clauseSummary(clause)
-			detail = falseClauseDetail(clause)
-		}
-		st.failure = st.newFailure(FailureAssertion, message)
+	if failure.Kind == FailureAssertion {
+		st.failure = st.newFailure(failure.Kind, failure.Message)
 		return detail + exchangeDetail(printer.Masker(), st.ctx.Req, st.ctx.Res), false
 	}
+	return detail, false
+}
 
-	return "", true
+// evaluateTest evaluates test against env, as the test of a step and the
+// test of a repeated job are, and tells whether it held. When it did not,
+// failure says why: the test could not be evaluated, did not come to a
+// boolean, or came to false, which is told with the condition of it that is
+// false and what that compared, the values masked, or without them when
+// hideOperands is set. detail is what the result shows of it.
+func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOperands bool) (passed bool, failure *StepFailure, detail string) {
+	out, err := ev.Eval(test, env)
+	if err != nil {
+		printer.logTestError(test, err)
+		return false, &StepFailure{Kind: FailureTestError, Message: err.Error()}, testErrorDetail(err)
+	}
+
+	held, ok := out.(bool)
+	if !ok {
+		printer.LogDebug("%s", typeMismatchText(test, out))
+		failure := &StepFailure{
+			Kind:    FailureTestType,
+			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", out, out),
+		}
+		return false, failure, typeMismatchDetail(test, out)
+	}
+	if held {
+		return true, nil, ""
+	}
+
+	message := "test evaluated to false"
+	if clause, ok := ev.FalseClause(test, env); ok {
+		if hideOperands {
+			clause.Operands = nil
+		}
+		// The message is cut before the report masks it, so the secrets are
+		// hidden here, in the values themselves.
+		clause = maskClause(printer.Masker(), clause)
+		message += ": " + clauseSummary(clause)
+		detail = falseClauseDetail(clause)
+	}
+	return false, &StepFailure{Kind: FailureAssertion, Message: message}, detail
 }
 
 // newFailure builds a StepFailure carrying the request and response, unless
