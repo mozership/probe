@@ -7,10 +7,7 @@
 package actions
 
 import (
-	"slices"
 	"sort"
-
-	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actions/db"
 	"github.com/mozership/probe/actions/dns"
@@ -25,18 +22,18 @@ import (
 )
 
 // builtin maps an action name to the function that serves it. Each value
-// blocks until the workflow runner closes the plugin connection.
+// blocks until the workflow runner closes the plugin connection. The embedded
+// action is added by init.
 var builtin = map[string]func(){
-	"db":       db.Serve,
-	"dns":      dns.Serve,
-	"embedded": embedded.Serve,
-	"grpc":     grpc.Serve,
-	"hello":    hello.Serve,
-	"http":     http.Serve,
-	"imap":     imap.Serve,
-	"shell":    shell.Serve,
-	"smtp":     smtp.Serve,
-	"ssh":      ssh.Serve,
+	"db":    db.Serve,
+	"dns":   dns.Serve,
+	"grpc":  grpc.Serve,
+	"hello": hello.Serve,
+	"http":  http.Serve,
+	"imap":  imap.Serve,
+	"shell": shell.Serve,
+	"smtp":  smtp.Serve,
+	"ssh":   ssh.Serve,
 }
 
 // keeps are the kinds of guard each built-in action declares it keeps to,
@@ -60,20 +57,6 @@ func Keeps() map[string][]string {
 		m[name] = f()
 	}
 	return m
-}
-
-// Keeping returns the names of the built-in actions that keep to every kind
-// of guard, such as --read-only and --allow-host, in alphabetical order.
-func Keeping() []string {
-	all := []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-	var names []string
-	for name, kinds := range Keeps() {
-		if !slices.ContainsFunc(all, func(k string) bool { return !slices.Contains(kinds, k) }) {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
 }
 
 // params are the keys each built-in action takes in with. hello, which
@@ -106,16 +89,6 @@ func Contracts() map[string][]string {
 		out[name] = f()
 	}
 	return out
-}
-
-// Params returns the keys the built-in action name takes in with, and false
-// for an action that takes any key, or that is not built in.
-func Params(name string) ([]string, bool) {
-	f, ok := params[name]
-	if !ok {
-		return nil, false
-	}
-	return f(), true
 }
 
 // AllParams returns the keys each built-in action takes in with, by its
@@ -263,13 +236,15 @@ func AllRequired() map[string][][]string {
 
 // Lookup returns the serve function of a built-in action.
 func Lookup(name string) (func(), bool) {
-	// The embedded action runs steps of its own, so it is told which
-	// actions there are.
-	if name == "embedded" {
-		return func() { embedded.ServeWithActions(Names()) }, true
-	}
 	serve, ok := builtin[name]
 	return serve, ok
+}
+
+// The embedded action runs steps of its own, so it is told which actions
+// there are. It is added here rather than in builtin, which Names reads, as
+// referring to Names there would be an initialization cycle.
+func init() {
+	builtin["embedded"] = func() { embedded.ServeWithActions(Names()) }
 }
 
 // Names returns the names of the built-in actions in alphabetical order.

@@ -197,16 +197,19 @@ func (r *Req) Do() (re *Result, er error) {
 }
 
 // tlsConfig returns the TLS configuration tls, insecure, ca_file, cert_file
-// and key_file ask for.
+// and key_file ask for. insecure skips verifying the server, which leaves
+// ca_file nothing to do, but the client certificate is still presented.
 func (r *Req) tlsConfig() (*tls.Config, error) {
-	if r.Insecure {
-		// TLS without certificate verification (for development)
-		return &tls.Config{InsecureSkipVerify: true}, nil
+	if (r.CertFile == "") != (r.KeyFile == "") {
+		return nil, errors.New("cert_file and key_file must be given together")
 	}
 	tlsConfig := &tls.Config{}
 
-	// Custom CA certificate
-	if r.CAFile != "" {
+	if r.Insecure {
+		// TLS without certificate verification (for development)
+		tlsConfig.InsecureSkipVerify = true
+	} else if r.CAFile != "" {
+		// Custom CA certificate
 		caCert, err := os.ReadFile(r.CAFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA file: %w", err)
@@ -219,7 +222,7 @@ func (r *Req) tlsConfig() (*tls.Config, error) {
 	}
 
 	// Client certificate for mTLS
-	if r.CertFile != "" && r.KeyFile != "" {
+	if r.CertFile != "" {
 		cert, err := tls.LoadX509KeyPair(r.CertFile, r.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load client certificate: %w", err)

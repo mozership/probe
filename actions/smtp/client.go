@@ -139,7 +139,7 @@ func (r *Req) Do() (*Result, error) {
 	}
 
 	// Get mail data for processing
-	mailData := bulk.MakeData()
+	mailData := bulk.makeData()
 
 	// Process mail data (check if it's text or binary)
 	bodyString, filePath, err := binary.ProcessHttpBody(mailData, "text/plain")

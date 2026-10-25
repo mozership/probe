@@ -118,7 +118,7 @@ Besides `res`, the step can test these:
 
 ## Response Examples
 
-What the response holds depends on the statement. A `SELECT` returns rows; an `INSERT` or `UPDATE` returns counts instead.
+What the response holds depends on the statement. One whose first word is `SELECT`, `SHOW`, `DESCRIBE`, `DESC`, `EXPLAIN` or `WITH`, in any case, returns rows; any other, such as an `INSERT` or `UPDATE`, returns counts instead.
 
 ### SELECT Query Response
 

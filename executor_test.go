@@ -1,25 +1,15 @@
 package probe
 
 import (
+	"errors"
 	"maps"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/report"
 )
-
-// Test basic executor creation and interface compliance
-func TestJobExecutor_Creation(t *testing.T) {
-	workflow := &Workflow{Name: "test-workflow"}
-	job := &Job{Name: "test-job", Steps: []*Step{}}
-
-	t.Run("Executor creation", func(t *testing.T) {
-		executor := NewExecutor(workflow, job)
-		if executor == nil {
-			t.Fatal("NewExecutor should not return nil")
-		}
-	})
-}
 
 // The runs of a job are counted only when it is repeated, warmed up or
 // tested over its runs, and then the warmup runs are left out of the total.
@@ -47,7 +37,7 @@ func TestExecutor_setupContext(t *testing.T) {
 				t.Fatal(err)
 			}
 			env := &runEnv{Printer: newBufferPrinter(), JobScheduler: scheduler}
-			ctx := NewExecutor(&Workflow{}, job).setupContext(JobContext{runEnv: env})
+			ctx := NewExecutor(job).setupContext(JobContext{runEnv: env})
 
 			if ctx.runEnv != env {
 				t.Error("the job should run with the workflow's environment, not a copy of it")
@@ -74,12 +64,269 @@ func TestExecutor_setupContext(t *testing.T) {
 	}
 }
 
-// TestExecutionResult_Structure is no longer needed as ExecutionResult has been removed
+// runJob runs job as the workflow runs each of its jobs, and returns what
+// Executor.Run reported and the result it left for the job.
+func runJob(t *testing.T, job Job) (bool, *JobResult) {
+	t.Helper()
+	w := &Workflow{Name: "executor", Jobs: []Job{job}, printer: newBufferPrinter()}
+	scheduler, err := w.initJobScheduler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := w.newJobContext(Config{}, nil, scheduler)
+	ctx.Outputs = NewOutputs()
+	scheduler.StartJob(job.ID)
+	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
+	return passed, ctx.Result.Jobs[job.ID]
+}
 
-// TestExecutionConfig_Structure is no longer needed as ExecutionConfig has been removed
+// A job that fails reports so to its caller, which fails the workflow for
+// it, in turn and with its runs overlapping alike. A failure that is only
+// counted, in a warmup run or under a test over the runs, fails nothing.
+func TestExecutor_Run(t *testing.T) {
+	failing := NewMockActionRunner()
+	failing.SetError("hello", errors.New("boom"))
+	passing := NewMockActionRunner()
+	passing.SetResult("hello", map[string]any{"status": 0})
+
+	tests := []struct {
+		name       string
+		runner     ActionRunner
+		repeat     *Repeat
+		test       string
+		wantPassed bool
+	}{
+		{name: "run once and passed", runner: passing, wantPassed: true},
+		{name: "run once and failed", runner: failing},
+		{name: "repeated and passed", runner: passing, repeat: &Repeat{Count: 3}, wantPassed: true},
+		{name: "repeated and failed", runner: failing, repeat: &Repeat{Count: 3}},
+		{name: "async and passed", runner: passing, repeat: &Repeat{Count: 3, Async: true}, wantPassed: true},
+		{name: "async and failed", runner: failing, repeat: &Repeat{Count: 3, Async: true}},
+		{
+			name:       "failed only in the warmup run",
+			runner:     &echoRunner{},
+			repeat:     &Repeat{Count: 2, Warmup: 1},
+			test:       `res.i != "0"`,
+			wantPassed: true,
+		},
+		{name: "failed in every run warmed up", runner: &echoRunner{}, repeat: &Repeat{Count: 2, Warmup: 1}, test: "false"},
+		{name: "failed under a test over the runs that held", runner: failing, repeat: &Repeat{Count: 2, Test: "true"}, wantPassed: true},
+		{name: "passed under a test over the runs that did not hold", runner: passing, repeat: &Repeat{Count: 2, Test: "false"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.repeat != nil {
+				tt.repeat.Interval = Interval{Duration: time.Millisecond}
+			}
+			job := Job{
+				Name:   "job",
+				ID:     "job",
+				Repeat: tt.repeat,
+				Steps: []*Step{{
+					Name: "step", Uses: "hello", actionRunner: tt.runner,
+					With: map[string]any{"i": "{{repeat_index}}"},
+					Test: tt.test,
+				}},
+			}
+			passed, jr := runJob(t, job)
+			if passed != tt.wantPassed {
+				t.Errorf("Run() = %v, want %v", passed, tt.wantPassed)
+			}
+			if wantError := !tt.wantPassed; (jr.Status == StatusError) != wantError {
+				t.Errorf("job status = %v, want an error %v", jr.Status, wantError)
+			}
+			if jr.EndTime.Before(jr.StartTime) {
+				t.Errorf("end time %v is before the start time %v", jr.EndTime, jr.StartTime)
+			}
+		})
+	}
+}
+
+// overlapRunner holds every call to an action until a second call is in
+// one at the same time, or until wait is over, and records whether two
+// calls ever were.
+type overlapRunner struct {
+	wait time.Duration
+
+	mu         sync.Mutex
+	running    int
+	overlapped bool
+	both       chan struct{}
+}
+
+func newOverlapRunner(wait time.Duration) *overlapRunner {
+	return &overlapRunner{wait: wait, both: make(chan struct{})}
+}
+
+func (r *overlapRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+	r.mu.Lock()
+	r.running++
+	if r.running > 1 && !r.overlapped {
+		r.overlapped = true
+		close(r.both)
+	}
+	r.mu.Unlock()
+
+	select {
+	case <-r.both:
+	case <-time.After(r.wait):
+	}
+
+	r.mu.Lock()
+	r.running--
+	r.mu.Unlock()
+	return map[string]any{"status": 0}, nil
+}
+
+// The runs of an async job start an interval apart, without waiting for the
+// run before to end, while those of any other job run one after another.
+// An async run waits in its action for the next run to be in it as well,
+// for as long as a stalled machine could take; a run in turn waits a short
+// while, which no other run is in its action during.
+func TestExecutor_Run_AsyncOverlaps(t *testing.T) {
+	for _, async := range []bool{false, true} {
+		name, wait := "in turn", 20*time.Millisecond
+		if async {
+			name, wait = "async", 30*time.Second
+		}
+		t.Run(name, func(t *testing.T) {
+			runner := newOverlapRunner(wait)
+			job := Job{
+				Name:   "job",
+				ID:     "job",
+				Repeat: &Repeat{Count: 3, Interval: Interval{Duration: time.Millisecond}, Async: async},
+				Steps:  []*Step{{Name: "pause", Uses: "hello", actionRunner: runner}},
+			}
+			if passed, _ := runJob(t, job); !passed {
+				t.Fatal("Run() = false, want true")
+			}
+			runner.mu.Lock()
+			overlapped := runner.overlapped
+			runner.mu.Unlock()
+			if overlapped != async {
+				t.Errorf("runs overlapped = %v, want %v", overlapped, async)
+			}
+		})
+	}
+}
+
+// A repeated step's result is made from its counter over the runs: whether
+// it passed by which runs it passed, failed or was skipped in, and its
+// failure by the first run's with how many runs failed.
+func TestRepeatStepResult(t *testing.T) {
+	first := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	tests := []struct {
+		name        string
+		counter     StepRepeatCounter
+		readByTest  bool
+		wantStatus  StatusType
+		wantHasTest bool
+		wantMessage string
+	}{
+		{name: "passed in every run", counter: StepRepeatCounter{SuccessCount: 3, Test: "true"}, wantStatus: StatusSuccess, wantHasTest: true},
+		{name: "passed in the runs it ran in", counter: StepRepeatCounter{SuccessCount: 1, SkippedCount: 2}, wantStatus: StatusSuccess},
+		{name: "ran in no run", counter: StepRepeatCounter{SkippedCount: 3}, wantStatus: StatusSkipped},
+		{name: "counted in no run", counter: StepRepeatCounter{}, wantStatus: StatusSuccess},
+		{
+			name:        "failed in every run",
+			counter:     StepRepeatCounter{FailureCount: 3, Failure: first},
+			wantStatus:  StatusError,
+			wantMessage: "3 of 3 iterations failed; the first: test evaluated to false",
+		},
+		{
+			name:        "failed in the runs it ran in",
+			counter:     StepRepeatCounter{FailureCount: 1, SkippedCount: 2, Failure: first},
+			wantStatus:  StatusError,
+			wantMessage: "1 of 3 iterations failed; the first: test evaluated to false",
+		},
+		{
+			name:        "failed in some runs",
+			counter:     StepRepeatCounter{SuccessCount: 2, FailureCount: 1, SkippedCount: 1, Failure: first},
+			wantStatus:  StatusWarning,
+			wantMessage: "1 of 4 iterations failed; the first: test evaluated to false",
+		},
+		{name: "checked by a contract", counter: StepRepeatCounter{SuccessCount: 1, Checked: true}, wantStatus: StatusSuccess, wantHasTest: true},
+		{name: "read by the test over the runs", counter: StepRepeatCounter{SuccessCount: 1}, readByTest: true, wantStatus: StatusSuccess, wantHasTest: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.counter.ID, tt.counter.Name = "s", "Step"
+			got := repeatStepResult(2, tt.counter, tt.readByTest)
+
+			if got.Index != 2 || got.ID != "s" || got.Name != "Step" {
+				t.Errorf("index, id, name = %d, %q, %q, want 2, %q, %q", got.Index, got.ID, got.Name, "s", "Step")
+			}
+			if got.Status != tt.wantStatus {
+				t.Errorf("Status = %v, want %v", got.Status, tt.wantStatus)
+			}
+			if got.HasTest != tt.wantHasTest {
+				t.Errorf("HasTest = %v, want %v", got.HasTest, tt.wantHasTest)
+			}
+			if got.RepeatCounter == nil || got.RepeatCounter.SuccessCount != tt.counter.SuccessCount || got.RepeatCounter.FailureCount != tt.counter.FailureCount {
+				t.Errorf("RepeatCounter = %+v, want the counter %+v", got.RepeatCounter, tt.counter)
+			}
+			if tt.wantMessage == "" {
+				if got.Failure != nil {
+					t.Errorf("Failure = %+v, want none", got.Failure)
+				}
+				return
+			}
+			if got.Failure == nil || got.Failure.Message != tt.wantMessage || got.Failure.Kind != first.Kind {
+				t.Fatalf("Failure = %+v, want %q of kind %q", got.Failure, tt.wantMessage, first.Kind)
+			}
+			if first.Message != "test evaluated to false" {
+				t.Errorf("the counter's failure became %q, want it left as it was", first.Message)
+			}
+		})
+	}
+}
+
+// The counters are read in the order of their keys, which is the order the
+// steps ran in, with what the runs share filled in. A counter given its
+// total by the step keeps it. The snapshot's fields are its own, and what
+// they point to is the stored counter's.
+func TestJobRepeat_snapshotCounters(t *testing.T) {
+	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	contract := &report.Contract{Spec: "openapi.yml"}
+	rep := newJobRepeat(5, 2)
+	rep.tested = true
+	rep.counters[7] = StepRepeatCounter{Name: "third"}
+	rep.counters[0] = StepRepeatCounter{
+		Name: "first", RepeatTotal: 4,
+		Failure: failure, Contract: contract,
+		RTs: []float64{0.1}, EchoOutputs: []string{"echo"},
+	}
+	rep.counters[3] = StepRepeatCounter{Name: "second"}
+
+	got := rep.snapshotCounters()
+	var names []string
+	for _, c := range got {
+		names = append(names, c.Name)
+		if c.Warmup != 2 || !c.Tested {
+			t.Errorf("%s: warmup, tested = %d, %v, want 2, true", c.Name, c.Warmup, c.Tested)
+		}
+	}
+	if strings.Join(names, ",") != "first,second,third" {
+		t.Fatalf("order = %v, want first, second, third", names)
+	}
+	if got[0].RepeatTotal != 4 || got[1].RepeatTotal != 3 || got[2].RepeatTotal != 3 {
+		t.Errorf("totals = %d, %d, %d, want 4, 3, 3", got[0].RepeatTotal, got[1].RepeatTotal, got[2].RepeatTotal)
+	}
+	got[0].Name = "changed"
+	if rep.counters[0].Name != "first" {
+		t.Error("setting a field of the snapshot changed the stored counter")
+	}
+	if got[0].Failure != failure || got[0].Contract != contract {
+		t.Error("the snapshot should point to the stored counter's failure and contract")
+	}
+	got[0].RTs[0] = 9
+	got[0].EchoOutputs[0] = "changed"
+	if rep.counters[0].RTs[0] != 9 || rep.counters[0].EchoOutputs[0] != "changed" {
+		t.Error("the snapshot should share the stored counter's RTs and echo outputs")
+	}
+}
 
 func TestExecutor_AppendRepeatStepResults(t *testing.T) {
-	workflow := &Workflow{Name: "test-workflow"}
 	job := &Job{
 		Name: "test-job",
 		ID:   "test-job",
@@ -90,7 +337,7 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 			},
 		},
 	}
-	executor := NewExecutor(workflow, job)
+	executor := NewExecutor(job)
 
 	// Create WorkflowBuffer with JobResult
 	result := NewResult()
@@ -150,75 +397,6 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 	}
 }
 
-func TestJobExecutor_Integration_WithMockJob(t *testing.T) {
-	// Test that the executor can handle basic job execution scenarios
-	// without relying on the actual job.Start() method which has plugin dependencies
-
-	t.Run("executor creation and interface compliance", func(t *testing.T) {
-		workflow := &Workflow{Name: "test-workflow"}
-		job := &Job{Name: "test-job", Steps: []*Step{}}
-
-		// Test that the executor can be created
-		executor := NewExecutor(workflow, job)
-
-		if executor == nil {
-			t.Error("Executor creation failed")
-		}
-	})
-}
-
-func TestExecutor_AsyncRepeat(t *testing.T) {
-	t.Run("async flag should be recognized", func(t *testing.T) {
-		// Test that async flag is properly set and recognized
-		asyncRepeat := &Repeat{
-			Count:    10,
-			Interval: Interval{Duration: 10 * time.Millisecond},
-			Async:    true,
-		}
-
-		if !asyncRepeat.Async {
-			t.Error("Async flag should be true")
-		}
-
-		syncRepeat := &Repeat{
-			Count:    10,
-			Interval: Interval{Duration: 10 * time.Millisecond},
-			Async:    false,
-		}
-
-		if syncRepeat.Async {
-			t.Error("Async flag should be false")
-		}
-	})
-
-	t.Run("async repeat structure is valid", func(t *testing.T) {
-		workflow := &Workflow{Name: "test-workflow"}
-		job := &Job{
-			Name: "test-job",
-			ID:   "test-job",
-			Repeat: &Repeat{
-				Count:    5,
-				Interval: Interval{Duration: 10 * time.Millisecond},
-				Async:    true,
-			},
-			Steps: []*Step{},
-		}
-
-		executor := NewExecutor(workflow, job)
-		if executor == nil {
-			t.Fatal("Executor should not be nil")
-		}
-
-		if job.Repeat == nil {
-			t.Fatal("Job repeat should not be nil")
-		}
-
-		if !job.Repeat.Async {
-			t.Error("Job repeat async flag should be true")
-		}
-	})
-}
-
 // TestExecutor_AsyncRepeat_HandleSkipNoDataRace covers the handleSkip
 // path: when an async-repeat job evaluates skipif==true on every iteration,
 // each goroutine reaches Job.handleSkip and writes JobResult.Status /
@@ -254,7 +432,7 @@ func TestExecutor_AsyncRepeat_HandleSkipNoDataRace(t *testing.T) {
 // any concurrent mutation of shared *Step / *Job state is reported as a race.
 //
 // Before the fix, every goroutine spawned by the async repeat loop called
-// e.job.Start on the same *Job, which in turn mutated j.Name (expandJobName)
+// e.job.run on the same *Job, which in turn mutated j.Name (expandJobName)
 // and st.Expr / st.ctx / st.startedAt / st.err / st.retryAttempt on the same
 // *Step instances.
 func TestExecutor_AsyncRepeat_NoDataRace(t *testing.T) {

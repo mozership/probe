@@ -2,12 +2,9 @@ package smtp
 
 import (
 	"crypto/tls"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"net/smtp"
 	"net/textproto"
 	"strings"
 )
@@ -18,7 +15,6 @@ type Client struct {
 	tls        bool
 	serverName string
 	ext        map[string]string
-	auth       []string
 	localName  string
 	didHello   bool
 	helloError error
@@ -102,9 +98,6 @@ func (c *Client) ehlo() error {
 			ext[k] = v
 		}
 	}
-	if mechs, ok := ext["AUTH"]; ok {
-		c.auth = strings.Split(mechs, " ")
-	}
 	c.ext = ext
 	return err
 }
@@ -121,70 +114,6 @@ func (c *Client) StartTLS(config *tls.Config) error {
 	c.Text = textproto.NewConn(c.conn)
 	c.tls = true
 	return c.ehlo()
-}
-
-func (c *Client) TLSConnectionState() (state tls.ConnectionState, ok bool) {
-	tc, ok := c.conn.(*tls.Conn)
-	if !ok {
-		return
-	}
-	return tc.ConnectionState(), true
-}
-
-func (c *Client) Verify(addr string) error {
-	if err := validateLine(addr); err != nil {
-		return err
-	}
-	if err := c.hello(); err != nil {
-		return err
-	}
-	_, _, err := c.cmd(250, "VRFY %s", addr)
-	return err
-}
-
-func (c *Client) Auth(a smtp.Auth) error {
-	if err := c.hello(); err != nil {
-		return err
-	}
-	encoding := base64.StdEncoding
-	mech, resp, err := a.Start(&smtp.ServerInfo{
-		Name: c.serverName,
-		TLS:  c.tls,
-		Auth: []string{},
-	})
-	if err != nil {
-		_ = c.Quit() // Ignore error on cleanup
-		return err
-	}
-	resp64 := make([]byte, encoding.EncodedLen(len(resp)))
-	encoding.Encode(resp64, resp)
-	code, msg64, err := c.cmd(0, "%s", strings.TrimSpace(fmt.Sprintf("AUTH %s %s", mech, resp64)))
-	for err == nil {
-		var msg []byte
-		switch code {
-		case 334:
-			msg, err = encoding.DecodeString(msg64)
-		case 235:
-			msg = []byte(msg64)
-		default:
-			err = &textproto.Error{Code: code, Msg: msg64}
-		}
-		if err == nil {
-			resp, err = a.Next(msg, code == 334)
-		}
-		if err != nil {
-			_, _, _ = c.cmd(501, "*") // Ignore error
-			_ = c.Quit()              // Ignore error on cleanup
-			break
-		}
-		if resp == nil {
-			break
-		}
-		resp64 = make([]byte, encoding.EncodedLen(len(resp)))
-		encoding.Encode(resp64, resp)
-		code, msg64, err = c.cmd(0, "%s", resp64)
-	}
-	return err
 }
 
 func (c *Client) Mail(from string) error {
@@ -246,22 +175,6 @@ func (c *Client) Extension(ext string) (bool, string) {
 	ext = strings.ToUpper(ext)
 	param, ok := c.ext[ext]
 	return ok, param
-}
-
-func (c *Client) Reset() error {
-	if err := c.hello(); err != nil {
-		return err
-	}
-	_, _, err := c.cmd(250, "RSET")
-	return err
-}
-
-func (c *Client) Noop() error {
-	if err := c.hello(); err != nil {
-		return err
-	}
-	_, _, err := c.cmd(250, "NOOP")
-	return err
 }
 
 func (c *Client) Quit() error {

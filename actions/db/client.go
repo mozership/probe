@@ -219,13 +219,8 @@ func (r *Req) Execute(driverDSN string, timeout time.Duration) (res map[string]a
 		return r.createErrorResult(start, timeoutError(ctx, fmt.Errorf("failed to connect to database: %w", err), timeout))
 	}
 
-	// Determine query type
-	trimmedQuery := strings.TrimSpace(strings.ToUpper(r.Query))
-	isSelect := strings.HasPrefix(trimmedQuery, "SELECT") ||
-		strings.HasPrefix(trimmedQuery, "SHOW") ||
-		strings.HasPrefix(trimmedQuery, "DESCRIBE") ||
-		strings.HasPrefix(trimmedQuery, "EXPLAIN") ||
-		strings.HasPrefix(trimmedQuery, "WITH") // CTE queries
+	// A statement that reads runs as a query, so that its rows come back.
+	isSelect := returnsRows(firstVerb(r.Query))
 
 	var q queryer = db
 	if r.readOnly {

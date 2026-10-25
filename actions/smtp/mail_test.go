@@ -15,7 +15,6 @@ import (
 	"log"
 	"math/big"
 	"net"
-	"net/smtp"
 	"net/textproto"
 	"os"
 	"path/filepath"
@@ -397,85 +396,6 @@ func TestMail_Send_Success(t *testing.T) {
 			if tt.wantError {
 				if err == nil {
 					t.Error("expected error but got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("expected no error but got %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestMail_Send_WithAuth(t *testing.T) {
-	tests := []struct {
-		name         string
-		auth         smtp.Auth
-		wantError    bool
-		wantErrorMsg string
-	}{
-		{
-			name:         "with auth but server doesn't support AUTH",
-			auth:         smtp.PlainAuth("", "user", "pass", "test.example.com"),
-			wantError:    true,
-			wantErrorMsg: "server doesn't support AUTH",
-		},
-		{
-			name:         "without auth",
-			auth:         nil,
-			wantError:    false,
-			wantErrorMsg: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Start mock SMTP server
-			mockServer := &MockServer{
-				Addr: "localhost:0",
-				Name: "test.example.com",
-				Log:  log.New(io.Discard, "", 0), // Disable logging for tests
-			}
-
-			// Create a listener to get a free port
-			listener, err := net.Listen("tcp", "localhost:0")
-			if err != nil {
-				t.Fatalf("failed to create listener: %v", err)
-			}
-			addr := listener.Addr().String()
-			_ = listener.Close()
-
-			mockServer.Addr = addr
-
-			// Start server in goroutine
-			go func() {
-				if err := mockServer.Serve(); err != nil {
-					t.Logf("mock server error: %v", err)
-				}
-			}()
-
-			// Give server time to start
-			time.Sleep(100 * time.Millisecond)
-
-			mail := &Mail{
-				Addr:             addr,
-				MailFrom:         "sender@example.com",
-				RcptTo:           []string{"recipient@example.com"},
-				Data:             []byte("Subject: Test\n\nTest message"),
-				Auth:             tt.auth,
-				StartTLSDisabled: true,
-				MessageCount:     1,
-			}
-
-			err = mail.Send()
-
-			if tt.wantError {
-				if err == nil {
-					t.Error("expected error but got none")
-					return
-				}
-				if !strings.Contains(err.Error(), tt.wantErrorMsg) {
-					t.Errorf("expected error message to contain '%s', got %s", tt.wantErrorMsg, err.Error())
 				}
 			} else {
 				if err != nil {

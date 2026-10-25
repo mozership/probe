@@ -28,6 +28,7 @@ type Req struct {
 	Timeout         time.Duration `map:"timeout"`
 	InsecureSkipTLS bool          `map:"insecure_skip_tls"`
 	Commands        []Command     `map:"commands"`
+	cb              *Callback
 	cl              *imapclient.Client
 	latestSeqSet    string
 	latestUidSet    string
@@ -234,6 +235,12 @@ func Request(data map[string]any, opts ...Option) (map[string]any, error) {
 		return map[string]any{}, fmt.Errorf("failed in map-to-struct-by-tags for data: %w", err)
 	}
 
+	cb := &Callback{}
+	for _, opt := range opts {
+		opt(cb)
+	}
+	r.cb = cb
+
 	ret, err := r.Do()
 	if err != nil {
 		return map[string]any{}, fmt.Errorf("failed to Do(): %w", err)
@@ -258,6 +265,11 @@ func NewReq() *Req {
 
 func (r *Req) Do() (*Result, error) {
 	result := &Result{Req: *r}
+
+	if r.cb != nil && r.cb.before != nil {
+		r.cb.before(r)
+	}
+
 	start := time.Now()
 
 	res, err := r.runImap()
@@ -268,6 +280,10 @@ func (r *Req) Do() (*Result, error) {
 
 	result.Res = *res
 	result.Status = res.Code
+
+	if r.cb != nil && r.cb.after != nil {
+		r.cb.after(res)
+	}
 
 	return result, nil
 }

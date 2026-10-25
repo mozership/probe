@@ -14,9 +14,9 @@ import (
 	"github.com/mozership/probe/actionrpc"
 
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/dag"
 	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
+	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -296,26 +296,6 @@ func (w *Workflow) checkAllJobs(builtin []string) error {
 	return nil
 }
 
-// checkCycle refuses jobs whose needs are in a cycle, as a run does.
-func (w *Workflow) checkCycle() error {
-	byID := make(map[string]*Job, len(w.Jobs))
-	ids := make([]string, len(w.Jobs))
-	for i := range w.Jobs {
-		byID[w.Jobs[i].ID] = &w.Jobs[i]
-		ids[i] = w.Jobs[i].ID
-	}
-	cycle := dag.DetectCycleFn(ids, func(id string) []string {
-		if j, ok := byID[id]; ok {
-			return j.Needs
-		}
-		return nil
-	})
-	if cycle != nil {
-		return fmt.Errorf("circular dependency detected: %s", strings.Join(cycle, " -> "))
-	}
-	return nil
-}
-
 // jobNamer returns the name of the job of each id, with the templates in it
 // evaluated with vars where they can be: a name that reads more than the
 // vars, such as repeat_index, is as written.
@@ -336,15 +316,33 @@ func (w *Workflow) jobNamer(vars map[string]any) func(id string) string {
 	}
 }
 
-// initJobScheduler creates and sets up the job scheduler with dependencies
-func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+// newScheduler returns a scheduler of the workflow's jobs, added in the
+// order they are written.
+func (w *Workflow) newScheduler() (*JobScheduler, error) {
 	scheduler := NewJobScheduler()
-
-	// Add all jobs to scheduler
 	for i := range w.Jobs {
 		if err := scheduler.AddJob(&w.Jobs[i]); err != nil {
 			return nil, err
 		}
+	}
+	return scheduler, nil
+}
+
+// checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
+// that is no job is not refused.
+func (w *Workflow) checkCycle() error {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return err
+	}
+	return scheduler.checkCircularDependencies()
+}
+
+// initJobScheduler creates and sets up the job scheduler with dependencies
+func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+	scheduler, err := w.newScheduler()
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate dependencies
@@ -428,9 +426,7 @@ func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, do
 		go func(j *Job) {
 			defer func() { done <- struct{}{} }()
 
-			executor := NewExecutor(w, j)
-			success := executor.Execute(ctx)
-			if !success {
+			if !NewExecutor(j).Run(ctx) {
 				w.SetExitStatus(true)
 			}
 		}(job)
@@ -451,146 +447,12 @@ func (w *Workflow) Env() map[string]string {
 	return w.env
 }
 
-// evalVars evaluates template variables in workflow vars using environment
-// variables. A var can read another as vars.<name>; each one is evaluated
-// after the vars it reads, so a value such as random_str(8) is computed once
-// and every var that reads it sees the same value. A var whose template
-// cannot be evaluated is an error, which stops the workflow before any job
-// starts.
-//
-// A var the person running the workflow gave is not evaluated: it is the
-// text given, whatever the workflow writes for it, and the vars that read it
-// see that text.
+// evalVars evaluates the vars of the workflow, with the vars the person
+// running it gave and the environment variables, as vareval.Eval does. A var
+// whose template cannot be evaluated is an error, which stops the workflow
+// before any job starts.
 func (w *Workflow) evalVars() (map[string]any, error) {
-	written := w.Vars
-	if len(w.given) > 0 {
-		written = maps.Clone(w.Vars)
-		if written == nil {
-			written = make(map[string]any, len(w.given))
-		}
-		for name, value := range w.given {
-			written[name] = givenVar(value)
-		}
-	}
-
-	order, err := varsOrder(written)
-	if err != nil {
-		return nil, err
-	}
-
-	vars := make(map[string]any)
-	env := strmapToAnymap(w.Env())
-
-	var errs []error
-	failed := make(map[string]bool)
-	done := make(map[string]bool)
-	var cycle error
-
-	// evaluate evaluates the var k, which path, the vars being evaluated,
-	// waits for. A template a var expands is read only when it runs, so a
-	// var it reads that has not been evaluated yet, which varsOrder could not
-	// see, is evaluated first and k evaluated again after it. k has kept no
-	// value then, so a value such as random_str(8) is still computed once.
-	var evaluate func(k string, path []string)
-	evaluate = func(k string, path []string) {
-		if done[k] || failed[k] || cycle != nil {
-			return
-		}
-		v := written[k]
-		if given, ok := v.(givenVar); ok {
-			vars[k] = string(given)
-			done[k] = true
-			return
-		}
-
-		// A var that reads one that failed is not evaluated: its error
-		// would only repeat that one.
-		keys, dynamic := expr.Refs(v, "vars")
-		if len(failed) > 0 && (dynamic || expr.CallsTemplate(v) || slices.ContainsFunc(keys, func(d string) bool { return failed[d] })) {
-			failed[k] = true
-			return
-		}
-
-		ev := &expr.Expr{BeforeTemplate: func(text string) error {
-			keys, dynamic := expr.Refs(text, "vars")
-			for _, d := range keys {
-				if _, ok := written[d]; ok && !done[d] {
-					return &pendingVarError{name: d}
-				}
-			}
-			// A template that reads vars by a key known only when it runs
-			// waits for every other var, as varsOrder orders such a var.
-			if dynamic {
-				for _, d := range order {
-					if d != k && !done[d] {
-						return &pendingVarError{name: d}
-					}
-				}
-			}
-			return nil
-		}}
-		for {
-			// Each var reads a copy of the vars evaluated so far. A
-			// template such as {{vars}} keeps the map it returns, and the
-			// map being filled in would then hold itself.
-			env["vars"] = maps.Clone(vars)
-
-			out, err := evalVar(ev, k, v, env)
-			var pending *pendingVarError
-			if errors.As(err, &pending) {
-				d := pending.name
-				waiting := append(slices.Clone(path), k)
-				if i := slices.Index(waiting, d); i >= 0 {
-					chain := append(waiting[i:], d)
-					cycle = fmt.Errorf("vars: circular reference: %s", strings.Join(chain, " -> "))
-					return
-				}
-				evaluate(d, waiting)
-				if cycle != nil {
-					return
-				}
-				if failed[d] {
-					failed[k] = true
-					return
-				}
-				continue
-			}
-			if err != nil {
-				errs = append(errs, err)
-				failed[k] = true
-				return
-			}
-			vars[k] = out
-			done[k] = true
-			return
-		}
-	}
-	for _, k := range order {
-		evaluate(k, nil)
-		if cycle != nil {
-			return nil, cycle
-		}
-	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
-	}
-
-	return vars, nil
-}
-
-// givenVar is the value of a var the person running the workflow gave. It
-// is a type of its own so that it is told from a string the workflow
-// writes, whose templates are evaluated.
-type givenVar string
-
-// pendingVarError stops the evaluation of a var whose template reads the var
-// name, which has not been evaluated yet.
-type pendingVarError struct {
-	name string
-}
-
-func (e *pendingVarError) Error() string {
-	return fmt.Sprintf("vars.%s has not been evaluated yet", e.name)
+	return vareval.Eval(w.Vars, w.given, w.Env())
 }
 
 // maskedError shows err with the secrets masker knows hidden, and unwraps to
@@ -606,169 +468,6 @@ func (e *maskedError) Error() string {
 
 func (e *maskedError) Unwrap() error {
 	return e.err
-}
-
-// evalVar evaluates the templates in the var name, a workflow var or a step
-// var: a string becomes a string, and a map or a list keeps the type of each
-// value that is a single template. Other values are kept as they are. An
-// error names the value that could not be evaluated, as vars.auth.user.
-func evalVar(ev *expr.Expr, name string, v any, env any) (any, error) {
-	switch v := v.(type) {
-	case string:
-		out, err := ev.EvalTemplate(v, env)
-		if err != nil {
-			return nil, &expr.FieldError{Path: "vars." + name, Err: err}
-		}
-		return out, nil
-	case map[string]any:
-		out, err := ev.EvalTemplateMap(v, env)
-		if err != nil {
-			return nil, prefixFieldErrors(err, "vars."+name+".")
-		}
-		return out, nil
-	case []any:
-		// Evaluated as a map's value is, so that a list renders the
-		// templates in it as one nested in a map does. The map is keyed by a
-		// name of its own rather than the var's, which, holding a template,
-		// would be evaluated as a key is; the errors are named after the var.
-		const key = "list"
-		out, err := ev.EvalTemplateMap(map[string]any{key: v}, env)
-		if err != nil {
-			return nil, renameFieldErrors(err, key, "vars."+name)
-		}
-		return out[key], nil
-	default:
-		return v, nil
-	}
-}
-
-// renameFieldErrors names the value at the top of the path of each
-// *expr.FieldError joined into err, from, as to.
-func renameFieldErrors(err error, from, to string) error {
-	rename := func(path string) string {
-		if rest, ok := strings.CutPrefix(path, from); ok {
-			return to + rest
-		}
-		return path
-	}
-	var errs []error
-	for _, e := range unwrapJoined(err) {
-		var fe *expr.FieldError
-		if errors.As(e, &fe) {
-			evaluated := ""
-			if fe.EvaluatedPath != "" {
-				evaluated = rename(fe.EvaluatedPath)
-			}
-			e = &expr.FieldError{Path: rename(fe.Path), EvaluatedPath: evaluated, Err: fe.Err}
-		}
-		errs = append(errs, e)
-	}
-	return errors.Join(errs...)
-}
-
-// prefixFieldErrors puts prefix before the path of each *expr.FieldError
-// joined into err, so that the path names the value from further up.
-func prefixFieldErrors(err error, prefix string) error {
-	var errs []error
-	for _, e := range unwrapJoined(err) {
-		var fe *expr.FieldError
-		if errors.As(e, &fe) {
-			evaluated := ""
-			if fe.EvaluatedPath != "" {
-				evaluated = prefix + fe.EvaluatedPath
-			}
-			e = &expr.FieldError{Path: prefix + fe.Path, EvaluatedPath: evaluated, Err: fe.Err}
-		}
-		errs = append(errs, e)
-	}
-	return errors.Join(errs...)
-}
-
-// varsOrder returns the names of vars in an order in which each comes after
-// the vars it reads. A var that reads vars by a key known only when it runs
-// comes after all the others. A var that expands a template, such as one read
-// from a file, comes after all the vars that do not, since what the template
-// reads is known only when it runs; among themselves they are ordered by what
-// they read outside it. Names are otherwise sorted, and Refs returns the keys
-// of a map in the order of its sorted keys, so neither the order nor a
-// reported cycle depends on map iteration.
-func varsOrder(vars map[string]any) ([]string, error) {
-	names := make([]string, 0, len(vars))
-	for k := range vars {
-		names = append(names, k)
-	}
-	slices.Sort(names)
-
-	expands := make(map[string]bool, len(vars))
-	for _, k := range names {
-		expands[k] = expr.CallsTemplate(vars[k])
-	}
-
-	deps := make(map[string][]string, len(vars))
-	for _, k := range names {
-		keys, dynamic := expr.Refs(vars[k], "vars")
-		for _, d := range keys {
-			// A name that is not a var reads as nil, as it always has.
-			if _, ok := vars[d]; ok {
-				deps[k] = append(deps[k], d)
-			}
-		}
-		if dynamic {
-			// A var that reads vars as a whole is taken to read every other
-			// var, but not itself: only a key it names reads itself.
-			for _, d := range names {
-				if d != k && !slices.Contains(deps[k], d) {
-					deps[k] = append(deps[k], d)
-				}
-			}
-		}
-		if expands[k] {
-			// Two vars that expand templates are not taken to read each
-			// other, which would make every pair of them a cycle.
-			for _, d := range names {
-				if d != k && !expands[d] && !slices.Contains(deps[k], d) {
-					deps[k] = append(deps[k], d)
-				}
-			}
-		}
-	}
-
-	const (
-		visiting = 1
-		done     = 2
-	)
-	state := make(map[string]int, len(vars))
-	order := make([]string, 0, len(vars))
-	var path []string
-	var visit func(k string) error
-	visit = func(k string) error {
-		switch state[k] {
-		case done:
-			return nil
-		case visiting:
-			i := slices.Index(path, k)
-			cycle := append(slices.Clone(path[i:]), k)
-			return fmt.Errorf("vars: circular reference: %s", strings.Join(cycle, " -> "))
-		}
-		state[k] = visiting
-		path = append(path, k)
-		for _, d := range deps[k] {
-			if err := visit(d); err != nil {
-				return err
-			}
-		}
-		path = path[:len(path)-1]
-		state[k] = done
-		order = append(order, k)
-		return nil
-	}
-	for _, k := range names {
-		if err := visit(k); err != nil {
-			return nil, err
-		}
-	}
-
-	return order, nil
 }
 
 func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobScheduler) JobContext {
@@ -824,8 +523,7 @@ func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, 
 			}
 			m, err := actionref.ReadManifest(st.Uses, baseDir)
 			if err != nil {
-				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err).
-					WithContext("uses", st.Uses)
+				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err)
 			}
 			// What this action.yml declares replaces any declaration the guard
 			// came with, even when it declares nothing: a job of the embedded
@@ -836,8 +534,7 @@ func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, 
 				continue
 			}
 			if _, err := actionref.Resolve(st.Uses, baseDir); err != nil {
-				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err).
-					WithContext("uses", st.Uses)
+				return guard, NewConfigurationError("resolve_action", "failed to resolve an external action", err)
 			}
 		}
 	}
@@ -855,10 +552,7 @@ func checkBuiltinUses(job *Job, builtin []string) error {
 		if actionref.IsExternal(st.Uses) || slices.Contains(builtin, st.Uses) {
 			continue
 		}
-		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin))).
-			WithContext("uses", st.Uses).
-			WithContext("job", job.Name).
-			WithContext("step", i)
+		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin)))
 	}
 	return nil
 }
@@ -915,10 +609,7 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 				if found != nil || actionref.IsExternal(uses) || slices.Contains(builtin, uses) {
 					return
 				}
-				found = NewConfigurationError("resolve_action", "failed to resolve an action of an embedded job", fmt.Errorf("%s, step %d: %w", file, i, unknownAction(uses, builtin))).
-					WithContext("uses", uses).
-					WithContext("path", file).
-					WithContext("step", i)
+				found = NewConfigurationError("resolve_action", "failed to resolve an action of an embedded job", fmt.Errorf("%s, step %d: %w", file, i, unknownAction(uses, builtin)))
 			})
 			if found != nil {
 				return found

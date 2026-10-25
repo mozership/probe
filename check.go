@@ -167,13 +167,14 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 		return c.sorted(), nil
 	}
 	c.wf = &p.workflow
-	c.checkAliases(aliases)
+	c.reportAliasProblems(aliases)
 	c.checkActions()
 	c.checkEmbedded()
 	c.checkWith()
 	c.checkRequired()
 	c.checkNeeds()
-	c.checkProblems(problems)
+	c.checkVarsTemplates()
+	c.reportJobProblems(problems)
 	c.checkOutputs()
 	c.checkNames()
 	c.checkResults()
@@ -240,14 +241,6 @@ func (c *checker) line(path string) int {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
 	return line
-}
-
-func (c *checker) jobWhere(i int) string {
-	return jobWhere(c.wf.Jobs, i)
-}
-
-func (c *checker) stepWhere(i, j int) string {
-	return stepWhere(c.jobWhere(i), j, c.wf.Jobs[i].Steps[j])
 }
 
 // listNames lists names as a, b and c.
