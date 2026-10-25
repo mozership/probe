@@ -1180,6 +1180,40 @@ runs:
   test: res.message == "Hello, probe!"
 ```
 
+#### パラメーターを構造体に読み込む
+
+`actionrpc`は、ステップのパラメーターを、組み込みアクションと同じ読み方で、フィールドの`map`タグにしたがって構造体に読み込みます。
+
+| 関数 | 動作 |
+|------|------|
+| `actionrpc.DecodeParams(with, &req)` | `with`から`req`を埋めます。`validate:"required"`を付けたフィールドは省略できません。数値のフィールドは、収まる数値か10進数の文字列を受け取り、小数や範囲外の値は拒否します。boolのフィールドは、bool、`0`か`1`、`"true"`のような文字列を受け取ります。`map[string]string`のフィールドは、文字列、数値、boolをその文字列として受け取り、`null`は空文字列とし、リストやマップは拒否します。エラーはフィールドを名指しします |
+| `actionrpc.EncodeResult(res)` | 構造体を、同じタグをキーとする、`Run`が返すマップにします |
+| `actionrpc.ParamNames(Req{})` | 構造体が受け取るパラメーターを、フィールドの順に並べます。`action.yml`の`params`などに使えます |
+| `actionrpc.ParseTimeout(v)` | タイムアウトを組み込みアクションと同じく読みます。`"30s"`、秒数、数値の文字列を受け取り、それ以外とゼロは拒否します |
+
+```go
+type Req struct {
+    Name   string `map:"name" validate:"required"`
+    Repeat int    `map:"repeat"`
+}
+
+type Res struct {
+    Message string `map:"message"`
+}
+
+func (g *Greet) Run(with map[string]any) (map[string]any, error) {
+    req := Req{Repeat: 1}
+    if err := actionrpc.DecodeParams(with, &req); err != nil {
+        return nil, err
+    }
+    res, err := actionrpc.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
+    if err != nil {
+        return nil, err
+    }
+    return map[string]any{"req": with, "res": res, "status": 0}, nil
+}
+```
+
 ### Probeへのカスタムアクションの組み込み
 
 カスタムアクションをProbe自体に組み込むこともできます。Probeは組み込みアクションごとに別のプロセスを使い、自身の実行ファイルを`<実行ファイル> builtin-actions <名前>`として起動し直します。そのため、このようなアクションは独自にビルドしたProbeに組み込みます。Probeをライブラリとして使うプログラムを作り、このサブコマンドで自分のアクションを提供し、それ以外の名前では組み込みアクションを提供します。

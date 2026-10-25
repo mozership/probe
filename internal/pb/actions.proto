@@ -1,6 +1,6 @@
 syntax = "proto3";
 package pb;
-option go_package = "./pb";
+option go_package = "github.com/mozership/probe/internal/pb";
 
 import "google/protobuf/struct.proto";
 

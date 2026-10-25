@@ -5,6 +5,7 @@ package truncate
 import (
 	"fmt"
 	"reflect"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
@@ -17,12 +18,23 @@ func Message() string {
 	return "... [" + color.New(color.FgYellow).Sprintf("⚠︎ probe truncated") + "]"
 }
 
-// String truncates a string if it exceeds the maximum length
+// String cuts s to at most maxLen bytes and appends Message when s is
+// longer. The cut backs off to the start of a rune, so a multibyte
+// character, such as one of Japanese text, is never split in two. It backs
+// off no further than a rune can be long: past that the bytes are not
+// UTF-8, and they are cut where maxLen falls rather than all left out.
 func String(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + Message()
+	cut := maxLen
+	for i := 0; i < utf8.UTFMax-1 && cut > 0 && !utf8.RuneStart(s[cut]); i++ {
+		cut--
+	}
+	if !utf8.RuneStart(s[cut]) {
+		cut = maxLen
+	}
+	return s[:cut] + Message()
 }
 
 // Value truncates the long strings in v, a value an action logs, at any

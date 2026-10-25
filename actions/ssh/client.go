@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 // NOTE: SSH config file support is intentionally not implemented to maintain
@@ -499,7 +499,7 @@ func (r *Req) Do() (re *Result, er error) {
 
 func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 	// EnvToStringValue copies data, so the caller's map is left as it was.
-	m := mapping.HeaderToStringValue(mapping.EnvToStringValue(data))
+	m := mapping.EnvToStringValue(data)
 
 	// Manually handle type conversions BEFORE MapToStructByTags to prevent reflection panics
 	if portInput, exists := m["port"]; exists {

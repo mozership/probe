@@ -16,7 +16,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/hostport"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 const (

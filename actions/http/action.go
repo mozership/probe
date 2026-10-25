@@ -9,7 +9,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
-	"github.com/mozership/probe/mapping"
+	"github.com/mozership/probe/internal/mapping"
 )
 
 type Action struct {

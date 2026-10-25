@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mozership/probe/internal/safefile"
 	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/safefile"
 )
 
 // Format names a report file format.

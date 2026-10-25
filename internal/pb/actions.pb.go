@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: pb/actions.proto
+// source: internal/pb/actions.proto
 
 package pb
 
@@ -44,7 +44,7 @@ type RunRequest struct {
 
 func (x *RunRequest) Reset() {
 	*x = RunRequest{}
-	mi := &file_pb_actions_proto_msgTypes[0]
+	mi := &file_internal_pb_actions_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -56,7 +56,7 @@ func (x *RunRequest) String() string {
 func (*RunRequest) ProtoMessage() {}
 
 func (x *RunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[0]
+	mi := &file_internal_pb_actions_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -69,7 +69,7 @@ func (x *RunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunRequest.ProtoReflect.Descriptor instead.
 func (*RunRequest) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{0}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *RunRequest) GetWith() *structpb.Struct {
@@ -135,7 +135,7 @@ type Guard struct {
 
 func (x *Guard) Reset() {
 	*x = Guard{}
-	mi := &file_pb_actions_proto_msgTypes[1]
+	mi := &file_internal_pb_actions_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -147,7 +147,7 @@ func (x *Guard) String() string {
 func (*Guard) ProtoMessage() {}
 
 func (x *Guard) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[1]
+	mi := &file_internal_pb_actions_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -160,7 +160,7 @@ func (x *Guard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Guard.ProtoReflect.Descriptor instead.
 func (*Guard) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{1}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Guard) GetReadOnly() bool {
@@ -201,7 +201,7 @@ type GuardKinds struct {
 
 func (x *GuardKinds) Reset() {
 	*x = GuardKinds{}
-	mi := &file_pb_actions_proto_msgTypes[2]
+	mi := &file_internal_pb_actions_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -213,7 +213,7 @@ func (x *GuardKinds) String() string {
 func (*GuardKinds) ProtoMessage() {}
 
 func (x *GuardKinds) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[2]
+	mi := &file_internal_pb_actions_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -226,7 +226,7 @@ func (x *GuardKinds) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GuardKinds.ProtoReflect.Descriptor instead.
 func (*GuardKinds) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{2}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GuardKinds) GetKinds() []string {
@@ -260,7 +260,7 @@ type Step struct {
 
 func (x *Step) Reset() {
 	*x = Step{}
-	mi := &file_pb_actions_proto_msgTypes[3]
+	mi := &file_internal_pb_actions_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +272,7 @@ func (x *Step) String() string {
 func (*Step) ProtoMessage() {}
 
 func (x *Step) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[3]
+	mi := &file_internal_pb_actions_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,7 +285,7 @@ func (x *Step) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Step.ProtoReflect.Descriptor instead.
 func (*Step) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{3}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Step) GetRunId() string {
@@ -366,7 +366,7 @@ type RunResponse struct {
 
 func (x *RunResponse) Reset() {
 	*x = RunResponse{}
-	mi := &file_pb_actions_proto_msgTypes[4]
+	mi := &file_internal_pb_actions_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -378,7 +378,7 @@ func (x *RunResponse) String() string {
 func (*RunResponse) ProtoMessage() {}
 
 func (x *RunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[4]
+	mi := &file_internal_pb_actions_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -391,7 +391,7 @@ func (x *RunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunResponse.ProtoReflect.Descriptor instead.
 func (*RunResponse) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{4}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RunResponse) GetResult() *structpb.Struct {
@@ -444,7 +444,7 @@ type Contract struct {
 
 func (x *Contract) Reset() {
 	*x = Contract{}
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_internal_pb_actions_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +456,7 @@ func (x *Contract) String() string {
 func (*Contract) ProtoMessage() {}
 
 func (x *Contract) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[5]
+	mi := &file_internal_pb_actions_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +469,7 @@ func (x *Contract) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Contract.ProtoReflect.Descriptor instead.
 func (*Contract) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{5}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Contract) GetMatched() *ContractMatch {
@@ -502,7 +502,7 @@ type ContractMatch struct {
 
 func (x *ContractMatch) Reset() {
 	*x = ContractMatch{}
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_internal_pb_actions_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -514,7 +514,7 @@ func (x *ContractMatch) String() string {
 func (*ContractMatch) ProtoMessage() {}
 
 func (x *ContractMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[6]
+	mi := &file_internal_pb_actions_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -527,7 +527,7 @@ func (x *ContractMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContractMatch.ProtoReflect.Descriptor instead.
 func (*ContractMatch) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{6}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ContractMatch) GetSpec() string {
@@ -567,7 +567,7 @@ type Violation struct {
 
 func (x *Violation) Reset() {
 	*x = Violation{}
-	mi := &file_pb_actions_proto_msgTypes[7]
+	mi := &file_internal_pb_actions_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -579,7 +579,7 @@ func (x *Violation) String() string {
 func (*Violation) ProtoMessage() {}
 
 func (x *Violation) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[7]
+	mi := &file_internal_pb_actions_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -592,7 +592,7 @@ func (x *Violation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Violation.ProtoReflect.Descriptor instead.
 func (*Violation) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{7}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Violation) GetIn() string {
@@ -636,7 +636,7 @@ type Process struct {
 
 func (x *Process) Reset() {
 	*x = Process{}
-	mi := &file_pb_actions_proto_msgTypes[8]
+	mi := &file_internal_pb_actions_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +648,7 @@ func (x *Process) String() string {
 func (*Process) ProtoMessage() {}
 
 func (x *Process) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[8]
+	mi := &file_internal_pb_actions_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,7 +661,7 @@ func (x *Process) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Process.ProtoReflect.Descriptor instead.
 func (*Process) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{8}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Process) GetPid() int64 {
@@ -690,7 +690,7 @@ type CleanupRequest struct {
 
 func (x *CleanupRequest) Reset() {
 	*x = CleanupRequest{}
-	mi := &file_pb_actions_proto_msgTypes[9]
+	mi := &file_internal_pb_actions_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +702,7 @@ func (x *CleanupRequest) String() string {
 func (*CleanupRequest) ProtoMessage() {}
 
 func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[9]
+	mi := &file_internal_pb_actions_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +715,7 @@ func (x *CleanupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupRequest.ProtoReflect.Descriptor instead.
 func (*CleanupRequest) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{9}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CleanupRequest) GetRunId() string {
@@ -733,7 +733,7 @@ type CleanupResponse struct {
 
 func (x *CleanupResponse) Reset() {
 	*x = CleanupResponse{}
-	mi := &file_pb_actions_proto_msgTypes[10]
+	mi := &file_internal_pb_actions_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -745,7 +745,7 @@ func (x *CleanupResponse) String() string {
 func (*CleanupResponse) ProtoMessage() {}
 
 func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_actions_proto_msgTypes[10]
+	mi := &file_internal_pb_actions_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -758,14 +758,14 @@ func (x *CleanupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupResponse.ProtoReflect.Descriptor instead.
 func (*CleanupResponse) Descriptor() ([]byte, []int) {
-	return file_pb_actions_proto_rawDescGZIP(), []int{10}
+	return file_internal_pb_actions_proto_rawDescGZIP(), []int{10}
 }
 
-var File_pb_actions_proto protoreflect.FileDescriptor
+var File_internal_pb_actions_proto protoreflect.FileDescriptor
 
-const file_pb_actions_proto_rawDesc = "" +
+const file_internal_pb_actions_proto_rawDesc = "" +
 	"\n" +
-	"\x10pb/actions.proto\x12\x02pb\x1a\x1cgoogle/protobuf/struct.proto\"\xc0\x02\n" +
+	"\x19internal/pb/actions.proto\x12\x02pb\x1a\x1cgoogle/protobuf/struct.proto\"\xc0\x02\n" +
 	"\n" +
 	"RunRequest\x12+\n" +
 	"\x04with\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x04with\x12-\n" +
@@ -827,22 +827,22 @@ const file_pb_actions_proto_rawDesc = "" +
 	"\x0fCleanupResponse2e\n" +
 	"\aActions\x12&\n" +
 	"\x03Run\x12\x0e.pb.RunRequest\x1a\x0f.pb.RunResponse\x122\n" +
-	"\aCleanup\x12\x12.pb.CleanupRequest\x1a\x13.pb.CleanupResponseB\x06Z\x04./pbb\x06proto3"
+	"\aCleanup\x12\x12.pb.CleanupRequest\x1a\x13.pb.CleanupResponseB(Z&github.com/mozership/probe/internal/pbb\x06proto3"
 
 var (
-	file_pb_actions_proto_rawDescOnce sync.Once
-	file_pb_actions_proto_rawDescData []byte
+	file_internal_pb_actions_proto_rawDescOnce sync.Once
+	file_internal_pb_actions_proto_rawDescData []byte
 )
 
-func file_pb_actions_proto_rawDescGZIP() []byte {
-	file_pb_actions_proto_rawDescOnce.Do(func() {
-		file_pb_actions_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pb_actions_proto_rawDesc), len(file_pb_actions_proto_rawDesc)))
+func file_internal_pb_actions_proto_rawDescGZIP() []byte {
+	file_internal_pb_actions_proto_rawDescOnce.Do(func() {
+		file_internal_pb_actions_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_pb_actions_proto_rawDesc), len(file_internal_pb_actions_proto_rawDesc)))
 	})
-	return file_pb_actions_proto_rawDescData
+	return file_internal_pb_actions_proto_rawDescData
 }
 
-var file_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
-var file_pb_actions_proto_goTypes = []any{
+var file_internal_pb_actions_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_internal_pb_actions_proto_goTypes = []any{
 	(*RunRequest)(nil),      // 0: pb.RunRequest
 	(*Guard)(nil),           // 1: pb.Guard
 	(*GuardKinds)(nil),      // 2: pb.GuardKinds
@@ -858,7 +858,7 @@ var file_pb_actions_proto_goTypes = []any{
 	nil,                     // 12: pb.Guard.KeepsEntry
 	(*structpb.Struct)(nil), // 13: google.protobuf.Struct
 }
-var file_pb_actions_proto_depIdxs = []int32{
+var file_internal_pb_actions_proto_depIdxs = []int32{
 	13, // 0: pb.RunRequest.with:type_name -> google.protobuf.Struct
 	13, // 1: pb.RunRequest.state:type_name -> google.protobuf.Struct
 	3,  // 2: pb.RunRequest.step:type_name -> pb.Step
@@ -883,26 +883,26 @@ var file_pb_actions_proto_depIdxs = []int32{
 	0,  // [0:13] is the sub-list for field type_name
 }
 
-func init() { file_pb_actions_proto_init() }
-func file_pb_actions_proto_init() {
-	if File_pb_actions_proto != nil {
+func init() { file_internal_pb_actions_proto_init() }
+func file_internal_pb_actions_proto_init() {
+	if File_internal_pb_actions_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_actions_proto_rawDesc), len(file_pb_actions_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_pb_actions_proto_rawDesc), len(file_internal_pb_actions_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_pb_actions_proto_goTypes,
-		DependencyIndexes: file_pb_actions_proto_depIdxs,
-		MessageInfos:      file_pb_actions_proto_msgTypes,
+		GoTypes:           file_internal_pb_actions_proto_goTypes,
+		DependencyIndexes: file_internal_pb_actions_proto_depIdxs,
+		MessageInfos:      file_internal_pb_actions_proto_msgTypes,
 	}.Build()
-	File_pb_actions_proto = out.File
-	file_pb_actions_proto_goTypes = nil
-	file_pb_actions_proto_depIdxs = nil
+	File_internal_pb_actions_proto = out.File
+	file_internal_pb_actions_proto_goTypes = nil
+	file_internal_pb_actions_proto_depIdxs = nil
 }
