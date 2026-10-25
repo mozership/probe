@@ -168,3 +168,31 @@ func TestStep_DefaultStepTimeout_Value(t *testing.T) {
 		t.Errorf("DefaultStepTimeout = %v, want %v", DefaultStepTimeout, expected)
 	}
 }
+
+func TestStepTimeoutStillTracksBackground(t *testing.T) {
+	step := &stepRun{
+		Step: &Step{
+			Uses:    "shell",
+			Timeout: Interval{Duration: 100 * time.Millisecond},
+		},
+		expr: &expr.Expr{},
+	}
+	runner := &lateBackgroundRunner{t: t, delay: 300 * time.Millisecond, pid: make(chan int, 1)}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			background: newBackground(),
+		},
+	}
+
+	if _, err := step.executeSingleAction(runner, map[string]any{}, jCtx, false); err == nil {
+		t.Fatal("expected the step to time out")
+	}
+
+	// The workflow ends while the action is still running.
+	jCtx.background.Stop()
+
+	pid := <-runner.pid
+	if !waitGroupGone(pid) {
+		t.Errorf("process group %d started after the step timed out is still running", pid)
+	}
+}
