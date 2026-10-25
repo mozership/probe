@@ -427,9 +427,7 @@ func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, do
 		go func(j *Job) {
 			defer func() { done <- struct{}{} }()
 
-			executor := NewExecutor(w, j)
-			success := executor.Execute(ctx)
-			if !success {
+			if !NewExecutor(j).Run(ctx) {
 				w.SetExitStatus(true)
 			}
 		}(job)
