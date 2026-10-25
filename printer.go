@@ -224,6 +224,11 @@ func (p *Printer) PrintSeparator() {
 
 // generateLogDebug generates debug message string
 func (p *Printer) generateLogDebug(format string, args ...any) string {
+	return debugLine(format, args...)
+}
+
+// debugLine returns a line of verbose output, as LogDebug writes it.
+func debugLine(format string, args ...any) string {
 	return fmt.Sprintf("[DEBUG] %s\n", fmt.Sprintf(format, args...))
 }
 
@@ -254,8 +259,7 @@ func (p *Printer) LogWarn(format string, args ...any) {
 // evaluated for.
 func (p *Printer) logTestError(testExpr string, err error) {
 	if p.verbose {
-		p.LogError("Test Error: %s", err)
-		p.LogError("Input: %s", testExpr)
+		p.Fprint(os.Stderr, p.generateLogError("Test Error: %s", err)+p.generateLogError("Input: %s", testExpr))
 	}
 }
 
@@ -267,11 +271,13 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 	} else {
 		resultStr = colorError().Sprintf("Failure")
 	}
-	p.LogDebug("Test: %s (input: %s)", resultStr, testExpr)
+	var b debugBlock
+	b.line("Test: %s (input: %s)", resultStr, testExpr)
 	if env := testEnv(context); env != nil {
-		p.LogDebug("Env:")
-		p.PrintMapData(p.masker.Map(env))
+		b.line("Env:")
+		b.mapData(p.masker.Map(env))
 	}
+	p.logDebugBlock(&b)
 }
 
 // testEnv is what PrintTestResult shows of the context a test was evaluated
@@ -296,42 +302,74 @@ func testEnv(context any) map[string]any {
 	}
 }
 
+// debugBlock collects the lines of a block of verbose output, such as the
+// request and the response of a step, so that the block is written at once.
+// Jobs run concurrently, and a block written a line at a time would have
+// the lines of another job land inside it.
+type debugBlock struct {
+	strings.Builder
+}
+
+// line adds a line to the block, as LogDebug writes it.
+func (b *debugBlock) line(format string, args ...any) {
+	b.WriteString(debugLine(format, args...))
+}
+
+// mapData adds the lines PrintMapData writes of data to the block.
+func (b *debugBlock) mapData(data map[string]any) {
+	for _, l := range dump.Lines(data, dump.Options{}) {
+		b.line("  %s", l)
+	}
+}
+
+// logDebugBlock writes a block of verbose output in one write, only in
+// verbose mode.
+func (p *Printer) logDebugBlock(b *debugBlock) {
+	if p.verbose && b.Len() > 0 {
+		p.Fprint(p.errWriter, b.String())
+	}
+}
+
 // PrintEchoContent prints echo content with proper indentation in verbose mode
 func (p *Printer) PrintEchoContent(content string) {
 	// Add indent to all lines, including after user-specified newlines
 	indent := "       "
-	lines := strings.SplitSeq(content, "\n")
-
-	for line := range lines {
-		p.LogDebug("%s%s", indent, line)
+	var b debugBlock
+	for line := range strings.SplitSeq(content, "\n") {
+		b.line("%s%s", indent, line)
 	}
+	p.logDebugBlock(&b)
 }
 
 // PrintRequestResponse prints request and response data with proper formatting
 func (p *Printer) PrintRequestResponse(stepIdx int, stepName string, req, res map[string]any, rt string) {
-	p.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
-	p.LogDebug("Request:")
-	p.PrintMapData(p.masker.Map(req))
+	var b debugBlock
+	b.line("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	b.line("Request:")
+	b.mapData(p.masker.Map(req))
 
-	p.LogDebug("Response:")
-	p.PrintMapData(p.masker.Map(res))
+	b.line("Response:")
+	b.mapData(p.masker.Map(res))
 
-	p.LogDebug("RT: %s", colorInfo().Sprintf("%s", rt))
+	b.line("RT: %s", colorInfo().Sprintf("%s", rt))
+	p.logDebugBlock(&b)
 }
 
 // PrintGivenRequest prints, for a step whose action failed without
 // returning the request it made, the parameters the step gave the action,
 // its templates evaluated, in place of the request and the response.
 func (p *Printer) PrintGivenRequest(stepIdx int, stepName string, with map[string]any) {
-	p.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
-	p.LogDebug("Request (as the step gave it; the action returned none):")
-	p.PrintMapData(p.masker.Map(with))
+	var b debugBlock
+	b.line("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	b.line("Request (as the step gave it; the action returned none):")
+	b.mapData(p.masker.Map(with))
+	p.logDebugBlock(&b)
 }
 
 // PrintMapData prints map data in verbose mode as YAML-like lines, its keys
 // sorted, and all of it, as it is: nothing is cut or left out.
 func (p *Printer) PrintMapData(data map[string]any) {
-	for _, l := range dump.Lines(data, dump.Options{}) {
-		p.LogDebug("  %s", l)
-	}
+	var b debugBlock
+	b.mapData(data)
+	p.logDebugBlock(&b)
 }

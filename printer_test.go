@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1375,5 +1376,72 @@ func TestReportRenderer_MasksTheReport(t *testing.T) {
 		if !strings.Contains(got, "Log in as") {
 			t.Errorf("%s() should have the step, got:\n%s", name, got)
 		}
+	}
+}
+
+// Jobs run concurrently, so each block of verbose output must be written at
+// once: a block written a line at a time has the lines of another job land
+// inside it.
+func TestPrinter_WritesEachBlockAtOnce(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	const jobs, iterations = 16, 50
+	blocks := []struct {
+		name  string
+		print func(p *Printer, job int)
+	}{
+		{"PrintRequestResponse", func(p *Printer, job int) {
+			p.PrintRequestResponse(1, fmt.Sprintf("step of job %d", job),
+				map[string]any{"job": job, "method": "GET", "url": "/x"},
+				map[string]any{"job": job, "status": 200, "body": "ok"}, "1ms")
+		}},
+		{"PrintGivenRequest", func(p *Printer, job int) {
+			p.PrintGivenRequest(1, fmt.Sprintf("step of job %d", job), map[string]any{"job": job, "get": "/x"})
+		}},
+		{"PrintEchoContent", func(p *Printer, job int) {
+			p.PrintEchoContent(fmt.Sprintf("echo of job %d\nsecond line\nthird line", job))
+		}},
+		{"PrintTestResult", func(p *Printer, job int) {
+			p.PrintTestResult(true, "res.status == 200", map[string]any{"job": job, "a": 1, "b": 2})
+		}},
+		{"PrintMapData", func(p *Printer, job int) {
+			p.PrintMapData(map[string]any{"job": job, "a": 1, "b": 2})
+		}},
+	}
+
+	for _, bl := range blocks {
+		t.Run(bl.name, func(t *testing.T) {
+			// The block each job writes, written alone.
+			want := make([]string, jobs)
+			for job := range jobs {
+				p := newBufferPrinter()
+				p.verbose = true
+				bl.print(p, job)
+				want[job] = p.errWriter.(*bytes.Buffer).String()
+				if strings.Count(want[job], "\n") < 3 {
+					t.Fatalf("job %d wrote %q, not a block of lines", job, want[job])
+				}
+			}
+
+			p := newBufferPrinter()
+			p.verbose = true
+			var wg sync.WaitGroup
+			for job := range jobs {
+				wg.Go(func() {
+					for range iterations {
+						bl.print(p, job)
+					}
+				})
+			}
+			wg.Wait()
+
+			got := p.errWriter.(*bytes.Buffer).String()
+			for job := range jobs {
+				if n := strings.Count(got, want[job]); n != iterations {
+					t.Errorf("the block of job %d is whole %d times of %d; another job's lines landed inside it", job, n, iterations)
+				}
+			}
+		})
 	}
 }

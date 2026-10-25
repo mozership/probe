@@ -343,8 +343,10 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 // handleSkip handles the skipped job logic
 func (j *Job) handleSkip(ctx JobContext) {
 	if ctx.Verbose {
-		ctx.Printer.LogDebug("Job '%s' (SKIPPED)", ctx.jobName)
-		ctx.Printer.LogDebug("Skip condition: %s", j.SkipIf)
+		var b debugBlock
+		b.line("Job '%s' (SKIPPED)", ctx.jobName)
+		b.line("Skip condition: %s", j.SkipIf)
+		ctx.Printer.logDebugBlock(&b)
 		ctx.Printer.PrintSeparator()
 	}
 
