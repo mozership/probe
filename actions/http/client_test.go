@@ -481,6 +481,76 @@ func TestRequestBodyJSONConversion(t *testing.T) {
 	}
 }
 
+func TestJoinHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header hp.Header
+		want   map[string]string
+	}{
+		{"none", hp.Header{}, map[string]string{}},
+		{"one value", hp.Header{"Content-Type": {"text/plain"}}, map[string]string{"Content-Type": "text/plain"}},
+		{
+			"values joined",
+			hp.Header{"Accept": {"text/html", "application/xml;q=0.9"}, "Set-Cookie": {"a=1; Path=/", "b=2"}},
+			map[string]string{"Accept": "text/html, application/xml;q=0.9", "Set-Cookie": "a=1; Path=/, b=2"},
+		},
+		{"no values", hp.Header{"X-Empty": {}}, map[string]string{"X-Empty": ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := joinHeader(tt.header); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("joinHeader() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header map[string]string
+		key    string
+		want   bool
+	}{
+		{"nil", nil, "authorization", false},
+		{"same case", map[string]string{"authorization": "x"}, "authorization", true},
+		{"other case", map[string]string{"Authorization": "x"}, "authorization", true},
+		{"other header", map[string]string{"X-Auth": "x"}, "authorization", false},
+		{"empty value counts", map[string]string{"X-Trace": ""}, "x-trace", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasHeader(tt.header, tt.key); got != tt.want {
+				t.Errorf("hasHeader(%v, %q) = %v, want %v", tt.header, tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header map[string]string
+		want   map[string]string
+	}{
+		{"nil is made", nil, map[string]string{"content-type": "text/csv"}},
+		{"added", map[string]string{"Accept": "*/*"}, map[string]string{"Accept": "*/*", "content-type": "text/csv"}},
+		{"same case replaced", map[string]string{"content-type": "application/json"}, map[string]string{"content-type": "text/csv"}},
+		{
+			"every other case replaced",
+			map[string]string{"Content-Type": "application/json", "CONTENT-TYPE": "text/plain", "Accept": "*/*"},
+			map[string]string{"content-type": "text/csv", "Accept": "*/*"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := setHeader(tt.header, "content-type", "text/csv"); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("setHeader() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMergeHeaders(t *testing.T) {
 	tests := []struct {
 		name           string

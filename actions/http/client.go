@@ -110,6 +110,41 @@ func parseTimeout(s string) (time.Duration, error) {
 	return d, nil
 }
 
+// joinHeader returns h with the values of each header joined, as the result
+// shows them, such as Accept: text/html, application/xml;q=0.9.
+func joinHeader(h hp.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[k] = strings.Join(v, ", ")
+	}
+	return out
+}
+
+// hasHeader reports whether h holds the header name, in any case.
+func hasHeader(h map[string]string, name string) bool {
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// setHeader sets the header name of h to value, in place of any it holds in
+// another case, and returns h, made when it is nil.
+func setHeader(h map[string]string, name, value string) map[string]string {
+	if h == nil {
+		h = make(map[string]string)
+	}
+	for k := range h {
+		if strings.EqualFold(k, name) {
+			delete(h, k)
+		}
+	}
+	h[name] = value
+	return h
+}
+
 // mergeHeaders merges custom headers with default headers, handling case-insensitive duplicates
 // Custom headers override defaults when header names match (case-insensitive)
 func mergeHeaders(defaultHeaders, customHeaders map[string]string) map[string]string {
@@ -247,14 +282,7 @@ func (r *Req) Do() (*Result, error) {
 	result.Res.Body = bodyString
 	result.Res.FilePath = filePath
 
-	header := make(map[string]string)
-	for k, v := range res.Header {
-		// examples:
-		//   Set-Cookie: sessionid=abc123; Path=/; HttpOnly
-		//   Accept: text/html, application/xhtml+xml, application/xml;q=0.9
-		header[k] = strings.Join(v, ", ")
-	}
-	result.Res.Header = header
+	result.Res.Header = joinHeader(res.Header)
 
 	if r.contract != nil {
 		sentBody := []byte(r.Body)
@@ -487,42 +515,24 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 		if err != nil {
 			return nil, nil, err
 		}
-		for k := range customHeaders {
-			if strings.EqualFold(k, "authorization") {
-				return nil, nil, errors.New("basic_auth and an authorization header cannot be given together")
-			}
+		if hasHeader(customHeaders, "authorization") {
+			return nil, nil, errors.New("basic_auth and an authorization header cannot be given together")
 		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders["authorization"] = value
+		customHeaders = setHeader(customHeaders, "authorization", value)
 	}
 
 	// The body built from form or multipart is sent with its own Content-Type,
 	// which replaces one set for the job's other requests, such as JSON in
 	// defaults; a multipart one also carries the boundary only it knows.
 	if contentType != "" {
-		for k := range customHeaders {
-			if strings.EqualFold(k, "content-type") {
-				delete(customHeaders, k)
-			}
-		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders["content-type"] = contentType
+		customHeaders = setHeader(customHeaders, "content-type", contentType)
 	}
 
 	if traceHeader != "" {
-		for k := range customHeaders {
-			if strings.EqualFold(k, traceHeader) {
-				return nil, nil, fmt.Errorf("trace_header and a %s header cannot be given together", traceHeader)
-			}
+		if hasHeader(customHeaders, traceHeader) {
+			return nil, nil, fmt.Errorf("trace_header and a %s header cannot be given together", traceHeader)
 		}
-		if customHeaders == nil {
-			customHeaders = make(map[string]string)
-		}
-		customHeaders[traceHeader] = traceValue(call.Step)
+		customHeaders = setHeader(customHeaders, traceHeader, traceValue(call.Step))
 	}
 
 	// Create new request with merged headers
