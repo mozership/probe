@@ -114,8 +114,8 @@ func TestReportRenderer_writeJobStatus(t *testing.T) {
 // Test that job status uses correct colors for each status type - with actual color detection
 func TestReportRenderer_writeJobStatus_ColorMapping(t *testing.T) {
 	// Enable colors to detect actual color differences
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = false
-	defer func() { color.NoColor = true }()
 
 	r := newReportRenderer(nil, nil, nil)
 
@@ -169,8 +169,8 @@ func TestReportRenderer_writeJobStatus_ColorMapping(t *testing.T) {
 // Test that SUCCESS status specifically does NOT use blue color (colorInfo)
 func TestReportRenderer_writeJobStatus_SuccessNotBlue(t *testing.T) {
 	// Enable colors to detect actual color differences
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = false
-	defer func() { color.NoColor = true }()
 
 	r := newReportRenderer(nil, nil, nil)
 
