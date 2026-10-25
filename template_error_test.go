@@ -39,8 +39,8 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 		Outputs:      NewOutputs(),
 	}
 
-	st.SetCtx(*jCtx, nil)
-	st.Do(jCtx)
+	st.bindContext(*jCtx, nil)
+	st.run(jCtx)
 
 	results := rs.Jobs["j"].StepResults
 	if len(results) != 1 {

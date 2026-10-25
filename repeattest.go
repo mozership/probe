@@ -228,33 +228,8 @@ func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounte
 
 // evalRepeatTest evaluates test, a test of a repeated job, against env.
 func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestResult {
-	ev := &expr.Expr{}
-	res := &RepeatTestResult{Test: test}
-
-	out, err := ev.Eval(test, env)
-	if err != nil {
-		res.Failure = &StepFailure{Kind: FailureTestError, Message: err.Error()}
-		ctx.Printer.logTestError(test, err)
-		res.Output = testErrorDetail(err)
-	} else if passed, ok := out.(bool); !ok {
-		res.Failure = &StepFailure{
-			Kind:    FailureTestType,
-			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", out, out),
-		}
-		ctx.Printer.LogDebug("%s", typeMismatchText(test, out))
-		res.Output = typeMismatchDetail(test, out)
-	} else if !passed {
-		message := "test evaluated to false"
-		if clause, ok := ev.FalseClause(test, env); ok {
-			clause = maskClause(ctx.Printer.Masker(), clause)
-			message += ": " + clauseSummary(clause)
-			res.Output = falseClauseDetail(clause)
-		}
-		res.Failure = &StepFailure{Kind: FailureAssertion, Message: message}
-	} else {
-		res.Passed = true
-	}
-	return res
+	passed, failure, detail := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
+	return &RepeatTestResult{Test: test, Passed: passed, Failure: failure, Output: detail}
 }
 
 // recordRepeatTest records res, the outcome of a test of a repeated job, by

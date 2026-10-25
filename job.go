@@ -2,7 +2,6 @@ package probe
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
@@ -206,12 +205,12 @@ func (j *Job) executeSteps(ev *expr.Expr, ctx *JobContext) {
 func (j *Job) executeStep(st *stepRun, idx *int, ctx *JobContext, vars map[string]any) {
 	st.idx = *idx
 	*idx++
-	st.SetCtx(*ctx, vars)
+	st.bindContext(*ctx, vars)
 	if j.FailFast && ctx.Failed {
 		st.skipAfterFailure(ctx)
 		return
 	}
-	st.Do(ctx)
+	st.run(ctx)
 }
 
 // executeStepWithIterations executes a step multiple times with different
@@ -235,7 +234,7 @@ func (j *Job) executeStepWithIterationExpr(place func(ordinal int) *stepRun, idx
 		return
 	}
 
-	st.SetCtx(*ctx, nil)
+	st.bindContext(*ctx, nil)
 	entries, err := st.iterationEntries()
 	if err == nil && len(entries) > 0 {
 		j.executeStepWithIterations(place, entries, idx, ctx)
@@ -298,7 +297,7 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 		return false
 	}
 
-	// Create a step context for evaluation - same as SetCtx in step.go
+	// Create a step context for evaluation - same as stepRun.bindContext
 	var outputs map[string]any
 	if ctx.Outputs != nil {
 		outputs = ctx.Outputs.GetAll()
@@ -456,9 +455,8 @@ func firstRefusal(jr *JobResult) *actionrpc.Refused {
 		if sr.RepeatCounter != nil {
 			f = sr.RepeatCounter.Failure
 		}
-		if f != nil && f.Kind == FailureRefused {
-			reason := strings.TrimPrefix(f.Message, "refused: ")
-			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, reason)}
+		if f != nil && f.refused != nil {
+			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.refused.Reason)}
 		}
 	}
 	return nil

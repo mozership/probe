@@ -254,6 +254,28 @@ func TestJob_shouldSkip(t *testing.T) {
 	}
 }
 
+// A list in the defaults is given to each step as a copy, so that a step
+// that changes its own, or a map in it, leaves the others' as they were.
+func TestMergeDefaults_ListsAreNotShared(t *testing.T) {
+	defaults := map[string]any{"args": []any{"-v", map[string]any{"name": "a"}, []any{1}}}
+	first, second := map[string]any{}, map[string]any{}
+	mergeDefaults(first, defaults)
+	mergeDefaults(second, defaults)
+
+	args := first["args"].([]any)
+	args[0] = "-q"
+	args[1].(map[string]any)["name"] = "b"
+	args[2].([]any)[0] = 2
+
+	want := []any{"-v", map[string]any{"name": "a"}, []any{1}}
+	if !reflect.DeepEqual(second["args"], want) {
+		t.Errorf("second args = %v, want %v", second["args"], want)
+	}
+	if !reflect.DeepEqual(defaults["args"], want) {
+		t.Errorf("defaults = %v, want %v", defaults["args"], want)
+	}
+}
+
 func TestJob_shouldSkip_errorHandling(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -817,5 +839,58 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 		if !reflect.DeepEqual(*st, *written.Steps[i]) {
 			t.Errorf("step %d = %+v, want it as written, %+v", i, *st, *written.Steps[i])
 		}
+	}
+}
+
+// The refusal is read from the failure the step was refused with, not from
+// a message that looks like one, and is found when it is wrapped.
+func TestFirstRefusal(t *testing.T) {
+	failure := func(err error) *StepFailure {
+		return (&stepRun{Step: &Step{}, err: err}).errorFailure()
+	}
+	tests := []struct {
+		name string
+		jr   *JobResult
+		want string
+	}{
+		{
+			// The kind and the message of a refusal, without the refusal
+			// itself, which reading the message would have taken for one.
+			name: "none refused",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: &StepFailure{Kind: FailureRefused, Message: "refused: x"}}}},
+		},
+		{
+			name: "the first of those refused",
+			jr: &JobResult{StepResults: []StepResult{
+				{Index: 0, Name: "a"},
+				{Index: 1, Name: "b", Failure: failure(actionrpc.Refuse("the action ssh does not keep to --read-only"))},
+				{Index: 2, Name: "c", Failure: failure(actionrpc.Refuse("the second"))},
+			}},
+			want: `step 1 "b" of the embedded job: the action ssh does not keep to --read-only`,
+		},
+		{
+			name: "a refusal wrapped in another error",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", actionrpc.Refuse("no network")))}}},
+			want: `step 0 "a" of the embedded job: no network`,
+		},
+		{
+			name: "a repeated step",
+			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", RepeatCounter: &StepRepeatCounter{Failure: failure(actionrpc.Refuse("no network"))}}}},
+			want: `step 0 "a" of the embedded job: no network`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := firstRefusal(tt.jr)
+			if tt.want == "" {
+				if got != nil {
+					t.Errorf("firstRefusal() = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Reason != tt.want {
+				t.Errorf("firstRefusal() = %+v, want %q", got, tt.want)
+			}
+		})
 	}
 }

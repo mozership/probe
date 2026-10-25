@@ -225,6 +225,71 @@ func TestStep_handleWait(t *testing.T) {
 	}
 }
 
+// A wait that cannot be evaluated, or is not a time, is told of, and the
+// step runs at once rather than fail.
+func TestStep_prepare_WaitThatIsNoTime(t *testing.T) {
+	tests := []struct {
+		name string
+		wait string
+		want string
+	}{
+		{name: "a template that cannot be evaluated", wait: "{{1 +}}s", want: "wait expression evaluation error: "},
+		{name: "not a time", wait: "soon", want: "wait duration parsing error: invalid wait format: soon"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			st := newStepRun(&Step{Name: "step", Wait: tt.wait}, nil)
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer}}
+
+			start := time.Now()
+			_, ok := st.prepare(jCtx)
+			if !ok {
+				t.Error("prepare() = false, want the step to run")
+			}
+			if d := time.Since(start); d > 500*time.Millisecond {
+				t.Errorf("prepare() took %v, want no wait", d)
+			}
+			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+				t.Errorf("output = %q, want %q", out, tt.want)
+			}
+			if st.templateErr != nil {
+				t.Errorf("templateErr = %v, want the wait to fail nothing", st.templateErr)
+			}
+		})
+	}
+}
+
+// A skipif that cannot be evaluated, or is not a boolean, is told of, and
+// the step runs rather than be skipped.
+func TestStep_shouldSkip_errorHandling(t *testing.T) {
+	tests := []struct {
+		name   string
+		skipIf string
+		want   string
+	}{
+		{name: "an expression that cannot be evaluated", skipIf: "invalid syntax ===", want: "skipif evaluation error: "},
+		{name: "not a boolean", skipIf: `"yes"`, want: "skipif expression must return boolean, got: string"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			st := newStepRun(&Step{Name: "step", SkipIf: tt.skipIf}, nil)
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: NewResult()}}
+
+			if st.shouldSkip(jCtx) {
+				t.Error("shouldSkip() = true, want the step to run")
+			}
+			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+				t.Errorf("output = %q, want %q", out, tt.want)
+			}
+			if _, ok := st.prepare(jCtx); !ok {
+				t.Error("prepare() = false, want the step to run")
+			}
+		})
+	}
+}
+
 func TestStep_SkipIfWithWaitTiming(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -459,7 +524,8 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 		},
 	}
 
-	result := step.createStepResult("Test Step", jCtx)
+	status, testOutput := step.verdict(jCtx)
+	result := step.createStepResult("Test Step", jCtx, status, testOutput)
 
 	if result.RT != "250ms" {
 		t.Errorf("RT = %v, want %v", result.RT, "250ms")
@@ -529,6 +595,108 @@ func TestStep_createFailedStepResult(t *testing.T) {
 	}
 	if result.RepeatCounter != nil {
 		t.Errorf("RepeatCounter should be nil for non-repeat step, got %v", result.RepeatCounter)
+	}
+}
+
+func TestStep_verdict(t *testing.T) {
+	tests := []struct {
+		name         string
+		test         string
+		uses         string
+		needsNoCheck []string
+		wantStatus   StatusType
+		wantFailed   bool
+		wantOutput   bool
+	}{
+		{name: "a test that holds passes", test: "res.code == 0", wantStatus: StatusSuccess},
+		{name: "a test that does not hold fails the job", test: "res.code == 1", wantStatus: StatusError, wantFailed: true, wantOutput: true},
+		{name: "an action that needs no check passes", uses: "hello", needsNoCheck: []string{"hello"}, wantStatus: StatusSuccess},
+		{name: "a step that nothing checks is a warning", uses: "hello", wantStatus: StatusWarning},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &stepRun{Step: &Step{Test: tt.test, Uses: tt.uses}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 0}}}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Config:  Config{NeedsNoCheck: tt.needsNoCheck},
+					Printer: newBufferPrinter(),
+					Result:  NewResult(),
+				},
+			}
+
+			status, out := st.verdict(jCtx)
+			if status != tt.wantStatus {
+				t.Errorf("status = %v, want %v", status, tt.wantStatus)
+			}
+			if (out != "") != tt.wantOutput {
+				t.Errorf("output = %q, want one: %v", out, tt.wantOutput)
+			}
+			if jCtx.Failed != tt.wantFailed {
+				t.Errorf("Failed = %v, want %v", jCtx.Failed, tt.wantFailed)
+			}
+			if got := jCtx.Result.failures[FailureAssertion]; got != tt.wantFailed {
+				t.Errorf("assertion failure recorded = %v, want %v", got, tt.wantFailed)
+			}
+			if (st.failure != nil) != tt.wantFailed {
+				t.Errorf("failure = %+v, want one: %v", st.failure, tt.wantFailed)
+			}
+		})
+	}
+}
+
+// Creating the result of a failed step only reads what the check left: it
+// neither fails the job nor records the failure, which verdict has done.
+func TestStep_createStepResult_ChangesNothing(t *testing.T) {
+	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	st := &stepRun{Step: &Step{Test: "res.code == 1"}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 0}}, failure: failure}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+	}
+
+	result := st.createStepResult("Check", jCtx, StatusError, "the output")
+	if result.Status != StatusError || result.TestOutput != "the output" || result.Failure != failure {
+		t.Errorf("result = %+v, want the status, output and failure it was given", result)
+	}
+	if jCtx.Failed {
+		t.Error("Failed = true, want the job left as it was")
+	}
+	if len(jCtx.Result.failures) != 0 {
+		t.Errorf("failures = %v, want none recorded", jCtx.Result.failures)
+	}
+
+	passed := st.createStepResult("Check", jCtx, StatusSuccess, "")
+	if passed.Failure != nil || passed.TestOutput != "" {
+		t.Errorf("result = %+v, want no failure on a step that passed", passed)
+	}
+}
+
+// A step that failed before its test could run is told to have a test as
+// one that ran is: by what checks it, an action that needs no check among
+// them.
+func TestStep_createFailedStepResult_HasTestAsARunStepHas(t *testing.T) {
+	tests := []struct {
+		name string
+		st   *Step
+		want bool
+	}{
+		{name: "with a test", st: &Step{Uses: "http", Test: "true"}, want: true},
+		{name: "of an action that needs no check", st: &Step{Uses: "hello"}, want: true},
+		{name: "unchecked", st: &Step{Uses: "http"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &stepRun{Step: tt.st, expr: &expr.Expr{}, err: errors.New("boom")}
+			jCtx := &JobContext{runEnv: &runEnv{Config: Config{NeedsNoCheck: []string{"hello"}}}}
+
+			failed := st.createFailedStepResult("Step", jCtx)
+			ran := st.createStepResult("Step", jCtx, StatusSuccess, "")
+			if failed.HasTest != tt.want || ran.HasTest != tt.want {
+				t.Errorf("HasTest = %v failed and %v run, want %v", failed.HasTest, ran.HasTest, tt.want)
+			}
+		})
 	}
 }
 
@@ -952,8 +1120,8 @@ func TestStep_finalize(t *testing.T) {
 	}
 }
 
-// Integration test for the refactored Do() method
-func TestStep_Do_Integration(t *testing.T) {
+// Integration test for the run method
+func TestStep_run_Integration(t *testing.T) {
 	t.Run("step with skip condition", func(t *testing.T) {
 		step := newStepRun(&Step{
 			Name:   "Skipped Step",
@@ -972,11 +1140,11 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		// Execute the step (should be skipped)
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Since step is skipped, job should not fail
 		if jobContext.Failed {
-			t.Errorf("Do() with skip condition should not fail the job")
+			t.Errorf("run() with skip condition should not fail the job")
 		}
 	})
 
@@ -1012,15 +1180,15 @@ func TestStep_Do_Integration(t *testing.T) {
 		// Execute the step
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("Do() method panicked: %v", r)
+				t.Errorf("run() method panicked: %v", r)
 			}
 		}()
 
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Verify successful execution
 		if jobContext.Failed {
-			t.Errorf("Do() with successful mock should not fail the job")
+			t.Errorf("run() with successful mock should not fail the job")
 		}
 
 		// Verify context was updated
@@ -1052,11 +1220,11 @@ func TestStep_Do_Integration(t *testing.T) {
 		}
 
 		// Execute the step
-		step.Do(&jobContext)
+		step.run(&jobContext)
 
 		// Verify failed execution
 		if !jobContext.Failed {
-			t.Errorf("Do() with failing mock should fail the job")
+			t.Errorf("run() with failing mock should fail the job")
 		}
 
 		// Verify error was set
@@ -1939,6 +2107,63 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	}
 }
 
+// An output that cannot be evaluated is told of and left out, and the
+// others of the step are saved.
+func TestSaveOutputs_SkipsOneThatCannotBeEvaluated(t *testing.T) {
+	printer := newBufferPrinter()
+	jCtx := &JobContext{runEnv: &runEnv{Printer: printer}, Outputs: NewOutputs()}
+	st := &stepRun{Step: &Step{ID: "login", Outputs: map[string]string{"bad": "nosuch(1)", "token": "res.v"}}, expr: &expr.Expr{}}
+	st.ctx = StepContext{Res: map[string]any{"v": "abc"}}
+
+	st.saveOutputs(jCtx)
+
+	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "output 'bad' evaluation error: ") {
+		t.Errorf("output = %q, want the error of the output", out)
+	}
+	got, ok := jCtx.Outputs.GetAll()["login"].(map[string]any)
+	if !ok {
+		t.Fatalf("outputs = %v, want the step's", jCtx.Outputs.GetAll())
+	}
+	if got["token"] != "abc" {
+		t.Errorf("token = %v, want abc", got["token"])
+	}
+	if _, ok := got["bad"]; ok {
+		t.Errorf("outputs = %v, want bad left out", got)
+	}
+}
+
+// The first attempt of a retry waits for its initial delay.
+func TestStep_executeActionWithRetry_InitialDelay(t *testing.T) {
+	callCount := 0
+	runner := &callCountingRunner{result: map[string]any{"res": map[string]any{"code": 0}}, callCount: &callCount}
+	delay := 50 * time.Millisecond
+	st := &stepRun{
+		Step: &Step{
+			Uses:  "test-action",
+			Test:  "true",
+			Retry: &StepRetry{MaxAttempts: 2, InitialDelay: Interval{Duration: delay}},
+		},
+		expr: &expr.Expr{},
+	}
+	printer := newBufferPrinter()
+	printer.verbose = true
+	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
+
+	start := time.Now()
+	if _, err := st.executeActionWithRetry(runner, map[string]any{}, jCtx, "test"); err != nil {
+		t.Fatalf("executeActionWithRetry() error = %v", err)
+	}
+	if d := time.Since(start); d < delay {
+		t.Errorf("took %v, want at least the initial delay of %v", d, delay)
+	}
+	if callCount != 1 {
+		t.Errorf("calls = %d, want 1", callCount)
+	}
+	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "Initial delay before first attempt: 50ms") {
+		t.Errorf("output = %q, want the initial delay told of", out)
+	}
+}
+
 // startGroup starts cmd in a process group of its own, as the shell action
 // does for a background step, and returns its pid.
 func startGroup(t *testing.T, cmd string) int {
@@ -2281,7 +2506,8 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 				},
 			}
 
-			result := st.createStepResult("Contract", jCtx)
+			status, testOutput := st.verdict(jCtx)
+			result := st.createStepResult("Contract", jCtx, status, testOutput)
 			if result.Status != tt.wantStatus {
 				t.Errorf("Status = %v, want %v", result.Status, tt.wantStatus)
 			}
@@ -2463,7 +2689,7 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 		},
 	}
 
-	result := st.createStepResult("Get a user", jCtx)
+	result := st.createStepResult("Get a user", jCtx, StatusSuccess, "")
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
 	if !reflect.DeepEqual(result.Contract, want) {
 		t.Errorf("Contract = %+v, want %+v", result.Contract, want)
@@ -2681,7 +2907,7 @@ func TestFailureKindOf_Refused(t *testing.T) {
 	}
 }
 
-func TestStep_DoTest_FalseClause(t *testing.T) {
+func TestStep_runTest_FalseClause(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
@@ -2717,9 +2943,9 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}}
 			st.ctx = StepContext{Req: map[string]any{}, Res: tt.res}
 
-			out, ok := st.DoTest(printer)
+			out, ok := st.runTest(printer)
 			if ok {
-				t.Fatal("DoTest() passed, want it to fail")
+				t.Fatal("runTest() passed, want it to fail")
 			}
 			if st.failure == nil || st.failure.Message != tt.wantMessage {
 				t.Errorf("failure = %+v, want the message %q", st.failure, tt.wantMessage)
@@ -2729,6 +2955,90 @@ func TestStep_DoTest_FalseClause(t *testing.T) {
 			}
 			if tt.notInOutput != "" && strings.Contains(out, tt.notInOutput) {
 				t.Errorf("output = %q, want it without %q", out, tt.notInOutput)
+			}
+		})
+	}
+}
+
+func TestEvaluateTest(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	env := StepContext{Res: map[string]any{"code": 500}}
+	_, evalErr := (&expr.Expr{}).Eval("nosuch(1)", env)
+	if evalErr == nil {
+		t.Fatal("nosuch(1) evaluated, want an error to test with")
+	}
+
+	tests := []struct {
+		name         string
+		test         string
+		hideOperands bool
+		wantPassed   bool
+		wantKind     string
+		wantMessage  string
+		wantDetail   string
+	}{
+		{name: "a test that holds", test: "res.code == 500", wantPassed: true},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr)},
+		{name: "a test that is not a boolean", test: "res.code", wantKind: FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: typeMismatchDetail("res.code", 500)},
+		{name: "a test that is false", test: "res.code == 200", wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200 (res.code = 500)", wantDetail: "       failed: res.code == 200\n         res.code = 500\n"},
+		{name: "a test that is false, its operands hidden", test: "res.code == 200", hideOperands: true, wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200", wantDetail: "       failed: res.code == 200\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			printer.SetMasker(mask.New(nil, nil))
+
+			passed, failure, detail := evaluateTest(&expr.Expr{}, tt.test, env, printer, tt.hideOperands)
+			if passed != tt.wantPassed {
+				t.Errorf("passed = %v, want %v", passed, tt.wantPassed)
+			}
+			if tt.wantPassed {
+				if failure != nil || detail != "" {
+					t.Errorf("failure = %+v, detail = %q, want neither", failure, detail)
+				}
+				return
+			}
+			if failure == nil || failure.Kind != tt.wantKind || failure.Message != tt.wantMessage {
+				t.Errorf("failure = %+v, want %s %q", failure, tt.wantKind, tt.wantMessage)
+			}
+			if failure != nil && (failure.Request != nil || failure.Response != nil) {
+				t.Errorf("failure = %+v, want no exchange: the caller adds one", failure)
+			}
+			if detail != tt.wantDetail {
+				t.Errorf("detail = %q, want %q", detail, tt.wantDetail)
+			}
+		})
+	}
+}
+
+// A test that cannot be evaluated, or is not a boolean, fails the step
+// without the exchange, which only a false test is told with.
+func TestStep_runTest_ErrorAndType(t *testing.T) {
+	tests := []struct {
+		name     string
+		test     string
+		wantKind string
+	}{
+		{name: "an error", test: "nosuch(1)", wantKind: FailureTestError},
+		{name: "not a boolean", test: "res.code", wantKind: FailureTestType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			printer := newBufferPrinter()
+			printer.SetMasker(mask.New(nil, nil))
+			st := &stepRun{Step: &Step{Test: tt.test}, expr: &expr.Expr{}, ctx: StepContext{Req: map[string]any{"url": "/"}, Res: map[string]any{"code": 500}}}
+
+			out, ok := st.runTest(printer)
+			if ok {
+				t.Fatal("runTest() passed, want it to fail")
+			}
+			if st.failure == nil || st.failure.Kind != tt.wantKind {
+				t.Fatalf("failure = %+v, want %s", st.failure, tt.wantKind)
+			}
+			if st.failure.Request != nil || strings.Contains(out, "request:") {
+				t.Errorf("failure = %+v, output = %q, want no exchange", st.failure, out)
 			}
 		})
 	}

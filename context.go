@@ -175,6 +175,14 @@ func (j *JobContext) countedOnly() bool {
 	return j.warmingUp() || (j.repeat != nil && j.repeat.tested)
 }
 
+// failStep marks the job failed by a step that failed with a failure of
+// kind, and records the kind for the exit code of the run as recordFailure
+// does. Every failure of a step goes through it.
+func (j *JobContext) failStep(kind string) {
+	j.SetFailed()
+	j.recordFailure(kind)
+}
+
 // recordFailure notes the kind of a failure of a step for the exit code of
 // the run, unless the failure is only counted.
 func (j *JobContext) recordFailure(kind string) {
