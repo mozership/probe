@@ -24,6 +24,31 @@ type actionResult struct {
 	Status int
 }
 
+// ExitStatus represents the unified status across all actions
+type ExitStatus int
+
+const (
+	ExitStatusSuccess ExitStatus = 0 // Action succeeded
+	ExitStatusFailure ExitStatus = 1 // Action failed
+)
+
+// Int returns the ExitStatus as an int for comparison
+func (e ExitStatus) Int() int {
+	return int(e)
+}
+
+// String returns the ExitStatus as a string
+func (e ExitStatus) String() string {
+	switch e {
+	case ExitStatusSuccess:
+		return "success"
+	case ExitStatusFailure:
+		return "failure"
+	default:
+		return "unknown"
+	}
+}
+
 // readActionResult reads what an action returned for a step.
 func readActionResult(m map[string]any) actionResult {
 	r := actionResult{Status: parseExitStatus(m["status"])}

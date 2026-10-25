@@ -94,34 +94,3 @@ func (b *graphBuilder) step(st *Step) dag.Step {
 	}
 	return s
 }
-
-// eachEmbeddedStep calls visit for each step of the job file st embeds, when
-// st is a step of the embedded action, and of the job files those steps
-// embed in turn, with the path of the file as it is written and the position
-// of the step in it. seen holds the files read, each of which is read once,
-// so that job files that embed one another end.
-//
-// Only what can be told before a run is read: a path that is a template is
-// not followed, and nor is a file that cannot be read.
-func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
-	file, ok := embeddedJobFile(st)
-	if !ok || expr.HasTemplate(file) {
-		return
-	}
-	abs, err := filepath.Abs(file)
-	if err != nil || seen[abs] {
-		return
-	}
-	seen[abs] = true
-	job, err := ReadJobFile(file, nil)
-	if err != nil {
-		return
-	}
-	for i, es := range job.Steps {
-		if es == nil {
-			continue
-		}
-		visit(file, i, es)
-		eachEmbeddedStep(es, seen, visit)
-	}
-}

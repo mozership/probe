@@ -868,9 +868,9 @@ func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 	}
 
 	// Merge workflow vars with evaluated step vars
-	vers := mergeMaps(j.Vars, evaluatedStepVars)
+	vers := mergeMapsShared(j.Vars, evaluatedStepVars)
 	if override != nil {
-		vers = mergeMaps(vers, override)
+		vers = mergeMapsShared(vers, override)
 	}
 
 	st.ctx = StepContext{
