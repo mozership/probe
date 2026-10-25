@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/internal/body"
 	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/hostport"
@@ -258,14 +258,14 @@ func (r *Req) Do() (*Result, error) {
 	}
 	result.Status = status
 
-	body, err := io.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return result, err
 	}
 
-	// Process body based on Content-Type
+	// A textual body is kept as text, and any other is written to a file.
 	contentType := res.Header.Get("Content-Type")
-	bodyString, filePath, err := binary.ProcessHttpBody(body, contentType)
+	bodyString, filePath, err := body.TextOrFile(resBody, contentType)
 	if err != nil {
 		return result, err
 	}
@@ -279,7 +279,7 @@ func (r *Req) Do() (*Result, error) {
 		if r.payload != nil {
 			sentBody = r.payload
 		}
-		result.violations, result.matched = r.contract.check(sent, sentBody, res, body)
+		result.violations, result.matched = r.contract.check(sent, sentBody, res, resBody)
 	}
 
 	return result, nil
@@ -382,7 +382,7 @@ func ResolveMethodAndURL(data map[string]any) error {
 func hasJSONContentType(headers any) bool {
 	checkHeader := func(k string, v any) bool {
 		s, ok := v.(string)
-		return ok && strings.EqualFold(k, "content-type") && binary.IsJSONMediaType(s)
+		return ok && strings.EqualFold(k, "content-type") && body.IsJSON(s)
 	}
 
 	switch h := headers.(type) {
