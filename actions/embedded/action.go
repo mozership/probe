@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
@@ -54,46 +55,21 @@ func ServeWithActions(builtin []string) {
 	})
 }
 
-// Keeps returns the kinds of guard the embedded action keeps to: it runs
-// its job under the guard of the run, whose steps keep to it or are refused.
-func Keeps() []string {
-	return []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-}
-
-// Params returns the keys the embedded action takes in with.
-func Params() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ReqFields returns the fields of the req the embedded action returns, those of
-// Req, and ResFields those of its res, those of Res, for probe check to
-// report a step that reads another.
-func ReqFields() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ResFields returns the fields of the res the embedded action returns; see
-// ReqFields.
-func ResFields() []string {
-	return mapping.FieldTags(Res{})
-}
-
-// ReqTypes returns the kinds of the fields of the req the embedded action
-// returns, those of Req, and ResTypes those of its res, those of Res, for
-// probe check to report an expression that does with a field what its kind
-// does not allow.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the embedded action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
-	return kind.Fields(Res{})
-}
-
-// Required returns the keys of with the embedded action cannot run without:
-// path.
-func Required() [][]string {
-	return [][]string{{"path"}}
+// Spec declares the embedded action. It keeps to every kind of guard: it
+// runs its job under the guard of the run, whose steps keep to it or are
+// refused. It cannot run without path.
+//
+// Spec leaves Serve to the registry, which serves the action with
+// ServeWithActions to tell it the names of the actions of Probe.
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"path"}},
+	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
-	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
+	kinds := actiontest.NewKinds(t, Spec().ReqTypes, Spec().ResTypes)
 	srv := httptest.NewServer(hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
 		hp.SetCookie(w, &hp.Cookie{Name: "session", Value: "abc", Path: "/"})
 		w.Header().Set("Content-Type", "application/json")
@@ -34,7 +34,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}
-		actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+		actiontest.CheckFields(t, Spec().ReqFields, Spec().ResFields, nil, ret)
 		kinds.Check(ret)
 	}
 	kinds.Covered()
@@ -46,7 +46,7 @@ func TestRequired(t *testing.T) {
 		_, _, err := a.RunStep(actionrpc.Call{With: with})
 		return err
 	}
-	actiontest.CheckRequired(t, Required(), map[string]any{"url": "http://127.0.0.1:1", "method": "GET", "timeout": "1s"}, run)
+	actiontest.CheckRequired(t, Spec().Required, map[string]any{"url": "http://127.0.0.1:1", "method": "GET", "timeout": "1s"}, run)
 	// get stands for the method, and for the URL when it is one in full.
 	if err := run(map[string]any{"get": "http://127.0.0.1:1/", "timeout": "1s"}); err == nil || strings.Contains(err.Error(), "missing") {
 		t.Errorf("err = %v, want the request sent, and failing to connect", err)

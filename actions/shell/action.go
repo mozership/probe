@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
@@ -49,7 +50,7 @@ func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, e
 	return ret, nil, err
 }
 
-func Serve() {
+func serve() {
 	stopStartedOnSignal()
 
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
@@ -76,40 +77,19 @@ func stopStartedOnSignal() {
 	}()
 }
 
-// Params returns the keys the shell action takes in with.
-func Params() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ReqFields returns the fields of the req the shell action returns, those of
-// Req, and ResFields those of its res, those of Res, for probe check to
-// report a step that reads another.
-func ReqFields() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ResFields returns the fields of the res the shell action returns; see
-// ReqFields.
-func ResFields() []string {
-	return mapping.FieldTags(Res{})
-}
-
-// ReqTypes returns the kinds of the fields of the req the shell action
-// returns, those of Req, and ResTypes those of its res, those of Res, for
-// probe check to report an expression that does with a field what its kind
-// does not allow.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the shell action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
-	return kind.Fields(Res{})
-}
-
-// Required returns the keys of with the shell action cannot run without:
-// cmd.
-func Required() [][]string {
-	return [][]string{{"cmd"}}
+// Spec declares the shell action. It keeps to no guard, as it does not check
+// what it is about to do against one, so that a guard refuses it unless it
+// is allowed by name. It cannot run without cmd.
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     actionspec.KeepsNone(),
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"cmd"}},
+	}
 }

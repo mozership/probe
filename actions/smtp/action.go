@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
@@ -34,46 +35,25 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	return ret, err
 }
 
-func Serve() {
+func serve() {
 	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
 		return &Action{log: log}
 	})
 }
 
-// Params returns the keys the smtp action takes in with.
-func Params() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ReqFields returns the fields of the req the smtp action returns, those of
-// Req, and ResFields those of its res, those of Res, for probe check to
-// report a step that reads another.
-func ReqFields() []string {
-	return mapping.FieldTags(Req{})
-}
-
-// ResFields returns the fields of the res the smtp action returns; see
-// ReqFields.
-func ResFields() []string {
-	return mapping.FieldTags(Res{})
-}
-
-// ReqTypes returns the kinds of the fields of the req the smtp action
-// returns, those of Req, and ResTypes those of its res, those of Res, for
-// probe check to report an expression that does with a field what its kind
-// does not allow.
-func ReqTypes() map[string]string {
-	return kind.Fields(Req{})
-}
-
-// ResTypes returns the kinds of the fields of the res the smtp action
-// returns; see ReqTypes.
-func ResTypes() map[string]string {
-	return kind.Fields(Res{})
-}
-
-// Required returns the keys of with the smtp action cannot run without:
-// addr, from and to.
-func Required() [][]string {
-	return [][]string{{"addr"}, {"from"}, {"to"}}
+// Spec declares the smtp action. It keeps to no guard, as it does not check
+// what it is about to do against one, so that a guard refuses it unless it
+// is allowed by name. It cannot run without addr, from and to.
+func Spec() actionspec.Spec {
+	return actionspec.Spec{
+		Serve:     serve,
+		Keeps:     actionspec.KeepsNone(),
+		Params:    mapping.FieldTags(Req{}),
+		Contracts: actionspec.NoContracts(),
+		ReqFields: mapping.FieldTags(Req{}),
+		ResFields: mapping.FieldTags(Res{}),
+		ReqTypes:  kind.Fields(Req{}),
+		ResTypes:  kind.Fields(Res{}),
+		Required:  [][]string{{"addr"}, {"from"}, {"to"}},
+	}
 }

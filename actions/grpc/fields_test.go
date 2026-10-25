@@ -10,7 +10,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
-	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
+	kinds := actiontest.NewKinds(t, Spec().ReqTypes, Spec().ResTypes)
 	grpcAddr := startUserServer(t)
 	s := startConnectServer(t, "")
 	files := protoOf(writeProto(t, userProto(t)), false)
@@ -33,7 +33,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%v: %v", with, err)
 			}
-			actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+			actiontest.CheckFields(t, Spec().ReqFields, Spec().ResFields, nil, ret)
 			kinds.Check(ret)
 		}
 	}
@@ -43,7 +43,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 func TestRequired(t *testing.T) {
 	a := &Action{log: hclog.NewNullLogger()}
 	with := map[string]any{"addr": "127.0.0.1:1", "service": "UserService", "method": "GetUser", "timeout": "1s"}
-	actiontest.CheckRequired(t, Required(), with, func(with map[string]any) error {
+	actiontest.CheckRequired(t, Spec().Required, with, func(with map[string]any) error {
 		_, err := a.Run(with)
 		return err
 	})
