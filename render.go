@@ -147,9 +147,11 @@ func (r *reportRenderer) repeatTestText(label string, rt *RepeatTestResult) stri
 	return fmt.Sprintf("    %s %s: %s\n%s", colorError().Sprintf(IconError), label, rt.Test, rt.Output)
 }
 
-// writeUnderJob writes text under the status line of a job: its first
+// writeUnderJob writes text as the body of the block of a job: its first
 // line after ⎿, the others indented to it and the blank ones left out,
-// then a blank line that ends the block of the job.
+// then a blank line that ends the block. In the report the body comes under
+// the status line of the job; what a job run on its own reports is the body
+// alone.
 func (r *reportRenderer) writeUnderJob(b *strings.Builder, text string) {
 	text = strings.TrimSpace(text)
 	if text != "" {
@@ -256,7 +258,6 @@ func (r *reportRenderer) reportText(rs *Result) string {
 	successCount := 0
 	var earliestStart, latestEnd time.Time
 
-	// Generate step results and job summaries for each job in the order
 	for _, jobID := range r.order {
 		if jr, exists := rs.Jobs[jobID]; exists {
 			block, succeeded, start, end := r.jobText(jr)
@@ -283,7 +284,6 @@ func (r *reportRenderer) reportText(rs *Result) string {
 		totalTime = latestEnd.Sub(earliestStart).Seconds()
 	}
 
-	// Generate workflow footer
 	r.writeFooter(&output, totalTime, successCount, len(rs.Jobs))
 
 	return output.String()
@@ -301,7 +301,6 @@ func (r *reportRenderer) stepsText(rs *Result) string {
 	for _, jobID := range r.order {
 		if jr, exists := rs.Jobs[jobID]; exists {
 			jr.mutex.Lock()
-			// Generate job results from StepResults
 			stepOutput := r.stepResultsText(jr.JobID, jr.StepResults)
 			r.writeUnderJob(&output, stepOutput)
 			jr.mutex.Unlock()
@@ -336,7 +335,6 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 				output.WriteString(colorInfo().Sprint(echo) + "\n")
 			}
 		} else {
-			// Generate regular step output
 			num := colorDim().Sprintf("%2d.", stepResult.Index)
 
 			// Add wait time indicator if present
