@@ -792,6 +792,13 @@ func TestDoReadsStructuredSyntaxBodiesAsText(t *testing.T) {
 	}
 }
 
+func TestParseTimeoutSaysWhyItRefuses(t *testing.T) {
+	_, err := parseTimeout("-1s")
+	if err == nil || err.Error() != "invalid timeout -1s: a duration cannot be below zero" {
+		t.Errorf("parseTimeout(-1s) error = %v, want it to say the timeout is below zero", err)
+	}
+}
+
 func TestDoRejectsInvalidTimeout(t *testing.T) {
 	req := NewReq()
 	req.URL = "http://localhost:8080/"

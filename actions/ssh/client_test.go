@@ -150,7 +150,7 @@ func TestParseParams(t *testing.T) {
 				Timeout:  "0",
 			},
 			wantError: true,
-			errorMsg:  "invalid timeout 0: use a duration such as 30s, or a number of seconds",
+			errorMsg:  "invalid timeout 0: a timeout must be above zero",
 		},
 	}
 

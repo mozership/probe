@@ -180,11 +180,14 @@ func TitleCase(st string, char string) string {
 // duration: a duration string such as "30s", a number of seconds, or a
 // numeric string. It refuses anything else, and zero too, rather than
 // falling back to a default, so a mistyped timeout is reported instead of
-// silently ignored.
+// silently ignored. The error says why, as duration.Parse does.
 func ParseTimeout(v any) (time.Duration, error) {
 	d, err := duration.Parse(v)
-	if err != nil || d == 0 {
-		return 0, fmt.Errorf("invalid timeout %v: use a duration such as 30s, or a number of seconds", v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeout %v: %w", v, err)
+	}
+	if d == 0 {
+		return 0, fmt.Errorf("invalid timeout %v: a timeout must be above zero", v)
 	}
 	return d, nil
 }
