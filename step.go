@@ -389,8 +389,7 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 			jCtx.Printer.PrintError("Action execution failed: %v", err)
 		}
 	}
-	jCtx.SetFailed()
-	jCtx.recordFailure(kind)
+	jCtx.failStep(kind)
 
 	// Create and add step result for failed action execution. An action
 	// that failed returned no request, and what the step gave it is shown
@@ -450,8 +449,9 @@ func (st *stepRun) finalize(name string, jCtx *JobContext) {
 		return
 	}
 
-	// Standard execution: create result
-	stepResult := st.createStepResult(name, jCtx)
+	// Standard execution: check the step, then create its result
+	status, testOutput := st.verdict(jCtx)
+	stepResult := st.createStepResult(name, jCtx, status, testOutput)
 
 	// Add step result to workflow buffer
 	if jCtx.Result != nil {
@@ -463,8 +463,47 @@ func (st *stepRun) finalize(name string, jCtx *JobContext) {
 	}
 }
 
-// createStepResult creates a StepResult from step execution
-func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
+// verdict checks the step, when anything checks it, and tells its status
+// and, when it failed, what the check said of it. A failure is recorded on
+// the job as any other failure of a step is.
+func (st *stepRun) verdict(jCtx *JobContext) (StatusType, string) {
+	switch {
+	case st.checked():
+		testOutput, ok := st.check(jCtx.Printer)
+		if ok {
+			return StatusSuccess, ""
+		}
+		jCtx.failStep(st.failure.Kind)
+		return StatusError, testOutput
+	case st.needsNoCheck(jCtx):
+		return StatusSuccess, ""
+	default:
+		return StatusWarning, ""
+	}
+}
+
+// createStepResult creates the result of a step whose action ran, with the
+// status and the output of the check verdict came to. It changes nothing:
+// the step's failure, if any, is the one the check left.
+func (st *stepRun) createStepResult(name string, jCtx *JobContext, status StatusType, testOutput string) StepResult {
+	result := st.baseResult(name, jCtx)
+	result.Status = status
+	if status == StatusError {
+		result.TestOutput = testOutput
+		result.Failure = st.failure
+	}
+
+	if st.Echo != "" {
+		result.EchoOutput = st.getEchoOutput()
+	}
+
+	return result
+}
+
+// baseResult is what the result of a step that was not skipped shows,
+// whether it passed or failed: where it is, its test, the attempts of its
+// retry, its timing, its report and its contract.
+func (st *stepRun) baseResult(name string, jCtx *JobContext) StepResult {
 	result := StepResult{
 		Index:    st.idx,
 		ID:       st.repeatID(),
@@ -497,28 +536,6 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext) StepResult {
 	}
 
 	result.Contract = st.contractMatched()
-
-	if st.checked() {
-		testOutput, ok := st.check(jCtx.Printer)
-		if ok {
-			result.Status = StatusSuccess
-		} else {
-			result.Status = StatusError
-			result.TestOutput = testOutput
-			result.Failure = st.failure
-			jCtx.SetFailed()
-			jCtx.Result.recordFailure(st.failure.Kind)
-		}
-	} else if st.needsNoCheck(jCtx) {
-		result.Status = StatusSuccess
-	} else {
-		result.Status = StatusWarning
-	}
-
-	if st.Echo != "" {
-		result.EchoOutput = st.getEchoOutput()
-	}
-
 	return result
 }
 
@@ -539,8 +556,7 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	} else if hasTest {
 		_, testResult = st.check(jCtx.Printer)
 		if !testResult {
-			jCtx.SetFailed()
-			jCtx.recordFailure(st.failure.Kind)
+			jCtx.failStep(st.failure.Kind)
 		}
 	}
 	// The test of a warmup run is checked all the same, since a failure
@@ -1105,41 +1121,11 @@ func (st *stepRun) createSkippedStepResult(name string, jCtx *JobContext) StepRe
 	}
 }
 
-// createFailedStepResult creates a StepResult for a failed step
+// createFailedStepResult creates the result of a step that failed before
+// its test could run, with the error it failed with.
 func (st *stepRun) createFailedStepResult(name string, jCtx *JobContext) StepResult {
-	result := StepResult{
-		Index:    st.idx,
-		ID:       st.repeatID(),
-		Name:     name,
-		Status:   StatusError,
-		RT:       "",
-		WaitTime: st.getWaitTimeForDisplay(),
-		HasTest:  st.Test != "",
-		Test:     st.Test,
-		Elapsed:  st.elapsed(),
-	}
-
-	if st.Retry != nil && st.retryAttempt > 0 {
-		result.RetryAttempt = st.retryAttempt
-		result.RetryMax = st.Retry.MaxAttempts
-	}
-
-	if jCtx.Timing {
-		if !st.startedAt.IsZero() {
-			result.StartedAt = st.startedAt
-		}
-		if st.ctx.RT.Duration != "" {
-			result.RT = st.ctx.RT.Duration
-			result.RTSec = st.ctx.RT.Sec
-		}
-	}
-	if v, ok := st.ctx.Res["report"]; ok {
-		if report, sok := v.(string); sok {
-			result.Report = report
-		}
-	}
-
-	result.Contract = st.contractMatched()
+	result := st.baseResult(name, jCtx)
+	result.Status = StatusError
 
 	// Include error information if available
 	if st.err != nil {

@@ -459,7 +459,8 @@ func TestStep_createStepResult_Timing(t *testing.T) {
 		},
 	}
 
-	result := step.createStepResult("Test Step", jCtx)
+	status, testOutput := step.verdict(jCtx)
+	result := step.createStepResult("Test Step", jCtx, status, testOutput)
 
 	if result.RT != "250ms" {
 		t.Errorf("RT = %v, want %v", result.RT, "250ms")
@@ -529,6 +530,108 @@ func TestStep_createFailedStepResult(t *testing.T) {
 	}
 	if result.RepeatCounter != nil {
 		t.Errorf("RepeatCounter should be nil for non-repeat step, got %v", result.RepeatCounter)
+	}
+}
+
+func TestStep_verdict(t *testing.T) {
+	tests := []struct {
+		name         string
+		test         string
+		uses         string
+		needsNoCheck []string
+		wantStatus   StatusType
+		wantFailed   bool
+		wantOutput   bool
+	}{
+		{name: "a test that holds passes", test: "res.code == 0", wantStatus: StatusSuccess},
+		{name: "a test that does not hold fails the job", test: "res.code == 1", wantStatus: StatusError, wantFailed: true, wantOutput: true},
+		{name: "an action that needs no check passes", uses: "hello", needsNoCheck: []string{"hello"}, wantStatus: StatusSuccess},
+		{name: "a step that nothing checks is a warning", uses: "hello", wantStatus: StatusWarning},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &stepRun{Step: &Step{Test: tt.test, Uses: tt.uses}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 0}}}
+			jCtx := &JobContext{
+				runEnv: &runEnv{
+					Config:  Config{NeedsNoCheck: tt.needsNoCheck},
+					Printer: newBufferPrinter(),
+					Result:  NewResult(),
+				},
+			}
+
+			status, out := st.verdict(jCtx)
+			if status != tt.wantStatus {
+				t.Errorf("status = %v, want %v", status, tt.wantStatus)
+			}
+			if (out != "") != tt.wantOutput {
+				t.Errorf("output = %q, want one: %v", out, tt.wantOutput)
+			}
+			if jCtx.Failed != tt.wantFailed {
+				t.Errorf("Failed = %v, want %v", jCtx.Failed, tt.wantFailed)
+			}
+			if got := jCtx.Result.failures[FailureAssertion]; got != tt.wantFailed {
+				t.Errorf("assertion failure recorded = %v, want %v", got, tt.wantFailed)
+			}
+			if (st.failure != nil) != tt.wantFailed {
+				t.Errorf("failure = %+v, want one: %v", st.failure, tt.wantFailed)
+			}
+		})
+	}
+}
+
+// Creating the result of a failed step only reads what the check left: it
+// neither fails the job nor records the failure, which verdict has done.
+func TestStep_createStepResult_ChangesNothing(t *testing.T) {
+	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	st := &stepRun{Step: &Step{Test: "res.code == 1"}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 0}}, failure: failure}
+	jCtx := &JobContext{
+		runEnv: &runEnv{
+			Printer: newBufferPrinter(),
+			Result:  NewResult(),
+		},
+	}
+
+	result := st.createStepResult("Check", jCtx, StatusError, "the output")
+	if result.Status != StatusError || result.TestOutput != "the output" || result.Failure != failure {
+		t.Errorf("result = %+v, want the status, output and failure it was given", result)
+	}
+	if jCtx.Failed {
+		t.Error("Failed = true, want the job left as it was")
+	}
+	if len(jCtx.Result.failures) != 0 {
+		t.Errorf("failures = %v, want none recorded", jCtx.Result.failures)
+	}
+
+	passed := st.createStepResult("Check", jCtx, StatusSuccess, "")
+	if passed.Failure != nil || passed.TestOutput != "" {
+		t.Errorf("result = %+v, want no failure on a step that passed", passed)
+	}
+}
+
+// A step that failed before its test could run is told to have a test as
+// one that ran is: by what checks it, an action that needs no check among
+// them.
+func TestStep_createFailedStepResult_HasTestAsARunStepHas(t *testing.T) {
+	tests := []struct {
+		name string
+		st   *Step
+		want bool
+	}{
+		{name: "with a test", st: &Step{Uses: "http", Test: "true"}, want: true},
+		{name: "of an action that needs no check", st: &Step{Uses: "hello"}, want: true},
+		{name: "unchecked", st: &Step{Uses: "http"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := &stepRun{Step: tt.st, expr: &expr.Expr{}, err: errors.New("boom")}
+			jCtx := &JobContext{runEnv: &runEnv{Config: Config{NeedsNoCheck: []string{"hello"}}}}
+
+			failed := st.createFailedStepResult("Step", jCtx)
+			ran := st.createStepResult("Step", jCtx, StatusSuccess, "")
+			if failed.HasTest != tt.want || ran.HasTest != tt.want {
+				t.Errorf("HasTest = %v failed and %v run, want %v", failed.HasTest, ran.HasTest, tt.want)
+			}
+		})
 	}
 }
 
@@ -2281,7 +2384,8 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 				},
 			}
 
-			result := st.createStepResult("Contract", jCtx)
+			status, testOutput := st.verdict(jCtx)
+			result := st.createStepResult("Contract", jCtx, status, testOutput)
 			if result.Status != tt.wantStatus {
 				t.Errorf("Status = %v, want %v", result.Status, tt.wantStatus)
 			}
@@ -2463,7 +2567,7 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 		},
 	}
 
-	result := st.createStepResult("Get a user", jCtx)
+	result := st.createStepResult("Get a user", jCtx, StatusSuccess, "")
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
 	if !reflect.DeepEqual(result.Contract, want) {
 		t.Errorf("Contract = %+v, want %+v", result.Contract, want)
