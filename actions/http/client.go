@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	hp "net/http"
 	"net/url"
 	"path"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/binary"
+	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -280,15 +280,7 @@ func (r *Req) checkGuard(req *hp.Request) error {
 	if r.guard.ReadOnly && !slices.Contains(readMethods, req.Method) {
 		return actionrpc.Refuse("%s %s may write, and the run is read-only; only GET, HEAD and OPTIONS are sent", req.Method, req.URL.Redacted())
 	}
-	host := req.URL.Host
-	if req.URL.Port() == "" {
-		port := "80"
-		if req.URL.Scheme == "https" {
-			port = "443"
-		}
-		host = net.JoinHostPort(req.URL.Hostname(), port)
-	}
-	return r.guard.CheckHost(host)
+	return r.guard.CheckHost(hostport.OfURL(req.URL))
 }
 
 type Option func(*Callback)

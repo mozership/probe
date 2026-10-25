@@ -15,6 +15,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -219,7 +220,7 @@ func (r *Req) servers() ([]string, error) {
 		port = defaultTLSPort
 	}
 	if r.Server != "" {
-		return []string{withPort(r.Server, port)}, nil
+		return []string{hostport.WithPort(r.Server, port)}, nil
 	}
 
 	conf, err := dns.ClientConfigFromFile(r.resolvConf)
@@ -238,15 +239,6 @@ func (r *Req) servers() ([]string, error) {
 		servers[i] = net.JoinHostPort(server, port)
 	}
 	return servers, nil
-}
-
-// withPort returns hostport with port when it names none. An IPv6 address
-// may be given bare or in brackets.
-func withPort(hostport, port string) string {
-	if _, _, err := net.SplitHostPort(hostport); err == nil {
-		return hostport
-	}
-	return net.JoinHostPort(strings.Trim(hostport, "[]"), port)
 }
 
 // exchange asks each server in turn until one answers, and returns the
