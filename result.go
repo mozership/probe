@@ -1,11 +1,13 @@
 package probe
 
 import (
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
@@ -130,6 +132,23 @@ type StepFailure struct {
 	// shows them under the step.
 	clause *expr.Clause
 	got    any
+	// summary is the condition as Message ends with it, masked and cut as
+	// the test was checked, so that the report files can tell it anew with
+	// the secrets known by then; see reportMessage.
+	summary string
+}
+
+// reportMessage is the message of f as the report files have it. The
+// condition of a test that is false, which Message ends with, is told anew
+// from the condition as it is, masked by m before its values are cut: a
+// secret a later step taught m would otherwise be left in the message as
+// the part of it the cut kept, which no masker finds. Without a condition,
+// or with no masker, it is Message.
+func (f *StepFailure) reportMessage(m *mask.Masker) string {
+	if m == nil || f.clause == nil || f.summary == "" || !strings.HasSuffix(f.Message, f.summary) {
+		return f.Message
+	}
+	return strings.TrimSuffix(f.Message, f.summary) + clauseSummary(maskClause(m, *f.clause))
 }
 
 // JobResult stores execution results for a job

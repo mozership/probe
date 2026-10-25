@@ -6,12 +6,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
 // BuildReport assembles a Report from the results of a run. Jobs are listed in
 // the given order, which is the order they are declared in the workflow.
 func BuildReport(name, description string, rs *Result, order []string, startedAt, finishedAt time.Time) *report.Report {
+	return buildReport(name, description, rs, order, startedAt, finishedAt, nil)
+}
+
+// buildReport is BuildReport with the message of each failure told as
+// StepFailure.reportMessage tells it with m, which hides the secrets m knows
+// in what a false condition compared before the values are cut; m may be
+// nil. The report is still to be masked with m as a whole.
+func buildReport(name, description string, rs *Result, order []string, startedAt, finishedAt time.Time, m *mask.Masker) *report.Report {
 	r := report.New(name, description, startedAt, finishedAt)
 	if rs == nil {
 		return r
@@ -22,13 +31,13 @@ func BuildReport(name, description string, rs *Result, order []string, startedAt
 		if !ok {
 			continue
 		}
-		r.AddJob(buildJobReport(jr))
+		r.AddJob(buildJobReport(jr, m))
 	}
 
 	return r
 }
 
-func buildJobReport(jr *JobResult) report.Job {
+func buildJobReport(jr *JobResult, m *mask.Masker) report.Job {
 	jr.mutex.Lock()
 	defer jr.mutex.Unlock()
 
@@ -49,15 +58,15 @@ func buildJobReport(jr *JobResult) report.Job {
 		Steps:      make([]report.Step, 0, len(jr.StepResults)),
 	}
 	for _, sr := range jr.StepResults {
-		job.Steps = append(job.Steps, buildStepReport(sr))
+		job.Steps = append(job.Steps, buildStepReport(sr, m))
 	}
-	job.RepeatTest = buildRepeatTestReport(jr.RepeatTest)
-	job.BaselineTest = buildRepeatTestReport(jr.BaselineTest)
+	job.RepeatTest = buildRepeatTestReport(jr.RepeatTest, m)
+	job.BaselineTest = buildRepeatTestReport(jr.BaselineTest, m)
 
 	return job
 }
 
-func buildRepeatTestReport(rt *RepeatTestResult) *report.RepeatTest {
+func buildRepeatTestReport(rt *RepeatTestResult, m *mask.Masker) *report.RepeatTest {
 	if rt == nil {
 		return nil
 	}
@@ -65,7 +74,7 @@ func buildRepeatTestReport(rt *RepeatTestResult) *report.RepeatTest {
 	switch {
 	case rt.Failure != nil:
 		out.Status = report.Failed
-		out.Failure = &report.Failure{Kind: rt.Failure.Kind, Message: rt.Failure.Message}
+		out.Failure = &report.Failure{Kind: rt.Failure.Kind, Message: rt.Failure.reportMessage(m)}
 	case rt.Skipped != "":
 		out.Status = report.Skipped
 		out.Reason = rt.Skipped
@@ -73,7 +82,7 @@ func buildRepeatTestReport(rt *RepeatTestResult) *report.RepeatTest {
 	return out
 }
 
-func buildStepReport(sr StepResult) report.Step {
+func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 	step := report.Step{
 		Index:      sr.Index,
 		ID:         sr.ID,
@@ -130,7 +139,7 @@ func buildStepReport(sr StepResult) report.Step {
 	if f := sr.Failure; f != nil && step.Status == report.Failed {
 		step.Failure = &report.Failure{
 			Kind:       f.Kind,
-			Message:    f.Message,
+			Message:    f.reportMessage(m),
 			Request:    jsonSafeMap(f.Request),
 			Response:   jsonSafeMap(f.Response),
 			Violations: f.Violations,
