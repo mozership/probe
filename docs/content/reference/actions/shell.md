@@ -66,7 +66,7 @@ A relative path is resolved against the directory Probe is run from, not the dir
 
 **Type:** String or Duration  
 **Default:** `30s`  
-**Format:** Go duration format (`30s`, `5m`, `1h`) or plain number (seconds)
+**Format:** Go duration format (`30s`, `5m`, `1h`) or a number of seconds (`30`, `1.5`). A value that is neither, or not above zero, such as `0`, is rejected
 
 ```yaml
 with:

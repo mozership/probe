@@ -167,7 +167,7 @@ func repeatShapes(job Job) map[string]expr.Shape {
 		for _, f := range fields {
 			s.Fields[f] = number
 		}
-		s.Fields["rt"] = rt
+		s.Fields[runFieldRT] = rt
 		return s
 	}
 	steps := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}

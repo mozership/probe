@@ -94,37 +94,45 @@ func TestValidateWorkdir(t *testing.T) {
 	}
 }
 
-func TestParseTimeout(t *testing.T) {
+func TestParseParamsTimeout(t *testing.T) {
 	tests := []struct {
 		name        string
-		timeoutStr  string
+		timeout     string
 		expected    time.Duration
 		expectError bool
 	}{
+		{"empty is the default", "", 30 * time.Second, false},
 		{"plain seconds", "30", 30 * time.Second, false},
+		{"fractional seconds", "1.5", 1500 * time.Millisecond, false},
 		{"duration format", "30s", 30 * time.Second, false},
 		{"minutes", "5m", 5 * time.Minute, false},
 		{"hours", "1h", 1 * time.Hour, false},
 		{"invalid format", "invalid", 0, true},
+		{"zero", "0", 0, true},
+		{"zero duration", "0s", 0, true},
+		{"negative", "-1s", 0, true},
+		{"too many seconds for a duration", "18446744074", 0, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTimeout(tt.timeoutStr)
+			params, err := parseParams(&Req{Cmd: "true", Shell: "/bin/sh", Timeout: tt.timeout})
 			if tt.expectError {
 				if err == nil {
-					t.Errorf("parseTimeout() expected error but got none")
+					t.Errorf("parseParams() timeout %q = %v, want an error", tt.timeout, params.timeout)
+				} else if !strings.Contains(err.Error(), "invalid timeout") {
+					t.Errorf("parseParams() error = %v, want it to name the timeout", err)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Errorf("parseTimeout() unexpected error: %v", err)
+				t.Errorf("parseParams() unexpected error: %v", err)
 				return
 			}
 
-			if got != tt.expected {
-				t.Errorf("parseTimeout() = %v, want %v", got, tt.expected)
+			if params.timeout != tt.expected {
+				t.Errorf("parseParams() timeout = %v, want %v", params.timeout, tt.expected)
 			}
 		})
 	}

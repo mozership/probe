@@ -282,8 +282,8 @@ func TestRequestInvalid(t *testing.T) {
 		{"unknown type", map[string]any{"name": "example.test", "type": "NOPE"}, "unsupported type: NOPE"},
 		{"zone transfer", map[string]any{"name": "example.test", "type": "AXFR"}, "zone transfer"},
 		{"unknown protocol", map[string]any{"name": "example.test", "protocol": "quic"}, "unsupported protocol: quic"},
-		{"timeout that is no duration", map[string]any{"name": "example.test", "timeout": "soon"}, "invalid timeout format"},
-		{"timeout of zero", map[string]any{"name": "example.test", "timeout": "0"}, "must be above zero"},
+		{"timeout that is no duration", map[string]any{"name": "example.test", "timeout": "soon"}, "invalid timeout soon"},
+		{"timeout of zero", map[string]any{"name": "example.test", "timeout": "0"}, "invalid timeout 0"},
 		{"name that is no domain name", map[string]any{"name": "a..b"}, "invalid name"},
 	}
 	for _, tt := range tests {

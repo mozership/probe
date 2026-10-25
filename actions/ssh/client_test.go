@@ -137,7 +137,20 @@ func TestParseParams(t *testing.T) {
 				Timeout:  "invalid",
 			},
 			wantError: true,
-			errorMsg:  "invalid timeout format: invalid",
+			errorMsg:  "invalid timeout invalid: use a duration such as 30s, or a number of seconds",
+		},
+		{
+			name: "zero timeout",
+			req: &Req{
+				Host:     "example.com",
+				Port:     22,
+				User:     "testuser",
+				Cmd:      "ls -la",
+				Password: "testpass",
+				Timeout:  "0",
+			},
+			wantError: true,
+			errorMsg:  "invalid timeout 0: a timeout must be above zero",
 		},
 	}
 

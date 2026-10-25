@@ -437,6 +437,20 @@ func TestRequestInvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestRequestTimeoutInSeconds(t *testing.T) {
+	// A number of seconds is a timeout, so the call gets as far as the
+	// address, which refuses it.
+	_, err := Request(map[string]any{
+		"addr":    "127.0.0.1:1",
+		"service": "grpc.health.v1.Health",
+		"method":  "Check",
+		"timeout": 2,
+	})
+	if err == nil || strings.Contains(err.Error(), "invalid timeout") {
+		t.Fatalf("Request() error = %v, want the call to fail on the address", err)
+	}
+}
+
 // clockProto declares a service whose response imports a well-known type,
 // so that its reflection reply holds more than one file.
 const clockProto = `syntax = "proto3";

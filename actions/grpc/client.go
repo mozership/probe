@@ -112,9 +112,9 @@ func (r *Req) Do() (re *Result, er error) {
 	}
 
 	// Setup timeout
-	timeout, err := time.ParseDuration(r.Timeout)
+	timeout, err := mapping.ParseTimeout(r.Timeout)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timeout %q: use a duration such as 30s", r.Timeout)
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

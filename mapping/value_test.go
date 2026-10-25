@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/internal/duration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestParseTimeout(t *testing.T) {
 		{"-1s", 0, true},
 		{true, 0, true},
 		{20_000_000_000, 0, true}, // would wrap to about 49 years
-		{int64(maxTimeoutSeconds) + 1, 0, true},
+		{int64(duration.MaxSeconds) + 1, 0, true},
 		{1e20, 0, true},
 		{"1e20", 0, true},
 		{"NaN", 0, true},
@@ -37,7 +38,9 @@ func TestParseTimeout(t *testing.T) {
 		{1e-10, 0, true},          // below a nanosecond: would truncate to zero
 		{"0.0000000001", 0, true}, // the same as a numeric string
 		{1e-9, time.Nanosecond, false},
-		{int64(maxTimeoutSeconds), time.Duration(maxTimeoutSeconds) * time.Second, false},
+		{4.1, 4100 * time.Millisecond, false},
+		{"8.2", 8200 * time.Millisecond, false},
+		{int64(duration.MaxSeconds), time.Duration(duration.MaxSeconds) * time.Second, false},
 	}
 	for _, tt := range tests {
 		got, err := ParseTimeout(tt.in)
@@ -47,6 +50,26 @@ func TestParseTimeout(t *testing.T) {
 		}
 		require.NoError(t, err, "%#v", tt.in)
 		assert.Equal(t, tt.want, got, "%#v", tt.in)
+	}
+}
+
+// The error of a refused timeout names it and says why.
+func TestParseTimeoutSaysWhy(t *testing.T) {
+	tests := []struct {
+		in   any
+		want string
+	}{
+		{"soon", "invalid timeout soon: use a duration such as 30s, or a number of seconds"},
+		{"0", "invalid timeout 0: a timeout must be above zero"},
+		{0, "invalid timeout 0: a timeout must be above zero"},
+		{"-1s", "invalid timeout -1s: a duration cannot be below zero"},
+		{1e20, "invalid timeout 1e+20: a duration cannot be longer than about 292 years"},
+		{"0.0000000001", "invalid timeout 0.0000000001: a duration above zero cannot be shorter than a nanosecond"},
+	}
+	for _, tt := range tests {
+		_, err := ParseTimeout(tt.in)
+		require.Error(t, err, "%#v", tt.in)
+		assert.Equal(t, tt.want, err.Error(), "%#v", tt.in)
 	}
 }
 

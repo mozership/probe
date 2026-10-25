@@ -3,11 +3,11 @@ package probe
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/duration"
 )
 
 const (
@@ -41,7 +41,10 @@ func getMaxAttempts() int {
 	return DefaultMaxAttempts
 }
 
-// Interval represents a time interval that can be specified as a number (seconds) or duration string
+// Interval is a duration written in a workflow, as duration.Parse reads it:
+// a duration string such as "1m30s", or a number of seconds, which may have
+// a fraction. It is used for the interval of a repeat or a retry, the delay
+// before a retry and a step's timeout, and cannot be negative.
 type Interval struct {
 	time.Duration
 }
@@ -53,38 +56,11 @@ func (i *Interval) UnmarshalYAML(unmarshal func(any) error) error {
 		return err
 	}
 
-	switch v := raw.(type) {
-	case int:
-		// If it's an integer, treat as seconds
-		i.Duration = time.Duration(v) * time.Second
-	case float64:
-		// YAML might parse numbers as float64
-		i.Duration = time.Duration(int(v)) * time.Second
-	case uint64:
-		// YAML might parse numbers as uint64
-		i.Duration = time.Duration(v) * time.Second
-	case string:
-		// If it's a string, try to parse as duration
-		// First check if it's a plain number (backward compatibility)
-		if matched, _ := regexp.MatchString(`^\d+$`, v); matched {
-			// Plain number, treat as seconds
-			if seconds, err := strconv.Atoi(v); err == nil {
-				i.Duration = time.Duration(seconds) * time.Second
-			} else {
-				return fmt.Errorf("invalid interval: %s", v)
-			}
-		} else {
-			// Parse as duration string
-			if dur, err := time.ParseDuration(v); err == nil {
-				i.Duration = dur
-			} else {
-				return fmt.Errorf("invalid interval format: %s", v)
-			}
-		}
-	default:
-		return fmt.Errorf("interval must be a number or duration string, got %T: %v", v, v)
+	d, err := duration.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid duration %v: %w", raw, err)
 	}
-
+	i.Duration = d
 	return nil
 }
 

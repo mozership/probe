@@ -41,7 +41,7 @@ Every request sends `Accept: */*` and `User-Agent: probe-http/1.0.0` unless `hea
 
 ### `timeout`
 
-`timeout` accepts a duration string such as `10s` or `1m30s`, or a plain number of seconds. `0` removes the limit.
+`timeout` accepts a duration string such as `10s` or `1m30s`, or a plain number of seconds. `0` removes the limit. A negative value, one too long for a duration (about 292 years), and one below a nanosecond are rejected.
 
 ```yaml
   - name: Slow endpoint
