@@ -11,7 +11,7 @@ The golden tests cover comprehensive DAG patterns for ASCII rendering:
 	                      | embedded_action          | Jobs with embedded actions (↗ bullet)
 	                      | embedded_expanded        | Embedded action with path expands steps
 	                      | truncated_long_names     | Long names truncated with ellipsis (…)
-	                      | wide_names               | Names of wide characters, padded by columns
+	                      | wide_names               | Names of wide characters and emoji, by columns
 	                      | linear_two               | A → B
 	                      | linear_three             | A → B → C
 	Divergence            | divergence_two           | A → [B, C]
@@ -420,13 +420,15 @@ func TestASCII_RenderNode_EmbeddedAction(t *testing.T) {
 	}
 }
 
-// TestASCII_RenderNode_WideNames pads and cuts names of wide characters by
-// the columns they take, so that the box is as wide as one of narrow names.
+// TestASCII_RenderNode_WideNames pads and cuts names of wide characters and
+// emoji by the columns they take, so that the box is as wide as one of
+// narrow names.
 func TestASCII_RenderNode_WideNames(t *testing.T) {
 	job := &Job{
 		Name: "結合テスト",
 		Steps: []Step{
 			{Name: "ログイン"},
+			{Name: "⚠\ufe0f ❤\ufe0f ✔\ufe0f 👍\U0001F3FD ✅ 🚀 で始まる長いステップ"},
 			{Name: "ステージングの API を順に呼んで確かめる"},
 			{Name: "埋め込み", Embedded: true, EmbeddedFile: "共通ジョブ定義ファイル.yml", EmbeddedSteps: []string{"準備", "とても長い名前の埋め込まれたステップ"}},
 		},
@@ -439,8 +441,8 @@ func TestASCII_RenderNode_WideNames(t *testing.T) {
 			t.Errorf("line %d is %d columns wide, want %d: %s", i, w, fixedNodeWidth, line)
 		}
 	}
-	if !strings.Contains(lines[4], "ステージングの API …│") {
-		t.Errorf("a long wide step name should be cut by columns: %s", lines[4])
+	if !strings.Contains(lines[5], "ステージングの API …│") {
+		t.Errorf("a long wide step name should be cut by columns: %s", lines[5])
 	}
 }
 
@@ -511,6 +513,9 @@ func asciiGoldenCases() []asciiGoldenCase {
 				}},
 				{ID: "test", Name: "結合テストを全部実行する", Needs: []string{"build"}, Steps: []Step{
 					{Name: "ステージングの API を順に呼んで確かめる"},
+				}},
+				{ID: "cleanup", Name: "⚠\ufe0f cleanup", Needs: []string{"test"}, Steps: []Step{
+					{Name: "✅ remove the 🚀 stack 👍\U0001F3FD"},
 				}},
 			}},
 		},

@@ -6,19 +6,57 @@ package textwidth
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/text/width"
 )
 
 // Width returns how many columns s takes in a terminal: two for a wide
-// character, such as one of Japanese, none for a mark that combines with
-// the one before it or a format character, and one for any other.
+// character, such as one of Japanese, or one drawn as an emoji, none for a
+// mark that combines with the one before it or a format character, and one
+// for any other.
 func Width(s string) int {
 	w := 0
-	for _, r := range s {
-		w += runeWidth(r)
+	for len(s) > 0 {
+		n, cw := next(s)
+		w += cw
+		s = s[n:]
 	}
 	return w
+}
+
+// The variation selector that asks for the character before it to be drawn
+// as an emoji, and the skin tones that change the emoji before them.
+const (
+	emojiPresentation = '\uFE0F'
+	skinToneFirst     = '\U0001F3FB'
+	skinToneLast      = '\U0001F3FF'
+)
+
+// next returns the length of the first character of s, with the marks,
+// format characters, emoji variation selector and skin tones that follow
+// it, and how many columns they take together. A character given the
+// emoji variation selector, as the warning sign of ⚠️ is, is drawn two
+// columns wide, and a skin tone takes no column of its own after the emoji
+// it changes. An emoji joined to the next by a zero width joiner, as those
+// of a family are, is measured as each of them would be alone, which is
+// wider than a terminal that joins them draws it.
+func next(s string) (int, int) {
+	r, n := utf8.DecodeRuneInString(s)
+	w := runeWidth(r)
+	for n < len(s) {
+		r, size := utf8.DecodeRuneInString(s[n:])
+		switch {
+		case r == emojiPresentation:
+			w = max(w, 2)
+		case r >= skinToneFirst && r <= skinToneLast:
+		case runeWidth(r) == 0:
+		default:
+			return n, w
+		}
+		n += size
+	}
+	return n, w
 }
 
 func runeWidth(r rune) int {
@@ -33,9 +71,10 @@ func runeWidth(r rune) int {
 }
 
 // Truncate returns s cut to at most maxWidth columns, ending in an
-// ellipsis when it was cut. A wide character that would go past maxWidth
-// is left out whole, so what is returned may be a column narrower. Nothing
-// is left of s when maxWidth is less than one.
+// ellipsis when it was cut. A character is kept or left out with the marks
+// and the emoji modifiers that follow it, and a wide one that would go past
+// maxWidth is left out whole, so what is returned may be a column
+// narrower. Nothing is left of s when maxWidth is less than one.
 func Truncate(s string, maxWidth int) string {
 	if Width(s) <= maxWidth {
 		return s
@@ -43,17 +82,16 @@ func Truncate(s string, maxWidth int) string {
 	if maxWidth < 1 {
 		return ""
 	}
-	var b strings.Builder
-	w := 0
-	for _, r := range s {
-		rw := runeWidth(r)
-		if w+rw > maxWidth-1 {
+	w, end := 0, 0
+	for end < len(s) {
+		n, cw := next(s[end:])
+		if w+cw > maxWidth-1 {
 			break
 		}
-		b.WriteRune(r)
-		w += rw
+		w += cw
+		end += n
 	}
-	return b.String() + "…"
+	return s[:end] + "…"
 }
 
 // OneLine returns s with each run of white space and control characters

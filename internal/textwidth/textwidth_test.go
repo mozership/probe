@@ -16,6 +16,18 @@ func TestWidth(t *testing.T) {
 		{"Ｔｅｓｔ", 8},
 		{"a\u200bb", 2},
 		{"╭─○…╮", 5},
+		{"⚠\ufe0f", 2},
+		{"⚠", 1},
+		{"❤\ufe0f", 2},
+		{"✔\ufe0f", 2},
+		{"👍\U0001F3FD", 2},
+		{"\U0001F3FD", 2},
+		{"✅", 2},
+		{"🚀", 2},
+		{"🚀\ufe0f", 2},
+		{"⚠\ufe0f cleanup", 10},
+		// A family joined by zero width joiners is measured as its members.
+		{"👨\u200d👩\u200d👧", 6},
 	}
 	for _, tt := range tests {
 		if got := Width(tt.in); got != tt.want {
@@ -40,6 +52,10 @@ func TestTruncate(t *testing.T) {
 		{"結合テスト", 6, "結合…"},
 		{"結合テスト", 5, "結合…"},
 		{"結合テスト", 2, "…"},
+		{"⚠\ufe0f cleanup", 4, "⚠\ufe0f …"},
+		{"⚠\ufe0f cleanup", 2, "…"},
+		{"👍\U0001F3FD👍\U0001F3FD", 3, "👍\U0001F3FD…"},
+		{"e\u0301e\u0301e\u0301", 2, "e\u0301…"},
 	}
 	for _, tt := range tests {
 		got := Truncate(tt.in, tt.max)
