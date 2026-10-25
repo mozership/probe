@@ -73,9 +73,14 @@ const maxSession = 1000
 // a session from asking for more memory than the machine has.
 const maxLength = 100 << 20
 
-// defaultTimeout is the timeout when the step does not give one: the 5
-// minutes RFC 5321 4.5.3.2 asks a client to wait for most replies.
-const defaultTimeout = 5 * time.Minute
+// defaultTimeout is the timeout when the step does not give one. It is
+// well below the step's own default timeout of 5 minutes, so that a server
+// that stops answering fails its session, and the step still gets the
+// counts of the others, before the step timeout ends the action and drops
+// them; the reply to the end of a message, at twice it, is 2 minutes. RFC
+// 5321 4.5.3.2 asks for 5 and 10 minutes, which a step can give by raising
+// both timeouts.
+const defaultTimeout = time.Minute
 
 func NewReq() *Req {
 	return &Req{

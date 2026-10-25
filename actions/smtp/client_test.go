@@ -24,7 +24,7 @@ func TestNewReq(t *testing.T) {
 		Message:    1,
 		Length:     0,
 		StartTLS:   StartTLSAuto,
-		Timeout:    5 * time.Minute,
+		Timeout:    time.Minute,
 	}
 
 	if !reflect.DeepEqual(got, expected) {

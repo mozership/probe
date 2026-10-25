@@ -37,11 +37,24 @@ The fields below describe the delivery. All of them accept template expressions.
 | `length` | Integer | No | `0` | Number of `*` characters appended to the generated body, up to 104857600 (100 MiB) |
 | `starttls` | String | No | `auto` | `auto` switches to TLS with `STARTTLS` when the server offers it, `required` fails a session whose server does not, and `off` never uses it |
 | `insecure_skip_tls` | Boolean | No | `false` | Accept any certificate after `STARTTLS`, such as a self-signed one |
-| `timeout` | Duration | No | `5m` | Time limit for connecting, and for each wait on the server to read or write. The reply to the end of a message may take twice as long |
+| `timeout` | Duration | No | `1m` | Time limit for connecting, and for each wait on the server to read or write. The reply to the end of a message may take twice as long |
 
 After `STARTTLS` the server's certificate is verified against the host in `addr`, so a self-signed or mismatched one fails the session unless `insecure_skip_tls` is set. A connection that starts in TLS, as on port 465, is not supported. There are no parameters for authentication, CC/BCC, a custom body or HTML. To include a report in the run output, use the step's `echo`.
 
-`timeout` accepts a duration string such as `10s` or `1m30s`, or a plain number of seconds. A value that is not a duration, not a number, or not above zero is rejected. The default follows RFC 5321 (section 4.5.3.2), which asks a client to wait 5 minutes for most replies and 10 for the reply to the end of a message, as a server may check the message before it answers; so the reply to the end of a message may always take twice `timeout`. A message whose reply runs out of time is counted as failed, although the server may have taken it. `timeout` bounds each wait rather than the whole session, so a session of many messages may take longer than it as long as the server keeps answering. A session whose server does not answer in time fails, and when no message was delivered the step ends with an error, such as `mail delivery failed: tcp dial error: read tcp ...: i/o timeout (the server did not answer within 5m0s)`. What bounds the whole session is the step's own `timeout`, 5m by default, which stops the action however the waits go; raise it with `timeout` on the step when a session is to run longer.
+`timeout` accepts a duration string such as `10s` or `1m30s`, or a plain number of seconds. A value that is not a duration, not a number, or not above zero is rejected. It bounds each wait rather than the whole session, so a session of many messages may take longer than it as long as the server keeps answering. The reply to the end of a message may take twice `timeout`, 2 minutes by default, as a server may check the message before it answers; a message whose reply runs out of time is counted as failed, although the server may have taken it. A session whose server does not answer in time fails, and when no message was delivered the step ends with an error, such as `mail delivery failed: tcp dial error: read tcp ...: i/o timeout (the server did not answer within 1m0s)`.
+
+What bounds the whole session is the step's own `timeout`, 5m by default, which stops the action however the waits go and leaves no `res` to test. The default `timeout` is well below it, so that a server that stops answering fails its session, and the step still reports the counts of all sessions, before that happens. RFC 5321 (section 4.5.3.2) asks a client to wait 5 minutes for most replies and 10 for the reply to the end of a message, so for a slow server, such as one that greylists or scans each message, raise both: `with.timeout` for each wait, and the step's `timeout` above the time the whole session may take.
+
+```yaml
+- name: Deliver to a slow server
+  uses: smtp
+  timeout: 30m
+  with:
+    addr: "mx.example.com:25"
+    from: "sender@example.com"
+    to: "recipient@example.com"
+    timeout: 5m
+```
 
 The generated message has `From`, `To`, `Date` and `Subject` headers and a body of `This is a test mail.` followed by `length` `*` characters, broken into lines of 80. Each message is sent with two more headers before these, `X-Send-Timestamp-Ns`, the time it was sent in Unix nanoseconds, and a `Message-ID` of its own, whose part before `@` is also added to the end of the subject as ` - <id>`.
 
