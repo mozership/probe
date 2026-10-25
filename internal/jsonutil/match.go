@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/internal/scalar"
 )
 
 // Match compares two `map[string]any` objects strictly.
@@ -157,12 +157,12 @@ func (m *matcher) deepMatch(src, target any, diffs *[]string, path string) bool 
 		return true
 
 	case int, int64, uint, uint64, float64:
-		targetStr, ok := mapping.AnyToString(target)
+		targetStr, ok := scalar.String(target)
 		if !ok {
 			*diffs = append(*diffs, fmt.Sprintf("Key '%s': Expected number, got %T", path, target))
 			return false
 		}
-		srcStr, ok := mapping.AnyToString(src)
+		srcStr, ok := scalar.String(src)
 		if !ok {
 			*diffs = append(*diffs, fmt.Sprintf("Key '%s': Expected %#v, got %#v", path, target, src))
 			return false
@@ -184,7 +184,7 @@ func (m *matcher) deepMatch(src, target any, diffs *[]string, path string) bool 
 					return false
 				}
 			} else {
-				srcStr, ok := mapping.AnyToString(src)
+				srcStr, ok := scalar.String(src)
 				if !ok || !re.MatchString(srcStr) {
 					*diffs = append(*diffs, fmt.Sprintf("Key '%s': Regex mismatch (pattern: %s, value: %v)", path, pattern, srcStr))
 					return false

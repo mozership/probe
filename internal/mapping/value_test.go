@@ -73,37 +73,6 @@ func TestParseTimeoutSaysWhy(t *testing.T) {
 	}
 }
 
-func TestAnyToString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    any
-		expected string
-		ok       bool
-	}{
-		{"string", "hello", "hello", true},
-		{"bool true", true, "true", true},
-		{"bool false", false, "false", true},
-		{"int", 42, "42", true},
-		{"int64", int64(42), "42", true},
-		{"float64", 3.14, "3.14", true},
-		{"[]byte", []byte("bytes"), "bytes", true},
-		{"nil", nil, "nil", true},
-		{"unsupported", []int{1, 2, 3}, "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, ok := AnyToString(tt.input)
-			if ok != tt.ok {
-				t.Errorf("AnyToString() ok = %v, want %v", ok, tt.ok)
-			}
-			if result != tt.expected {
-				t.Errorf("AnyToString() = %q, want %q", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestTitleCase(t *testing.T) {
 	tests := []struct {
 		name     string

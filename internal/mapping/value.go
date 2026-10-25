@@ -2,12 +2,12 @@ package mapping
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mozership/probe/internal/duration"
+	"github.com/mozership/probe/internal/scalar"
 )
 
 // HeaderToStringValue converts header values to strings for HTTP processing.
@@ -114,48 +114,10 @@ func envString(v any) string {
 	if v == nil {
 		return ""
 	}
-	if s, ok := AnyToString(v); ok {
+	if s, ok := scalar.String(v); ok {
 		return s
 	}
 	return fmt.Sprintf("%v", v)
-}
-
-// AnyToString attempts to convert any type to a string.
-// Returns the string representation and a boolean indicating success.
-//
-// Example:
-//
-//	str, ok := AnyToString(42)        // "42", true
-//	str, ok := AnyToString(3.14)      // "3.14", true
-//	str, ok := AnyToString("hello")   // "hello", true
-//	str, ok := AnyToString(nil)       // "nil", true
-//	str, ok := AnyToString([]int{1})  // "", false
-func AnyToString(value any) (string, bool) {
-	if value == nil {
-		return "nil", true
-	}
-
-	switch v := value.(type) {
-	case string:
-		return v, true
-	case bool:
-		return strconv.FormatBool(v), true
-	case int, int8, int16, int32, int64:
-		return strconv.FormatInt(reflect.ValueOf(v).Int(), 10), true
-	case uint, uint8, uint16, uint32, uint64:
-		return strconv.FormatUint(reflect.ValueOf(v).Uint(), 10), true
-	case float32, float64:
-		return strconv.FormatFloat(reflect.ValueOf(v).Float(), 'f', -1, 64), true
-	case []byte:
-		return string(v), true
-	case fmt.Stringer:
-		return v.String(), true
-	default:
-		if reflect.ValueOf(value).IsZero() {
-			return "nil", true
-		}
-		return "", false
-	}
 }
 
 // TitleCase converts a string to title case using a specified separator character.
