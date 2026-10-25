@@ -18,3 +18,21 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		t.Errorf("res = %v, want the keys of with in it", res)
 	}
 }
+
+// TestTypesHoldOverWith checks that status and dump are of the kinds
+// declared whatever with gives under their names, which the action returns
+// in res too.
+func TestTypesHoldOverWith(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
+	for _, with := range []map[string]any{
+		{"name": "probe"},
+		{"status": "ok", "dump": "yes"},
+	} {
+		ret, err := (&Action{log: hclog.NewNullLogger()}).Run(with)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kinds.Check(ret)
+	}
+	kinds.Covered()
+}

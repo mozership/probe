@@ -8,6 +8,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	host, port := plainIMAPServer(t, 2)
 	a := &Action{log: hclog.NewNullLogger()}
 	with := map[string]any{
@@ -24,6 +25,8 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		t.Fatal(err)
 	}
 	actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+	kinds.Check(ret)
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

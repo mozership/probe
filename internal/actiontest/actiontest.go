@@ -7,6 +7,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 )
 
 // CheckFields fails t when ret, what an action returned for a step, has a
@@ -57,5 +60,73 @@ func CheckRequired(t testing.TB, required [][]string, with map[string]any, run f
 		if !slices.ContainsFunc(group, func(key string) bool { return strings.Contains(msg, key) }) {
 			t.Errorf("without any of %v, the action failed with %q, which names none of them", group, err)
 		}
+	}
+}
+
+// Kinds checks that the fields of the req and the res an action returns are
+// of the kinds it declares, as the runner receives them: after they have
+// been sent from the action's process, which sends a time.Duration as text
+// and every number as one kind. A field that is nil, as one an action leaves
+// empty may be, is of any kind.
+type Kinds struct {
+	t        testing.TB
+	req, res map[string]string
+	// seen are the fields a value of was checked, as req.<name> and
+	// res.<name>.
+	seen map[string]bool
+}
+
+// NewKinds returns a Kinds that checks what an action returns against req
+// and res, the kinds of the fields of its req and res it declares.
+func NewKinds(t testing.TB, req, res map[string]string) *Kinds {
+	return &Kinds{t: t, req: req, res: res, seen: map[string]bool{}}
+}
+
+// Check fails the test when a field of ret, what the action returned for a
+// step, is of another kind than the one declared for it.
+func (k *Kinds) Check(ret map[string]any) {
+	k.t.Helper()
+	sent, err := actionrpc.Sendable(ret)
+	if err != nil {
+		k.t.Fatalf("the result cannot be sent: %v", err)
+	}
+	for _, name := range []string{"req", "res"} {
+		declared := k.req
+		if name == "res" {
+			declared = k.res
+		}
+		m, _ := sent[name].(map[string]any)
+		for _, key := range slices.Sorted(maps.Keys(declared)) {
+			v := m[key]
+			if v == nil {
+				continue
+			}
+			k.seen[name+"."+key] = true
+			if got, _ := kind.Of(v); got != declared[key] {
+				k.t.Errorf("%s.%s is %v (%T), which is not a %s as declared", name, key, v, v, declared[key])
+			}
+		}
+	}
+}
+
+// Covered fails the test for a field declared that no result checked had a
+// value of, as its kind is then not known to be right.
+func (k *Kinds) Covered() {
+	k.t.Helper()
+	var unseen []string
+	for _, name := range []string{"req", "res"} {
+		declared := k.req
+		if name == "res" {
+			declared = k.res
+		}
+		for key := range declared {
+			if !k.seen[name+"."+key] {
+				unseen = append(unseen, name+"."+key)
+			}
+		}
+	}
+	slices.Sort(unseen)
+	if len(unseen) > 0 {
+		k.t.Errorf("no result checked has %s, so their kinds are not known to be right", strings.Join(unseen, ", "))
 	}
 }

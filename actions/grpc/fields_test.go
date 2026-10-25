@@ -10,6 +10,7 @@ import (
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
+	kinds := actiontest.NewKinds(t, ReqTypes(), ResTypes())
 	grpcAddr := startUserServer(t)
 	s := startConnectServer(t, "")
 	files := protoOf(writeProto(t, userProto(t)), false)
@@ -33,8 +34,10 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 				t.Fatalf("%v: %v", with, err)
 			}
 			actiontest.CheckFields(t, ReqFields(), ResFields(), nil, ret)
+			kinds.Check(ret)
 		}
 	}
+	kinds.Covered()
 }
 
 func TestRequired(t *testing.T) {

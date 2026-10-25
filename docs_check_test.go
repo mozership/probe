@@ -75,7 +75,7 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 	if err := os.WriteFile(name, []byte("name: docs\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	opts := probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), WithFields: actions.WithFields(), Required: actions.AllRequired()}
+	opts := probe.CheckOptions{Actions: actions.Names(), Params: actions.AllParams(), Contracts: actions.Contracts(), ReqFields: actions.AllReqFields(), ResFields: actions.AllResFields(), ReqTypes: actions.AllReqTypes(), ResTypes: actions.AllResTypes(), WithFields: actions.WithFields(), Required: actions.AllRequired()}
 
 	count := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

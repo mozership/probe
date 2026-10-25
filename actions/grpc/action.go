@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -80,6 +81,25 @@ func ReqFields() []string {
 // ReqFields.
 func ResFields() []string {
 	return append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations")
+}
+
+// ReqTypes returns the kinds of the fields of the req the grpc action
+// returns, those of Req, and ResTypes those of its res, those of Res and of
+// the fields it adds, for probe check to report an expression that does
+// with a field what its kind does not allow.
+func ReqTypes() map[string]string {
+	return kind.Fields(Req{})
+}
+
+// ResTypes returns the kinds of the fields of the res the grpc action
+// returns; see ReqTypes.
+func ResTypes() map[string]string {
+	types := kind.Fields(Res{})
+	types["complete"] = kind.Bool
+	types["contract"] = kind.Map
+	types["messages"] = kind.List
+	types["violations"] = kind.List
+	return types
 }
 
 // Required returns the keys of with the grpc action cannot run without:

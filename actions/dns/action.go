@@ -3,6 +3,7 @@ package dns
 import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/mapping"
 )
 
@@ -54,6 +55,26 @@ func ReqFields() []string {
 // ReqFields.
 func ResFields() []string {
 	return []string{"answers", "authoritative", "protocol", "rcode", "server", "values"}
+}
+
+// ReqTypes returns the kinds of the fields of the req the dns action
+// returns, and ResTypes those of its res, for probe check to report an
+// expression that does with a field what its kind does not allow.
+func ReqTypes() map[string]string {
+	return kind.Fields(Req{})
+}
+
+// ResTypes returns the kinds of the fields of the res the dns action
+// returns; see ReqTypes.
+func ResTypes() map[string]string {
+	return map[string]string{
+		"answers":       kind.List,
+		"authoritative": kind.Bool,
+		"protocol":      kind.String,
+		"rcode":         kind.String,
+		"server":        kind.String,
+		"values":        kind.List,
+	}
 }
 
 // Required returns the keys of with the dns action cannot run without: name.
