@@ -95,6 +95,8 @@ func (js *JobScheduler) checkCircularDependencies() error {
 	for jobID := range js.jobs {
 		allIDs = append(allIDs, jobID)
 	}
+	// Sorted, so that the cycle is told from the same job each time.
+	slices.Sort(allIDs)
 
 	// Define dependency getter function
 	getDeps := func(jobID string) []string {
@@ -113,23 +115,14 @@ func (js *JobScheduler) checkCircularDependencies() error {
 	return nil
 }
 
-func (js *JobScheduler) CanRunJob(jobID string) bool {
-	js.mutex.RLock()
-	defer js.mutex.RUnlock()
-
-	return js.canRunJobLocked(jobID)
-}
-
-// canRunJobLocked is the lock-free implementation of CanRunJob.
-// Callers must already hold js.mutex (read or write). Splitting this out
-// avoids re-entering RLock from GetRunnableJobs, which would deadlock when
-// a writer is waiting on the same mutex.
+// canRunJobLocked reports whether the job jobID can start. Callers must
+// already hold js.mutex (read or write): taking RLock again from
+// GetRunnableJobs would deadlock when a writer is waiting on the same mutex.
 func (js *JobScheduler) canRunJobLocked(jobID string) bool {
 	job, ok := js.jobs[jobID]
 	if !ok {
-		// Unknown job: a missing key returns a nil *Job, and ranging
-		// over job.Needs below would panic. CanRunJob is exported, so
-		// guard external callers by reporting "not runnable" instead.
+		// A missing key returns a nil *Job, and ranging over job.Needs
+		// below would panic.
 		return false
 	}
 	if js.status[jobID] != JobPending {
@@ -237,19 +230,6 @@ func (js *JobScheduler) GetRunnableJobs() []string {
 	}
 
 	return runnable
-}
-
-func (js *JobScheduler) AllJobsCompleted() bool {
-	js.mutex.RLock()
-	defer js.mutex.RUnlock()
-
-	for _, status := range js.status {
-		if status != JobCompleted && status != JobSkipped {
-			return false
-		}
-	}
-
-	return true
 }
 
 // PendingJobs returns the jobs that have not started, sorted.
