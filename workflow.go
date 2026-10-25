@@ -15,6 +15,7 @@ import (
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
@@ -44,6 +45,9 @@ type Workflow struct {
 	// atomic.Bool because a Workflow is copied by value when it is decoded.
 	failed int32
 	env    map[string]string
+	// ownEnv is the workflow's own env, as the first Start found it, for
+	// every run to give Config.Env under afresh
+	ownEnv map[string]string
 	// basePath is the directory containing the workflow file (used for resolving relative paths)
 	basePath string
 	// named are the names the workflow gives its external actions, as a job
@@ -92,6 +96,14 @@ func (w *Workflow) Start(c Config) error {
 	if found := w.problems(); len(found) > 0 {
 		return problemsError(found)
 	}
+	// What a run finds out is its own: a workflow started again starts
+	// with no job failed, no outputs and every job of it, whatever the run
+	// before was narrowed to. The jobs are put back as Start returns,
+	// since what a run reads them from is the workflow.
+	atomic.StoreInt32(&w.failed, 0)
+	w.outputs = NewOutputs()
+	w.selection = nil
+	defer func(jobs []Job) { w.Jobs = jobs }(w.Jobs)
 	// A run narrowed to some jobs is the run of a workflow of those jobs
 	// alone: the others are not run, reported or counted, and the actions
 	// and files only they use are not fetched or read.
@@ -135,9 +147,14 @@ func (w *Workflow) Start(c Config) error {
 	// The variables read from files are those of the environment the
 	// vars read, and a secret may be among them, so they are in place
 	// before the masker is made. What the environment has comes first.
+	// That of an earlier run is not kept: each is given its own.
+	if w.ownEnv == nil {
+		w.ownEnv = w.Env()
+	}
+	w.env = w.ownEnv
 	if len(c.Env) > 0 {
 		env := maps.Clone(c.Env)
-		maps.Copy(env, w.Env())
+		maps.Copy(env, w.ownEnv)
 		w.env = env
 	}
 
@@ -158,11 +175,6 @@ func (w *Workflow) Start(c Config) error {
 
 	startedAt := time.Now()
 	reporter.Start(w.Name, w.Description)
-
-	// Initialize shared outputs
-	if w.outputs == nil {
-		w.outputs = NewOutputs()
-	}
 
 	w.given = c.Vars
 	vars, err := w.evalVars()
@@ -318,14 +330,24 @@ func (w *Workflow) jobNamer(vars map[string]any) func(id string) string {
 
 // newScheduler returns a scheduler of the workflow's jobs, added in the
 // order they are written.
-func (w *Workflow) newScheduler() (*JobScheduler, error) {
-	scheduler := NewJobScheduler()
+func (w *Workflow) newScheduler() (*schedule.Scheduler, error) {
+	scheduler := schedule.New()
 	for i := range w.Jobs {
-		if err := scheduler.AddJob(&w.Jobs[i]); err != nil {
+		if err := addToSchedule(scheduler, &w.Jobs[i]); err != nil {
 			return nil, err
 		}
 	}
 	return scheduler, nil
+}
+
+// addToSchedule adds job to s by what s waits on: its ID, its needs and
+// whether it always runs. The jobs of a workflow are given their IDs before
+// they are added, by assignJobIDs.
+func addToSchedule(s *schedule.Scheduler, job *Job) error {
+	if job.ID == "" {
+		return fmt.Errorf("job %q has no ID", job.Name)
+	}
+	return s.Add(schedule.Job{ID: job.ID, Needs: job.Needs, Always: job.Always})
 }
 
 // checkCycle refuses jobs whose needs are in a cycle, as a run does. A need
@@ -335,18 +357,18 @@ func (w *Workflow) checkCycle() error {
 	if err != nil {
 		return err
 	}
-	return scheduler.checkCircularDependencies()
+	return scheduler.CheckCycle()
 }
 
 // initJobScheduler creates and sets up the job scheduler with dependencies
-func (w *Workflow) initJobScheduler() (*JobScheduler, error) {
+func (w *Workflow) initJobScheduler() (*schedule.Scheduler, error) {
 	scheduler, err := w.newScheduler()
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate dependencies
-	if err := scheduler.ValidateDependencies(); err != nil {
+	if err := scheduler.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -377,12 +399,12 @@ func (w *Workflow) startJobsWithDependencies(ctx JobContext) error {
 	running := 0
 
 	for {
-		skippedJobs := ctx.JobScheduler.MarkJobsWithFailedDependencies()
+		skippedJobs := ctx.scheduler.SkipBlocked()
 		if ctx.Result != nil {
 			w.updateSkippedJobsOutput(skippedJobs, ctx.Result)
 		}
 
-		running += w.processRunnableJobs(ctx.JobScheduler.GetRunnableJobs(), ctx, done)
+		running += w.processRunnableJobs(ctx.scheduler.Runnable(), ctx, done)
 		if running == 0 {
 			break
 		}
@@ -394,7 +416,7 @@ func (w *Workflow) startJobsWithDependencies(ctx JobContext) error {
 
 	// With no job running, a job not over yet would never run: what it
 	// waits for will not change any more.
-	if pending := ctx.JobScheduler.PendingJobs(); len(pending) > 0 {
+	if pending := ctx.scheduler.Pending(); len(pending) > 0 {
 		return fmt.Errorf("jobs %s cannot run: the jobs they need will not be done", strings.Join(pending, ", "))
 	}
 	return nil
@@ -420,8 +442,8 @@ func (w *Workflow) updateSkippedJobsOutput(skippedJobs []string, rs *Result) {
 // started. Each job sends to done once it is over and its status says so.
 func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, done chan<- struct{}) int {
 	for _, jobID := range runnableJobs {
-		job := ctx.JobScheduler.jobs[jobID]
-		ctx.JobScheduler.StartJob(jobID)
+		job := w.job(jobID)
+		ctx.scheduler.Start(jobID)
 
 		go func(j *Job) {
 			defer func() { done <- struct{}{} }()
@@ -432,6 +454,17 @@ func (w *Workflow) processRunnableJobs(runnableJobs []string, ctx JobContext, do
 		}(job)
 	}
 	return len(runnableJobs)
+}
+
+// job returns the job of id. The scheduler has the jobs of the workflow
+// alone, so a job it starts is one of them.
+func (w *Workflow) job(id string) *Job {
+	for i := range w.Jobs {
+		if w.Jobs[i].ID == id {
+			return &w.Jobs[i]
+		}
+	}
+	panic(fmt.Sprintf("probe: no job has the ID %q", id))
 }
 
 func (w *Workflow) SetExitStatus(isErr bool) {
@@ -470,21 +503,21 @@ func (e *maskedError) Unwrap() error {
 	return e.err
 }
 
-func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *JobScheduler) JobContext {
+func (w *Workflow) newJobContext(c Config, vars map[string]any, scheduler *schedule.Scheduler) JobContext {
 	rs := w.setupResult()
 	rs.SetReporter(w.printer.Reporter())
 
 	return JobContext{
 		runEnv: &runEnv{
-			Config:       c,
-			Printer:      w.printer,
-			Result:       rs,
-			JobScheduler: scheduler,
-			background:   newBackground(),
-			cleanups:     newCleanups(w.runID, w.printer, c.Trace),
-			baseDir:      w.basePath,
-			runID:        w.runID,
-			actions:      w.named,
+			Config:     c,
+			Printer:    w.printer,
+			Result:     rs,
+			scheduler:  scheduler,
+			background: newBackground(),
+			cleanups:   newCleanups(w.runID, w.printer, c.Trace),
+			baseDir:    w.basePath,
+			runID:      w.runID,
+			actions:    w.named,
 		},
 		Vars:    vars,
 		Outputs: w.outputs,

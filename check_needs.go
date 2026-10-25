@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/suggest"
 )
 
@@ -31,14 +32,14 @@ func (c *checker) checkNeeds() {
 		return
 	}
 
-	s := NewJobScheduler()
+	s := schedule.New()
 	for i := range c.wf.Jobs {
-		if err := s.AddJob(&c.wf.Jobs[i]); err != nil {
+		if err := addToSchedule(s, &c.wf.Jobs[i]); err != nil {
 			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d]", i)), c.jobWhere(i), "%s", firstLine(err.Error()))
 			return
 		}
 	}
-	if err := s.ValidateDependencies(); err != nil {
+	if err := s.Validate(); err != nil {
 		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
 	}
 }

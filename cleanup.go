@@ -9,6 +9,7 @@ import (
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionlog"
 )
 
 // cleanupTimeout is how long an action is given to clean up after a run.
@@ -58,7 +59,7 @@ func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 		if err != nil {
 			return err
 		}
-		log := newActionLog(c.nameOf(uses), os.Stderr, printer.Masker(), actionLogLevel(printer.verbose, trace), printer.verbose)
+		log := actionlog.New(c.nameOf(uses), os.Stderr, printer.Masker(), actionlog.Level(printer.verbose, trace), printer.verbose)
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		return actionrpc.CleanupExecutable(ctx, exe.Path, exe.SHA256, actionrpc.CleanupCall{RunID: runID}, log)
