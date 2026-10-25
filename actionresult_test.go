@@ -101,11 +101,15 @@ func TestAddedResFields(t *testing.T) {
 	}
 }
 
+// TestStep_processActionResult checks that the context a step's test and
+// echo read takes the request, the response and the time the action
+// returned, with a JSON body read as the value it holds.
 func TestStep_processActionResult(t *testing.T) {
 	tests := []struct {
 		name         string
 		actionResult map[string]any
-		expectLogs   int
+		wantBody     any
+		wantRT       ResponseTime
 	}{
 		{
 			name: "normal action result",
@@ -114,7 +118,8 @@ func TestStep_processActionResult(t *testing.T) {
 				"res": map[string]any{"status": 200, "body": "response"},
 				"rt":  "100ms",
 			},
-			expectLogs: 1,
+			wantBody: "response",
+			wantRT:   ResponseTime{Duration: "100ms", Sec: 0.1},
 		},
 		{
 			name: "action result with JSON body",
@@ -126,7 +131,8 @@ func TestStep_processActionResult(t *testing.T) {
 				},
 				"rt": "150ms",
 			},
-			expectLogs: 1,
+			wantBody: map[string]any{"message": "success"},
+			wantRT:   ResponseTime{Duration: "150ms", Sec: 0.15},
 		},
 	}
 
@@ -142,6 +148,19 @@ func TestStep_processActionResult(t *testing.T) {
 			}
 
 			step.processActionResult(readActionResult(tt.actionResult), jCtx)
+
+			if got := step.ctx.Req["url"]; got != "http://example.com" {
+				t.Errorf("req.url = %#v, want the url of the request", got)
+			}
+			if got := step.ctx.Res["status"]; got != 200 {
+				t.Errorf("res.status = %#v, want 200", got)
+			}
+			if got := step.ctx.Res["body"]; !reflect.DeepEqual(got, tt.wantBody) {
+				t.Errorf("res.body = %#v, want %#v", got, tt.wantBody)
+			}
+			if step.ctx.RT != tt.wantRT {
+				t.Errorf("rt = %+v, want %+v", step.ctx.RT, tt.wantRT)
+			}
 		})
 	}
 }
