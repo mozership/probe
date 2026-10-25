@@ -80,6 +80,8 @@ func TestHints(t *testing.T) {
 		{`res.code != None`, `expressions have no None: write nil`, `res.code != nil`, true},
 		{`True`, `expressions have no True: write true`, `true`, true},
 		{`False`, `expressions have no False: write false`, `false`, false},
+		{`{{ res.code == 200 }}`, `an expression is written without {{ }}: write res.code == 200`, `res.code == 200`, true},
+		{`{{res.body contains "World"}}`, `an expression is written without {{ }}: write res.body contains "World"`, `res.body contains "World"`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

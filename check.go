@@ -14,6 +14,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/expr"
+	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/suggest"
 )
 
@@ -77,6 +78,13 @@ type CheckOptions struct {
 	// or the res of an action they do not name is not checked.
 	ReqFields map[string][]string
 	ResFields map[string][]string
+	// ReqTypes and ResTypes are the kinds of the fields of the req and the
+	// res each action returns, by its name, so that an expression that does
+	// with a field what its kind does not allow is reported, as res.code ==
+	// "200 OK" is, which is never true of a number. A field they leave out,
+	// and a field of an action they do not name, may hold anything.
+	ReqTypes map[string]map[string]kind.Kind
+	ResTypes map[string]map[string]kind.Kind
 	// WithFields are the actions whose req and res hold the keys of the
 	// step's with too, besides the fields they are named with, as an action
 	// that returns what it is given does.
@@ -97,10 +105,10 @@ type CheckOptions struct {
 // wrong with it or weak in it, without running anything: keys a workflow
 // does not take, what a run would refuse to load, actions that do not
 // exist, needs that cannot be met, expressions and templates that do not
-// parse or that read a name that is not there to read, and outputs read
-// before or without being published, as errors; and steps that nothing
-// checks, tests that read nothing, and vars that nothing defines, as
-// warnings.
+// parse, that read a name that is not there to read, or that do with a
+// value what its kind does not allow, and outputs read before or without
+// being published, as errors; and steps that nothing checks, tests that
+// read nothing, and vars that nothing defines, as warnings.
 //
 // The error it returns is for a workflow that cannot be read at all, such
 // as a file that does not exist.
@@ -174,6 +182,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	c.checkOutputs()
 	c.checkNames()
 	c.checkResults()
+	c.checkTypes()
 	c.checkTests()
 	c.checkRepeatTests()
 	return c.sorted(), nil
