@@ -21,17 +21,30 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 
 	actionrpc.LogParams(a.log, "received imap request parameters", with)
 
+	// The request and the response are logged as the parameters are, with
+	// the password hidden and long values such as message bodies truncated.
 	before := WithBefore(func(req *Req) {
-		a.log.Trace("imap request prepared", "request", req)
+		a.logStruct("imap request prepared", req)
 	})
 	after := WithAfter(func(res *Res) {
-		a.log.Trace("imap response received", "response", res)
+		a.logStruct("imap response received", res)
 	})
 	ret, err := Request(with, before, after)
 
 	actionrpc.LogOutcome(a.log, "imap request", ret, err)
 
 	return ret, err
+}
+
+// logStruct records v, a Req or a Res, by its map tags through
+// actionrpc.LogParams, which hides credentials such as the password.
+func (a *Action) logStruct(msg string, v any) {
+	m, err := mapping.StructToMapByTags(v)
+	if err != nil {
+		a.log.Trace(msg, "error", err)
+		return
+	}
+	actionrpc.LogParams(a.log, msg, m)
 }
 
 func Serve() {
