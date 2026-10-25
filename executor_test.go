@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/report"
 )
 
@@ -64,16 +65,17 @@ func TestExecutor_setupContext(t *testing.T) {
 	}
 }
 
-// runJob runs job as the workflow runs each of its jobs, and returns what
-// Executor.Run reported and the result it left for the job.
-func runJob(t *testing.T, job Job) (bool, *JobResult) {
+// runJob runs job as the workflow runs each of its jobs, its actions run by
+// runner, and returns what Executor.Run reported and the result it left for
+// the job.
+func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
 	t.Helper()
 	w := &Workflow{Name: "executor", Jobs: []Job{job}, printer: newBufferPrinter()}
 	scheduler, err := w.initJobScheduler()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := w.newJobContext(Config{}, nil, scheduler)
+	ctx := w.newJobContext(Config{ActionRunner: runner}, nil, scheduler)
 	ctx.Outputs = NewOutputs()
 	scheduler.StartJob(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
@@ -84,9 +86,9 @@ func runJob(t *testing.T, job Job) (bool, *JobResult) {
 // it, in turn and with its runs overlapping alike. A failure that is only
 // counted, in a warmup run or under a test over the runs, fails nothing.
 func TestExecutor_Run(t *testing.T) {
-	failing := NewMockActionRunner()
+	failing := newMockRunner()
 	failing.SetError("hello", errors.New("boom"))
-	passing := NewMockActionRunner()
+	passing := newMockRunner()
 	passing.SetResult("hello", map[string]any{"status": 0})
 
 	tests := []struct {
@@ -123,12 +125,12 @@ func TestExecutor_Run(t *testing.T) {
 				ID:     "job",
 				Repeat: tt.repeat,
 				Steps: []*Step{{
-					Name: "step", Uses: "hello", actionRunner: tt.runner,
+					Name: "step", Uses: "hello",
 					With: map[string]any{"i": "{{repeat_index}}"},
 					Test: tt.test,
 				}},
 			}
-			passed, jr := runJob(t, job)
+			passed, jr := runJob(t, job, tt.runner)
 			if passed != tt.wantPassed {
 				t.Errorf("Run() = %v, want %v", passed, tt.wantPassed)
 			}
@@ -158,7 +160,7 @@ func newOverlapRunner(wait time.Duration) *overlapRunner {
 	return &overlapRunner{wait: wait, both: make(chan struct{})}
 }
 
-func (r *overlapRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *overlapRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	r.running++
 	if r.running > 1 && !r.overlapped {
@@ -175,7 +177,7 @@ func (r *overlapRunner) RunActions(name string, with map[string]any, opts RunOpt
 	r.mu.Lock()
 	r.running--
 	r.mu.Unlock()
-	return map[string]any{"status": 0}, nil
+	return map[string]any{"status": 0}, nil, nil
 }
 
 // The runs of an async job start an interval apart, without waiting for the
@@ -195,9 +197,9 @@ func TestExecutor_Run_AsyncOverlaps(t *testing.T) {
 				Name:   "job",
 				ID:     "job",
 				Repeat: &Repeat{Count: 3, Interval: Interval{Duration: time.Millisecond}, Async: async},
-				Steps:  []*Step{{Name: "pause", Uses: "hello", actionRunner: runner}},
+				Steps:  []*Step{{Name: "pause", Uses: "hello"}},
 			}
-			if passed, _ := runJob(t, job); !passed {
+			if passed, _ := runJob(t, job, runner); !passed {
 				t.Fatal("Run() = false, want true")
 			}
 			runner.mu.Lock()
@@ -436,16 +438,14 @@ func TestExecutor_AsyncRepeat_HandleSkipNoDataRace(t *testing.T) {
 // and st.Expr / st.ctx / st.startedAt / st.err / st.retryAttempt on the same
 // *Step instances.
 func TestExecutor_AsyncRepeat_NoDataRace(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("hello", map[string]any{"status": 0})
 
-	// Each Step instance has actionRunner pre-wired to the mock so that
-	// st.executeAction takes the mock path instead of spawning the
-	// real plugin process.
+	// The run is given the mock, so that st.executeAction takes the mock
+	// path instead of spawning the real plugin process.
 	step := &Step{
-		Name:         "tick",
-		Uses:         "hello",
-		actionRunner: runner,
+		Name: "tick",
+		Uses: "hello",
 	}
 
 	workflow := &Workflow{
@@ -465,7 +465,7 @@ func TestExecutor_AsyncRepeat_NoDataRace(t *testing.T) {
 		printer: newBufferPrinter(),
 	}
 
-	config := Config{Verbose: false}
+	config := Config{Verbose: false, ActionRunner: runner}
 	if err := workflow.Start(config); err != nil {
 		t.Fatalf("workflow failed: %v", err)
 	}
@@ -479,7 +479,8 @@ type echoRunner struct {
 	got []string
 }
 
-func (r *echoRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
+func (r *echoRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	with := call.With
 	if s, ok := with["sleep"].(string); ok {
 		if d, err := time.ParseDuration(s); err == nil {
 			time.Sleep(d)
@@ -492,13 +493,13 @@ func (r *echoRunner) RunActions(name string, with map[string]any, opts RunOption
 	}
 	res := make(map[string]any, len(with))
 	maps.Copy(res, with)
-	return map[string]any{"req": with, "res": res, "status": 0}, nil
+	return map[string]any{"req": with, "res": res, "status": 0}, nil, nil
 }
 
 // repeatOutputsWorkflow repeats a job that publishes a value naming its run,
 // waits, and reads it back, followed by a job that reads it after. One step
 // is skipped by the last run.
-func repeatOutputsWorkflow(runner ActionRunner, async bool) *Workflow {
+func repeatOutputsWorkflow(async bool) *Workflow {
 	repeated := Job{
 		Name: "repeated",
 		ID:   "repeated",
@@ -509,25 +510,25 @@ func repeatOutputsWorkflow(runner ActionRunner, async bool) *Workflow {
 		},
 		Steps: []*Step{
 			{
-				Name: "publish", ID: "pub", Uses: "hello", actionRunner: runner,
+				Name: "publish", ID: "pub", Uses: "hello",
 				With:    map[string]any{"v": "run-{{repeat_index}}"},
 				Outputs: map[string]string{"v": "res.v"},
 			},
 			{
 				// The last run skips this one, so what the jobs after read is
 				// what the run before left.
-				Name: "early", ID: "early", Uses: "hello", actionRunner: runner,
+				Name: "early", ID: "early", Uses: "hello",
 				SkipIf:  "repeat_index == 3",
 				With:    map[string]any{"e": "early-{{repeat_index}}"},
 				Outputs: map[string]string{"e": "res.e"},
 			},
 			{
 				// Long enough for the other runs to publish meanwhile.
-				Name: "pause", ID: "pause", Uses: "hello", actionRunner: runner,
+				Name: "pause", ID: "pause", Uses: "hello",
 				With: map[string]any{"sleep": "100ms"},
 			},
 			{
-				Name: "read own", ID: "own", Uses: "hello", actionRunner: runner,
+				Name: "read own", ID: "own", Uses: "hello",
 				With: map[string]any{"got": "{{outputs.pub.v}}", "want": "run-{{repeat_index}}"},
 				Test: "res.got == res.want",
 			},
@@ -539,7 +540,7 @@ func repeatOutputsWorkflow(runner ActionRunner, async bool) *Workflow {
 		Needs: []string{"repeated"},
 		Steps: []*Step{
 			{
-				Name: "read last", ID: "last", Uses: "hello", actionRunner: runner,
+				Name: "read last", ID: "last", Uses: "hello",
 				With: map[string]any{"got": "{{outputs.pub.v}}", "early": "{{outputs.early.e}}"},
 				Test: `res.got == "run-3" && res.early == "early-2"`,
 			},
@@ -564,8 +565,8 @@ func TestRepeatedJobOutputs(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			runner := &echoRunner{}
-			w := repeatOutputsWorkflow(runner, async)
-			if err := w.Start(Config{}); err != nil {
+			w := repeatOutputsWorkflow(async)
+			if err := w.Start(Config{ActionRunner: runner}); err != nil {
 				t.Fatalf("Start() error: %v", err)
 			}
 			if w.exitStatus != 0 {

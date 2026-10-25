@@ -47,6 +47,8 @@ type Callback struct {
 	actions map[string]string
 	// builtin are the names of the actions of Probe.
 	builtin []string
+	// needsNoCheck are the actions whose steps pass without a test.
+	needsNoCheck []string
 	// cleanups are those of the run the job is part of, or nil for a job
 	// that cleans up after itself.
 	cleanups *actionrpc.Cleanups
@@ -94,7 +96,7 @@ func (r *Req) Do() (*Result, error) {
 		opts = append(opts, probe.WithRunID(r.cb.runID))
 	}
 	if r.cb != nil {
-		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithCleanups(r.cb.cleanups))
+		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithNeedsNoCheck(r.cb.needsNoCheck), probe.WithCleanups(r.cb.cleanups))
 	}
 	run := job.RunStandalone(r.Vars, printer, jobID, filepath.Dir(absPath), opts...)
 
@@ -216,6 +218,15 @@ func WithActions(names map[string]string) Option {
 func WithBuiltinActions(names []string) Option {
 	return func(c *Callback) {
 		c.builtin = names
+	}
+}
+
+// WithNeedsNoCheck tells the job the names of the actions whose steps pass
+// without a test, so that a step of one that has none is not counted as
+// untested.
+func WithNeedsNoCheck(names []string) Option {
+	return func(c *Callback) {
+		c.needsNoCheck = names
 	}
 }
 

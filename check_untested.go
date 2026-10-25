@@ -2,6 +2,7 @@ package probe
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mozership/probe/expr"
@@ -25,10 +26,10 @@ func (c *checker) checkTests() {
 			}
 			switch {
 			case strings.TrimSpace(st.Test) == "":
-				// The hello action does nothing that could go wrong, so
-				// a step of it, which is there for its echo or to publish
-				// what it is given, has nothing to check.
-				if st.Uses != "hello" && !c.checkedByContract(st.Uses, st.With) && !tested[id] {
+				// A step of an action that does nothing that could go
+				// wrong, which is there for its echo or to publish what
+				// it is given, has nothing to check.
+				if !slices.Contains(c.opts.NeedsNoCheck, st.Uses) && !c.checkedByContract(st.Uses, st.With) && !tested[id] {
 					c.add(SeverityWarning, c.line(path), c.stepWhere(i, j), "nothing checks this step: it has no test")
 				}
 			case expr.Parse(st.Test) == nil && expr.ReadsNothing(st.Test):
