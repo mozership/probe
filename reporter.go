@@ -118,7 +118,7 @@ func (r *BufferedReporter) JobDone(jobID string, jr *JobResult) {}
 
 func (r *BufferedReporter) Finish(rs *Result) {
 	r.printer.StopSpinner()
-	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(r.name, r.description)+r.render.GenerateReport(rs))
+	r.printer.Fprint(r.printer.outWriter, r.render.headerText(r.name, r.description)+r.render.reportText(rs))
 }
 
 // StreamReporter prints the report incrementally.
@@ -183,7 +183,7 @@ func (r *StreamReporter) labelJobs(name func(id string) string) {
 }
 
 func (r *StreamReporter) Start(name, description string) {
-	r.printer.Fprint(r.printer.outWriter, r.render.generateHeader(name, description))
+	r.printer.Fprint(r.printer.outWriter, r.render.headerText(name, description))
 }
 
 func (r *StreamReporter) StepStart(jobID, stepName string) {
@@ -259,7 +259,7 @@ func (r *StreamReporter) Finish(rs *Result) {
 	}
 
 	var output strings.Builder
-	r.render.generateFooter(totalTime, r.succeeded, len(rs.Jobs), &output)
+	r.render.writeFooter(&output, totalTime, r.succeeded, len(rs.Jobs))
 	r.printer.Fprint(r.printer.outWriter, output.String())
 }
 
@@ -281,7 +281,7 @@ func (r *StreamReporter) flushLocked() {
 // writeJobLocked renders one job block and folds it into the footer totals.
 // Callers must hold r.mu.
 func (r *StreamReporter) writeJobLocked(jr *JobResult) {
-	block, succeeded, start, end := r.render.generateJobReport(jr)
+	block, succeeded, start, end := r.render.jobText(jr)
 	if succeeded {
 		r.succeeded++
 	}

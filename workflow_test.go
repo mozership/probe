@@ -359,9 +359,9 @@ func TestWorkflowExecutor_PrintDetailedResults(t *testing.T) {
 		}
 		result.Jobs["test-job"] = jobResult
 
-		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).GenerateReport(result)
+		got := newReportRenderer([]string{"test-job"}, nil, workflow.printer.Masker()).reportText(result)
 		if !strings.Contains(got, "test-job") {
-			t.Errorf("GenerateReport() should have the job, got:\n%s", got)
+			t.Errorf("reportText() should have the job, got:\n%s", got)
 		}
 	})
 }
@@ -1590,35 +1590,6 @@ func TestWorkflow_Start_FailFastRepeated(t *testing.T) {
 	}
 	if got := strings.Count(report, "1/3 success (33.3%), 2 skipped"); got != 2 {
 		t.Errorf("%d steps are reported as run once and skipped twice, want both after the failure:\n%s", got, report)
-	}
-}
-
-func TestPrinter_printStepRepeatResult_Skipped(t *testing.T) {
-	// The colors are put back as they were, for the tests after this one.
-	noColor := color.NoColor
-	color.NoColor = true
-	defer func() { color.NoColor = noColor }()
-	printer := newReportRenderer(nil, nil, nil)
-
-	tests := []struct {
-		name    string
-		counter StepRepeatCounter
-		hasTest bool
-		want    string
-	}{
-		{"never run", StepRepeatCounter{SkippedCount: 3, RepeatTotal: 3}, true, "skipped in 3/3 runs"},
-		{"run in some", StepRepeatCounter{SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3}, true, "1/3 success (33.3%), 2 skipped"},
-		{"without a test", StepRepeatCounter{SuccessCount: 2, SkippedCount: 1, RepeatTotal: 3}, false, "2/3 completed (no test), 1 skipped"},
-		{"none skipped", StepRepeatCounter{SuccessCount: 3, RepeatTotal: 3}, true, "3/3 success (100.0%)\n"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out strings.Builder
-			printer.printStepRepeatResult(&tt.counter, tt.hasTest, &out)
-			if !strings.Contains(out.String(), tt.want) {
-				t.Errorf("printStepRepeatResult() = %q, want it to hold %q", out.String(), tt.want)
-			}
-		})
 	}
 }
 

@@ -553,7 +553,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	run.Duration = time.Since(start)
 	jr.EndTime = jr.StartTime.Add(run.Duration)
 	run.Outputs = ctx.Outputs.GetAll()
-	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).GenerateReportOnlySteps(result)
+	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).stepsText(result)
 
 	return run
 }

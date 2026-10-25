@@ -157,7 +157,7 @@ func TestStreamReporter_MatchesBufferedReport(t *testing.T) {
 	}
 	r.Finish(rs)
 
-	want := newReportRenderer(order, nil, nil).GenerateReport(newTestResult(base))
+	want := newReportRenderer(order, nil, nil).reportText(newTestResult(base))
 
 	if out.String() != want {
 		t.Errorf("streamed report differs from buffered report\ngot:\n%s\nwant:\n%s", out.String(), want)
