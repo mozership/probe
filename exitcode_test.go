@@ -76,7 +76,7 @@ func TestResult_recordFailure(t *testing.T) {
 // TestWorkflow_ExitCode runs workflows end to end and checks the exit status
 // each kind of failure leaves behind.
 func TestWorkflow_ExitCode(t *testing.T) {
-	runner := NewMockActionRunner()
+	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{
 		"req": map[string]any{},
 		"res": map[string]any{"code": 200},
@@ -84,7 +84,7 @@ func TestWorkflow_ExitCode(t *testing.T) {
 	runner.SetError("down", errors.New("connection refused"))
 
 	step := func(name, uses, test string) *Step {
-		return &Step{Name: name, Uses: uses, Test: test, actionRunner: runner}
+		return &Step{Name: name, Uses: uses, Test: test}
 	}
 
 	tests := []struct {
@@ -122,7 +122,7 @@ func TestWorkflow_ExitCode(t *testing.T) {
 		},
 		{
 			name: "a job that cannot start",
-			jobs: []Job{{Name: "{{ nofunc() }}", Steps: []*Step{{Name: "s", Uses: "ok", actionRunner: runner}}}},
+			jobs: []Job{{Name: "{{ nofunc() }}", Steps: []*Step{{Name: "s", Uses: "ok"}}}},
 			want: ExitConfigError,
 		},
 		{
@@ -148,7 +148,7 @@ func TestWorkflow_ExitCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := &Workflow{Name: "exit", Jobs: tt.jobs, printer: newBufferPrinter()}
-			if err := w.Start(Config{}); err != nil {
+			if err := w.Start(Config{ActionRunner: runner}); err != nil {
 				t.Fatalf("Start: %v", err)
 			}
 			if w.exitStatus != tt.want {

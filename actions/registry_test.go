@@ -99,6 +99,20 @@ func TestContracts(t *testing.T) {
 	}
 }
 
+// TestNeedsNoCheck checks that the actions whose steps need no test are
+// built in, and that hello, which does nothing that could fail, is one.
+func TestNeedsNoCheck(t *testing.T) {
+	names := Names()
+	for _, name := range NeedsNoCheck() {
+		if !slices.Contains(names, name) {
+			t.Errorf("%s needs no check but is not a built-in action", name)
+		}
+	}
+	if !slices.Equal(NeedsNoCheck(), []string{"hello"}) {
+		t.Errorf("NeedsNoCheck() = %v, want [hello]", NeedsNoCheck())
+	}
+}
+
 // TestParamsCoverTheDocs checks that each key the reference page of an
 // action lists in its parameters is one AllParams gives, so that probe check
 // does not refuse a key the action takes. Keys of a map nested in with,

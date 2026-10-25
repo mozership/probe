@@ -32,6 +32,7 @@ type RunOptions struct {
 	BaseDir string
 	// cleanups are told of the actions that are to clean up once the run
 	// is over. Without them no action is told that the runner cleans up.
+	// Only PluginActionRunner tells them; see ActionRunner.
 	cleanups *cleanups
 	// ctx is done once the step gives up on the action, as it does when the
 	// step times out, and the action is stopped then. Without it the action
@@ -39,8 +40,10 @@ type RunOptions struct {
 	ctx context.Context
 }
 
-// context returns the context the action runs in.
-func (o RunOptions) context() context.Context {
+// Context returns the context the action runs in, which is done once the
+// step gives up on the action, as it does when the step times out. It is
+// never nil: without one, the action runs until it returns.
+func (o RunOptions) Context() context.Context {
 	if o.ctx == nil {
 		return context.Background()
 	}
@@ -55,33 +58,31 @@ func (o RunOptions) logLevel() hclog.Level {
 	return actionLogLevel(o.Verbose, o.Trace)
 }
 
-// ActionRunner defines the interface for running actions
+// ActionRunner runs the action of a step: the action named name, as the
+// step writes it in uses, with what call tells it about the step and the
+// state the action left in the job. It returns what the action returned and
+// the state it leaves, nil to keep the one there was.
+//
+// Run is called concurrently, from the steps of the jobs that run at once
+// and of the runs of an async job, and is to return once opts.Context() is
+// done: the step has given up on the action by then, and what Run returns
+// after is not used. The actions that clean up once the run is over are
+// told so by PluginActionRunner alone, so a runner of its own takes part in
+// that only by running the action with PluginActionRunner and opts as it
+// was given them.
 type ActionRunner interface {
-	RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error)
+	Run(name string, call actionrpc.Call, opts RunOptions) (result, newState map[string]any, err error)
 }
 
-// StepActionRunner is an ActionRunner that also tells an action about the
-// step it runs for and carries the state it keeps in a job, as
-// actionrpc.StepAction describes. A runner that is not one runs every action
-// with its parameters alone.
-type StepActionRunner interface {
-	ActionRunner
-	RunStep(name string, call actionrpc.Call, opts RunOptions) (result, newState map[string]any, err error)
-}
-
-// PluginActionRunner implements ActionRunner using the plugin system
+// PluginActionRunner is the ActionRunner a run uses unless it is given
+// another: it runs each action in a process of its own, a built-in one
+// served by the probe executable and an external one by its own.
 type PluginActionRunner struct{}
 
-// RunActions executes an action using the plugin system
-func (p *PluginActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	result, _, err := p.RunStep(name, actionrpc.Call{With: with}, opts)
-	return result, err
-}
-
-// RunStep executes an action for a step using the plugin system, telling it
-// about the step, giving it the state it left in the job and returning the
-// state it leaves.
-func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+// Run runs the action for a step in a process of its own, telling it about
+// the step, giving it the state it left in the job and returning the state
+// it leaves.
+func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
 	log := newActionLog(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
@@ -93,7 +94,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return actionrpc.RunBuiltin(opts.context(), name, call, log)
+		return actionrpc.RunBuiltin(opts.Context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -107,7 +108,7 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
-	return actionrpc.RunExecutable(opts.context(), exe.Path, exe.SHA256, call, log)
+	return actionrpc.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks
@@ -116,16 +117,6 @@ func (p *PluginActionRunner) RunStep(name string, call actionrpc.Call, opts RunO
 func cleansUp(name, baseDir string) bool {
 	m, err := actionref.ReadManifest(name, baseDir)
 	return err == nil && m.Cleanup
-}
-
-// runAction runs the action named name for a step, when runner can tell it
-// about one, and returns the state it leaves.
-func runAction(runner ActionRunner, name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	if sr, ok := runner.(StepActionRunner); ok {
-		return sr.RunStep(name, call, opts)
-	}
-	result, err := runner.RunActions(name, call.With, opts)
-	return result, nil, err
 }
 
 // actionStates holds the state each action keeps in one run of a job, keyed
@@ -169,73 +160,4 @@ func (s *actionStates) set(name string, state map[string]any) error {
 	defer s.mu.Unlock()
 	s.states[name] = sendable
 	return nil
-}
-
-// MockActionRunner implements ActionRunner for testing
-type MockActionRunner struct {
-	Results map[string]map[string]any
-	Errors  map[string]error
-	// States is the state each action leaves in the job, keyed by its name.
-	States map[string]map[string]any
-	// Calls records each call of an action for a step, in order.
-	Calls map[string][]actionrpc.Call
-
-	mu sync.Mutex
-}
-
-// NewMockActionRunner creates a new mock action runner
-func NewMockActionRunner() *MockActionRunner {
-	return &MockActionRunner{
-		Results: make(map[string]map[string]any),
-		Errors:  make(map[string]error),
-		States:  make(map[string]map[string]any),
-		Calls:   make(map[string][]actionrpc.Call),
-	}
-}
-
-// RunStep records the call and returns the result and the state set for the
-// action.
-func (m *MockActionRunner) RunStep(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
-	m.mu.Lock()
-	if m.Calls == nil {
-		m.Calls = make(map[string][]actionrpc.Call)
-	}
-	m.Calls[name] = append(m.Calls[name], call)
-	newState := m.States[name]
-	m.mu.Unlock()
-	result, err := m.RunActions(name, call.With, opts)
-	if err != nil {
-		return nil, nil, err
-	}
-	return result, newState, nil
-}
-
-// SetResult sets the expected result for an action
-func (m *MockActionRunner) SetResult(actionName string, result map[string]any) {
-	m.Results[actionName] = result
-}
-
-// SetError sets the expected error for an action
-func (m *MockActionRunner) SetError(actionName string, err error) {
-	m.Errors[actionName] = err
-}
-
-// RunActions returns the mocked result or error for the given action
-func (m *MockActionRunner) RunActions(name string, with map[string]any, opts RunOptions) (map[string]any, error) {
-	if err, exists := m.Errors[name]; exists {
-		return nil, err
-	}
-
-	if result, exists := m.Results[name]; exists {
-		return result, nil
-	}
-
-	// Default mock response
-	return map[string]any{
-		"code":    0,
-		"mock":    true,
-		"action":  name,
-		"with":    with,
-		"results": map[string]any{},
-	}, nil
 }
