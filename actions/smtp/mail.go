@@ -36,7 +36,22 @@ type Mail struct {
 	// LastSent is the last message the server accepted in the last
 	// SendSession, as it was written to DATA, with its Message-ID and send
 	// time. It is nil when none was accepted.
-	LastSent []byte
+	LastSent *SentMessage
+}
+
+// SentMessage is a message as it was written to DATA: its own headers, and
+// the body it shares, unchanged, with the other messages of the session.
+type SentMessage struct {
+	Header []byte
+	Body   []byte
+}
+
+// String returns the message as one text, or "" for a nil message.
+func (m *SentMessage) String() string {
+	if m == nil {
+		return ""
+	}
+	return string(m.Header) + string(m.Body)
 }
 
 // localName returns the name to greet the server with. Many servers refuse
@@ -106,8 +121,14 @@ func (m *Mail) SendSession() error {
 			return fmt.Errorf("smtp data error: %w", err)
 		}
 
-		data := stamp(m.Data)
-		_, err = w.Write(data)
+		// Only the headers are stamped, so that each message copies them
+		// and not the body, which may be long.
+		header, body := splitHeader(m.Data)
+		sent := &SentMessage{Header: stamp(header), Body: body}
+		_, err = w.Write(sent.Header)
+		if err == nil {
+			_, err = w.Write(sent.Body)
+		}
 		if err != nil {
 			return fmt.Errorf("smtp data write error: %w", err)
 		}
@@ -116,7 +137,7 @@ func (m *Mail) SendSession() error {
 			return fmt.Errorf("smtp data close error: %w", err)
 		}
 		m.Delivered++
-		m.LastSent = data
+		m.LastSent = sent
 	}
 
 	return c.Quit()
@@ -157,6 +178,24 @@ func stamp(data []byte) []byte {
 	idLeft, msgID := genMessageID()
 	data = prependHeader(tagSubject(data, idLeft), "Message-ID", msgID)
 	return prependHeader(data, "X-Send-Timestamp-Ns", strconv.FormatInt(time.Now().UnixNano(), 10))
+}
+
+// splitHeader splits data after its headers, which end at the first empty
+// line, so that the body starts with that line. Data with no empty line is
+// all headers. Both are slices of data.
+func splitHeader(data []byte) (header, body []byte) {
+	for i := 0; i < len(data); {
+		end := bytes.IndexByte(data[i:], '\n')
+		if end < 0 {
+			break
+		}
+		line := bytes.TrimSuffix(data[i:i+end], []byte("\r"))
+		if len(line) == 0 {
+			return data[:i:i], data[i:]
+		}
+		i += end + 1
+	}
+	return data, nil
 }
 
 // prependHeader puts a header line before data.

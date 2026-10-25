@@ -770,3 +770,49 @@ func TestDeliverCountsMessagesOfFailedSessions(t *testing.T) {
 		t.Errorf("total = %d, want 6", result.Total)
 	}
 }
+
+func TestSplitHeader(t *testing.T) {
+	tests := []struct {
+		data, header, body string
+	}{
+		{"Subject: a\nFrom: b\n\nbody\n", "Subject: a\nFrom: b\n", "\nbody\n"},
+		{"Subject: a\r\n\r\nbody\r\n", "Subject: a\r\n", "\r\nbody\r\n"},
+		{"Subject: a\nFrom: b", "Subject: a\nFrom: b", ""},
+		{"\nbody", "", "\nbody"},
+		{"", "", ""},
+	}
+	for _, tt := range tests {
+		header, body := splitHeader([]byte(tt.data))
+		if string(header) != tt.header || string(body) != tt.body {
+			t.Errorf("splitHeader(%q) = %q, %q, want %q, %q", tt.data, header, body, tt.header, tt.body)
+		}
+	}
+}
+
+func TestSendSessionSharesTheBody(t *testing.T) {
+	// Each message copies its headers to stamp them, but writes the body
+	// from Data as it is, so that sessions of a long body hold one copy.
+	data := []byte("Subject: hi\nFrom: a@b\n\n" + strings.Repeat("*", 1000) + "\n")
+	original := string(data)
+	m := &Mail{
+		Addr:             startMockServer(t, false),
+		MailFrom:         "from@example.com",
+		RcptTo:           []string{"to@example.com"},
+		Data:             data,
+		StartTLSDisabled: true,
+		MessageCount:     2,
+	}
+	if err := m.SendSession(); err != nil {
+		t.Fatalf("SendSession() error: %v", err)
+	}
+	header, _ := splitHeader(data)
+	if body := m.LastSent.Body; len(body) == 0 || &body[0] != &data[len(header)] {
+		t.Error("the body sent is a copy, want the slice of Data")
+	}
+	if !strings.Contains(string(m.LastSent.Header), "Subject: hi - ") || !strings.HasPrefix(string(m.LastSent.Header), "X-Send-Timestamp-Ns: ") {
+		t.Errorf("headers sent = %q, want them stamped", m.LastSent.Header)
+	}
+	if string(data) != original {
+		t.Error("SendSession changed Data, which the other sessions share")
+	}
+}

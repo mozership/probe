@@ -32,7 +32,7 @@ type Bulk struct {
 
 	mu       sync.Mutex
 	count    int
-	lastSent []byte
+	lastSent *SentMessage
 }
 
 type DeliveryResult struct {
@@ -48,7 +48,7 @@ type DeliveryResult struct {
 	// nil when none was. The sessions run at the same time, so it is the
 	// last message of whichever session finished last, which need not be
 	// the message accepted last.
-	LastSent []byte
+	LastSent *SentMessage
 }
 
 func (b *Bulk) DeliverWithResult() DeliveryResult {
@@ -57,18 +57,21 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 		err   error
 	}
 
-	// Every delivery hands out the messages from the start.
+	// Every delivery hands out the messages from the start. The message is
+	// made once and shared by the sessions, which only read it, so that a
+	// step holds one body however many sessions it opens.
 	b.mu.Lock()
 	b.count = 0
 	b.lastSent = nil
 	b.mu.Unlock()
+	data := b.makeData()
 
 	var wg sync.WaitGroup
 	resultCh := make(chan sendResult, b.Session)
 
 	for i := 0; i < b.Session; i++ {
 		wg.Go(func() {
-			count, err := b.sendShare()
+			count, err := b.sendShare(data)
 			resultCh <- sendResult{count: count, err: err}
 		})
 	}
@@ -122,9 +125,10 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	return result
 }
 
-// sendShare takes this session's share of the messages and sends it over
-// one SMTP session, returning how many the server accepted.
-func (b *Bulk) sendShare() (int, error) {
+// sendShare takes this session's share of the messages and sends data as each
+// of them over one SMTP session, returning how many the server accepted.
+// data is only read, as the other sessions send it too.
+func (b *Bulk) sendShare(data []byte) (int, error) {
 	n := b.calcMessageNumEachSession()
 	if n == 0 {
 		return 0, nil
@@ -135,7 +139,7 @@ func (b *Bulk) sendShare() (int, error) {
 		LocalName:          b.MyHostname,
 		MailFrom:           b.From,
 		RcptTo:             splitRecipients(b.To),
-		Data:               b.makeData(),
+		Data:               data,
 		StartTLSDisabled:   b.StartTLS == "" || b.StartTLS == StartTLSOff,
 		StartTLSRequired:   b.StartTLS == StartTLSRequired,
 		InsecureSkipVerify: b.InsecureSkipTLS,
@@ -189,36 +193,22 @@ func (b *Bulk) calcMessageNumEachSession() int {
 	return n
 }
 
+// makeData makes the message: its headers, and a body of a line of text
+// and Length asterisks broken into lines of 80. It writes them into one
+// slice of the size they need, as the body may be long.
 func (b *Bulk) makeData() []byte {
 	now := time.Now().Format("Mon, 02 Jan 2006 15:04:05 -0700")
-	appendingText := insertLF(strings.Repeat("*", b.Length), 80)
-	data := fmt.Sprintf(`From: %s
-To: %s
-Date: %s
-Subject: %s
-
-This is a test mail.
-
-%s
-`, b.From, b.To, now, b.Subject, appendingText)
-	return []byte(data)
-}
-
-func insertLF(s string, length int) string {
-	n := len(s)
-	if n <= length {
-		return s
-	}
-
-	var result strings.Builder
-	for i := 0; i < n; i += length {
-		if i+length < len(s) {
-			result.WriteString(s[i : i+length])
-			result.WriteByte('\n')
-		} else {
-			result.WriteString(s[i:])
+	head := fmt.Sprintf("From: %s\nTo: %s\nDate: %s\nSubject: %s\n\nThis is a test mail.\n\n", b.From, b.To, now, b.Subject)
+	const width = 80
+	data := make([]byte, 0, len(head)+b.Length+b.Length/width+1)
+	data = append(data, head...)
+	for i := 0; i < b.Length; i += width {
+		if i > 0 {
+			data = append(data, '\n')
+		}
+		for range min(width, b.Length-i) {
+			data = append(data, '*')
 		}
 	}
-
-	return result.String()
+	return append(data, '\n')
 }

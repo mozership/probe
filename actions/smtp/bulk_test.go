@@ -3,6 +3,7 @@ package smtp
 import (
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -139,7 +140,7 @@ func TestBulkSendShare(t *testing.T) {
 				Length:     100,
 			}
 
-			count, err := bulk.sendShare()
+			count, err := bulk.sendShare(bulk.makeData())
 
 			// Verify no error
 			if err != nil {
@@ -196,6 +197,30 @@ func TestSplitRecipients(t *testing.T) {
 	for in, want := range tests {
 		if got := splitRecipients(in); !reflect.DeepEqual(got, want) {
 			t.Errorf("splitRecipients(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestMakeData(t *testing.T) {
+	// The body is a line of text and length asterisks in lines of 80.
+	for length, want := range map[int]string{
+		0:   "\n",
+		3:   "***\n",
+		80:  strings.Repeat("*", 80) + "\n",
+		81:  strings.Repeat("*", 80) + "\n*\n",
+		160: strings.Repeat("*", 80) + "\n" + strings.Repeat("*", 80) + "\n",
+	} {
+		b := &Bulk{From: "f@example.com", To: "t@example.com", Subject: "hi", Length: length}
+		got := string(b.makeData())
+		head, body, ok := strings.Cut(got, "\n\nThis is a test mail.\n\n")
+		if !ok {
+			t.Fatalf("length %d: makeData() = %q, want the line of text after the headers", length, got)
+		}
+		if !strings.HasPrefix(head, "From: f@example.com\nTo: t@example.com\nDate: ") || !strings.HasSuffix(head, "\nSubject: hi") {
+			t.Errorf("length %d: headers = %q", length, head)
+		}
+		if body != want {
+			t.Errorf("length %d: body = %q, want %q", length, body, want)
 		}
 	}
 }

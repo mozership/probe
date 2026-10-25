@@ -69,8 +69,9 @@ const maxSession = 1000
 
 // maxLength is the longest body a step may ask for, 100 MiB. It is above the
 // limits of common servers, such as Postfix's 10240000 bytes and Gmail's
-// 25 MB, so that a test can still go past a server's limit, while it keeps
-// a session from asking for more memory than the machine has.
+// 25 MB, so that a test can still go past a server's limit. The sessions
+// share one body, and res.maildata copies it once, so a step holds about
+// twice it however many sessions it opens.
 const maxLength = 100 << 20
 
 // defaultTimeout is the timeout when the step does not give one. It is
@@ -138,7 +139,7 @@ func (r *Req) Do() (*Result, error) {
 		Failed:   deliveryResult.Failed,
 		Total:    deliveryResult.Total,
 		Error:    deliveryResult.Error,
-		MailData: string(deliveryResult.LastSent),
+		MailData: deliveryResult.LastSent.String(),
 	}
 	result.Status = status
 
@@ -169,7 +170,7 @@ func (r *Req) validate() (string, error) {
 	// Fewer than one session or message would send nothing and report
 	// only a failure, and a negative length was taken as 0. Sessions and
 	// length have an upper bound as well, since every session opens its
-	// connection at once and holds its own copy of the message.
+	// connection at once, and the body is held in memory.
 	case r.Session < 1 || r.Session > maxSession:
 		return "", fmt.Errorf("invalid session %d: use 1 to %d", r.Session, maxSession)
 	case r.Message < 1:
