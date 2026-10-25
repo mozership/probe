@@ -201,11 +201,12 @@ func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
 // as, to follow what names it, or an empty string.
 func nameHint(name string, names []string) string {
 	step := slices.Equal(names, stepNames)
+	hint := suggest.Hint(name, names)
 	switch {
 	case expr.NameFor(name) != "":
 		return fmt.Sprintf("; did you mean %s?", expr.NameFor(name))
-	case suggest.Hint(name, names) != "":
-		return suggest.Hint(name, names)
+	case hint != "":
+		return hint
 	case step && name == "steps":
 		return "; what an earlier step publishes is read under outputs"
 	case step && name == strings.ToUpper(name) && strings.Trim(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") == "":
