@@ -123,6 +123,40 @@ func TestNewPrinter(t *testing.T) {
 	}
 }
 
+// The spinner only draws on a terminal, so a test cannot run its render
+// goroutine. The reader here does what that goroutine does: it reads Suffix
+// under the spinner's own lock. Run with -race, a write to Suffix under any
+// other lock is reported.
+func TestAddSpinnerSuffix_SharesSpinnerLock(t *testing.T) {
+	p := NewPrinter(false)
+
+	done := make(chan struct{})
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			p.spinner.Lock()
+			_ = p.spinner.Suffix
+			p.spinner.Unlock()
+		}
+	}()
+
+	for i := range 100 {
+		p.AddSpinnerSuffix(fmt.Sprintf("step %d", i))
+	}
+	close(done)
+	<-readerDone
+
+	if got, want := p.spinner.Suffix, " step 99..."; got != want {
+		t.Errorf("Suffix = %q, want %q", got, want)
+	}
+}
+
 func TestStatusType(t *testing.T) {
 	tests := []struct {
 		status   StatusType

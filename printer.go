@@ -75,7 +75,6 @@ const (
 type Printer struct {
 	verbose   bool
 	spinner   *spinner.Spinner
-	spinnerMu sync.Mutex // serializes writes to spinner.Suffix from concurrent steps (async repeat)
 	outWriter io.Writer
 	errWriter io.Writer
 	reporter  Reporter
@@ -122,8 +121,7 @@ func newBufferPrinter() *Printer {
 	pr.outWriter = new(bytes.Buffer)
 	pr.errWriter = new(bytes.Buffer)
 	// Tests do not render a live spinner; nil here makes the spinner
-	// helpers no-op so that `go test -race` does not flag the
-	// reader-in-library / writer-in-probe contention on spinner.Suffix.
+	// helpers no-op.
 	pr.spinner = nil
 	return pr
 }
@@ -164,11 +162,13 @@ func (p *Printer) AddSpinnerSuffix(txt string) {
 	if p.verbose || p.spinner == nil {
 		return
 	}
-	// Async repeat fans out steps across goroutines; serialize writes to
-	// spinner.Suffix so that probe's own writers don't race each other.
-	p.spinnerMu.Lock()
-	p.spinner.Suffix = fmt.Sprintf(" %s...", p.masker.String(txt))
-	p.spinnerMu.Unlock()
+	// The spinner's render goroutine reads Suffix under the spinner's own
+	// lock, and async repeat sets it from several steps at once, so every
+	// write takes that same lock.
+	suffix := fmt.Sprintf(" %s...", p.masker.String(txt))
+	p.spinner.Lock()
+	p.spinner.Suffix = suffix
+	p.spinner.Unlock()
 }
 
 // Every write goes through write, so that secrets are hidden and concurrent
