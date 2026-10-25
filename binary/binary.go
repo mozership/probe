@@ -11,15 +11,39 @@ import (
 	"strings"
 )
 
+// mediaType returns the media type of a Content-Type value, lowercased and
+// without parameters such as charset. A value mime.ParseMediaType refuses,
+// such as one with a malformed parameter, is taken up to its first
+// semicolon, so a type that names text is still read as text.
+func mediaType(contentType string) string {
+	if mt, _, err := mime.ParseMediaType(contentType); err == nil {
+		return mt
+	}
+	mt, _, _ := strings.Cut(contentType, ";")
+	return strings.TrimSpace(strings.ToLower(mt))
+}
+
+// IsJSONMediaType reports whether a Content-Type value names JSON:
+// application/json, or a structured syntax type such as
+// application/problem+json, ignoring parameters such as charset.
+func IsJSONMediaType(contentType string) bool {
+	mt := mediaType(contentType)
+	return mt == "application/json" || strings.HasSuffix(mt, "+json")
+}
+
 // isTextualMimeType determines if the given MIME type represents textual data
 func isTextualMimeType(contentType string) bool {
 	if contentType == "" {
 		return true // Default to text if no content type
 	}
 
-	// Extract the main MIME type (before semicolon if present)
-	mimeType := strings.Split(contentType, ";")[0]
-	mimeType = strings.TrimSpace(strings.ToLower(mimeType))
+	mt := mediaType(contentType)
+
+	// A structured syntax suffix names the syntax the body is written in,
+	// so application/problem+json is JSON and image/svg+xml is XML.
+	if IsJSONMediaType(contentType) || strings.HasSuffix(mt, "+xml") {
+		return true
+	}
 
 	// Textual MIME types
 	textualTypes := []string{
@@ -29,14 +53,10 @@ func isTextualMimeType(contentType string) bool {
 		"application/javascript",
 		"application/x-javascript",
 		"application/x-www-form-urlencoded",
-		"application/xhtml+xml",
-		"application/rss+xml",
-		"application/atom+xml",
-		"application/ld+json",
 	}
 
 	for _, textType := range textualTypes {
-		if strings.HasPrefix(mimeType, textType) {
+		if strings.HasPrefix(mt, textType) {
 			return true
 		}
 	}
