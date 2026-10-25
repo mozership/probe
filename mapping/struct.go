@@ -3,6 +3,7 @@
 package mapping
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -146,6 +147,26 @@ func (n numeric) equals(m int64) bool {
 // duration it takes as text or seconds first, with ParseTimeout.
 var durationType = reflect.TypeFor[time.Duration]()
 
+// isDecimalFloat reports whether s is written as a decimal number, with an
+// optional sign, digits, a point and an exponent, and nothing else.
+func isDecimalFloat(s string) bool {
+	s = strings.TrimLeft(s, "+-")
+	if s == "" {
+		return false
+	}
+	digits := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits = true
+		case r == '.' || r == 'e' || r == 'E' || r == '+' || r == '-':
+		default:
+			return false
+		}
+	}
+	return digits
+}
+
 // isNumberKind reports whether a field of kind k is read by numberParam.
 func isNumberKind(k reflect.Kind) bool {
 	switch k {
@@ -162,11 +183,18 @@ func isNumberKind(k reflect.Kind) bool {
 // a numeric string. A number that does not fit t is an error, rather than
 // cut down or wrapped round as a plain conversion does it: int64(2.5) is 2,
 // uint(-1) is the largest uint, and int32(1<<40) is 0. For an int or uint
-// that means a number that is not whole, or out of t's range; for a
-// float32, a finite number beyond its largest.
+// that means a number that is not whole, or out of t's range; for a float,
+// one that is not finite, or beyond the largest float32 for a float32. A
+// string is read in base 10 for every kind: strconv.ParseFloat also reads
+// hexadecimal, underscores, "Inf" and "NaN", which an int field never took,
+// so a float field refuses them too.
 func numberParam(v any, t reflect.Type, key string) (reflect.Value, error) {
 	out := reflect.New(t).Elem()
 	if t == durationType {
+		if d, ok := v.(time.Duration); ok {
+			out.SetInt(int64(d))
+			return out, nil
+		}
 		return out, fmt.Errorf("cannot convert %T to %s for field '%s': give a time.Duration", v, t, key)
 	}
 	bits := t.Bits()
@@ -189,9 +217,14 @@ func numberParam(v any, t reflect.Type, key string) (reflect.Value, error) {
 			}
 		default:
 			var f float64
-			if f, err = strconv.ParseFloat(s, bits); err == nil {
+			if !isDecimalFloat(s) {
+				err = strconv.ErrSyntax
+			} else if f, err = strconv.ParseFloat(s, bits); err == nil {
 				out.SetFloat(f)
 			}
+		}
+		if errors.Is(err, strconv.ErrRange) {
+			return out, fmt.Errorf("cannot convert '%s' to %s for field '%s': out of range", s, t, key)
 		}
 		if err != nil {
 			return out, fmt.Errorf("cannot convert '%s' to %s for field '%s'", s, t, key)
@@ -213,7 +246,10 @@ func numberParam(v any, t reflect.Type, key string) (reflect.Value, error) {
 		case reflect.Uint64:
 			f = float64(n.u)
 		}
-		if bits == 32 && !math.IsInf(f, 0) && math.Abs(f) > math.MaxFloat32 {
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return out, fmt.Errorf("cannot convert %v to %s for field '%s': not a finite number", v, t, key)
+		}
+		if bits == 32 && math.Abs(f) > math.MaxFloat32 {
 			return out, outOfRange
 		}
 		out.SetFloat(f)
@@ -407,7 +443,9 @@ func MapToStructByTags(params map[string]any, dest any) error {
 			if v, ok := params[mapTag]; ok {
 				// set a value for a field
 				if field.CanSet() {
-					if v != nil && reflect.TypeOf(v) == field.Type() {
+					// A number goes through numberParam even of the field's own type,
+					// so that a NaN or an infinity is refused there.
+					if v != nil && reflect.TypeOf(v) == field.Type() && !isNumberKind(field.Kind()) {
 						field.Set(reflect.ValueOf(v))
 					} else if field.Kind() == reflect.Bool {
 						b, err := boolParam(v, mapTag)
