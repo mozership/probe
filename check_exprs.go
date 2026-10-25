@@ -91,7 +91,3 @@ func forStrings(path string, v any, f func(path, s string)) {
 		}
 	}
 }
-
-func isTemplate(s string) bool {
-	return len(expr.TemplateExprs(s)) > 0
-}

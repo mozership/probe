@@ -53,7 +53,7 @@ func (w *Workflow) aliasProblems(builtin []string) []aliasProblem {
 			msg = fmt.Sprintf("actions: %s must name an external action, as github.com/<owner>/<repo>@<commit SHA> or a local path starting with ./, not %q", name, ref)
 		// A local path is taken as it is written, so a template in one would
 		// name a directory with braces in its name.
-		case len(expr.TemplateExprs(ref)) > 0:
+		case expr.HasTemplate(ref):
 			msg = fmt.Sprintf("actions: %s must name an external action as it is, not by a template: %q", name, ref)
 		default:
 			if _, err := actionref.Parse(ref); err != nil {

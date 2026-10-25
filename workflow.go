@@ -595,7 +595,7 @@ func (w *Workflow) checkEmbeddedJobs(builtin []string, vars map[string]any) erro
 				continue
 			}
 			// A path the vars of the workflow give is known by now.
-			if len(expr.TemplateExprs(path)) > 0 {
+			if expr.HasTemplate(path) {
 				expanded, err := ev.EvalTemplate(path, env)
 				if err != nil {
 					continue

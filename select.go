@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mozership/probe/expr"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/report"
 )
@@ -158,7 +159,7 @@ func findJob(jobs []Job, byID map[string]int, name string) (int, error) {
 		msg := fmt.Sprintf("no job has the id or name %q", name)
 		if s := suggest.Closest(name, known); s != "" {
 			msg += fmt.Sprintf("; did you mean %q?", s)
-		} else if slices.ContainsFunc(jobs, func(j Job) bool { return strings.Contains(j.Name, "{{") }) {
+		} else if slices.ContainsFunc(jobs, func(j Job) bool { return expr.HasTemplate(j.Name) }) {
 			// The vars are not evaluated yet, and a name may read more.
 			msg += "; a job whose name has a template is selected by its id"
 		}

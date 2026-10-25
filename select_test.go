@@ -127,12 +127,17 @@ func TestSelectJobs_Errors(t *testing.T) {
 		{"a name of another case", []string{"setup", "notify", "TESTS"}, `no job has the id or name "TESTS"; did you mean "tests"?`},
 		{"a name several jobs have", []string{"Tests"}, `2 jobs are named "Tests"; select one by its id: tests, job_7`},
 		{"a name a template makes", []string{"Lint staging"}, `no job has the id or name "Lint staging"; a job whose name has a template is selected by its id`},
+		{"a name with an unclosed opener", []string{"Lint staging"}, `no job has the id or name "Lint staging"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jobs := selectionJobs()
-			if strings.Contains(tt.name, "template") {
+			switch {
+			case strings.Contains(tt.name, "template"):
 				jobs[3].Name = "Lint {{vars.env}}"
+			case strings.Contains(tt.name, "unclosed"):
+				// Not a template: it is the name as written.
+				jobs[3].Name = "Lint {{ vars.env"
 			}
 			_, _, err := selectJobs(jobs, tt.names)
 			if err == nil || err.Error() != tt.want {

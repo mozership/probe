@@ -147,6 +147,16 @@ func TestStep_getWaitTimeForDisplay(t *testing.T) {
 			wait:     "invalid",
 			expected: "",
 		},
+		{
+			name:     "template not evaluated returns empty",
+			wait:     "{{ vars.wait }}",
+			expected: "",
+		},
+		{
+			name:     "unclosed opener returns empty",
+			wait:     "{{ 5",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
