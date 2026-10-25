@@ -59,7 +59,7 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 
 	for i := 0; i < b.Session; i++ {
 		wg.Go(func() {
-			count, err := b.Send()
+			count, err := b.sendShare()
 			resultCh <- sendResult{count: count, err: err}
 		})
 	}
@@ -111,7 +111,9 @@ func (b *Bulk) DeliverWithResult() DeliveryResult {
 	return result
 }
 
-func (b *Bulk) Send() (int, error) {
+// sendShare takes this session's share of the messages and sends it over
+// one SMTP session, returning how many the server accepted.
+func (b *Bulk) sendShare() (int, error) {
 	n := b.calcMessageNumEachSession()
 	if n == 0 {
 		return 0, nil
@@ -129,7 +131,7 @@ func (b *Bulk) Send() (int, error) {
 		MessageCount:       n,
 	}
 
-	err := m.Send()
+	err := m.SendSession()
 	if err != nil {
 		return m.Delivered, err
 	}

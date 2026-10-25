@@ -170,7 +170,9 @@ func (r *Req) validate() (string, error) {
 	}
 }
 
-func Send(data map[string]any, opts ...Option) (map[string]any, error) {
+// Deliver runs the smtp action: it reads the parameters in data, sends the
+// mail they describe, and returns the result as a map.
+func Deliver(data map[string]any, opts ...Option) (map[string]any, error) {
 	r := NewReq()
 
 	cb := &Callback{}

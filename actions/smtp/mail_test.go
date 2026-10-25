@@ -2,7 +2,6 @@ package smtp
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -138,115 +137,67 @@ func TestGenMessageID(t *testing.T) {
 	}
 }
 
-func TestMail_AppendIDtoSubject(t *testing.T) {
+func TestTagSubject(t *testing.T) {
 	tests := []struct {
-		name                string
-		originalData        []byte
-		wantMsgIDAtStart    bool
-		wantSubjectModified bool
-		wantDataUnchanged   bool
+		name string
+		data string
+		want string
 	}{
-		{
-			name:                "with subject header",
-			originalData:        []byte("Subject: Original Subject\nFrom: sender@example.com\n\nBody content"),
-			wantMsgIDAtStart:    true,
-			wantSubjectModified: true,
-			wantDataUnchanged:   false,
-		},
-		{
-			name:                "without subject header",
-			originalData:        []byte("From: sender@example.com\n\nBody content"),
-			wantMsgIDAtStart:    true,
-			wantSubjectModified: false,
-			wantDataUnchanged:   true,
-		},
-		{
-			name:                "empty data",
-			originalData:        []byte(""),
-			wantMsgIDAtStart:    true,
-			wantSubjectModified: false,
-			wantDataUnchanged:   true,
-		},
-		{
-			name:                "subject at end",
-			originalData:        []byte("From: sender@example.com\nSubject: Test Subject\n\nBody"),
-			wantMsgIDAtStart:    true,
-			wantSubjectModified: true,
-			wantDataUnchanged:   false,
-		},
+		{"subject first", "Subject: Hi\nFrom: a@b\n\nBody", "Subject: Hi - id\nFrom: a@b\n\nBody"},
+		{"subject later", "From: a@b\nSubject: Hi\n\nBody", "From: a@b\nSubject: Hi - id\n\nBody"},
+		{"crlf", "Subject: Hi\r\n\r\nBody\r\n", "Subject: Hi - id\r\n\r\nBody\r\n"},
+		{"no subject", "From: a@b\n\nBody", "From: a@b\n\nBody"},
+		// A line in the body is not a header, whatever it starts with.
+		{"subject in the body only", "From: a@b\n\nSubject: not a header", "From: a@b\n\nSubject: not a header"},
+		{"empty", "", ""},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mail := &Mail{}
-			result := mail.appendIDtoSubject(tt.originalData)
-			lines := bytes.Split(result, []byte("\n"))
-
-			// Check if Message-ID is added at the beginning
-			if tt.wantMsgIDAtStart {
-				if len(lines) == 0 || !bytes.HasPrefix(lines[0], []byte("Message-ID: <")) {
-					t.Error("expected Message-ID to be added at the beginning")
-				}
-			}
-
-			// Check if subject is modified
-			if tt.wantSubjectModified {
-				found := false
-				for _, line := range lines {
-					if bytes.Contains(line, []byte("Subject:")) && bytes.Contains(line, []byte(" - ")) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Error("expected Subject to be modified with ID")
-				}
-			}
-
-			// Check if original data remains unchanged (except Message-ID)
-			if tt.wantDataUnchanged && len(lines) > 1 {
-				resultWithoutMsgID := bytes.Join(lines[1:], []byte("\n"))
-				if !bytes.Equal(resultWithoutMsgID, tt.originalData) {
-					t.Error("expected original data to remain unchanged when no Subject modification needed")
-				}
+			if got := string(tagSubject([]byte(tt.data), "id")); got != tt.want {
+				t.Errorf("tagSubject(%q) = %q, want %q", tt.data, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestMail_AppendSendTimestamp(t *testing.T) {
-	mail := &Mail{}
+func TestStamp(t *testing.T) {
 	original := []byte("Subject: Test\nFrom: a@b\n\nBody")
 
 	before := time.Now().UnixNano()
-	result := mail.appendSendTimestamp(original)
+	result := stamp(original)
 	after := time.Now().UnixNano()
 
-	lines := bytes.SplitN(result, []byte("\n"), 2)
-	if len(lines) != 2 {
-		t.Fatalf("expected at least one prepended line, got %q", result)
+	lines := strings.SplitN(string(result), "\n", 3)
+	if len(lines) != 3 {
+		t.Fatalf("expected two prepended lines, got %q", result)
 	}
 
-	prefix := []byte("X-Send-Timestamp-Ns: ")
-	if !bytes.HasPrefix(lines[0], prefix) {
-		t.Fatalf("expected first line to start with %q, got %q", prefix, lines[0])
+	ts, ok := strings.CutPrefix(lines[0], "X-Send-Timestamp-Ns: ")
+	if !ok {
+		t.Fatalf("first line = %q, want the send timestamp", lines[0])
 	}
-
-	tsStr := string(bytes.TrimPrefix(lines[0], prefix))
-	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	n, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
-		t.Fatalf("expected numeric timestamp, got %q: %v", tsStr, err)
+		t.Fatalf("expected numeric timestamp, got %q: %v", ts, err)
 	}
-	if ts < before || ts > after {
-		t.Errorf("timestamp %d not within [%d, %d]", ts, before, after)
+	if n < before || n > after {
+		t.Errorf("timestamp %d not within [%d, %d]", n, before, after)
 	}
 
-	if !bytes.Equal(lines[1], original) {
-		t.Errorf("original payload mutated: got %q, want %q", lines[1], original)
+	msgID, ok := strings.CutPrefix(lines[1], "Message-ID: <")
+	if !ok {
+		t.Fatalf("second line = %q, want the Message-ID", lines[1])
+	}
+	idLeft, _, _ := strings.Cut(msgID, "@")
+	if want := "Subject: Test - " + idLeft + "\nFrom: a@b\n\nBody"; lines[2] != want {
+		t.Errorf("message = %q, want %q", lines[2], want)
+	}
+	if string(original) != "Subject: Test\nFrom: a@b\n\nBody" {
+		t.Errorf("original payload mutated: %q", original)
 	}
 }
 
-func TestMail_Send_Validation(t *testing.T) {
+func TestMail_SendSession_Validation(t *testing.T) {
 	tests := []struct {
 		name         string
 		mail         *Mail
@@ -297,7 +248,7 @@ func TestMail_Send_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.mail.Send()
+			err := tt.mail.SendSession()
 
 			if tt.wantError {
 				if err == nil {
@@ -316,7 +267,7 @@ func TestMail_Send_Validation(t *testing.T) {
 	}
 }
 
-func TestMail_Send_Success(t *testing.T) {
+func TestMail_SendSession_Success(t *testing.T) {
 	tests := []struct {
 		name      string
 		mail      *Mail
@@ -391,7 +342,7 @@ func TestMail_Send_Success(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 
 			// Run the test
-			err = tt.mail.Send()
+			err = tt.mail.SendSession()
 
 			if tt.wantError {
 				if err == nil {
@@ -406,7 +357,7 @@ func TestMail_Send_Success(t *testing.T) {
 	}
 }
 
-func TestMail_Send_NetworkErrors(t *testing.T) {
+func TestMail_SendSession_NetworkErrors(t *testing.T) {
 	tests := []struct {
 		name         string
 		addr         string
@@ -435,7 +386,7 @@ func TestMail_Send_NetworkErrors(t *testing.T) {
 				MessageCount:     1,
 			}
 
-			err := mail.Send()
+			err := mail.SendSession()
 			if err == nil {
 				t.Error("expected error but got none")
 				return
@@ -521,7 +472,7 @@ func startMockServer(t *testing.T, withTLS bool) string {
 	}
 }
 
-func TestMail_Send_StartTLS(t *testing.T) {
+func TestMail_SendSession_StartTLS(t *testing.T) {
 	tests := []struct {
 		name       string
 		serverTLS  bool
@@ -552,10 +503,10 @@ func TestMail_Send_StartTLS(t *testing.T) {
 				InsecureSkipVerify: tt.skipVerify,
 				MessageCount:       1,
 			}
-			err := m.Send()
+			err := m.SendSession()
 			if tt.wantErr == "" {
 				if err != nil {
-					t.Fatalf("Send() error: %v", err)
+					t.Fatalf("SendSession() error: %v", err)
 				}
 				if m.Delivered != 1 {
 					t.Errorf("Delivered = %d, want 1", m.Delivered)
@@ -563,13 +514,13 @@ func TestMail_Send_StartTLS(t *testing.T) {
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("Send() error = %v, want one containing %q", err, tt.wantErr)
+				t.Errorf("SendSession() error = %v, want one containing %q", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestMail_Send_StartTLSHook(t *testing.T) {
+func TestMail_SendSession_StartTLSHook(t *testing.T) {
 	originalHook := testHookStartTLS
 	defer func() { testHookStartTLS = originalHook }()
 
@@ -594,8 +545,8 @@ func TestMail_Send_StartTLSHook(t *testing.T) {
 		InsecureSkipVerify: true,
 		MessageCount:       1,
 	}
-	if err := mail.Send(); err != nil {
-		t.Errorf("Send() error: %v", err)
+	if err := mail.SendSession(); err != nil {
+		t.Errorf("SendSession() error: %v", err)
 	}
 
 	if !hookCalled {
@@ -694,7 +645,7 @@ func stubHostname(t *testing.T, name string, err error) {
 	t.Cleanup(func() { osHostname = orig })
 }
 
-func TestMailSend_EHLOName(t *testing.T) {
+func TestMail_SendSession_EHLOName(t *testing.T) {
 	tests := []struct {
 		name      string
 		localName string
@@ -722,8 +673,8 @@ func TestMailSend_EHLOName(t *testing.T) {
 				StartTLSDisabled: true,
 				MessageCount:     1,
 			}
-			if err := m.Send(); err != nil {
-				t.Fatalf("Send: %v", err)
+			if err := m.SendSession(); err != nil {
+				t.Fatalf("SendSession: %v", err)
 			}
 
 			got := srv.greetings()
@@ -734,7 +685,7 @@ func TestMailSend_EHLOName(t *testing.T) {
 	}
 }
 
-func TestMailSend_RejectsLineBreakInName(t *testing.T) {
+func TestMail_SendSession_RejectsLineBreakInName(t *testing.T) {
 	srv := newGreetingRecorder(t)
 	m := &Mail{
 		Addr:             srv.addr(),
@@ -745,7 +696,7 @@ func TestMailSend_RejectsLineBreakInName(t *testing.T) {
 		StartTLSDisabled: true,
 		MessageCount:     1,
 	}
-	if err := m.Send(); err == nil {
+	if err := m.SendSession(); err == nil {
 		t.Error("a name with a line break must be refused, not sent as a second command")
 	}
 	if got := srv.greetings(); len(got) != 0 {
@@ -807,9 +758,9 @@ func startOneMessageServer(t *testing.T) string {
 	return lis.Addr().String()
 }
 
-func TestSendCountsMessagesBeforeFailure(t *testing.T) {
+func TestSendSessionCountsMessagesBeforeFailure(t *testing.T) {
 	// Each message is committed on its own, so the one accepted before the
-	// refusal was delivered even though Send fails.
+	// refusal was delivered even though SendSession fails.
 	m := &Mail{
 		Addr:             startOneMessageServer(t),
 		MailFrom:         "from@example.com",
@@ -818,8 +769,8 @@ func TestSendCountsMessagesBeforeFailure(t *testing.T) {
 		StartTLSDisabled: true,
 		MessageCount:     3,
 	}
-	if err := m.Send(); err == nil {
-		t.Fatal("Send() succeeded although the second message was refused")
+	if err := m.SendSession(); err == nil {
+		t.Fatal("SendSession() succeeded although the second message was refused")
 	}
 	if m.Delivered != 1 {
 		t.Errorf("Delivered = %d, want 1", m.Delivered)

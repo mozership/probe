@@ -126,7 +126,7 @@ func TestBulkDeliverWithResult(t *testing.T) {
 	}
 }
 
-func TestBulkSend(t *testing.T) {
+func TestBulkSendShare(t *testing.T) {
 	tests := []struct {
 		name          string
 		session       int
@@ -175,7 +175,7 @@ func TestBulkSend(t *testing.T) {
 				Length:     100,
 			}
 
-			count, err := bulk.Send()
+			count, err := bulk.sendShare()
 
 			// Verify no error
 			if err != nil {
@@ -184,7 +184,7 @@ func TestBulkSend(t *testing.T) {
 
 			// Verify count is within expected range
 			// For the first goroutine, it should return the expected count
-			// Note: This test only verifies a single Send() call
+			// Note: This test only verifies a single sendShare() call
 			if count < 1 || count > tt.expectedCount {
 				t.Errorf("Expected count between 1 and %d, got %d", tt.expectedCount, count)
 			}

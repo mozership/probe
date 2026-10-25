@@ -71,7 +71,7 @@ func TestReqDo_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestSendReadsParametersAsTheyCome(t *testing.T) {
+func TestDeliverReadsParametersAsTheyCome(t *testing.T) {
 	// A number may come as an int, a float64 as JSON gives it, or a numeric
 	// string, and a bool as a bool or its text. Each reaches the request
 	// as the same value.
@@ -86,9 +86,9 @@ func TestSendReadsParametersAsTheyCome(t *testing.T) {
 		with["to"] = "to@example.com"
 		with["starttls"] = "off"
 		var got Req
-		_, err := Send(with, WithAfter(func(r *Result) { got = r.Req }))
+		_, err := Deliver(with, WithAfter(func(r *Result) { got = r.Req }))
 		if err != nil {
-			t.Errorf("%v: Send() error: %v", with, err)
+			t.Errorf("%v: Deliver() error: %v", with, err)
 			continue
 		}
 		if got.Session != 2 || got.Message != 3 || got.Length != 10 || !got.InsecureSkipTLS {
@@ -96,7 +96,7 @@ func TestSendReadsParametersAsTheyCome(t *testing.T) {
 		}
 	}
 
-	_, err := Send(map[string]any{"addr": addr, "from": "f@example.com", "to": "t@example.com", "session": "two"})
+	_, err := Deliver(map[string]any{"addr": addr, "from": "f@example.com", "to": "t@example.com", "session": "two"})
 	if err == nil || !strings.Contains(err.Error(), "session") {
 		t.Errorf("unreadable session: error = %v, want one naming session", err)
 	}
@@ -181,7 +181,7 @@ func TestReqDo_WithCallbacks(t *testing.T) {
 	}
 }
 
-func TestSend(t *testing.T) {
+func TestDeliver(t *testing.T) {
 	tests := []struct {
 		name        string
 		data        map[string]any
@@ -239,11 +239,11 @@ func TestSend(t *testing.T) {
 				afterCalled = true
 			})
 
-			result, err := Send(tt.data, before, after)
+			result, err := Deliver(tt.data, before, after)
 
 			if tt.expectError {
 				if err == nil {
-					t.Errorf("Send() expected error but got none")
+					t.Errorf("Deliver() expected error but got none")
 				}
 			}
 
@@ -387,11 +387,11 @@ func TestReqFieldMapping(t *testing.T) {
 
 // TestSend_MyHostname follows the myhostname parameter from the action's
 // input through Bulk to the EHLO line, the path that dropped it before.
-func TestSend_MyHostname(t *testing.T) {
+func TestDeliver_MyHostname(t *testing.T) {
 	stubHostname(t, "machine-a", nil)
 	srv := newGreetingRecorder(t)
 
-	_, err := Send(map[string]any{
+	_, err := Deliver(map[string]any{
 		"addr":       srv.addr(),
 		"from":       "from@example.com",
 		"to":         "to@example.com",
@@ -401,7 +401,7 @@ func TestSend_MyHostname(t *testing.T) {
 		"message":    2,
 	})
 	if err != nil {
-		t.Fatalf("Send: %v", err)
+		t.Fatalf("Deliver: %v", err)
 	}
 
 	got := srv.greetings()
@@ -542,7 +542,7 @@ func TestReqDo_RejectedAndDropped(t *testing.T) {
 	}
 }
 
-func TestSendStartTLS(t *testing.T) {
+func TestDeliverStartTLS(t *testing.T) {
 	// The smtp action's starttls and insecure_skip_tls, against a server that
 	// offers STARTTLS with a self-signed certificate.
 	addr := startMockServer(t, true)
@@ -554,7 +554,7 @@ func TestSendStartTLS(t *testing.T) {
 
 	// auto is the default, so STARTTLS is taken up and the certificate
 	// checked, which a self-signed one fails
-	if _, err := Send(params(nil)); err == nil || !strings.Contains(err.Error(), "certificate") {
+	if _, err := Deliver(params(nil)); err == nil || !strings.Contains(err.Error(), "certificate") {
 		t.Errorf("default: error = %v, want a certificate error", err)
 	}
 
@@ -563,9 +563,9 @@ func TestSendStartTLS(t *testing.T) {
 		{"starttls": "AUTO", "insecure_skip_tls": true},
 		{"starttls": "off"},
 	} {
-		ret, err := Send(params(extra))
+		ret, err := Deliver(params(extra))
 		if err != nil {
-			t.Errorf("%v: Send() error: %v", extra, err)
+			t.Errorf("%v: Deliver() error: %v", extra, err)
 			continue
 		}
 		res, _ := ret["res"].(map[string]any)
@@ -574,22 +574,22 @@ func TestSendStartTLS(t *testing.T) {
 		}
 	}
 
-	if _, err := Send(params(map[string]any{"starttls": "sometimes"})); err == nil || !strings.Contains(err.Error(), "off, auto or required") {
+	if _, err := Deliver(params(map[string]any{"starttls": "sometimes"})); err == nil || !strings.Contains(err.Error(), "off, auto or required") {
 		t.Errorf("invalid starttls: error = %v, want the values there are", err)
 	}
 }
 
-func TestSendStartTLSRequiredNotOffered(t *testing.T) {
+func TestDeliverStartTLSRequiredNotOffered(t *testing.T) {
 	// required fails a server that does not offer STARTTLS, rather than
 	// sending in plain text
 	addr := startMockServer(t, false)
-	_, err := Send(map[string]any{"addr": addr, "from": "from@example.com", "to": "to@example.com", "starttls": "required"})
+	_, err := Deliver(map[string]any{"addr": addr, "from": "from@example.com", "to": "to@example.com", "starttls": "required"})
 	if err == nil || !strings.Contains(err.Error(), "does not offer STARTTLS") {
 		t.Errorf("error = %v, want the server not offering STARTTLS", err)
 	}
 }
 
-func TestSendStopsOnUnreadableParameter(t *testing.T) {
+func TestDeliverStopsOnUnreadableParameter(t *testing.T) {
 	// A parameter that cannot be read fails the step before anything is
 	// sent; it used to send with the parameter at its zero value and report
 	// the error only afterwards.
@@ -610,14 +610,14 @@ func TestSendStopsOnUnreadableParameter(t *testing.T) {
 		}
 	}()
 
-	_, err = Send(map[string]any{
+	_, err = Deliver(map[string]any{
 		"addr":              lis.Addr().String(),
 		"from":              "from@example.com",
 		"to":                "to@example.com",
 		"insecure_skip_tls": "invalid",
 	})
 	if err == nil {
-		t.Fatal("Send() succeeded with an unreadable insecure_skip_tls")
+		t.Fatal("Deliver() succeeded with an unreadable insecure_skip_tls")
 	}
 	time.Sleep(100 * time.Millisecond)
 	if n := accepted.Load(); n != 0 {

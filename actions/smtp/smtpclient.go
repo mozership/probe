@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// Client is an SMTP client forked from net/smtp, keeping what the smtp action
+// uses of it.
 type Client struct {
 	Text       *textproto.Conn
 	conn       net.Conn
