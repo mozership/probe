@@ -24,7 +24,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Settings
 actions:
-  ios: github.com/mozership/probe-ios@9e8d99c90abb717826816dffa892649c36e425b9 # v0.1.0
+  ios: github.com/mozership/probe-ios@aed5436143e9536754e2123b953831f60cd635eb # v0.2.0
 jobs:
   - name: settings
     steps:
@@ -67,7 +67,7 @@ A simulator runs one runner at a time, so two runs of Probe at once need a simul
 | `app` | String | Yes | - | The bundle identifier of the app the actions drive |
 | `actions` | List | Yes | - | The actions to take, in order. See [Actions](#actions) |
 | `device` | String | No | the one booted simulator | The simulator, by its name or UDID. It has to be booted, and has to be given when more than one is |
-| `timeout` | Duration string or number of seconds | No | `30s` | Limit for the actions, from the first to the last. It does not count building the runner or starting it, which the step's own `timeout` bounds |
+| `timeout` | Duration string or number of seconds | No | `30s` | Limit for the actions, from the first to the last. An action on an element that it runs out on waits up to a minute more for the runner to say why it failed, as XCUITest first waits for the app to be idle, which can take that long on a simulator just booted. It does not count building the runner or starting it, which the step's own `timeout` bounds |
 
 ## Actions
 
@@ -85,7 +85,7 @@ Each entry of `actions` names its action in `name`:
 | `tree` | `id` | Reads the app's accessibility tree, as XCUITest describes it, into `res.results`. It shows what a selector can name |
 | `screenshot` | `id` | Saves the screen as PNG, and puts its path in `res.filepaths` |
 
-`id` is the key of the result; without it, the action's name is. An action on an element waits for it to appear, for what is left of `timeout`, and the step fails when it does not.
+`id` is the key of the result; without it, the action's name is. An action on an element waits for it to appear, for what is left of `timeout`, and the step fails when it does not. An entry with a key an action does not take, such as a misspelt `selector`, is refused before the step runs.
 
 ### Selectors
 
