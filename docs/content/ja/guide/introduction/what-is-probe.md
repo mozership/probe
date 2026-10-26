@@ -134,7 +134,7 @@ jobs:
 | [`hello`](/ja/reference/actions/hello) | レポートへの出力 |
 
 外部アクションはそれぞれ独立したリポジトリにあり、ステップからコミットを指定して使います。
-[agent](/ja/reference/actions/agent)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[graphql](/ja/reference/actions/graphql)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[s3](/ja/reference/actions/s3)、[websocket](/ja/reference/actions/websocket)があります。
+[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[graphql](/ja/reference/actions/graphql)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[s3](/ja/reference/actions/s3)、[websocket](/ja/reference/actions/websocket)があります。
 
 ### カスタムアクション
 

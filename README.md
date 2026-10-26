@@ -36,7 +36,7 @@ Features
 Probe was made for reproducible experiments in computer science: a workflow that drives many protocols is written down in YAML, short enough to read, and run again the same way. The same workflows serve as end-to-end tests that keep software reliable, which matters more now that AI agents, not people, write much of the code.
 
 - **Ready for AI coding agents.** `probe skill` teaches an agent to write workflows for the version installed, and `probe check` finds its mistakes before anything runs. `--read-only` and `--allow-host` refuse writes, and connections to hosts you did not list, before they are sent, so a workflow the agent wrote can be run safely. A step can also check responses against your OpenAPI document or `.proto` files, not only against the agent's own `test`.
-- **Flexible.** HTTP, gRPC, MySQL, PostgreSQL, SQLite, SMTP, IMAP, DNS, SSH and shell are built in, external actions add a browser, GraphQL and JMAP, and a new protocol can be added as an action of its own. Jobs run in parallel unless `needs` orders them, so one run can call an endpoint, query the row it wrote and read the mail it sent, and `repeat` runs the same workflow on an interval as a monitor.
+- **Flexible.** HTTP, gRPC, MySQL, PostgreSQL, SQLite, SMTP, IMAP, DNS, SSH and shell are built in, external actions add a browser, iOS and Android apps, GraphQL and JMAP, and a new protocol can be added as an action of its own. Jobs run in parallel unless `needs` orders them, so one run can call an endpoint, query the row it wrote and read the mail it sent, and `repeat` runs the same workflow on an interval as a monitor.
 - **Easy to run and keep.** A workflow is YAML you can read, and steps several scenarios share, such as a login, live in one job file that `uses: embedded` runs. Probe is a single binary with nothing to install alongside it, so it runs the same on your machine, in CI and from cron, and `probe dag` prints the jobs as a flowchart in ASCII or Mermaid. Results show in the terminal job by job, with the reason a step failed, and `--report` also writes them as JSON, JUnit XML, Markdown or a GitHub Actions job summary.
 
 Beyond that, a workflow has `outputs` to pass data between steps and jobs, `test` to assert on any response and say which condition did not hold, `retry`, `skipif`, `wait` and `timeout`, `iteration` over a list written in the workflow or read from a file, `defaults` for settings shared across steps and jobs, `fail_fast` to stop a job at its first failure and `always` for a cleanup that runs after one, and merging of several YAML files on one command line, where `--var` and `--env-file` give the values that differ from run to run.
@@ -134,9 +134,11 @@ These are external actions, each in a repository of its own, which a step pins b
 | Action | Use it for |
 |---|---|
 | [agent](https://probe.linyo.ws/reference/actions/agent) | Testing a web application from a task written in natural language, with a model |
+| [android](https://probe.linyo.ws/reference/actions/android) | Driving an app on an Android emulator or device |
 | [browser](https://probe.linyo.ws/reference/actions/browser) | Driving a real browser |
 | [container](https://probe.linyo.ws/reference/actions/container) | Containers started for a run, and removed after it |
 | [graphql](https://probe.linyo.ws/reference/actions/graphql) | GraphQL queries over HTTP |
+| [ios](https://probe.linyo.ws/reference/actions/ios) | Driving an app on an iOS simulator |
 | [jmap](https://probe.linyo.ws/reference/actions/jmap) | JMAP methods |
 | [mail-latency](https://probe.linyo.ws/reference/actions/mail-latency) | Measuring delivery latency from received messages |
 | [redis](https://probe.linyo.ws/reference/actions/redis) | Commands on a Redis or Valkey server |
