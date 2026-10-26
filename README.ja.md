@@ -36,7 +36,7 @@ AIエージェントがサービスを変更したとき、その変更が動く
 Probeは、情報工学の実験を再現できるようにするために作られました。さまざまなプロトコルを使う複雑なワークフローを、読みやすいYAMLで簡潔に書き、同じ手順で何度でも実行できます。同じワークフローは、ソフトウェアの信頼性を確かめるEnd-to-endテストにも使えます。コードを書くのが人ではなくAIエージェントになりつつある今、その重要性は増しています。
 
 - **AIコーディングへの対応**: `probe skill`は、インストールしたバージョンに合うワークフローの書き方をAIエージェントに教えます。`probe check`は、実行する前に書き間違いを見つけます。`--read-only`と`--allow-host`は、書き込みと、指定していないホストへの接続を、送る前に拒否します。そのため、AIエージェントが書いたワークフローを安全に実行できます。ステップは、AIエージェントが書いた`test`だけでなく、OpenAPIドキュメントや`.proto`ファイルの仕様とも照合できます。
-- **柔軟性**: HTTP、gRPC、MySQL、PostgreSQL、SQLite、SMTP、IMAP、DNS、SSH、シェルが組み込みで、ブラウザ、GraphQL、JMAPは外部アクションで扱えます。新しいプロトコルも、独立したアクションとして追加できます。ジョブは`needs`で順序を決めない限り並行して動くため、エンドポイントを呼び、書き込まれた行を問い合わせ、送信されたメールを読む処理を1回の実行で行えます。`repeat`を加えれば、同じワークフローを一定の間隔で動かす監視にもなります。
+- **柔軟性**: HTTP、gRPC、MySQL、PostgreSQL、SQLite、SMTP、IMAP、DNS、SSH、シェルが組み込みで、ブラウザ、iOSとAndroidのアプリ、自然言語で書いたタスクからのエージェントによるテスト、GraphQL、JMAPは外部アクションで扱えます。新しいプロトコルも、独立したアクションとして追加できます。ジョブは`needs`で順序を決めない限り並行して動くため、エンドポイントを呼び、書き込まれた行を問い合わせ、送信されたメールを読む処理を1回の実行で行えます。`repeat`を加えれば、同じワークフローを一定の間隔で動かす監視にもなります。
 - **運用性**: ワークフローは読みやすいYAMLで定義します。ログインのように複数のシナリオで共通する手順は1つのジョブファイルにまとめ、`uses: embedded`で呼び出せます。Probeは単体のバイナリで、併せて入れるものはありません。手元でも、CIでも、cronからでも同じように動きます。ジョブの構造は`probe dag`でASCIIまたはMermaidのフローチャートとして出力できます。結果は端末にジョブごとに表示され、失敗したステップには理由が添えられます。`--report`を使えば、JSON、JUnit XML、Markdown、GitHub Actionsのジョブサマリーとしても書き出せます。
 
 このほかワークフローには、ステップやジョブの間でデータを渡す`outputs`、任意の応答を検証し、成立しなかった条件を示す`test`、`retry`、`skipif`、`wait`、`timeout`、ワークフローに書いたリストやファイルから読んだリストを繰り返す`iteration`、ステップやジョブの間で共通する設定をまとめる`defaults`、最初の失敗でジョブを止める`fail_fast`、失敗の後にも実行する後片付けのための`always`、そしてコマンドラインで複数のYAMLをマージする機能があり、実行のたびに変わる値は`--var`と`--env-file`で与えられます。
@@ -134,9 +134,11 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 | アクション | 用途 |
 |---|---|
 | [agent](https://probe.linyo.ws/ja/reference/actions/agent) | 自然言語で書いたタスクからの、モデルによるWebアプリケーションのテスト |
+| [android](https://probe.linyo.ws/ja/reference/actions/android) | Androidのエミュレータや実機の上のアプリの操作 |
 | [browser](https://probe.linyo.ws/ja/reference/actions/browser) | 実際のブラウザの操作 |
 | [container](https://probe.linyo.ws/ja/reference/actions/container) | 実行のためのコンテナの起動と、終了後の削除 |
 | [graphql](https://probe.linyo.ws/ja/reference/actions/graphql) | HTTPでのGraphQLのクエリ |
+| [ios](https://probe.linyo.ws/ja/reference/actions/ios) | iOSシミュレータ上のアプリの操作 |
 | [jmap](https://probe.linyo.ws/ja/reference/actions/jmap) | JMAPのメソッドの呼び出し |
 | [mail-latency](https://probe.linyo.ws/ja/reference/actions/mail-latency) | 受信したメールからの配送遅延の計測 |
 | [redis](https://probe.linyo.ws/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでのコマンドの実行 |
