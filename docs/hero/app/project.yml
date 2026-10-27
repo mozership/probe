@@ -1,0 +1,20 @@
+name: Acme
+options:
+  bundleIdPrefix: com.example
+targets:
+  Acme:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Acme]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.example.acme
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      CODE_SIGNING_ALLOWED: NO
+    info:
+      path: Acme/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true

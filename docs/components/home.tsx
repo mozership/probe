@@ -97,7 +97,7 @@ export function Home({ locale }: { locale: Locale }) {
 
           <figure className="lp-panel lp-panel--readout lp-pair__report">
             <figcaption className="lp-panel__label">{t.heroReportLabel}</figcaption>
-            <Report lines={heroReport} animate />
+            <Report lines={heroReport} animate wrap />
           </figure>
         </div>
       </section>

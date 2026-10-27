@@ -1,0 +1,111 @@
+name: Hero run
+
+# Runs signup-flow.yml against fresh stubs, and writes what Probe prints to
+# report.txt, from which heroReport in components/home-data.ts is copied.
+# Run it from this directory, with ANTHROPIC_API_KEY set:
+#
+#   probe run.yml
+#
+# The stub service and GreenMail run in the background, and are stopped
+# once the run is over.
+
+vars:
+  device: "{{DEVICE ?? 'iPhone 17'}}"
+
+jobs:
+- name: Service
+  id: service
+  steps:
+  - name: Build the stub
+    uses: shell
+    with:
+      cmd: go build -o stub .
+      workdir: stub
+      timeout: 2m
+    test: res.code == 0
+
+  - name: Start it afresh
+    uses: shell
+    with:
+      cmd: rm -rf app.db out && exec stub/stub -addr 127.0.0.1:18080 -base http://127.0.0.1:18080 -db app.db -smtp 127.0.0.1:13025
+      background: true
+      ready:
+        log: listening on
+    test: status == -1
+
+# A mailbox for ada@example.com. The ports are not GreenMail's own, which
+# other containers often hold.
+- name: Mailbox
+  id: mailbox
+  steps:
+  - name: Start GreenMail
+    uses: shell
+    with:
+      cmd: >-
+        docker rm -f hero-mail >/dev/null 2>&1;
+        exec docker run --rm --name hero-mail -p 13025:3025 -p 13143:3143
+        -e GREENMAIL_OPTS='-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=ada:mailpass@example.com
+        -Dgreenmail.users.login=email -Dgreenmail.auth.disabled=false'
+        greenmail/standalone:2.1.3
+      background: true
+      ready:
+        log: Starting GreenMail API server
+      timeout: 2m
+    test: status == -1
+
+- name: iOS app
+  id: app
+  steps:
+  - name: Build the app
+    uses: shell
+    with:
+      cmd: >-
+        xcodegen generate -q &&
+        xcodebuild -project Acme.xcodeproj -scheme Acme -sdk iphonesimulator
+        -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build -quiet
+      workdir: app
+      timeout: 10m
+    test: res.code == 0
+
+  - name: Boot the simulator
+    uses: shell
+    with:
+      cmd: xcrun simctl boot "{{vars.device}}" 2>/dev/null; xcrun simctl bootstatus "{{vars.device}}" -b
+      timeout: 5m
+    test: res.code == 0
+
+  - name: Install the app
+    uses: shell
+    with:
+      cmd: >-
+        xcrun simctl install "{{vars.device}}" app/build/Build/Products/Debug-iphonesimulator/Acme.app &&
+        { xcrun simctl terminate "{{vars.device}}" com.example.acme 2>/dev/null; true; }
+      timeout: 2m
+    test: res.code == 0
+
+- name: Hero run
+  id: hero-run
+  needs: [service, mailbox, app]
+  steps:
+  - name: Run signup-flow.yml
+    uses: shell
+    with:
+      cmd: probe signup-flow.yml > report.txt 2>&1
+      env:
+        MAIL_PASS: mailpass
+        PASSWORD: s3cret-Pass
+      timeout: 15m
+    test: res.code == 0
+
+# Stopping docker run leaves the container running, as GreenMail does not
+# end on the signal it passes on: remove it, however the run went.
+- name: Cleanup
+  needs: [mailbox, hero-run]
+  always: true
+  steps:
+  - name: Remove GreenMail
+    uses: shell
+    with:
+      cmd: docker rm -f hero-mail
+    test: res.code == 0

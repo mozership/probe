@@ -1,0 +1,162 @@
+name: Sign-up Flow
+
+actions:
+  browser: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+  ios: github.com/mozership/probe-ios@aed5436143e9536754e2123b953831f60cd635eb # v0.2.0
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+
+secrets:
+- ANTHROPIC_API_KEY
+
+vars:
+  web: http://127.0.0.1:18080
+  api: http://127.0.0.1:18080
+  mail_user: ada@example.com
+  mail_pass: "{{MAIL_PASS}}"
+  password: "{{PASSWORD}}"
+
+jobs:
+- name: Sign up
+  id: signup
+  steps:
+  - name: Fill in the form
+    uses: browser
+    with:
+      timeout: 15s
+      actions:
+      - name: navigate
+        url: "{{vars.web}}/signup"
+      - name: type
+        selector: "#email"
+        value: "{{vars.mail_user}}"
+      - name: type
+        selector: "#password"
+        value: "{{vars.password}}"
+      - name: click
+        selector: button[type=submit]
+      - name: wait_text
+        id: notice
+        selector: "#notice"
+    test: res.code == 0 && res.results.notice startsWith "Check your inbox"
+
+- name: API
+  id: api
+  needs: [signup]
+  defaults:
+    http:
+      url: "{{vars.api}}"
+      headers:
+        content-type: application/json
+  steps:
+  - name: Sign-in is refused
+    uses: http
+    with:
+      post: /login
+      body:
+        email: "{{vars.mail_user}}"
+        password: "{{vars.password}}"
+    test: res.code == 403 && res.body.error == "confirm your address first"
+
+- name: Database
+  id: db
+  needs: [signup]
+  defaults:
+    db:
+      dsn: file:./app.db
+  steps:
+  - name: Row is pending
+    uses: db
+    with:
+      query: SELECT status FROM users WHERE email = ?
+      params: ["{{vars.mail_user}}"]
+    test: res.code == 0 && res.rows[0].status == "pending"
+
+- name: Mailbox
+  id: mailbox
+  needs: [signup]
+  defaults:
+    imap:
+      host: 127.0.0.1
+      port: 13143
+      tls: false
+      username: "{{vars.mail_user}}"
+      password: "{{vars.mail_pass}}"
+  steps:
+  - name: Confirmation arrived
+    id: mail
+    uses: imap
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: fetch
+        sequence: "1"
+        dataitem: ENVELOPE BODY[TEXT]
+    test: |
+      res.code == 0 &&
+      res.data.fetch.messages[0].subject == "Confirm your address" &&
+      res.data.fetch.messages[0].to == vars.mail_user
+    outputs:
+      link: last(split(trim(res.data.fetch.messages[0].body), "\r\n"))
+
+- name: Activate
+  id: activate
+  needs: [api, db, mailbox]
+  steps:
+  - name: Follow the link
+    uses: browser
+    with:
+      timeout: 15s
+      actions:
+      - name: navigate
+        url: "{{outputs.mail.link}}"
+      - name: text
+        id: heading
+        selector: h1
+    test: res.code == 0 && res.results.heading == "Your account is active"
+
+- name: iOS app
+  id: ios
+  needs: [activate]
+  steps:
+  - name: Sign in on iPhone
+    uses: ios
+    timeout: 10m
+    with:
+      app: com.example.acme
+      actions:
+      - name: launch
+        args: ["-api", "{{vars.api}}"]
+      - name: type
+        selector: email
+        value: "{{vars.mail_user}}"
+      - name: type
+        selector: type=securetextfield identifier=password
+        value: "{{vars.password}}"
+      - name: tap
+        selector: signin
+      - name: text
+        id: greeting
+        selector: greeting
+    test: res.code == 0 && res.results.greeting == "Welcome, ada@example.com"
+
+- name: First visit
+  id: visit
+  needs: [activate]
+  steps:
+  - name: Ada names herself
+    uses: agent
+    with:
+      url: "{{vars.web}}/signin"
+      persona: |
+        Ada, who has just confirmed her address and has
+        never used the app. She signs in with {secret:EMAIL}
+        and the password {secret:PASSWORD}.
+      goal: |
+        Sign in, and set the display name of the account
+        to "Ada Lovelace".
+      secrets:
+        EMAIL: "{{vars.mail_user}}"
+        PASSWORD: "{{vars.password}}"
+      evidence_dir: out
+    test: res.verdict == "pass"

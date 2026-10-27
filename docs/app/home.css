@@ -162,7 +162,21 @@
 /* The flowchart carries no window chrome: it is a drawing, not a readout. */
 .lp-hero__flow {
   margin: clamp(1.5rem, 3vw, 2rem) auto 0;
-  max-width: 58rem;
+  max-width: 68rem;
+}
+
+/* Six boxes in four columns are too small to read on a phone: keep them at
+   a readable size and let the drawing scroll sideways instead. */
+@media (max-width: 40rem) {
+  .lp-hero__flow {
+    overflow-x: auto;
+    margin-inline: calc(var(--lp-gutter) * -1);
+    padding-inline: var(--lp-gutter);
+  }
+
+  .lp-flow--hero {
+    min-width: 46rem;
+  }
 }
 
 .lp-hero__flowNote {
@@ -370,6 +384,14 @@
   font-family: var(--lp-font-body);
   font-size: 13px;
   font-weight: 600;
+}
+
+.lp-flow__icon {
+  fill: none;
+  stroke: var(--lp-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .lp-flow__action {

@@ -78,13 +78,13 @@ export type HomeCopy = {
 export const homeCopy: Record<Locale, HomeCopy> = {
   en: {
     headline: ['Proof that AI-written code works.'],
-    lede: 'When an AI coding agent changes a service, something other than the code and tests it wrote has to show that the change works. Probe runs a YAML workflow, written like GitHub Actions, that drives the running service over HTTP, gRPC, databases, mail, SSH and shell, and checks each result. The agent writes the workflow, Probe checks it before it runs, and runs it without writes or connections you did not allow.',
+    lede: 'When an AI coding agent changes a service, something other than the code and tests it wrote has to show that the change works. Probe runs a YAML workflow, written like GitHub Actions, that drives the running service through a browser, an iOS app, HTTP, gRPC, databases, mail, SSH and shell, and checks each result. The agent writes the workflow, Probe checks it before it runs, and runs it without writes or connections you did not allow.',
     primaryCta: { label: 'Install Probe', href: '/guide/introduction/installation' },
     secondaryCta: { label: 'Read the quickstart', href: '/guide/introduction/quickstart' },
     heroWorkflowLabel: 'signup-flow.yml',
     exampleHeading: 'An example sign-up scenario',
-    heroDagAlt: 'Create account runs first; Database and Mailbox both follow it and run in parallel; Activate waits for both.',
-    flowNote: 'Create account posts the form and publishes the id that comes back. Database and Mailbox both depend on it, so Probe runs them at the same time — one asks SQLite for the row, the other opens the mailbox over IMAP. Activate waits for both before following the confirmation link.',
+    heroDagAlt: 'Sign up runs first in a browser; API, Database and Mailbox follow it and run in parallel; Activate waits for all three; iOS app and First visit follow it and run in parallel.',
+    flowNote: 'Sign up fills in the form in Chrome. API, Database and Mailbox each check what it left behind, at the same time: the API refuses to sign in an address not yet confirmed, SQLite holds the row as pending, and the confirmation mail is in the mailbox over IMAP. Activate waits for all three and opens the link from the mail in the browser. Then two jobs use the account at once: iOS app signs in on an iPhone simulator, and First visit hands the web app to an AI agent playing Ada, who has never seen it, and judges whether she reaches her goal — what a test written step by step cannot tell you.',
     heroReportLabel: '$ probe signup-flow.yml',
     channels: {
       kicker: 'Architecture',
@@ -231,13 +231,13 @@ export const homeCopy: Record<Locale, HomeCopy> = {
   },
   ja: {
     headline: ['AIが書いたコードに', '動く証拠を'],
-    lede: 'AIエージェントがサービスを変更したとき、その変更が動くことは、AIエージェント自身が書いたコードやテストとは別のもので示す必要があります。ProbeはGitHub ActionsのようなYAMLで定義したWorkflowを実行し、動いているサービスをHTTP、gRPC、データベース、メール、SSH、シェル越しに操作して、結果を検証します。WorkflowはAIエージェントが書き、Probeが実行前に検査し、許可していない書き込みや接続を防いで実行します。',
+    lede: 'AIエージェントがサービスを変更したとき、その変更が動くことは、AIエージェント自身が書いたコードやテストとは別のもので示す必要があります。ProbeはGitHub ActionsのようなYAMLで定義したWorkflowを実行し、動いているサービスをブラウザ、iOSアプリ、HTTP、gRPC、データベース、メール、SSH、シェル越しに操作して、結果を検証します。WorkflowはAIエージェントが書き、Probeが実行前に検査し、許可していない書き込みや接続を防いで実行します。',
     primaryCta: { label: 'Probeをインストール', href: '/ja/guide/introduction/installation' },
     secondaryCta: { label: 'クイックスタートを読む', href: '/ja/guide/introduction/quickstart' },
     heroWorkflowLabel: 'signup-flow.yml',
     exampleHeading: 'サインアップのシナリオの例',
-    heroDagAlt: 'Create accountが先に走り、DatabaseとMailboxがそれに続いて並列に走り、Activateが両方の完了を待つ。',
-    flowNote: '最初にCreate accountがフォームを送信し、返ってきたidを後続へ渡します。これを待つのがDatabaseとMailboxで、この2つは互いに依存しないため同時に走ります。DatabaseはSQLiteにレコードの状態を問い合わせ、MailboxはIMAPでメールボックスを開いて確認メールを探します。Activateはその両方が終わるのを待ってから、確認リンクをたどります。',
+    heroDagAlt: 'Sign upが先にブラウザで走り、API、Database、Mailboxがそれに続いて並列に走り、Activateが3つすべての完了を待ち、iOS appとFirst visitがそれに続いて並列に走る。',
+    flowNote: '最初にSign upがChromeでフォームに入力して送信します。API、Database、Mailboxはその結果を同時に確かめます。APIは確認前のアドレスでのサインインを拒否し、SQLiteのレコードはpendingのままで、IMAPで開いたメールボックスには確認メールが届いています。Activateはこの3つを待ってから、メールのリンクをブラウザで開きます。そのあとの2つは同時に走ります。iOS appはiPhoneのシミュレータからサインインし、First visitは初めてアプリを使うAdaをAIエージェントに演じさせて、目的を果たせたかを判定させます。手順を1つずつ書くテストでは確かめられない、使いやすさの検証です。',
     heroReportLabel: '$ probe signup-flow.yml',
     channels: {
       kicker: '仕組み',
