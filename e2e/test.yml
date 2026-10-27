@@ -657,11 +657,16 @@ jobs:
         cd actions/grpc/testserver && \
           protoc --go_out=. --go-grpc_out=. ./pb/user_service.proto
     test: res.code == 0
+  # go run builds the servers first, which the timeout allows for. The
+  # Connect port opens after the gRPC one, so its line says both are ready.
   - name: Start GRPC server in background
     uses: shell
     with:
       background: true
       cmd: go run actions/grpc/testserver/*.go -connect-port=50061
+      ready:
+        log: Serving the Connect protocol
+      timeout: 2m
     test: status == -1
     outputs:
       grpc_pid: res.pid
@@ -677,6 +682,9 @@ jobs:
         go run actions/grpc/testserver/*.go -tls -port=50052 \
           -cert="./e2e/certs/server.crt" \
           -key="./e2e/certs/server.key"
+      ready:
+        log: Serving gRPC on port
+      timeout: 2m
     test: status == -1
     outputs:
       grpctls_pid: res.pid
