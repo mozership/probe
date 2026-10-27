@@ -162,7 +162,21 @@
 /* The flowchart carries no window chrome: it is a drawing, not a readout. */
 .lp-hero__flow {
   margin: clamp(1.5rem, 3vw, 2rem) auto 0;
-  max-width: 58rem;
+  max-width: 68rem;
+}
+
+/* Six boxes in four columns are too small to read on a phone: keep them at
+   a readable size and let the drawing scroll sideways instead. */
+@media (max-width: 40rem) {
+  .lp-hero__flow {
+    overflow-x: auto;
+    margin-inline: calc(var(--lp-gutter) * -1);
+    padding-inline: var(--lp-gutter);
+  }
+
+  .lp-flow--hero {
+    min-width: 46rem;
+  }
 }
 
 .lp-hero__flowNote {
@@ -370,6 +384,14 @@
   font-family: var(--lp-font-body);
   font-size: 13px;
   font-weight: 600;
+}
+
+.lp-flow__icon {
+  fill: none;
+  stroke: var(--lp-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .lp-flow__action {
@@ -674,6 +696,80 @@
 .lp-section--install .lp-section__head {
   margin-inline: auto;
   text-align: center;
+}
+
+/* FAQ ------------------------------------------------------------------- */
+
+/* The head is centred as that of Install is; the questions and answers
+   stay ranged left, in a block centred under it. */
+.lp-faq .lp-section__head {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.lp-faq__list {
+  max-width: 56rem;
+  margin: clamp(1.75rem, 3.5vw, 2.5rem) auto 0;
+  border-top: 1px solid var(--lp-rule);
+}
+
+.lp-faq__item {
+  border-bottom: 1px solid var(--lp-rule);
+}
+
+.lp-faq__question {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 1.15rem 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lp-faq__question::-webkit-details-marker {
+  display: none;
+}
+
+/* A plus that turns into a minus when the answer is open. */
+.lp-faq__question::after {
+  content: '+';
+  flex: none;
+  color: var(--lp-blue);
+  font-family: var(--lp-font-mono);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.lp-faq__item[open] > .lp-faq__question::after {
+  content: '−';
+}
+
+.lp-faq__question:focus-visible {
+  outline: 2px solid var(--lp-blue);
+  outline-offset: 2px;
+}
+
+.lp-faq__answer {
+  padding: 0 0 1.35rem;
+  max-width: var(--lp-measure);
+  color: var(--lp-muted);
+}
+
+.lp-faq__answer p {
+  margin: 0;
+}
+
+.lp-faq__link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--lp-blue);
+  text-decoration: none;
+}
+
+.lp-faq__link:hover {
+  text-decoration: underline;
 }
 
 .lp-command {

@@ -1,0 +1,9 @@
+# What run.sh builds and what a run leaves behind.
+stub/stub
+app/build
+app/Acme.xcodeproj
+app/Acme/Info.plist
+app.db
+stub.log
+out
+report.txt

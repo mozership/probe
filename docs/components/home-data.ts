@@ -1,39 +1,88 @@
 /**
  * Every terminal block below is the literal output of the command shown with
  * it, captured from a real `probe` run of the workflow in `heroWorkflow`:
- * a stub API that sends the confirmation mail, SQLite, and a GreenMail IMAP
- * server. Only the connection details in the workflow were swapped for
- * presentable ones — the API host, the database path, the IMAP host and the
- * password, which is an env var here as it would be anywhere. Keep it that way.
+ * a stub service that serves the sign-up form, answers the API, keeps its
+ * users in SQLite and sends the confirmation mail to a GreenMail server, a
+ * SwiftUI app that signs in to it on an iOS simulator, and the agent action
+ * with Claude playing Ada. Only the connection details in the workflow were
+ * swapped for presentable ones — the web and API hosts, which were one local
+ * stub, and the IMAP host, port and TLS — and the passwords are env vars here
+ * as they would be anywhere. The lines Probe prints as a step starts and
+ * ends, and its warnings, were left out. Keep it that way: the stubs, and
+ * the workflow that runs this one against them, are in hero/.
  */
 
+export type ReportTone = 'title' | 'job' | 'pass' | 'idle' | 'echo' | 'total' | 'error' | 'warning'
+
+/**
+ * A line of a terminal block. tail is the end of the line that Probe prints
+ * in a color of its own, as the green of "✓ All jobs succeeded" after the
+ * total time.
+ */
 export type ReportLine = {
   text: string
-  tone?: 'title' | 'job' | 'pass' | 'idle' | 'echo' | 'total' | 'error' | 'warning'
+  tone?: ReportTone
+  tail?: { text: string; tone: ReportTone }
 }
 
 export const heroWorkflow = `name: Sign-up Flow
 
+actions:
+  browser: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+  ios: github.com/mozership/probe-ios@aed5436143e9536754e2123b953831f60cd635eb # v0.2.0
+  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+
+secrets:
+- ANTHROPIC_API_KEY
+
 vars:
+  web: https://app.example.com
   api: https://api.example.com
   mail_user: ada@example.com
   mail_pass: "{{MAIL_PASS}}"
+  password: "{{PASSWORD}}"
 
 jobs:
-- name: Create account
+- name: Sign up
   id: signup
+  steps:
+  - name: Fill in the form
+    uses: browser
+    with:
+      timeout: 15s
+      actions:
+      - name: navigate
+        url: "{{vars.web}}/signup"
+      - name: type
+        selector: "#email"
+        value: "{{vars.mail_user}}"
+      - name: type
+        selector: "#password"
+        value: "{{vars.password}}"
+      - name: click
+        selector: button[type=submit]
+      - name: wait_text
+        id: notice
+        selector: "#notice"
+    test: res.code == 0 && res.results.notice startsWith "Check your inbox"
+
+- name: API
+  id: api
+  needs: [signup]
   defaults:
     http:
       url: "{{vars.api}}"
+      headers:
+        content-type: application/json
   steps:
-  - name: Post the form
-    id: create
+  - name: Sign-in is refused
     uses: http
     with:
-      post: /signup
-    test: res.code == 201 && res.body.status == "pending"
-    outputs:
-      user_id: res.body.id
+      post: /login
+      body:
+        email: "{{vars.mail_user}}"
+        password: "{{vars.password}}"
+    test: res.code == 403 && res.body.error == "confirm your address first"
 
 - name: Database
   id: db
@@ -45,8 +94,8 @@ jobs:
   - name: Row is pending
     uses: db
     with:
-      query: SELECT status FROM users WHERE id = ?
-      params: ["{{outputs.create.user_id}}"]
+      query: SELECT status FROM users WHERE email = ?
+      params: ["{{vars.mail_user}}"]
     test: res.code == 0 && res.rows[0].status == "pending"
 
 - name: Mailbox
@@ -59,6 +108,7 @@ jobs:
       password: "{{vars.mail_pass}}"
   steps:
   - name: Confirmation arrived
+    id: mail
     uses: imap
     with:
       commands:
@@ -66,41 +116,109 @@ jobs:
         mailbox: INBOX
       - name: fetch
         sequence: "1"
-        dataitem: ALL
+        dataitem: ENVELOPE BODY[TEXT]
     test: |
       res.code == 0 &&
       res.data.fetch.messages[0].subject == "Confirm your address" &&
       res.data.fetch.messages[0].to == vars.mail_user
+    outputs:
+      link: last(split(trim(res.data.fetch.messages[0].body), "\\r\\n"))
 
 - name: Activate
-  needs: [db, mailbox]
-  defaults:
-    http:
-      url: "{{vars.api}}"
+  id: activate
+  needs: [api, db, mailbox]
   steps:
   - name: Follow the link
-    uses: http
+    uses: browser
     with:
-      get: "/users/{{outputs.create.user_id}}"
-    test: res.code == 200 && res.body.status == "active"
+      timeout: 15s
+      actions:
+      - name: navigate
+        url: "{{outputs.mail.link}}"
+      - name: text
+        id: heading
+        selector: h1
+    test: res.code == 0 && res.results.heading == "Your account is active"
+
+- name: iOS app
+  id: ios
+  needs: [activate]
+  steps:
+  - name: Sign in on iPhone
+    uses: ios
+    timeout: 10m
+    with:
+      app: com.example.acme
+      actions:
+      - name: launch
+        args: ["-api", "{{vars.api}}"]
+      - name: type
+        selector: email
+        value: "{{vars.mail_user}}"
+      - name: type
+        selector: type=securetextfield identifier=password
+        value: "{{vars.password}}"
+      - name: tap
+        selector: signin
+      - name: text
+        id: greeting
+        selector: greeting
+    test: res.code == 0 && res.results.greeting == "Welcome, ada@example.com"
+
+- name: First visit
+  id: visit
+  needs: [activate]
+  steps:
+  - name: Ada names herself
+    uses: agent
+    with:
+      url: "{{vars.web}}/signin"
+      persona: |
+        Ada, who has just confirmed her address and has
+        never used the app. She signs in with {secret:EMAIL}
+        and the password {secret:PASSWORD}.
+      goal: |
+        Sign in, and set the display name of the account
+        to "Ada Lovelace".
+      secrets:
+        EMAIL: "{{vars.mail_user}}"
+        PASSWORD: "{{vars.password}}"
+      evidence_dir: out
+    test: res.verdict == "pass"
 `
 
 export const heroReport: ReportLine[] = [
   { text: 'Sign-up Flow', tone: 'title' },
   { text: '' },
-  { text: '⏺ Create account (Completed in 0.11s)', tone: 'job' },
-  { text: '  ⎿ 0. ✓  Post the form', tone: 'pass' },
+  { text: '⏺ Sign up (Completed in 3.25s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Fill in the form', tone: 'pass' },
   { text: '' },
-  { text: '⏺ Database (Completed in 0.02s)', tone: 'job' },
+  { text: '⏺ API (Completed in 0.03s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Sign-in is refused', tone: 'pass' },
+  { text: '' },
+  { text: '⏺ Database (Completed in 0.04s)', tone: 'job' },
   { text: '  ⎿ 0. ✓  Row is pending', tone: 'pass' },
   { text: '' },
-  { text: '⏺ Mailbox (Completed in 0.03s)', tone: 'job' },
+  { text: '⏺ Mailbox (Completed in 0.05s)', tone: 'job' },
   { text: '  ⎿ 0. ✓  Confirmation arrived', tone: 'pass' },
   { text: '' },
-  { text: '⏺ Activate (Completed in 0.01s)', tone: 'job' },
+  { text: '⏺ Activate (Completed in 1.02s)', tone: 'job' },
   { text: '  ⎿ 0. ✓  Follow the link', tone: 'pass' },
   { text: '' },
-  { text: 'Total workflow time: 0.15s ✓ All jobs succeeded', tone: 'total' },
+  { text: '⏺ iOS app (Completed in 53.90s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Sign in on iPhone', tone: 'pass' },
+  { text: '' },
+  { text: '⏺ First visit (Completed in 29.86s)', tone: 'job' },
+  { text: '  ⎿ 0. ✓  Ada names herself', tone: 'pass' },
+  { text: '         ✅ pass: Signing in led to /home, so the persona got into the app. On the Account page she typed "Ada Lovelace" and saved, and the page showed "Saved." at /account?saved=1. The tester then opened /account again as a new page load. The page\'s form data shows the Display name field holding value="Ada Lovelace", and the screenshot shows the same name, so the change was kept. No server errors or slow requests turned up. The only failed request was the site icon (favicon.ico, 404), which the persona would not notice.' },
+  { text: '           evidence: "Home · Account Your projects You have no projects yet."' },
+  { text: '           evidence: "Saved."' },
+  { text: '           evidence: "textbox \\"Display name\\" value=\\"Ada Lovelace\\" [ref_7]"' },
+  { text: '           0 findings' },
+  { text: '           21 steps, stopped: done, 28s' },
+  { text: '           report: out/probe-agent-1662083251/report.md' },
+  { text: '' },
+  { text: 'Total workflow time: 58.23s ', tone: 'total', tail: { text: '✓ All jobs succeeded', tone: 'pass' } },
 ]
 
 /*
@@ -268,7 +386,7 @@ export const personaReport: ReportLine[] = [
   { text: '           24 steps, stopped: done, 47s' },
   { text: '           report: out/probe-agent-3220800333/report.md' },
   { text: '' },
-  { text: 'Total workflow time: 48.49s ✓ All jobs succeeded', tone: 'total' },
+  { text: 'Total workflow time: 48.49s ', tone: 'total', tail: { text: '✓ All jobs succeeded', tone: 'pass' } },
 ]
 
 export const installCommand = 'brew install mozership/tap/probe'

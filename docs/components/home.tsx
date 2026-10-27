@@ -39,6 +39,9 @@ function Report({
           style={animate ? { animationDelay: `${120 + i * 90}ms` } : undefined}
         >
           {line.text || ' '}
+          {line.tail && (
+            <span className={`lp-report__line--${line.tail.tone}`}>{line.tail.text}</span>
+          )}
         </span>
       ))}
     </pre>
@@ -97,7 +100,7 @@ export function Home({ locale }: { locale: Locale }) {
 
           <figure className="lp-panel lp-panel--readout lp-pair__report">
             <figcaption className="lp-panel__label">{t.heroReportLabel}</figcaption>
-            <Report lines={heroReport} animate />
+            <Report lines={heroReport} animate wrap />
           </figure>
         </div>
       </section>
@@ -262,6 +265,26 @@ export function Home({ locale }: { locale: Locale }) {
           <Link className="lp-button lp-button--solid lp-install__link" href={t.install.docsHref}>
             {t.install.docsLink}
           </Link>
+        </div>
+      </section>
+
+      <section className="lp-section lp-faq">
+        <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.faq.kicker}</p>
+          <h2 className="lp-section__heading">{t.faq.heading}</h2>
+        </div>
+        <div className="lp-faq__list">
+          {t.faq.items.map(item => (
+            <details key={item.question} className="lp-faq__item">
+              <summary className="lp-faq__question">{item.question}</summary>
+              <div className="lp-faq__answer">
+                <p>{item.answer}</p>
+                <Link className="lp-faq__link" href={item.link.href}>
+                  {item.link.label} →
+                </Link>
+              </div>
+            </details>
+          ))}
         </div>
       </section>
     </div>
