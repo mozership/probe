@@ -12,9 +12,17 @@
  * the workflow that runs this one against them, are in hero/.
  */
 
+export type ReportTone = 'title' | 'job' | 'pass' | 'idle' | 'echo' | 'total' | 'error' | 'warning'
+
+/**
+ * A line of a terminal block. tail is the end of the line that Probe prints
+ * in a color of its own, as the green of "✓ All jobs succeeded" after the
+ * total time.
+ */
 export type ReportLine = {
   text: string
-  tone?: 'title' | 'job' | 'pass' | 'idle' | 'echo' | 'total' | 'error' | 'warning'
+  tone?: ReportTone
+  tail?: { text: string; tone: ReportTone }
 }
 
 export const heroWorkflow = `name: Sign-up Flow
@@ -210,7 +218,7 @@ export const heroReport: ReportLine[] = [
   { text: '           21 steps, stopped: done, 28s' },
   { text: '           report: out/probe-agent-1662083251/report.md' },
   { text: '' },
-  { text: 'Total workflow time: 58.23s ✓ All jobs succeeded', tone: 'total' },
+  { text: 'Total workflow time: 58.23s ', tone: 'total', tail: { text: '✓ All jobs succeeded', tone: 'pass' } },
 ]
 
 /*
@@ -378,7 +386,7 @@ export const personaReport: ReportLine[] = [
   { text: '           24 steps, stopped: done, 47s' },
   { text: '           report: out/probe-agent-3220800333/report.md' },
   { text: '' },
-  { text: 'Total workflow time: 48.49s ✓ All jobs succeeded', tone: 'total' },
+  { text: 'Total workflow time: 48.49s ', tone: 'total', tail: { text: '✓ All jobs succeeded', tone: 'pass' } },
 ]
 
 export const installCommand = 'brew install mozership/tap/probe'

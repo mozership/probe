@@ -39,6 +39,9 @@ function Report({
           style={animate ? { animationDelay: `${120 + i * 90}ms` } : undefined}
         >
           {line.text || ' '}
+          {line.tail && (
+            <span className={`lp-report__line--${line.tail.tone}`}>{line.tail.text}</span>
+          )}
         </span>
       ))}
     </pre>
