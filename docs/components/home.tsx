@@ -267,6 +267,26 @@ export function Home({ locale }: { locale: Locale }) {
           </Link>
         </div>
       </section>
+
+      <section className="lp-section lp-faq">
+        <div className="lp-section__head">
+          <p className="lp-section__kicker">{t.faq.kicker}</p>
+          <h2 className="lp-section__heading">{t.faq.heading}</h2>
+        </div>
+        <div className="lp-faq__list">
+          {t.faq.items.map(item => (
+            <details key={item.question} className="lp-faq__item">
+              <summary className="lp-faq__question">{item.question}</summary>
+              <div className="lp-faq__answer">
+                <p>{item.answer}</p>
+                <Link className="lp-faq__link" href={item.link.href}>
+                  {item.link.label} →
+                </Link>
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }

@@ -72,6 +72,11 @@ export type HomeCopy = {
     link: { label: string; href: string }
   }
   install: { kicker: string; heading: string; body: string; sourceLabel: string; docsLink: string; docsHref: string }
+  faq: {
+    kicker: string
+    heading: string
+    items: { question: string; answer: string; link: { label: string; href: string } }[]
+  }
   copy: { idle: string; done: string }
 }
 
@@ -227,6 +232,57 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       docsLink: 'Read the installation guide',
       docsHref: '/guide/introduction/installation',
     },
+    faq: {
+      kicker: 'FAQ',
+      heading: 'Questions you may have',
+      items: [
+        {
+          question: 'Do I need an AI coding agent to use Probe?',
+          answer: 'No. A workflow is plain YAML, and Probe runs it the same whoever wrote it. What Probe does for an agent, such as finding the mistakes in a workflow before it runs, it does for a person writing one by hand too.',
+          link: { label: 'Read the quickstart', href: '/guide/introduction/quickstart' },
+        },
+        {
+          question: 'How is it different from runn, Hurl or k6?',
+          answer: 'Probe drives a browser, an iOS app, HTTP, databases and mail from one YAML file, runs its jobs in parallel where needs allows, and is a single binary. It does not put load on a system, which is what k6 is for, and for HTTP alone Hurl is the lighter tool.',
+          link: { label: 'Compare it with similar tools', href: '/guide/introduction/comparison' },
+        },
+        {
+          question: 'Can it run in CI?',
+          answer: 'Yes. On GitHub Actions, mozership/probe-action downloads Probe, verifies its checksum, caches it and runs your workflows. The exit code says what to look at: 1 for a failed test, 2 for the workflow itself, 3 for a target that did not answer. The iOS action needs a macOS runner, where Probe is installed with go install.',
+          link: { label: 'Set it up in GitHub Actions', href: '/guide/introduction/installation' },
+        },
+        {
+          question: 'Can a workflow an agent wrote change a system it should not?',
+          answer: 'Not when you run it under the guard. --read-only refuses what writes, and --allow-host refuses connecting to a host you did not name, before anything is sent; nothing in a workflow can loosen either. An action that cannot tell what it will do, such as the browser or the agent action, is refused under the guard unless --allow-action names it.',
+          link: { label: 'Read about the guard', href: '/guide/concepts/guard' },
+        },
+        {
+          question: 'What is the agent action for, when its result is not deterministic?',
+          answer: 'For what a deterministic step cannot state. A status, a row or a mail can be checked exactly, and those steps should gate a merge. Whether a first-time user gets through a page, or whether the application still holds up on staging once data and settings pile up, cannot be written as an expected value. The agent action leaves that to a model using the application through a real Chrome, and adds to the deterministic steps rather than replacing them.',
+          link: { label: 'See what deterministic tests leave out', href: '/reference/actions/agent' },
+        },
+        {
+          question: 'The agent action asks a model. Does its result change from run to run?',
+          answer: 'It can. The judge quotes what the pages showed and marks whether each quote was found there, and blocked, a test that could not be judged, is kept apart from fail. A scenario test can keep the steps of a run that passed and replay them without the model; only the judge is asked again.',
+          link: { label: 'Read the agent action', href: '/reference/actions/agent' },
+        },
+        {
+          question: 'What does testing an iOS or Android app need?',
+          answer: 'The iOS action runs on macOS with Xcode, against a booted simulator with the app installed. The Android action runs on Linux and macOS through adb, with an emulator or a device, and nothing but the app is installed on it. Neither boots the device or installs the app: do that in a shell step before.',
+          link: { label: 'Read the iOS action', href: '/reference/actions/ios' },
+        },
+        {
+          question: 'What if the protocol I need is not supported?',
+          answer: 'Write an action. Probe talks to an action over gRPC, so it can be written in any language, and the built-in actions go through the same handshake. A workflow pins an external action to a full commit SHA, and Probe runs only the executable whose SHA-256 the action.yml at that commit names.',
+          link: { label: 'Read about actions', href: '/guide/concepts/actions' },
+        },
+        {
+          question: 'Is it free?',
+          answer: 'Yes. Probe is open source under the MIT License. The agent action calls the model provider you choose with your own API key, and the provider bills that use.',
+          link: { label: 'See it on GitHub', href: 'https://github.com/mozership/probe' },
+        },
+      ],
+    },
     copy: { idle: 'Copy', done: 'Copied' },
   },
   ja: {
@@ -379,6 +435,57 @@ export const homeCopy: Record<Locale, HomeCopy> = {
       sourceLabel: 'Goでインストールする場合',
       docsLink: 'インストールガイドを読む',
       docsHref: '/ja/guide/introduction/installation',
+    },
+    faq: {
+      kicker: 'FAQ',
+      heading: 'よくある質問',
+      items: [
+        {
+          question: 'AIエージェントを使っていなくても使えますか？',
+          answer: '使えます。WorkflowはただのYAMLで、誰が書いてもProbeは同じように実行します。実行前にWorkflowの誤りを見つけるといった、ProbeがAIエージェントのためにしていることは、人が手で書くときにもそのまま役立ちます。',
+          link: { label: 'クイックスタートを読む', href: '/ja/guide/introduction/quickstart' },
+        },
+        {
+          question: 'runn、Hurl、k6とはどう違いますか？',
+          answer: 'Probeは1つのYAMLから、ブラウザ、iOSアプリ、HTTP、データベース、メールを操作し、needsが許す範囲でJobを並列に走らせます。実体は単一のバイナリです。負荷をかけることはできないので、性能の測定にはk6を使ってください。HTTPだけならHurlのほうが軽く書けます。',
+          link: { label: '類似ツールと比べる', href: '/ja/guide/introduction/comparison' },
+        },
+        {
+          question: 'CIで動かせますか？',
+          answer: '動かせます。GitHub Actionsでは、mozership/probe-actionがProbeをダウンロードし、チェックサムを検証してキャッシュし、Workflowを実行します。終了コードで何を調べればよいかがわかり、1はtestの失敗、2はWorkflow自体の誤り、3は相手が応答しなかったことを表します。iOSアクションにはmacOSのランナーが必要で、そこではgo installでProbeを入れます。',
+          link: { label: 'GitHub Actionsで使う', href: '/ja/guide/introduction/installation' },
+        },
+        {
+          question: 'AIエージェントが書いたWorkflowが、触ってはいけないシステムを変えてしまいませんか？',
+          answer: 'ガードを付けて実行すれば防げます。--read-onlyは書き込みを、--allow-hostは指定していないホストへの接続を、送信する前に拒否します。Workflowの中からこれを緩めることはできません。ブラウザやagentのように、何をするかを事前に判断できないアクションは、--allow-actionで名前を挙げない限りガードの下では拒否されます。',
+          link: { label: 'ガードについて読む', href: '/ja/guide/concepts/guard' },
+        },
+        {
+          question: '決定論的でないagentアクションは何のためにあるのですか？',
+          answer: '決定論的なStepでは書けないことを確かめるためです。ステータスやレコードやメールは正確に検証でき、マージの可否はそうしたStepで決めるべきです。一方で、初めての利用者がページを迷わず進めるか、データや設定が積み重なったステージングでもアプリケーションが持ちこたえるかは、期待値として書けません。agentアクションはそれを、本物のChromeでアプリケーションを使うモデルに任せます。決定論的なStepを置き換えるものではなく、その外側を補うものです。',
+          link: { label: '決定論的なテストが取りこぼすもの', href: '/ja/reference/actions/agent' },
+        },
+        {
+          question: 'agentアクションはモデルに判断させます。結果は毎回変わりませんか？',
+          answer: '変わることがあります。判定ではページに表示された内容を引用し、その引用が実際にページにあったかを記録します。判定できなかったことを表すblockedは、failと区別されます。シナリオテストなら、通った実行の手順を保存し、モデルを使わずに再生できます。その場合も判定だけはモデルに改めて任せます。',
+          link: { label: 'agentアクションを読む', href: '/ja/reference/actions/agent' },
+        },
+        {
+          question: 'iOSやAndroidのアプリをテストするには何が必要ですか？',
+          answer: 'iOSアクションはXcodeの入ったmacOSで動き、アプリを入れて起動したシミュレータを操作します。AndroidアクションはLinuxとmacOSでadb越しに動き、エミュレータか実機を操作します。端末に入れるのはテストするアプリだけです。どちらも端末の起動やアプリのインストールはしないので、その前のshellのStepで済ませておきます。',
+          link: { label: 'iOSアクションを読む', href: '/ja/reference/actions/ios' },
+        },
+        {
+          question: '必要なプロトコルに対応していないときは？',
+          answer: 'アクションを書けば追加できます。ProbeはアクションとgRPCでやり取りするので、どの言語でも書けます。ビルトインのアクションも同じ手順で接続されています。外部アクションはWorkflowの中でコミットSHAで固定し、Probeはそのコミットのaction.ymlがSHA-256を示す実行ファイルだけを実行します。',
+          link: { label: 'アクションについて読む', href: '/ja/guide/concepts/actions' },
+        },
+        {
+          question: '無料ですか？',
+          answer: '無料です。ProbeはMIT Licenseのオープンソースです。agentアクションは、選んだモデルの提供元のAPIを自分のAPIキーで呼ぶので、その利用料は提供元から請求されます。',
+          link: { label: 'GitHubで見る', href: 'https://github.com/mozership/probe' },
+        },
+      ],
     },
     copy: { idle: 'コピー', done: 'コピーしました' },
   },
