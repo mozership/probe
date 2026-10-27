@@ -55,6 +55,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+	fmt.Printf("Serving gRPC on port %s...\n", *port)
 
 	if *connectPort != "" {
 		if err := server.StartConnect(*connectPort); err != nil {
