@@ -182,7 +182,7 @@
 .lp-hero__flowNote {
   max-width: var(--lp-measure);
   margin: clamp(2.5rem, 5vw, 4rem) auto 0;
-  text-align: center;
+  text-align: left;
   color: var(--lp-muted);
 }
 
@@ -496,7 +496,7 @@
   font-family: var(--lp-font-mono);
   font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 

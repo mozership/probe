@@ -9,9 +9,9 @@ Probe is a free, open-source tool that checks that software works end to end. A 
 
 ## Why It Exists Now
 
-When an AI coding agent changes a service, it writes the code and the unit tests from the same reading of the task, so a wrong reading passes both. What shows that the change works has to come from outside that code: a request sent to the running service, the row it wrote, the mail it sent.
+With AI agents writing code, changes come faster and in greater numbers. Code and unit tests that pass do not show that a user can do what they came to do, because the path a user takes, the customer journey, crosses pages, APIs, databases and mail. Whether a change keeps that journey working has to be checked on the running service, along the same path: the form a user fills in, the row it writes, the mail it sends.
 
-Probe is made to be that check, and to be written by the agent itself:
+Probe is made to repeat that check on every change, and to be written by an agent as well:
 
 - `probe skill` teaches the agent to write a workflow for the version installed, and `probe check` finds its mistakes before anything runs.
 - A step can be checked against your OpenAPI document or `.proto` files, so the spec decides what is right, not the `test` the agent wrote.
