@@ -9,7 +9,7 @@
 <br><br><br><br>
 
 <p align="center">
-  <strong>Probe</strong> produces proof that AI-written code works: one YAML workflow calls the API, queries the row it wrote and reads the mail it sent, and the report is the evidence.
+  <strong>Probe</strong> brings continuous product verification to AI development: one YAML workflow follows a customer journey from the browser to the API, the row it writes and the mail it sends, on every change and on an interval after release.
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
   </a>
 </p>
 
-When an AI coding agent changes a service, something other than the code and the unit tests it wrote has to show that the change works. A Probe workflow shows it from outside: readable YAML that drives the running service over HTTP, gRPC, databases, mail, SSH and shell, with jobs in parallel, and checks every response. The agent learns to write one from `probe skill`, `probe check` finds its mistakes before anything runs, and `--read-only` and `--allow-host` refuse the writes and connections you did not allow. Probe is a single binary that runs the same on your machine, in CI and from cron, with the result in its exit status. Documentation: [probe.linyo.ws](https://probe.linyo.ws/)
+With AI agents writing code, changes come faster and in greater numbers, and code and unit tests that pass do not show that a user can do what they came to do. Probe takes end-to-end testing from a single page or API to the whole customer journey: readable YAML that drives the running service through a browser, an iOS app, HTTP, gRPC, databases, mail, SSH and shell, with jobs in parallel, and checks every response, and an AI agent playing a first-time user can judge whether they reach their goal. An agent learns to write one from `probe skill`, `probe check` finds its mistakes before anything runs, and `--read-only` and `--allow-host` refuse the writes and connections you did not allow. Probe is a single binary that runs the same on your machine, in CI and from cron, with the result in its exit status. Documentation: [probe.linyo.ws](https://probe.linyo.ws/)
 
 <p align="center">
   <img src="misc/demo.svg" alt="Demo: probe check finds the mistakes in an end-to-end test an AI agent wrote, the fixed test calls an API and queries the row it wrote, and --read-only refuses a write">
