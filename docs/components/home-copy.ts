@@ -286,7 +286,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     copy: { idle: 'Copy', done: 'Copied' },
   },
   ja: {
-    headline: ['AI開発に継続的な', 'プロダクト品質検証を'],
+    headline: ['AI開発にプロダクトの', '継続的な品質検証を'],
     lede: 'AIエージェントと開発すると、変更は速く、多くなります。コードとテストが通っても、ユーザーが目的を果たせるとは限りません。ProbeはE2Eテストの範囲を、1つの画面やAPIからカスタマージャーニー全体に広げます。ブラウザでのサインアップから、届いたメール、データベースの行、iOSアプリでのサインインまでをGitHub ActionsのようなYAMLのWorkflowで検証し、初めて使う人をAIエージェントに演じさせて、目的を果たせたかも判定します。同じWorkflowを変更のたびにCIで、リリースのあとも一定間隔で実行し、体験が壊れていないことを確かめ続けます。',
     primaryCta: { label: 'Probeをインストール', href: '/ja/guide/introduction/installation' },
     secondaryCta: { label: 'クイックスタートを読む', href: '/ja/guide/introduction/quickstart' },
