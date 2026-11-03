@@ -82,7 +82,7 @@ export type HomeCopy = {
 
 export const homeCopy: Record<Locale, HomeCopy> = {
   en: {
-    headline: ['Continuous product verification', 'for AI development'],
+    headline: ['Continuous product verification', 'for AI-driven development'],
     lede: 'With AI agents writing code, changes come faster and in greater numbers. Code and tests that pass do not show that a user can do what they came to do. Probe takes end-to-end testing from a single page or API to the whole customer journey. A YAML workflow, written like GitHub Actions, follows a sign-up in the browser to the mail it sends, the row it writes and a sign-in on the iOS app, and an AI agent playing a first-time user judges whether they reach their goal. The same workflow runs in CI on every change and on an interval after release, so you keep knowing that the experience still works.',
     primaryCta: { label: 'Install Probe', href: '/guide/introduction/installation' },
     secondaryCta: { label: 'Read the quickstart', href: '/guide/introduction/quickstart' },
@@ -286,7 +286,7 @@ export const homeCopy: Record<Locale, HomeCopy> = {
     copy: { idle: 'Copy', done: 'Copied' },
   },
   ja: {
-    headline: ['AI開発にプロダクトの', '継続的な品質検証を'],
+    headline: ['AI駆動開発に', 'プロダクトの継続的な品質検証を'],
     lede: 'AIエージェントと開発すると、変更は速く、多くなります。コードとテストが通っても、ユーザーが目的を果たせるとは限りません。ProbeはE2Eテストの範囲を、1つの画面やAPIからカスタマージャーニー全体に広げます。ブラウザでのサインアップから、届いたメール、データベースの行、iOSアプリでのサインインまでをGitHub ActionsのようなYAMLのWorkflowで検証し、初めて使う人をAIエージェントに演じさせて、目的を果たせたかも判定します。同じWorkflowを変更のたびにCIで、リリースのあとも一定間隔で実行し、体験が壊れていないことを確かめ続けます。',
     primaryCta: { label: 'Probeをインストール', href: '/ja/guide/introduction/installation' },
     secondaryCta: { label: 'クイックスタートを読む', href: '/ja/guide/introduction/quickstart' },
