@@ -9,7 +9,7 @@
 <br><br><br><br>
 
 <p align="center">
-  <strong>Probe</strong> brings continuous product verification to AI development: one YAML workflow follows a customer journey from the browser to the API, the row it writes and the mail it sends, on every change and on an interval after release.
+  <strong>Probe</strong> brings continuous product verification to AI-driven development: one YAML workflow follows a customer journey from the browser to the API, the row it writes and the mail it sends, on every change and on an interval after release.
 </p>
 
 <p align="center">
