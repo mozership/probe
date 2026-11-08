@@ -824,6 +824,29 @@ func asciiGoldenCases() []asciiGoldenCase {
 			}},
 		},
 		{
+			name: "skip_levels_crossed",
+			graph: Graph{Jobs: []Job{
+				{ID: "a", Name: "A", Steps: []Step{
+					{Name: "Run a"},
+				}},
+				{ID: "b", Name: "B", Steps: []Step{
+					{Name: "Run b"},
+				}},
+				{ID: "x", Name: "X", Needs: []string{"a"}, Steps: []Step{
+					{Name: "Run x"},
+				}},
+				{ID: "y", Name: "Y", Needs: []string{"b"}, Steps: []Step{
+					{Name: "Run y"},
+				}},
+				{ID: "c", Name: "C", Needs: []string{"x", "b"}, Steps: []Step{
+					{Name: "Run c"},
+				}},
+				{ID: "d", Name: "D", Needs: []string{"y", "a"}, Steps: []Step{
+					{Name: "Run d"},
+				}},
+			}},
+		},
+		{
 			name: "wide_divergence",
 			graph: Graph{Jobs: []Job{
 				{ID: "build", Name: "Build", Steps: []Step{

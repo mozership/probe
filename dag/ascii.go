@@ -317,9 +317,28 @@ func (r *asciiRenderer) addPassNodes() {
 // the rightmost column of the nodes it joins, or the next free one after it,
 // so its line runs straight down as far as it can. Jobs then fill the free
 // columns from the left in order.
+//
+// A node never takes a column under a node above that has a line down but is
+// not joined to it, even through other nodes. The line down from above would
+// otherwise run into the line to the node and read as one.
 func (r *asciiRenderer) assignColumns() {
-	columns := make(map[string]int, len(r.nodes))
+	byID := make(map[string]*asciiNode, len(r.nodes))
+	for _, node := range r.nodes {
+		byID[node.JobID] = node
+	}
+
 	for level, indices := range r.levels {
+		joined := r.joinedAcross(level)
+		blocked := func(node *asciiNode, col int) bool {
+			for _, idx := range r.levelAbove(level) {
+				above := r.nodes[idx]
+				if above.Column == col && above.HasChildren && joined(above.JobID) != joined(node.JobID) {
+					return true
+				}
+			}
+			return false
+		}
+
 		var passes, jobs []*asciiNode
 		for _, idx := range indices {
 			if node := r.nodes[idx]; node.Pass {
@@ -332,36 +351,61 @@ func (r *asciiRenderer) assignColumns() {
 		wants := make(map[*asciiNode]int, len(passes))
 		for _, pass := range passes {
 			for _, need := range pass.Needs {
-				wants[pass] = max(wants[pass], columns[need])
+				wants[pass] = max(wants[pass], byID[need].Column)
 			}
 		}
 		slices.SortStableFunc(passes, func(a, b *asciiNode) int { return cmp.Compare(wants[a], wants[b]) })
 
 		taken := make(map[int]bool)
-		for _, pass := range passes {
-			col := wants[pass]
-			for taken[col] {
+		place := func(node *asciiNode, col int) {
+			for taken[col] || blocked(node, col) {
 				col++
 			}
-			pass.Column = col
+			node.Column = col
 			taken[col] = true
 		}
-		col := 0
+		for _, pass := range passes {
+			place(pass, wants[pass])
+		}
 		for _, job := range jobs {
-			for taken[col] {
-				col++
-			}
-			job.Column = col
-			taken[col] = true
+			place(job, 0)
 		}
 
-		for _, idx := range indices {
-			columns[r.nodes[idx].JobID] = r.nodes[idx].Column
-		}
 		slices.SortStableFunc(r.levels[level], func(a, b int) int {
 			return cmp.Compare(r.nodes[a].Column, r.nodes[b].Column)
 		})
 	}
+}
+
+// levelAbove returns the nodes of the level above level, or nil for the top.
+func (r *asciiRenderer) levelAbove(level int) []int {
+	if level == 0 {
+		return nil
+	}
+	return r.levels[level-1]
+}
+
+// joinedAcross returns a function that names the set of nodes joined to a
+// node by the lines between level and the level above, so that two nodes
+// are joined when it gives them the same name.
+func (r *asciiRenderer) joinedAcross(level int) func(id string) string {
+	root := make(map[string]string)
+	var find func(id string) string
+	find = func(id string) string {
+		if p, ok := root[id]; ok && p != id {
+			root[id] = find(p)
+			return root[id]
+		}
+		root[id] = id
+		return id
+	}
+	for _, idx := range r.levels[level] {
+		node := r.nodes[idx]
+		for _, need := range node.Needs {
+			root[find(need)] = find(node.JobID)
+		}
+	}
+	return find
 }
 
 // renderNode draws the box of a job.
@@ -621,18 +665,6 @@ func (g *connGroup) overlaps(h *connGroup) bool {
 	return g.lo <= h.hi && h.lo <= g.hi
 }
 
-// feeds reports whether a parent of g sits above a child of h. The line of g
-// must then come first, so that the parent's line ends before the child's
-// begins and the two do not read as one.
-func (g *connGroup) feeds(h *connGroup) bool {
-	for _, p := range g.parents {
-		if slices.Contains(h.children, p) {
-			return true
-		}
-	}
-	return false
-}
-
 // groupConnections splits the connections into groups joined by shared
 // parents or children, ordered by where their lines start.
 func groupConnections(connections map[int][]int, childIndices []int, parentPositions, childPositions map[int]int) []*connGroup {
@@ -683,49 +715,19 @@ func groupConnections(connections map[int][]int, childIndices []int, parentPosit
 }
 
 // routeGroups puts the groups that turn on routing rows, giving overlapping
-// groups different rows and a group that feeds another an earlier row. It
-// returns the rows and, apart, the groups that run straight down, which
-// cross every row.
+// groups different rows. It returns the rows and, apart, the groups that run
+// straight down, which cross every row.
+//
+// Groups never share a column where one has a parent and another a child,
+// because assignColumns keeps a node from under a node it is not joined to,
+// so the order of the rows does not matter.
 func routeGroups(groups []*connGroup) (rows [][]*connGroup, straight []*connGroup) {
-	var turning []*connGroup
 	for _, g := range groups {
 		if g.isStraight() {
 			straight = append(straight, g)
-		} else {
-			turning = append(turning, g)
+			continue
 		}
-	}
-
-	// Order the groups so that one feeding another comes first, keeping the
-	// given order otherwise and when they feed each other.
-	var order []*connGroup
-	done := make(map[*connGroup]bool)
-	for len(order) < len(turning) {
-		var next *connGroup
-		for _, g := range turning {
-			if done[g] {
-				continue
-			}
-			if next == nil {
-				next = g
-			}
-			if !slices.ContainsFunc(turning, func(h *connGroup) bool { return h != g && !done[h] && h.feeds(g) }) {
-				next = g
-				break
-			}
-		}
-		order = append(order, next)
-		done[next] = true
-	}
-
-	rowOf := make(map[*connGroup]int)
-	for i, g := range order {
 		row := 0
-		for _, h := range order[:i] {
-			if g.overlaps(h) && h.feeds(g) {
-				row = max(row, rowOf[h]+1)
-			}
-		}
 		for row < len(rows) && slices.ContainsFunc(rows[row], g.overlaps) {
 			row++
 		}
@@ -733,7 +735,6 @@ func routeGroups(groups []*connGroup) (rows [][]*connGroup, straight []*connGrou
 			rows = append(rows, nil)
 		}
 		rows[row] = append(rows[row], g)
-		rowOf[g] = row
 	}
 	return rows, straight
 }
