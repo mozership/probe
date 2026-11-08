@@ -755,6 +755,98 @@ func asciiGoldenCases() []asciiGoldenCase {
 			}},
 		},
 		{
+			name: "skip_level",
+			graph: Graph{Jobs: []Job{
+				{ID: "build", Name: "Build", Steps: []Step{
+					{Name: "Compile"},
+				}},
+				{ID: "test", Name: "Test", Needs: []string{"build"}, Steps: []Step{
+					{Name: "Run tests"},
+				}},
+				{ID: "deploy", Name: "Deploy", Needs: []string{"test", "build"}, Steps: []Step{
+					{Name: "Deploy app"},
+				}},
+			}},
+		},
+		{
+			name: "skip_levels_merge",
+			graph: Graph{Jobs: []Job{
+				{ID: "signup", Name: "Signup", Steps: []Step{
+					{Name: "Sign up"},
+				}},
+				{ID: "receive", Name: "Receive", Needs: []string{"signup"}, Steps: []Step{
+					{Name: "Receive mail"},
+				}},
+				{ID: "compose", Name: "Compose", Needs: []string{"signup"}, Steps: []Step{
+					{Name: "Draft a body"},
+				}},
+				{ID: "send", Name: "Send", Needs: []string{"signup"}, Steps: []Step{
+					{Name: "Send mail"},
+				}},
+				{ID: "read", Name: "Read", Needs: []string{"receive"}, Steps: []Step{
+					{Name: "Open mail"},
+				}},
+				{ID: "search", Name: "Search", Needs: []string{"receive"}, Steps: []Step{
+					{Name: "Find mail"},
+				}},
+				{ID: "label", Name: "Label", Needs: []string{"read"}, Steps: []Step{
+					{Name: "Put a label"},
+				}},
+				{ID: "trash", Name: "Trash", Needs: []string{"label", "search"}, Steps: []Step{
+					{Name: "Delete mail"},
+				}},
+				{ID: "logout", Name: "Logout", Needs: []string{"trash", "compose", "send"}, Steps: []Step{
+					{Name: "Log out"},
+				}},
+			}},
+		},
+		{
+			name: "skip_level_crossing",
+			graph: Graph{Jobs: []Job{
+				{ID: "build", Name: "Build", Steps: []Step{
+					{Name: "Compile"},
+				}},
+				{ID: "test", Name: "Test", Needs: []string{"build"}, Steps: []Step{
+					{Name: "Run tests"},
+				}},
+				{ID: "docs", Name: "Docs", Needs: []string{"build"}, Steps: []Step{
+					{Name: "Build docs"},
+				}},
+				{ID: "unit", Name: "Unit", Needs: []string{"test"}, Steps: []Step{
+					{Name: "Run unit"},
+				}},
+				{ID: "e2e", Name: "E2E", Needs: []string{"test"}, Steps: []Step{
+					{Name: "Run e2e"},
+				}},
+				{ID: "release", Name: "Release", Needs: []string{"unit", "docs"}, Steps: []Step{
+					{Name: "Publish"},
+				}},
+			}},
+		},
+		{
+			name: "skip_levels_crossed",
+			graph: Graph{Jobs: []Job{
+				{ID: "a", Name: "A", Steps: []Step{
+					{Name: "Run a"},
+				}},
+				{ID: "b", Name: "B", Steps: []Step{
+					{Name: "Run b"},
+				}},
+				{ID: "x", Name: "X", Needs: []string{"a"}, Steps: []Step{
+					{Name: "Run x"},
+				}},
+				{ID: "y", Name: "Y", Needs: []string{"b"}, Steps: []Step{
+					{Name: "Run y"},
+				}},
+				{ID: "c", Name: "C", Needs: []string{"x", "b"}, Steps: []Step{
+					{Name: "Run c"},
+				}},
+				{ID: "d", Name: "D", Needs: []string{"y", "a"}, Steps: []Step{
+					{Name: "Run d"},
+				}},
+			}},
+		},
+		{
 			name: "wide_divergence",
 			graph: Graph{Jobs: []Job{
 				{ID: "build", Name: "Build", Steps: []Step{
