@@ -138,9 +138,9 @@ probe shared.yml,workflow.yml
 
 The file holding the anchors has to come first, and keys that Probe does not know - `shared` here - are ignored.
 
-## Splitting Jobs into Files
+## Splitting Steps into Files
 
-Merging cannot split `jobs` across files, since a later `jobs` replaces an earlier one. A workflow whose jobs have grown too long for one file includes them instead, with an entry of `jobs` that has only `include`:
+Merging cannot split `jobs` across files, since a later `jobs` replaces an earlier one, and the jobs are better kept together anyway: what each `needs` is read in one place. What makes a workflow long is the steps, and an entry of `steps` that has only `include` takes the steps of another file:
 
 ```yaml fragment
 name: API regression
@@ -148,17 +148,26 @@ vars:
   api_url: "{{API_URL ?? 'http://localhost:8080'}}"
 
 jobs:
-- include: jobs/auth.yml
-- include: jobs/users/*.yml
+- name: Users
+  id: users
+  steps:
+  - include: steps/login.yml
+  - include: steps/users.yml
+
+- name: Orders
+  needs: [users]
+  steps:
+  - include: steps/login.yml
+  - include: steps/orders.yml
 ```
 
-Each included file holds a job or a list of jobs, and its jobs take the place of the entry. A path is from the directory of the file that writes `jobs`, so the same workflow runs from anywhere, and merging still works on top of it: `probe workflow.yml,production.yml` replaces `vars` and runs the included jobs. Anchors are not shared with an included file. See [`include`](/reference/yaml-configuration#include) for the rules.
+Each included file holds a list of steps, which take the place of the entry. A path is from the directory of the file that writes `jobs`, so the same workflow runs from anywhere, and merging still works on top of it: `probe workflow.yml,production.yml` replaces `vars` and runs the included steps. Anchors are not shared with an included file. See [`include`](/reference/yaml-configuration#include) for the rules.
 
 ## Practical Notes
 
 - Put the anchor definitions first, then the workflow, then any environment override.
 - Keep one owner per top-level key. Two files that both define `vars` is the most common surprise.
-- Only one file can hold `jobs`; to split the jobs into files, [include](#splitting-jobs-into-files) them. When a later file has `jobs` too, its jobs replace those of the earlier file, which do not run, and the run, `probe dag` and `probe check` warn of it with the line of each. This also happens with a glob such as `probe workflows/*.yml` over files that are each a workflow: run them one at a time.
+- Only one file can hold `jobs`; to split the steps into files, [include](#splitting-steps-into-files) them. When a later file has `jobs` too, its jobs replace those of the earlier file, which do not run, and the run, `probe dag` and `probe check` warn of it with the line of each. This also happens with a glob such as `probe workflows/*.yml` over files that are each a workflow: run them one at a time.
 - `probe dag workflow.yml,production.yml` loads the merged result without running it, which is the quickest way to check that the pieces fit together.
 
 ## What's Next?

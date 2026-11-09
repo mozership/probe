@@ -138,9 +138,9 @@ probe shared.yml,workflow.yml
 
 アンカーを定義したファイルを先に置く必要があります。Probeの設定項目にないキー（ここでは`shared`）は無視されます。
 
-## ジョブをファイルに分ける
+## ステップをファイルに分ける
 
-後の`jobs`が前の`jobs`を置き換えるので、マージでは`jobs`を複数のファイルに分けられません。ジョブが増えて1つのファイルでは扱いにくくなったワークフローは、`include`だけを持つ`jobs`の要素でジョブを取り込みます。
+後の`jobs`が前の`jobs`を置き換えるので、マージでは`jobs`を複数のファイルに分けられません。また、各ジョブの`needs`を1か所で読めるように、ジョブはまとめておくほうが見通しがよくなります。ワークフローを長くしているのはステップです。`include`だけを持つ`steps`の要素で、他のファイルのステップを取り込めます。
 
 ```yaml fragment
 name: API regression
@@ -148,17 +148,26 @@ vars:
   api_url: "{{API_URL ?? 'http://localhost:8080'}}"
 
 jobs:
-- include: jobs/auth.yml
-- include: jobs/users/*.yml
+- name: Users
+  id: users
+  steps:
+  - include: steps/login.yml
+  - include: steps/users.yml
+
+- name: Orders
+  needs: [users]
+  steps:
+  - include: steps/login.yml
+  - include: steps/orders.yml
 ```
 
-取り込むファイルにはジョブを1つか、ジョブのリストを書き、そのジョブが要素の位置に入ります。パスは`jobs`を書いたファイルのディレクトリから解決するので、どこから実行しても同じように動きます。マージとも組み合わせられ、`probe workflow.yml,production.yml`は`vars`を置き換えたうえで、取り込んだジョブを実行します。アンカーは取り込むファイルと共有されません。規則は[`include`](/ja/reference/yaml-configuration#include)を参照してください。
+取り込むファイルにはステップのリストを書き、そのステップが要素の位置に入ります。パスは`jobs`を書いたファイルのディレクトリから解決するので、どこから実行しても同じように動きます。マージとも組み合わせられ、`probe workflow.yml,production.yml`は`vars`を置き換えたうえで、取り込んだステップを実行します。アンカーは取り込むファイルと共有されません。規則は[`include`](/ja/reference/yaml-configuration#include)を参照してください。
 
 ## 実践上の注意
 
 - アンカー定義、ワークフロー本体、環境ごとの上書き、の順に並べます
 - トップレベルのキーは1ファイルだけが持つようにします。2つのファイルが`vars`を定義してしまうのが、もっともよくある落とし穴です
-- `jobs`を持てるのは1ファイルだけです。ジョブをファイルに分けるには、[取り込み](#ジョブをファイルに分ける)を使います。後のファイルも`jobs`を持つと、そのジョブが前のファイルのジョブを置き換え、前のファイルのジョブは実行されません。実行時、`probe dag`、`probe check`は、それぞれの行を示して警告します。それぞれが1つのワークフローであるファイルを`probe workflows/*.yml`のようなグロブで渡した場合も同じです。1つずつ実行してください
+- `jobs`を持てるのは1ファイルだけです。ステップをファイルに分けるには、[取り込み](#ステップをファイルに分ける)を使います。後のファイルも`jobs`を持つと、そのジョブが前のファイルのジョブを置き換え、前のファイルのジョブは実行されません。実行時、`probe dag`、`probe check`は、それぞれの行を示して警告します。それぞれが1つのワークフローであるファイルを`probe workflows/*.yml`のようなグロブで渡した場合も同じです。1つずつ実行してください
 - `probe dag workflow.yml,production.yml`は実行せずに連結結果を読み込むので、組み合わせが正しいかを手早く確認できます
 
 ## 次のステップ

@@ -186,9 +186,10 @@ func (c *checker) walkWorkflow(body ast.Node) {
 		}
 		i := 0
 		for _, job := range items(value) {
-			// An entry that includes files is left only in the jobs a later
-			// file replaces, which are not read; one in those that run was
-			// put in place of, or told of when it could not be.
+			// An entry of jobs that includes a file is told of as the
+			// files are read, and left out of the jobs that run. One is
+			// left only in jobs a later file replaces, which are not read,
+			// as is an entry of their steps.
 			if isInclude(job) {
 				continue
 			}
@@ -203,10 +204,15 @@ func (c *checker) walkWorkflow(body ast.Node) {
 				case "repeat":
 					c.keys(value, jp+".repeat", jobLabel, repeatKeys, nil)
 				case "steps":
-					for j, step := range items(value) {
+					j := 0
+					for _, step := range items(value) {
+						if isInclude(step) {
+							continue
+						}
 						sp := fmt.Sprintf("%s.steps[%d]", jp, j)
 						c.lines[sp] = lineOf(step)
 						where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
+						j++
 						c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
 							switch key {
 							case "retry":

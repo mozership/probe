@@ -145,8 +145,8 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 		c.add(SeverityError, 0, "", "YAML: %s", firstLine(err.Error()))
 		return c.sorted(), nil
 	}
-	// The files the jobs include are read past those given, and what kept
-	// an entry from including its files is told on its line. The entry is
+	// The files the steps include are read past those given, and what kept
+	// an entry from including its file is told on its line. The entry is
 	// left out, so that the rest is checked.
 	c.files = src.files
 	for _, pr := range src.problems {

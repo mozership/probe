@@ -16,9 +16,6 @@ func TestFormat(t *testing.T) {
 		{"nothing", "", ""},
 		{"only blank lines", "\n\n", ""},
 		{"a formatted workflow", "name: x\n\njobs:\n- name: A\n  steps:\n  - uses: hello\n", "name: x\n\njobs:\n- name: A\n  steps:\n  - uses: hello\n"},
-		{"a list of jobs", "- name: A\n  steps:\n  - uses: hello\n- name: B\n  steps:\n  - uses: hello\n", "- name: A\n  steps:\n  - uses: hello\n\n- name: B\n  steps:\n  - uses: hello\n"},
-		{"a list of scalars at the top", "- a\n\n- b\n", "- a\n- b\n"},
-		{"a list of jobs after a marker", "---\n- name: A\n  steps: []\n- name: B\n  steps: []\n", "---\n- name: A\n  steps: []\n\n- name: B\n  steps: []\n"},
 
 		// Indentation.
 		{"four spaces", "a:\n    b:\n        c: 1\n    d: 2\n", "a:\n  b:\n    c: 1\n  d: 2\n"},
@@ -29,7 +26,7 @@ func TestFormat(t *testing.T) {
 		{"spaces after a -", "a:\n-   b: 1\n    c: 2\n-     d\n", "a:\n- b: 1\n  c: 2\n- d\n"},
 		{"a sequence in a sequence", "a:\n  -   - 1\n      - 2\n  - - 3\n", "a:\n- - 1\n  - 2\n- - 3\n"},
 		{"a - on a line of its own", "a:\n  -\n      b: 1\n  -\n      - 2\n", "a:\n-\n  b: 1\n-\n  - 2\n"},
-		{"a sequence at the top", "  - a\n  - b:\n      - c\n", "- a\n\n- b:\n  - c\n"},
+		{"a sequence at the top", "  - a\n  - b:\n      - c\n", "- a\n- b:\n  - c\n"},
 		{"a value on the line after its key", "a:\n    value\nb:\n    \"quoted\"\n", "a:\n  value\nb:\n  \"quoted\"\n"},
 		{"a document that is indented", "  a: 1\n  b:\n      c: 2\n", "a: 1\n\nb:\n  c: 2\n"},
 
@@ -146,7 +143,7 @@ func TestFormat_Error(t *testing.T) {
 // as it is when it is formatted again.
 func TestFormat_Workflows(t *testing.T) {
 	var files []string
-	for _, pattern := range []string{"../../examples/*.yml", "../../examples/embedded-jobs/*.yml", "../../examples/include-jobs/*.yml", "../../examples/include-jobs/*/*.yml", "../../e2e/*.yml", "../../misc/demo/*.yml"} {
+	for _, pattern := range []string{"../../examples/*.yml", "../../examples/embedded-jobs/*.yml", "../../examples/include-steps/*.yml", "../../e2e/*.yml", "../../misc/demo/*.yml"} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)

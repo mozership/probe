@@ -1,0 +1,63 @@
+name: Include Steps Example
+description: |
+  The steps of a job can be kept in files of their own. An entry of steps
+  that has only include is replaced by the steps of the file it names, which
+  holds a list of them. The jobs, and what each needs, stay in this file.
+  A path is from this file, wherever Probe runs.
+
+  The included steps are steps of their job like any other: the vars and the
+  defaults apply to them, and their outputs are read as any other.
+
+vars:
+  greeting: hello
+
+defaults:
+  shell:
+    env:
+      STAGE: workflow
+
+jobs:
+- name: Prepare
+  id: prepare
+  steps:
+  - name: Publish a token
+    id: token
+    uses: shell
+    with:
+      cmd: echo abc123
+    test: res.code == 0
+    outputs:
+      value: trim(res.stdout)
+
+- name: Users
+  id: users
+  needs: [prepare]
+  steps:
+  # A file more than one job includes.
+  - include: include-steps/login.yml
+  - include: include-steps/users.yml
+  - name: Read what an included step published
+    uses: shell
+    with:
+      cmd: echo "{{outputs.user.name}}"
+    test: trim(res.stdout) == "alice"
+
+- name: Orders
+  id: orders
+  needs: [prepare]
+  defaults:
+    shell:
+      env:
+        STAGE: orders
+  steps:
+  - include: include-steps/login.yml
+  - include: include-steps/orders.yml
+
+- name: Report
+  needs: [users, orders]
+  steps:
+  - name: Every job has run
+    uses: shell
+    with:
+      cmd: echo "done with {{outputs.token.value}}"
+    test: trim(res.stdout) == "done with abc123"

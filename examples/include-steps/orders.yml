@@ -1,0 +1,12 @@
+# An anchor is shared within this file, not with others.
+- name: The defaults of the job come first
+  uses: shell
+  with: &order
+    cmd: echo "$STAGE $ORDER_ID"
+    env:
+      ORDER_ID: "42"
+  test: trim(res.stdout) == "orders 42"
+- name: Cancel the order
+  uses: shell
+  with: *order
+  test: trim(res.stdout) == "orders 42"

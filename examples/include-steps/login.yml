@@ -1,0 +1,7 @@
+# Steps that more than one job includes have no id, which is the workflow's
+# to give once.
+- name: Log in with the token
+  uses: shell
+  with:
+    cmd: echo "token {{outputs.token.value}}"
+  test: trim(res.stdout) == "token abc123"

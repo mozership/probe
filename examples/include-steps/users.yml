@@ -1,8 +1,3 @@
-name: Users
-id: users
-needs: [prepare]
-
-steps:
 - name: The vars of the workflow
   uses: shell
   with:
@@ -13,8 +8,11 @@ steps:
   with:
     cmd: echo "$STAGE"
   test: trim(res.stdout) == "workflow"
-- name: The outputs of a job of another file
+- name: Publish a user
+  id: user
   uses: shell
   with:
-    cmd: echo "{{outputs.token.value}}"
-  test: trim(res.stdout) == "abc123"
+    cmd: echo alice
+  test: res.code == 0
+  outputs:
+    name: trim(res.stdout)
