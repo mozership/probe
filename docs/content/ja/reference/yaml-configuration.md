@@ -257,6 +257,8 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 
 ジョブに`if`、`continue_on_error`、`timeout`はありません。失敗の後にも実行したいジョブには[`always`](#always)を付けます。
 
+`jobs`の要素には、[`include`](#include)で他のファイルのジョブを取り込むこともできます。
+
 #### `needs`
 
 依存のないジョブは並列に開始します。`needs`が参照するのはジョブの**ID**なので、依存される側には明示的な`id`が必要です。
@@ -535,6 +537,81 @@ jobs:
 
 評価した場合は、テストが成り立つときだけジョブは成功し、終了ステータスは`repeat.test`と同じくテストの結果で決まります。各回の失敗の扱いは変えません。`repeat.test`がなければ、ステップが失敗した回があるとジョブは失敗します。`baseline`を読めるのはこのテストだけです。`baseline.steps`にないステップやフィールドを読む`baseline_test`は、`probe check`が報告します。
 
+### `include`
+
+`include`だけを持つ`jobs`の要素は、指定したファイルのジョブに置き換わります。大きなワークフローでは、ジョブをそれぞれのファイルに分け、`name`、`vars`、`defaults`、`actions`、`secrets`だけをワークフローのファイルに残せます。
+
+```yaml fragment
+name: API regression
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+defaults:
+  http:
+    url: "{{vars.api_url}}"
+
+jobs:
+- include: jobs/auth.yml
+- include: jobs/users/*.yml
+- name: Smoke
+  steps:
+  - uses: http
+    with:
+      get: /health
+    test: res.code == 200
+```
+
+`include`には次のいずれかを指定します。
+
+| 値 | 取り込むファイル |
+|---|---|
+| ファイル | そのファイル。拡張子は`.yml`か`.yaml`である必要があります |
+| ディレクトリ | その中の`.yml`と`.yaml`のファイルを名前順に。サブディレクトリは読みません |
+| グロブ | マッチした`.yml`と`.yaml`のファイルを名前順に |
+
+ファイルには、ジョブを1つか、ジョブのリストを書きます。ジョブを1つ書いたファイルは[`embedded`](/ja/reference/actions/embedded)アクションのジョブファイルと同じ形なので、同じファイルをどちらにも使えます。
+
+```yaml fragment
+# jobs/auth.yml
+name: Auth
+id: auth
+steps:
+- uses: http
+  with:
+    post: /login
+  test: res.code == 200
+```
+
+```yaml fragment
+# jobs/users/crud.yml
+- name: Create user
+  needs: [auth]
+  steps:
+  - uses: http
+    with:
+      post: /users
+    test: res.code == 201
+- name: Delete user
+  needs: [auth]
+  steps:
+  - uses: http
+    with:
+      delete: /users/1
+    test: res.code == 204
+```
+
+取り込んだジョブは、要素のあった位置に順に並びます。並んだ後は、ほかのジョブと同じワークフローのジョブです。ワークフローの`defaults`が適用され、`needs`ではどのファイルのジョブも指定でき、`--job`、`probe dag`、`probe check`はすべてのジョブを対象にします。`probe check`は、取り込んだジョブで見つけた問題を、そのファイルと行で示します。
+
+規則は次のとおりです。
+
+- 相対パスは、Probeを実行した場所ではなく、`jobs`を書いたファイルのディレクトリから解決します
+- 要素には`include`だけを書きます。`needs`などのキーは、取り込むファイルの側に書きます
+- 取り込まれたファイルから、さらに取り込むことはできません。ワークフローのファイル自体は取り込めず、同じファイルを2回取り込むこともできません
+- アンカーはファイルをまたいで共有されません。取り込むファイルのエイリアスは、そのファイルのアンカーを指す必要があります。共有したい値は`vars`や`defaults`に置きます
+- YAMLファイルに1つもマッチしないパスや、ジョブではなくワークフローを書いたファイルはエラーです
+- `embedded`の`path`やローカルのアクションなど、取り込んだジョブの中のほかのパスは、ジョブをワークフローのファイルに書いた場合と同じように解決します
+
+要素がファイルを取り込めないときは、最初のジョブの前に終了ステータス2で実行が止まります。
+
 ## ステップ
 
 ステップは1回のアクション呼び出しと、その周辺の指定から成ります。実行するかを決める条件、成功したかを決めるテスト、後続のステップに残す出力です。
@@ -791,7 +868,7 @@ probe base.yml production.yml
 probe base.yml,production.yml
 ```
 
-マージの規則は[ファイルマージ](/ja/guide/concepts/file-merging)を参照してください。
+マージの規則は[ファイルマージ](/ja/guide/concepts/file-merging)を参照してください。1つのワークフローのジョブをファイルに分けるには、マージではなく[`include`](#include)を使います。
 
 ## 関連項目
 

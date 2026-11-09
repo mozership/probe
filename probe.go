@@ -1,7 +1,6 @@
 package probe
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -150,7 +149,15 @@ func (p *Probe) Load() error {
 		}
 	}
 
-	aliases, found, err := p.load(files, y)
+	src, err := newSource(files, data, y)
+	if err != nil {
+		return NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
+	}
+	if err := src.problemError(); err != nil {
+		return err
+	}
+
+	aliases, found, err := p.load(src)
 	// A wrong name is told before what load stopped at, as all that
 	// follows the names reads the uses they give.
 	if len(aliases) > 0 {
@@ -167,22 +174,22 @@ func (p *Probe) Load() error {
 	return nil
 }
 
-// load decodes y, the text of files one after another, into the workflow.
+// load decodes src, the files of the workflow as read, into the workflow.
 // It returns what is wrong with the names the workflow's actions give, and
 // what keeps its jobs from running as they are written, rather than failing
 // on them, so that probe check can tell each one and Load the first. The
 // error is for what the load cannot go past, such as a text that does not
 // decode; the names found before it are returned with it.
-func (p *Probe) load(files []string, y string) ([]aliasProblem, []problem, error) {
+func (p *Probe) load(src *source) ([]aliasProblem, []problem, error) {
 	v := validator.New()
-	dec := yaml.NewDecoder(bytes.NewReader([]byte(y)), yaml.Validator(v), yaml.AllowDuplicateMapKey())
-	if err := dec.Decode(&p.workflow); err != nil {
+	if err := src.decode(&p.workflow, yaml.Validator(v), yaml.AllowDuplicateMapKey()); err != nil {
 		return nil, nil, NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}
 
+	files := src.files
 	// Set base path for resolving relative paths in embedded actions
 	if len(files) > 0 {
-		absPath, err := filepath.Abs(files[0])
+		absPath, err := filepath.Abs(files[0].name)
 		if err == nil {
 			p.workflow.basePath = filepath.Dir(absPath)
 		}

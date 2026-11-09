@@ -257,6 +257,8 @@ A job definition takes the properties below.
 
 There is no `if`, `continue_on_error` or `timeout` at the job level. A job that has to run after a failure is one with [`always`](#always).
 
+An entry of `jobs` can also stand for the jobs of other files, with [`include`](#include).
+
 #### `needs`
 
 Jobs without dependencies start in parallel. `needs` refers to job **ids**, so a job that others depend on needs an explicit `id`.
@@ -535,6 +537,81 @@ The test is skipped, and the job passes by it, when no `--baseline` was given, w
 
 When it is checked, the job passes only when it holds, and the exit status is that of the test, as for `repeat.test`. It does not change how a failed run is taken: without `repeat.test`, a run in which a step fails still fails the job. `baseline` can be read only by this test, and `probe check` reports a `baseline_test` that reads a step or a field that `baseline.steps` does not have.
 
+### `include`
+
+An entry of `jobs` that has only `include` is replaced by the jobs of the files it names. A large workflow can keep its jobs in files of their own and keep `name`, `vars`, `defaults`, `actions` and `secrets` in the workflow file.
+
+```yaml fragment
+name: API regression
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+defaults:
+  http:
+    url: "{{vars.api_url}}"
+
+jobs:
+- include: jobs/auth.yml
+- include: jobs/users/*.yml
+- name: Smoke
+  steps:
+  - uses: http
+    with:
+      get: /health
+    test: res.code == 200
+```
+
+`include` takes one of these:
+
+| Value | The files included |
+|-------|--------------------|
+| A file | The file, which must end in `.yml` or `.yaml` |
+| A directory | Its `.yml` and `.yaml` files, in the order of their names. Subdirectories are not read |
+| A glob | The `.yml` and `.yaml` files it matches, in the order of their names |
+
+A file holds one job, or a list of jobs. A file with one job is in the same form as a job file of the [`embedded`](/reference/actions/embedded) action, so the same file can be used both ways.
+
+```yaml fragment
+# jobs/auth.yml
+name: Auth
+id: auth
+steps:
+- uses: http
+  with:
+    post: /login
+  test: res.code == 200
+```
+
+```yaml fragment
+# jobs/users/crud.yml
+- name: Create user
+  needs: [auth]
+  steps:
+  - uses: http
+    with:
+      post: /users
+    test: res.code == 201
+- name: Delete user
+  needs: [auth]
+  steps:
+  - uses: http
+    with:
+      delete: /users/1
+    test: res.code == 204
+```
+
+The jobs take the place of the entry, in order. Once they are in place, they are jobs of the workflow like any other: the workflow's `defaults` apply to them, `needs` can name a job of any file, and `--job`, `probe dag` and `probe check` see them all. `probe check` tells what it finds in an included job by that file and line.
+
+The rules:
+
+- A relative path is from the directory of the file that writes `jobs`, not from where Probe is run.
+- The entry has `include` alone. Other keys, such as `needs`, go in the included file.
+- An included file cannot include. The files of the workflow cannot be included, and no file can be included twice.
+- Anchors are not shared between files. An alias in an included file must name an anchor of that file. Share values through `vars` and `defaults` instead.
+- A path that matches no YAML file, and a file that holds a workflow rather than jobs, are errors.
+- Other paths in an included job, such as the `path` of `embedded` or a local action, are read as if the job were written in the workflow file.
+
+What keeps an entry from including its files stops the run before its first job, with exit status 2.
+
 ## Steps
 
 A step is one action invocation plus what surrounds it: the condition that decides whether it runs, the test that decides whether it passed, and the outputs it leaves for later steps.
@@ -791,7 +868,7 @@ probe base.yml production.yml
 probe base.yml,production.yml
 ```
 
-See [File Merging](/guide/concepts/file-merging) for the merge rules.
+See [File Merging](/guide/concepts/file-merging) for the merge rules. To split the jobs of one workflow into files, use [`include`](#include) rather than merging.
 
 ## See Also
 
