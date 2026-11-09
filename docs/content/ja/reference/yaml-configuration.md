@@ -561,6 +561,8 @@ jobs:
 
 キーは`action`ではなく`uses`、条件は`if`ではなく`skipif`です。
 
+`steps`の要素には、[`include`](#include)で他のファイルのステップを取り込むこともできます。
+
 #### `outputs`
 
 後続のステップやジョブへ渡す値です。`outputs.token`のように名前で読めます。ステップに`id`があれば、`outputs.auth.token`のように`id`からも読めます。ほかのステップが同じ名前を公開する場合は、それぞれの値を読めるようにステップに`id`を付けてください。
@@ -677,6 +679,71 @@ steps:
 - `iteration`が受け取れる要素は1,048,576個までです。それより長いリストはステップを失敗させます。
 - [`repeat`](#repeat)を付けたジョブでは、テンプレートは回ごとに評価され、回によって要素数が変わることがあります。各要素はリスト内の位置ごとに集計され、後続のステップはそれぞれ自身として集計されます。リストに要素がなかった回は、[`fail_fast`](#fail_fast)のジョブで実行されなかった回と同じく、そのステップの成功にも失敗にも数えません。
 
+### `include`
+
+`include`だけを持つ`steps`の要素は、指定したファイルのステップに置き換わります。大きなワークフローでは、ジョブのステップをそれぞれのファイルに分けられます。ジョブとその`needs`はワークフローのファイルに残るので、実行の順序は1か所で読めます。
+
+```yaml fragment
+name: API regression
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+defaults:
+  http:
+    url: "{{vars.api_url}}"
+
+jobs:
+- name: Users
+  id: users
+  steps:
+  - include: steps/login.yml
+  - include: steps/users.yml
+  - name: Health
+    uses: http
+    with:
+      get: /health
+    test: res.code == 200
+
+- name: Orders
+  needs: [users]
+  steps:
+  - include: steps/login.yml
+  - include: steps/orders.yml
+```
+
+ファイルにはステップのリストを書きます。
+
+```yaml fragment
+# steps/users.yml
+- name: List users
+  uses: http
+  with:
+    get: /users
+  test: res.code == 200
+- name: Create user
+  id: user
+  uses: http
+  with:
+    post: /users
+  test: res.code == 201
+  outputs:
+    user_id: res.body.id
+```
+
+取り込んだステップは要素のあった位置に順に並び、その後はジョブのほかのステップと同じです。ワークフローとジョブの`defaults`が適用され、`outputs`はほかのステップと同じように読めます。`probe check`は、取り込んだステップで見つけた問題を、そのファイルと行で示します。
+
+規則は次のとおりです。
+
+- `include`には1つのファイルのパスを指定します。拡張子は`.yml`か`.yaml`である必要があります。ステップは書いた順に実行するので、ディレクトリやグロブは指定できません
+- 相対パスは、Probeを実行した場所ではなく、`jobs`を書いたファイルのディレクトリから解決します
+- 要素には`include`だけを書きます。取り込まれたファイルから、さらに取り込むことはできません
+- ログインのステップのように、同じファイルを複数のジョブで取り込めます。ただしステップの`id`はワークフロー全体で一意である必要があるので、`id`を持つステップは1回だけ取り込むファイルに書くのがよいでしょう
+- アンカーはファイルをまたいで共有されません。取り込むファイルのエイリアスは、そのファイルのアンカーを指す必要があります。共有したい値は`vars`や`defaults`に置きます
+- `embedded`の`path`やローカルのアクションなど、取り込んだステップの中のほかのパスは、ステップをワークフローのファイルに書いた場合と同じように解決します
+
+要素がファイルを取り込めないときは、最初のジョブの前に終了ステータス2で実行が止まります。
+
+[`embedded`](/ja/reference/actions/embedded)は、ジョブファイルを1つのステップとして、渡した`vars`で実行し、`outputs`を返します。これに対して`include`は、ステップをジョブに直接書いたのと同じです。
+
 ## 式のコンテキスト
 
 ステップの式から見えるのは次の名前だけです。
@@ -791,7 +858,7 @@ probe base.yml production.yml
 probe base.yml,production.yml
 ```
 
-マージの規則は[ファイルマージ](/ja/guide/concepts/file-merging)を参照してください。
+マージの規則は[ファイルマージ](/ja/guide/concepts/file-merging)を参照してください。大きなワークフローのステップをファイルに分けるには、マージではなく[`include`](#include)を使います。
 
 ## 関連項目
 

@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/actionref"
 )
 
@@ -129,7 +128,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	}
 
 	c := newChecker(opts)
-	c.mapFiles(files, contents)
+	c.files = mapFiles(files, contents)
 	for _, r := range redefinedJobs(files, contents) {
 		c.findings = append(c.findings, Finding{
 			Severity: SeverityWarning,
@@ -141,21 +140,28 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 
 	// A key may be written more than once, as a run reads the workflow,
 	// so that the files given can override one another.
-	file, err := parser.ParseBytes([]byte(data), 0, parser.AllowDuplicateMapKey())
+	src, err := newSource(files, contents, data)
 	if err != nil {
 		c.add(SeverityError, 0, "", "YAML: %s", firstLine(err.Error()))
 		return c.sorted(), nil
 	}
-	for _, doc := range file.Docs {
+	// The files the steps include are read past those given, and what kept
+	// an entry from including its file is told on its line. The entry is
+	// left out, so that the rest is checked.
+	c.files = src.files
+	for _, pr := range src.problems {
+		c.add(SeverityError, pr.line, "", "%s", pr.msg)
+	}
+	for _, doc := range src.file.Docs {
 		c.walkWorkflow(doc.Body)
 	}
 
 	// What is wrong with the names of external actions is told on the line
 	// of each, with whatever else is wrong, rather than ending the check.
-	// The workflow is loaded from the text read above, so that the lines
-	// mapped to the files are those of the text loaded.
+	// The workflow is loaded from the source walked above, so that the
+	// lines mapped to the files are those of the source loaded.
 	p.Config.Actions = opts.Actions
-	aliases, problems, err := p.load(files, data)
+	aliases, problems, err := p.load(src)
 	if err != nil {
 		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
 		return c.sorted(), nil
@@ -192,9 +198,9 @@ type checker struct {
 	// as jobs[0].steps[1].test, and of each job and step, by jobs[0] and
 	// jobs[0].steps[1].
 	lines map[string]int
-	// files are the files read, with the line of the text read that each
-	// one starts on.
-	files []fileStart
+	// files are the files read, given and included, with the line of the
+	// source that each one starts on.
+	files fileLines
 	// readManifests are the external actions whose action.yml was read.
 	readManifests map[string]bool
 	// reported are the findings addOnce added, by their path and message.

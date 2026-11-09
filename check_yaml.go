@@ -17,39 +17,50 @@ type fileStart struct {
 	line int
 }
 
-// mapFiles notes the line each file starts on in the text read, the files
-// one after another, so that a line of the text can be told as a line of a
-// file, whose contents are data. readYamlFiles adds a newline after a file
-// that does not end in one, unless it is the last.
-func (c *checker) mapFiles(files []string, data [][]byte) {
+// fileLines are the files of a workflow, each with the line of the source
+// it starts on, in that order.
+type fileLines []fileStart
+
+// mapFiles returns the line each of files starts on in the text read, the
+// files one after another, so that a line of the text can be told as a line
+// of a file, whose contents are data. readYamlFiles adds a newline after a
+// file that does not end in one, unless it is the last.
+func mapFiles(files []string, data [][]byte) fileLines {
+	var out fileLines
 	line := 1
 	for k, f := range files {
-		c.files = append(c.files, fileStart{name: f, line: line})
+		out = append(out, fileStart{name: f, line: line})
 		line += bytes.Count(data[k], []byte("\n"))
 		if k < len(files)-1 && len(data[k]) > 0 && data[k][len(data[k])-1] != '\n' {
 			line++
 		}
 	}
+	return out
 }
 
-// position tells line, a line of the text read, as a file and a line of it.
-func (c *checker) position(line int) (string, int) {
-	if len(c.files) == 0 {
+// at tells line, a line of the source, as a file and a line of it.
+func (fl fileLines) at(line int) (string, int) {
+	if len(fl) == 0 {
 		return "", 0
 	}
-	f := c.files[0]
-	for _, s := range c.files {
+	f := fl[0]
+	for _, s := range fl {
 		if line >= s.line {
 			f = s
 		}
 	}
 	if line <= 0 {
-		if len(c.files) > 1 {
+		if len(fl) > 1 {
 			return "", 0
 		}
 		return f.name, 0
 	}
 	return f.name, line - f.line + 1
+}
+
+// position tells line, a line of the source, as a file and a line of it.
+func (c *checker) position(line int) (string, int) {
+	return c.files.at(line)
 }
 
 // Keys each part of a workflow takes, from the fields Probe decodes them into.
@@ -173,10 +184,40 @@ func (c *checker) walkWorkflow(body ast.Node) {
 		if key != "jobs" {
 			return
 		}
-		for i, job := range items(value) {
+		i := 0
+		// A list an alias names is checked as the jobs, as it is run.
+		for _, job := range items(resolve(body, value)) {
+			// An entry of jobs that includes a file is told of as the
+			// files are read, and left out of the jobs that run. One is
+			// left only in jobs a later file replaces, which are not read,
+			// as is an entry of their steps.
+			if isInclude(job) {
+				continue
+			}
 			jp := fmt.Sprintf("jobs[%d]", i)
 			c.lines[jp] = lineOf(job)
 			jobLabel := named(fmt.Sprintf("job %d", i), job)
+			i++
+			walkSteps := func(value ast.Node) {
+				j := 0
+				for _, step := range items(resolve(body, value)) {
+					if isInclude(step) {
+						continue
+					}
+					sp := fmt.Sprintf("%s.steps[%d]", jp, j)
+					c.lines[sp] = lineOf(step)
+					where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
+					j++
+					c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
+						switch key {
+						case "retry":
+							c.keys(value, sp+".retry", where, retryKeys, nil)
+						case "with", "vars", "outputs":
+							c.noteLines(sp+"."+key, value)
+						}
+					})
+				}
+			}
 			c.keys(job, jp, jobLabel, jobKeys, func(key string, value ast.Node) {
 				switch key {
 				case "defaults":
@@ -184,21 +225,16 @@ func (c *checker) walkWorkflow(body ast.Node) {
 				case "repeat":
 					c.keys(value, jp+".repeat", jobLabel, repeatKeys, nil)
 				case "steps":
-					for j, step := range items(value) {
-						sp := fmt.Sprintf("%s.steps[%d]", jp, j)
-						c.lines[sp] = lineOf(step)
-						where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
-						c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
-							switch key {
-							case "retry":
-								c.keys(value, sp+".retry", where, retryKeys, nil)
-							case "with", "vars", "outputs":
-								c.noteLines(sp+"."+key, value)
-							}
-						})
-					}
+					walkSteps(value)
 				}
 			})
+			// The steps a merge key gives a job are checked as its own,
+			// as they are run.
+			if lastKey(job, "steps") == nil {
+				if kv := stepsOf(body, job); kv != nil {
+					walkSteps(kv.Value)
+				}
+			}
 		}
 	})
 }

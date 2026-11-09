@@ -1,0 +1,18 @@
+- name: The vars of the workflow
+  uses: shell
+  with:
+    cmd: echo "{{vars.greeting}}, users"
+  test: trim(res.stdout) == "hello, users"
+- name: The defaults of the workflow
+  uses: shell
+  with:
+    cmd: echo "$STAGE"
+  test: trim(res.stdout) == "workflow"
+- name: Publish a user
+  id: user
+  uses: shell
+  with:
+    cmd: echo alice
+  test: res.code == 0
+  outputs:
+    name: trim(res.stdout)

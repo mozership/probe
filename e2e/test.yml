@@ -276,6 +276,40 @@ jobs:
       cmd: ./probe examples/embedded-job.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: include-steps.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/include-steps.yml
+    test: |
+      res.code == 0 &&
+      res.stdout contains "Read what an included step published" &&
+      res.stdout contains "Cancel the order" &&
+      res.stdout contains "Report (Completed"
+    echo: "{{res.stdout}}"
+  - name: include-steps.yml, run from another directory
+    uses: shell
+    with:
+      cmd: |
+        root=$PWD
+        dir=$(mktemp -d)
+        cd "$dir" && "$root/probe" "$root/examples/include-steps.yml"
+        code=$?
+        rm -rf "$dir"
+        exit $code
+    test: res.code == 0
+    echo: "{{res.stdout}}"
+  - name: include-steps.yml without its step files is a configuration error
+    uses: shell
+    with:
+      cmd: |
+        dir=$(mktemp -d) &&
+        cp examples/include-steps.yml "$dir/workflow.yml" &&
+        ./probe "$dir/workflow.yml" 2>&1
+        echo "exit=$?"
+        rm -rf "$dir"
+    test: |
+      res.stdout contains "exit=2" &&
+      res.stdout contains "include-steps/login.yml: no such file"
   - name: expr-functions.yml
     uses: shell
     with:

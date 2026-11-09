@@ -143,7 +143,7 @@ func TestFormat_Error(t *testing.T) {
 // as it is when it is formatted again.
 func TestFormat_Workflows(t *testing.T) {
 	var files []string
-	for _, pattern := range []string{"../../examples/*.yml", "../../examples/jobs/*.yml", "../../e2e/*.yml", "../../misc/demo/*.yml"} {
+	for _, pattern := range []string{"../../examples/*.yml", "../../examples/embedded-jobs/*.yml", "../../examples/include-steps/*.yml", "../../e2e/*.yml", "../../misc/demo/*.yml"} {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)

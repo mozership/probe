@@ -238,7 +238,7 @@ jobs:
 	if err != nil {
 		t.Fatal(err)
 	}
-	aliases, _, err := p.load([]string{path}, string(data))
+	aliases, _, err := loadText(p, path, string(data))
 	if err != nil {
 		t.Fatal(err)
 	}

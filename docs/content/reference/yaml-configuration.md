@@ -561,6 +561,8 @@ A step definition takes the properties below.
 
 The key is `uses`, not `action`, and the conditional key is `skipif`, not `if`.
 
+An entry of `steps` can also stand for the steps of another file, with [`include`](#include).
+
 #### `outputs`
 
 Values published for use by later steps and jobs. Each is read by its name, as `outputs.token`, and, when the step has an `id`, through it as well, as `outputs.auth.token`. Give the step an `id` when another step publishes the same name, so that each value can be read.
@@ -677,6 +679,71 @@ steps:
 - An iteration takes up to 1,048,576 entries; a longer list fails the step.
 - In a job with [`repeat`](#repeat), the template is evaluated in each run and may come to another number of entries in each. Each entry is counted by its place in the list, and the steps after it as themselves. A run in which the list has no entry counts as neither a success nor a failure of the step, as a run a [`fail_fast`](#fail_fast) job did not run it in does.
 
+### `include`
+
+An entry of `steps` that has only `include` is replaced by the steps of the file it names. A large workflow can keep the steps of its jobs in files of their own, while the jobs, and what each `needs`, stay in the workflow file, where the order they run in is read in one place.
+
+```yaml fragment
+name: API regression
+vars:
+  api_url: "{{API_URL ?? 'http://localhost:8080'}}"
+defaults:
+  http:
+    url: "{{vars.api_url}}"
+
+jobs:
+- name: Users
+  id: users
+  steps:
+  - include: steps/login.yml
+  - include: steps/users.yml
+  - name: Health
+    uses: http
+    with:
+      get: /health
+    test: res.code == 200
+
+- name: Orders
+  needs: [users]
+  steps:
+  - include: steps/login.yml
+  - include: steps/orders.yml
+```
+
+The file holds a list of steps:
+
+```yaml fragment
+# steps/users.yml
+- name: List users
+  uses: http
+  with:
+    get: /users
+  test: res.code == 200
+- name: Create user
+  id: user
+  uses: http
+  with:
+    post: /users
+  test: res.code == 201
+  outputs:
+    user_id: res.body.id
+```
+
+The steps take the place of the entry, in order, and are then steps of the job like any other: the `defaults` of the workflow and of the job apply to them, their `outputs` are read as those of any step, and `probe check` tells what it finds in them by that file and line.
+
+The rules:
+
+- `include` takes the path of one file, which must end in `.yml` or `.yaml`. A directory or a glob is not taken, as the order of the steps is written.
+- A relative path is from the directory of the file that writes `jobs`, not from where Probe is run.
+- The entry has `include` alone, and an included file cannot include.
+- A file can be included by more than one job, as steps that log in can be. A step `id` must still be one of its own in the workflow, so a step with an `id` is better written in a file included once.
+- Anchors are not shared between files. An alias in an included file must name an anchor of that file. Share values through `vars` and `defaults` instead.
+- Other paths in an included step, such as the `path` of `embedded` or a local action, are read as if the step were written in the workflow file.
+
+What keeps an entry from including its file stops the run before its first job, with exit status 2.
+
+Unlike [`embedded`](/reference/actions/embedded), which runs a job file as one step of its own, with the vars it is given and the outputs it returns, `include` is the same as writing the steps in the job.
+
 ## The Expression Context
 
 Inside a step, an expression sees exactly these names:
@@ -791,7 +858,7 @@ probe base.yml production.yml
 probe base.yml,production.yml
 ```
 
-See [File Merging](/guide/concepts/file-merging) for the merge rules.
+See [File Merging](/guide/concepts/file-merging) for the merge rules. To keep the steps of a large workflow in files of their own, use [`include`](#include) rather than merging.
 
 ## See Also
 

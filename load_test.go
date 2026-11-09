@@ -63,7 +63,7 @@ func TestProbe_load(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := writeWorkflow(t, t.TempDir(), "workflow.yml", tt.workflow)
 			p := &Probe{Config: Config{Actions: builtinNames}}
-			aliases, problems, err := p.load([]string{path}, tt.workflow)
+			aliases, problems, err := loadText(p, path, tt.workflow)
 			if tt.wantErr == "" && err != nil || tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
 				t.Errorf("load() error = %v, want %q", err, tt.wantErr)
 			}
@@ -84,4 +84,14 @@ func TestProbe_load(t *testing.T) {
 			}
 		})
 	}
+}
+
+// loadText loads text, the workflow at path, as Load reads it once the file
+// is read.
+func loadText(p *Probe, path, text string) ([]aliasProblem, []problem, error) {
+	src, err := newSource([]string{path}, [][]byte{[]byte(text)}, text)
+	if err != nil {
+		return nil, nil, NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
+	}
+	return p.load(src)
 }
