@@ -136,7 +136,7 @@ func (s *source) include(body ast.Node) {
 			continue
 		}
 		out = append(out, job)
-		steps := lastKey(resolve(body, job), "steps")
+		steps := stepsOf(body, job)
 		if steps == nil {
 			continue
 		}
@@ -357,6 +357,31 @@ func resolve(body, n ast.Node) ast.Node {
 	return n
 }
 
+// stepsOf returns the pair of job, an entry of jobs, that gives its steps:
+// its own, or those a merge key gives it, the first of them as the decoder
+// takes them; nil when there is none.
+func stepsOf(body, job ast.Node) *ast.MappingValueNode {
+	job = resolve(body, job)
+	if kv := lastKey(job, "steps"); kv != nil {
+		return kv
+	}
+	for _, kv := range pairs(job) {
+		if kv.Key == nil || !kv.Key.IsMergeKey() {
+			continue
+		}
+		sources := []ast.Node{kv.Value}
+		if seq := sequence(kv.Value); seq != nil {
+			sources = seq.Values
+		}
+		for _, src := range sources {
+			if steps := stepsOf(body, src); steps != nil {
+				return steps
+			}
+		}
+	}
+	return nil
+}
+
 // lastKey returns the last pair of the mapping n whose key is key, which is
 // the one decoded; nil when there is none.
 func lastKey(n ast.Node, key string) *ast.MappingValueNode {
@@ -369,9 +394,10 @@ func lastKey(n ast.Node, key string) *ast.MappingValueNode {
 	return found
 }
 
-// anchored returns the node anchored as name in n, as the alias *name reads
-// it; nil when there is none. The last anchor of the name is that of an
-// alias after it, as anchors are read in the order they are written.
+// anchored returns the node anchored as name in n, as the decoder reads an
+// alias *name; nil when there is none. The decoder reads the anchors of the
+// whole document before the aliases, so an alias reads the last anchor of
+// its name, even one written after it.
 func anchored(n ast.Node, name string) ast.Node {
 	var found ast.Node
 	ast.Walk(visitorFunc(func(n ast.Node) bool {

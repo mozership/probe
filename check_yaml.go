@@ -185,7 +185,8 @@ func (c *checker) walkWorkflow(body ast.Node) {
 			return
 		}
 		i := 0
-		for _, job := range items(value) {
+		// A list an alias names is checked as the jobs, as it is run.
+		for _, job := range items(resolve(body, value)) {
 			// An entry of jobs that includes a file is told of as the
 			// files are read, and left out of the jobs that run. One is
 			// left only in jobs a later file replaces, which are not read,
@@ -205,7 +206,7 @@ func (c *checker) walkWorkflow(body ast.Node) {
 					c.keys(value, jp+".repeat", jobLabel, repeatKeys, nil)
 				case "steps":
 					j := 0
-					for _, step := range items(value) {
+					for _, step := range items(resolve(body, value)) {
 						if isInclude(step) {
 							continue
 						}

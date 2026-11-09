@@ -123,6 +123,29 @@ func TestLoad_Include(t *testing.T) {
 			want: "A/a",
 		},
 		{
+			// A job that takes its steps from another by a merge key has
+			// those of the other, included in.
+			name: "steps of a job a merge key gives",
+			files: map[string]string{
+				"w.yml":       "name: w\nshared:\n  base: &base\n    steps:\n    - include: steps/a.yml\njobs:\n- <<: *base\n  name: A\n",
+				"steps/a.yml": step("a"),
+			},
+			want: "A/a",
+		},
+		{
+			// The steps an alias stands for are those the decoder reads:
+			// those of the last anchor of its name, even one written after
+			// it. Any other list would be decoded with its entries that
+			// include left in it.
+			name: "an anchor of the name written again after the alias",
+			files: map[string]string{
+				"w.yml":       "name: w\nshared:\n  steps: &s\n  - include: steps/a.yml\njobs:\n- name: B\n  steps: *s\n- name: C\n  steps: &s\n  - include: steps/c.yml\n",
+				"steps/a.yml": step("a"),
+				"steps/c.yml": step("c"),
+			},
+			want: "B/c,C/c",
+		},
+		{
 			// The list is included in once, and both jobs read it.
 			name: "steps anchored and read by two jobs",
 			files: map[string]string{
@@ -354,6 +377,25 @@ func TestLoad_IncludeAnchors(t *testing.T) {
 			t.Errorf("step b: get = %v, want /workflow", got)
 		}
 	})
+}
+
+// TestCheck_IncludeAlias checks the steps of a list an alias names, those
+// included in it with them.
+func TestCheck_IncludeAlias(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"w.yml":       "name: w\nshared:\n  steps: &steps\n  - include: steps/a.yml\njobs:\n- name: A\n  steps: *steps\n",
+		"steps/a.yml": "- name: a\n  uses: http\n  with:\n    get: /\n  tset: res.code == 200\n",
+	})
+	findings, err := Check(filepath.Join(dir, "w.yml"), checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if filepath.Base(f.File) == "a.yml" && f.Line == 5 && strings.Contains(f.Message, `unknown key "tset"`) {
+			return
+		}
+	}
+	t.Errorf("no finding of tset at a.yml:5 in %v", findings)
 }
 
 // TestCheck_Include tells what is found in an included file by the file and
