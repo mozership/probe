@@ -1,0 +1,20 @@
+name: Users
+id: users
+needs: [prepare]
+
+steps:
+- name: The vars of the workflow
+  uses: shell
+  with:
+    cmd: echo "{{vars.greeting}}, users"
+  test: trim(res.stdout) == "hello, users"
+- name: The defaults of the workflow
+  uses: shell
+  with:
+    cmd: echo "$STAGE"
+  test: trim(res.stdout) == "workflow"
+- name: The outputs of a job of another file
+  uses: shell
+  with:
+    cmd: echo "{{outputs.token.value}}"
+  test: trim(res.stdout) == "abc123"

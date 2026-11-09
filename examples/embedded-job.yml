@@ -18,7 +18,7 @@ jobs:
     id: auth
     uses: embedded
     with:
-      path: "./examples/jobs/{{vars.testenv}}.yml"
+      path: "./examples/embedded-jobs/{{vars.testenv}}.yml"
       vars:
         name: foobar
         testenv: "{{ vars.testenv }}"

@@ -1,0 +1,45 @@
+name: Include Jobs Example
+description: |
+  The jobs of a workflow can be kept in files of their own. An entry of jobs
+  that has only include is replaced by the jobs of the files it names: a
+  file, the YAML files of a directory, or those a glob matches, in the order
+  of their names. A path is from this file, wherever Probe runs.
+
+  The included jobs are jobs of this workflow like any other: the vars and
+  the defaults below apply to them, and needs and outputs reach across files.
+
+vars:
+  greeting: hello
+
+defaults:
+  shell:
+    env:
+      STAGE: workflow
+
+jobs:
+- name: Prepare
+  id: prepare
+  steps:
+  - name: Publish a token
+    id: token
+    uses: shell
+    with:
+      cmd: echo abc123
+    test: res.code == 0
+    outputs:
+      value: trim(res.stdout)
+
+# A file that holds one job.
+- include: include-jobs/users.yml
+
+# The files a glob matches, each of which holds a job or a list of jobs.
+- include: include-jobs/orders/*.yml
+
+- name: Report
+  needs: [users, create-order, check-order, cancel-order]
+  steps:
+  - name: Every included job has run
+    uses: shell
+    with:
+      cmd: echo "done with {{outputs.token.value}}"
+    test: trim(res.stdout) == "done with abc123"

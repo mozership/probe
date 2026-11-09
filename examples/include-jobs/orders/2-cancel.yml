@@ -1,0 +1,10 @@
+name: Cancel order
+id: cancel-order
+needs: [check-order]
+
+steps:
+- name: Cancel
+  uses: shell
+  with:
+    cmd: echo "cancel {{outputs.order.id}}"
+  test: trim(res.stdout) == "cancel 42"

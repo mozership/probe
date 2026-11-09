@@ -1,0 +1,30 @@
+# A list of jobs. An anchor is shared within this file, not with others.
+- name: Create order
+  id: create-order
+  needs: [prepare]
+  defaults:
+    shell:
+      env: &order
+        ORDER_ID: "42"
+  steps:
+  - name: Create
+    id: order
+    uses: shell
+    with:
+      cmd: echo "$ORDER_ID"
+    test: res.code == 0
+    outputs:
+      id: trim(res.stdout)
+
+- name: Check order
+  id: check-order
+  needs: [create-order]
+  defaults:
+    shell:
+      env: *order
+  steps:
+  - name: The order created
+    uses: shell
+    with:
+      cmd: echo "$ORDER_ID"
+    test: trim(res.stdout) == outputs.order.id
