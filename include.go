@@ -361,7 +361,19 @@ func resolve(body, n ast.Node) ast.Node {
 // its own, or those a merge key gives it, the first of them as the decoder
 // takes them; nil when there is none.
 func stepsOf(body, job ast.Node) *ast.MappingValueNode {
+	return mergedSteps(body, job, map[ast.Node]bool{})
+}
+
+// mergedSteps is stepsOf for job, a mapping reached through the mappings
+// on, which it does not go back to: a merge key may name the mapping it is
+// in, which would be followed round for ever.
+func mergedSteps(body, job ast.Node, on map[ast.Node]bool) *ast.MappingValueNode {
 	job = resolve(body, job)
+	if job == nil || on[job] {
+		return nil
+	}
+	on[job] = true
+	defer delete(on, job)
 	if kv := lastKey(job, "steps"); kv != nil {
 		return kv
 	}
@@ -374,7 +386,7 @@ func stepsOf(body, job ast.Node) *ast.MappingValueNode {
 			sources = seq.Values
 		}
 		for _, src := range sources {
-			if steps := stepsOf(body, src); steps != nil {
+			if steps := mergedSteps(body, src, on); steps != nil {
 				return steps
 			}
 		}

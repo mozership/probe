@@ -198,6 +198,26 @@ func (c *checker) walkWorkflow(body ast.Node) {
 			c.lines[jp] = lineOf(job)
 			jobLabel := named(fmt.Sprintf("job %d", i), job)
 			i++
+			walkSteps := func(value ast.Node) {
+				j := 0
+				for _, step := range items(resolve(body, value)) {
+					if isInclude(step) {
+						continue
+					}
+					sp := fmt.Sprintf("%s.steps[%d]", jp, j)
+					c.lines[sp] = lineOf(step)
+					where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
+					j++
+					c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
+						switch key {
+						case "retry":
+							c.keys(value, sp+".retry", where, retryKeys, nil)
+						case "with", "vars", "outputs":
+							c.noteLines(sp+"."+key, value)
+						}
+					})
+				}
+			}
 			c.keys(job, jp, jobLabel, jobKeys, func(key string, value ast.Node) {
 				switch key {
 				case "defaults":
@@ -205,26 +225,16 @@ func (c *checker) walkWorkflow(body ast.Node) {
 				case "repeat":
 					c.keys(value, jp+".repeat", jobLabel, repeatKeys, nil)
 				case "steps":
-					j := 0
-					for _, step := range items(resolve(body, value)) {
-						if isInclude(step) {
-							continue
-						}
-						sp := fmt.Sprintf("%s.steps[%d]", jp, j)
-						c.lines[sp] = lineOf(step)
-						where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
-						j++
-						c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
-							switch key {
-							case "retry":
-								c.keys(value, sp+".retry", where, retryKeys, nil)
-							case "with", "vars", "outputs":
-								c.noteLines(sp+"."+key, value)
-							}
-						})
-					}
+					walkSteps(value)
 				}
 			})
+			// The steps a merge key gives a job are checked as its own,
+			// as they are run.
+			if lastKey(job, "steps") == nil {
+				if kv := stepsOf(body, job); kv != nil {
+					walkSteps(kv.Value)
+				}
+			}
 		}
 	})
 }

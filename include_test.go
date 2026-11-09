@@ -379,6 +379,36 @@ func TestLoad_IncludeAnchors(t *testing.T) {
 	})
 }
 
+// TestLoad_IncludeMergeCycle refuses a merge key that names the mapping it
+// is in, rather than following it round for ever.
+func TestLoad_IncludeMergeCycle(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"w.yml": "name: w\nshared:\n  base: &base\n    <<: *base\n    name: B\njobs:\n- <<: *base\n  name: A\n",
+	})
+	if _, err := loadDir(t, dir); err == nil {
+		t.Errorf("Load() = nil, want an error for a job with no steps")
+	}
+}
+
+// TestCheck_IncludeMerge checks the steps a merge key gives a job, those
+// included in them with them.
+func TestCheck_IncludeMerge(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"w.yml":       "name: w\nshared:\n  base: &base\n    steps:\n    - include: steps/a.yml\njobs:\n- <<: *base\n  name: A\n",
+		"steps/a.yml": "- name: a\n  uses: http\n  with:\n    get: /\n  tset: res.code == 200\n",
+	})
+	findings, err := Check(filepath.Join(dir, "w.yml"), checkActions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if filepath.Base(f.File) == "a.yml" && f.Line == 5 && strings.Contains(f.Message, `unknown key "tset"`) {
+			return
+		}
+	}
+	t.Errorf("no finding of tset at a.yml:5 in %v", findings)
+}
+
 // TestCheck_IncludeAlias checks the steps of a list an alias names, those
 // included in it with them.
 func TestCheck_IncludeAlias(t *testing.T) {
