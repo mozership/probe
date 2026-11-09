@@ -8,8 +8,9 @@
 //     it belongs to.
 //   - A blank line separates the keys at the top of a file when either holds a
 //     mapping or a sequence written on the lines under it, and the jobs from
-//     one another. There is no other blank line, apart from those a scalar
-//     holds.
+//     one another. The entries of a sequence at the top of a file, as a list
+//     of jobs a workflow includes, are separated as its keys are. There is
+//     no other blank line, apart from those a scalar holds.
 //   - A comment on its own line is indented as the line it comes before, and
 //     one at the end of a line is a single space from it. Each has a space
 //     after its #.
@@ -457,7 +458,8 @@ func indentBody(body []*line, to, delta int, explicit bool) {
 
 // separate marks the content lines that a blank line comes before: the keys
 // at the top of a document, when either of two that meet holds a mapping or
-// a sequence written on the lines under it, and the jobs but the first. A
+// a sequence written on the lines under it, and the jobs but the first. The
+// entries of a document that is a sequence at the top are taken as its keys. A
 // scalar, however many lines it takes, and a flow collection are not such.
 func separate(lines []*line) {
 	type entry struct {
@@ -474,16 +476,22 @@ func separate(lines []*line) {
 		entries = nil
 	}
 
-	jobs, first := false, false
+	// The entries of a document that is a sequence at the top, as a file of
+	// jobs a workflow includes is, are separated as its keys would be.
+	jobs, first, start, topSeq := false, false, true, false
 	for i, l := range lines {
 		if l.kind != kindContent {
 			continue
 		}
+		if start && !l.marker {
+			start = false
+			topSeq = l.newIndent == 0 && len(l.dashes) > 0
+		}
 		switch {
 		case l.marker:
 			flush()
-			jobs = false
-		case l.newIndent == 0 && len(l.dashes) == 0:
+			jobs, start, topSeq = false, true, false
+		case l.newIndent == 0 && (len(l.dashes) == 0 || topSeq):
 			entries = append(entries, entry{at: i})
 			jobs, first = l.key() == jobsKey, true
 		default:
