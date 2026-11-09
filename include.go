@@ -11,6 +11,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
+	"github.com/goccy/go-yaml/lexer"
 	"github.com/goccy/go-yaml/parser"
 )
 
@@ -133,8 +134,8 @@ func (s *source) include(body ast.Node, given []string) {
 	dir := filepath.Dir(file)
 	seen := map[string]int{}
 	for _, g := range given {
-		if abs, err := filepath.Abs(g); err == nil {
-			seen[abs] = 0
+		if key, err := fileKey(g); err == nil {
+			seen[key] = 0
 		}
 	}
 
@@ -155,7 +156,7 @@ func (s *source) include(body ast.Node, given []string) {
 			continue
 		}
 		for _, p := range paths {
-			abs, err := filepath.Abs(p)
+			abs, err := fileKey(p)
 			if err != nil {
 				s.problem(line, "%s: %s", p, err)
 				continue
@@ -219,10 +220,13 @@ func (s *source) read(path string, line int) []ast.Node {
 		s.included = start
 	}
 
-	// The lines before the file are left blank, so that its lines are
-	// those of the source.
-	text := strings.Repeat("\n", start-1) + string(data)
-	f, err := parser.ParseBytes([]byte(text), 0, parser.AllowDuplicateMapKey())
+	// The lines of the file are numbered as those of the source, before
+	// it is parsed, so that what the parser makes of them is too.
+	tokens := lexer.Tokenize(string(data))
+	for _, tk := range tokens {
+		tk.Position.Line += start - 1
+	}
+	f, err := parser.Parse(tokens, 0, parser.AllowDuplicateMapKey())
 	if err != nil {
 		var yerr yaml.Error
 		if errors.As(err, &yerr) && yerr.GetToken() != nil {
@@ -255,6 +259,11 @@ func (s *source) read(path string, line int) []ast.Node {
 		s.problem(lineOf(alias), "alias *%s names no anchor of this file; an anchor is not shared between files", alias.Value.GetToken().Value)
 		return nil
 	}
+	// The workflow is decoded as one, where an anchor would be read by an
+	// alias of another file, and would take the place of one of the same
+	// name in the aliases after it. Each anchor of the file, and the aliases
+	// that name it, are given a name no YAML can write.
+	renameAnchors(docs[0], fmt.Sprintf(" %s", path))
 
 	jobs := []ast.Node{docs[0]}
 	if seq := sequence(docs[0]); seq != nil {
@@ -349,6 +358,41 @@ func foreignAlias(n ast.Node) *ast.AliasNode {
 		return found == nil
 	}), n)
 	return found
+}
+
+// renameAnchors adds suffix to the name of each anchor of n and of each
+// alias that names one.
+func renameAnchors(n ast.Node, suffix string) {
+	rename := func(n ast.Node) {
+		if str, ok := n.(*ast.StringNode); ok {
+			str.Value += suffix
+			if str.Token != nil {
+				str.Token.Value += suffix
+			}
+		}
+	}
+	ast.Walk(visitorFunc(func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.AnchorNode:
+			rename(v.Name)
+		case *ast.AliasNode:
+			rename(v.Value)
+		}
+		return true
+	}), n)
+}
+
+// fileKey returns the path of a file, by which it is told from others: the
+// absolute path, with the symbolic links on it followed.
+func fileKey(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real, nil
+	}
+	return abs, nil
 }
 
 // isInclude reports whether n, an entry of jobs, includes files.

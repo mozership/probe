@@ -361,3 +361,52 @@ func TestCheck_Include(t *testing.T) {
 		}
 	}
 }
+
+// TestLoad_IncludeAnchors keeps the anchors of an included file to it: an
+// alias of the workflow does not read one, and one of the same name does
+// not change what an alias of the workflow reads.
+func TestLoad_IncludeAnchors(t *testing.T) {
+	t.Run("an alias of the workflow to an anchor of an included file", func(t *testing.T) {
+		dir := writeTree(t, map[string]string{
+			"w.yml":      "name: w\njobs:\n- include: jobs/a.yml\n- name: B\n  steps:\n  - *get\n",
+			"jobs/a.yml": "name: A\nsteps:\n- &get\n  uses: http\n  with:\n    get: /\n  test: res.code == 200\n",
+		})
+		p := &Probe{FilePath: filepath.Join(dir, "w.yml"), Config: Config{Actions: builtinNames}}
+		if err := p.Load(); err == nil {
+			t.Errorf("Load() = nil, want an error for the alias *get, whose anchor is in another file")
+		}
+	})
+	t.Run("an anchor of an included file with the name of one of the workflow", func(t *testing.T) {
+		dir := writeTree(t, map[string]string{
+			"w.yml":      "name: w\nvars:\n  path: &path /workflow\njobs:\n- include: jobs/a.yml\n- name: B\n  steps:\n  - uses: http\n    with:\n      get: *path\n    test: res.code == 200\n",
+			"jobs/a.yml": "name: A\nsteps:\n- uses: http\n  with:\n    get: &path /included\n  test: res.code == 200\n",
+		})
+		p := &Probe{FilePath: filepath.Join(dir, "w.yml"), Config: Config{Actions: builtinNames}}
+		if err := p.Load(); err != nil {
+			t.Fatal(err)
+		}
+		if got := p.workflow.Jobs[0].Steps[0].With["get"]; got != "/included" {
+			t.Errorf("job A: get = %v, want /included", got)
+		}
+		if got := p.workflow.Jobs[1].Steps[0].With["get"]; got != "/workflow" {
+			t.Errorf("job B: get = %v, want /workflow", got)
+		}
+	})
+}
+
+// TestLoad_IncludeSymlink tells a file included again through a symbolic
+// link, which would run its jobs twice.
+func TestLoad_IncludeSymlink(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"w.yml":      "name: w\njobs:\n- include: jobs/a.yml\n- include: link.yml\n",
+		"jobs/a.yml": "name: A\n" + okSteps,
+	})
+	if err := os.Symlink(filepath.Join(dir, "jobs", "a.yml"), filepath.Join(dir, "link.yml")); err != nil {
+		t.Skip(err)
+	}
+	p := &Probe{FilePath: filepath.Join(dir, "w.yml"), Config: Config{Actions: builtinNames}}
+	err := p.Load()
+	if err == nil || !strings.Contains(err.Error(), "link.yml: included already") {
+		t.Errorf("Load() = %v, want an error for link.yml included already", err)
+	}
+}
