@@ -28,7 +28,7 @@ export type ReportLine = {
 export const heroWorkflow = `name: Sign-up Flow
 
 actions:
-  browser: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+  browser: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
   ios: github.com/mozership/probe-ios@aed5436143e9536754e2123b953831f60cd635eb # v0.2.0
   agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
 
