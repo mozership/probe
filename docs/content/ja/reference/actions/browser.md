@@ -13,7 +13,7 @@ browserステップでは、行う操作を`actions`に順番に並べます。�
 ```yaml
 steps:
   - name: Read the heading
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       actions:
         - name: navigate
@@ -37,6 +37,8 @@ steps:
 | `window_h` | Integer | `1080` | ウィンドウの高さ（ピクセル） |
 | `evidence_dir` | String | 一時ディレクトリ | 操作が失敗したときにページを保存する場所。[失敗時のページ](#失敗時のページ)を参照 |
 | `storage_state` | String | なし | `save_storage_state`が書いたファイル。ブラウザはこのファイルのクッキーとlocalStorageを持った状態で始まる。[ログイン状態の引き継ぎ](#ログイン状態の引き継ぎ)を参照 |
+| `passkeys` | String | なし | `save_passkeys`が書いたファイル。仮想認証器はこのファイルのパスキーを持った状態で始まる。`virtual_authenticator`がなければ、デフォルトの設定の認証器を使う。[パスキーの引き継ぎ](#パスキーの引き継ぎ)を参照 |
+| `virtual_authenticator` | Booleanまたはマップ | なし | 仮想認証器でWebAuthnに応答し、利用者がいなくてもパスキーを登録して使えるようにする。[パスキーでのサインイン](#パスキーでのサインイン)を参照 |
 
 Chromeの起動にも`timeout`の一部を使い、1秒以上かかることもよくあります。短すぎる制限では、最初のページを開く前に時間切れになることがあります。
 
@@ -49,18 +51,42 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 | `name` | すべて | 下の表にある操作の名前 |
 | `id` | 結果を返すアクション | `res.results`や`res.filepaths`で結果を引くキー。省くとアクション名がキーになるため、同じ種類のアクションを後に置くと前の結果を置き換える |
 | `url` | `navigate` | 開くアドレス |
-| `selector` | 要素に対するアクション | CSSセレクタ |
-| `value` | `type`、`send_keys`、`select` | 使うテキスト |
+| `selector` | 要素に対するアクション | CSSセレクタ。開いたshadow rootの中の要素も探す。[要素の指定](#要素の指定)を参照 |
+| `has_text` | 要素に対するアクション | `selector`に一致する要素（`selector`がなければすべての要素）のうち、表示されたテキストがこの値を含む、最も内側の要素を選ぶ。[要素の指定](#要素の指定)を参照 |
+| `value` | `type`、`send_keys`、`press`、`set_value`、`select`、`set_user_verified` | 使うテキスト。`press`では`Enter`や`Shift+Tab`のように押すキー。`set_user_verified`では`true`か`false` |
 | `attribute` | `get_attribute` | 読む属性を`href`か`[href]`で指定する。リストの場合は最初の要素だけを読む |
 | `quality` | `full_screenshot` | `1`から`99`はその品質のJPEGで保存する。それ以外は、省略、`0`、`100`以上、負の数も含めてPNGで保存する |
-| `path` | スクリーンショット、`save_storage_state` | スクリーンショットでは非推奨で、画像をこのパスにも書き出す。代わりに`res.filepaths`を使う。`save_storage_state`では、一時ディレクトリに新しいファイルを作る代わりに書き出す場所 |
+| `path` | スクリーンショット、`save_storage_state`、`save_passkeys` | スクリーンショットでは非推奨で、画像をこのパスにも書き出す。代わりに`res.filepaths`を使う。`save_storage_state`と`save_passkeys`では、一時ディレクトリに新しいファイルを作る代わりに書き出す場所 |
 | `equals` | `wait_text` | テキストがこの値と一致するまで待つ。`equals: ""`は空のテキストになるまで待つ |
 | `contains` | `wait_text` | テキストがこの値を含むまで待つ |
+| `not_contains` | `wait_text` | テキストがこの値を含まなくなるまで待つ。`Loading`のような仮の表示が内容に置き換わるのを待つときに使う |
 | `matches` | `wait_text` | テキストがこの正規表現に一致するまで待つ。正規表現は[Goの構文](https://pkg.go.dev/regexp/syntax)で書く |
+| `cookie_name` | `get_cookie` | 読むクッキーの名前 |
 
-`wait_text`には`equals`、`contains`、`matches`のうち1つまでしか書けず、ほかのアクションには書けません。空の`contains`や`matches`はどのテキストでも通るため、これもエラーになります。これらに反するワークフローは、ブラウザを起動する前にエラーになります。
+`wait_text`には`equals`、`contains`、`not_contains`、`matches`のうち1つまでしか書けず、ほかのアクションには書けません。空の`contains`や`matches`はどのテキストでも通るため、空の`not_contains`はどのテキストも通らないため、これらもエラーになります。これらに反するワークフローは、ブラウザを起動する前にエラーになります。
 
 要素を探すアクションは、要素が現れるまで待ちます。先に`timeout`が尽きるとステップは失敗します。多くは要素が表示されるまでも待ちます。
+
+### 要素の指定
+
+要素に対するアクションは`selector`と`has_text`のどちらか、または両方を取り、それらに一致する最初の要素を操作します。要素はページの順に並び、shadow rootの要素はそのホストのすぐ後に来ます。要素が必要なアクションにどちらもない場合と、要素を操作しないアクションに`has_text`がある場合は、ブラウザを起動する前にエラーになります。
+
+`selector`はCSSセレクタで、文書と、開いたすべてのshadow rootから探します。そのため、コンポーネントがshadow rootに描画した要素も、その外の要素と同じように見つかります。ルートごとに別々に照合するため、`#host p`は`#host`のshadow rootの中の`p`には一致しませんが、`p`は一致します。閉じたshadow rootはページのスクリプトからも、このアクションからも触れられません。`selector`はCSSだけを受け付け、XPathや探すテキストとしては扱いません。
+
+`has_text`は利用者が読むテキストで要素を選ぶため、ステップがページの構造に依存しません。
+
+```yaml
+        - name: click
+          selector: button
+          has_text: Recovery codes
+        - name: click
+          selector: '[data-slot="dropdown-menu-item"]'
+          has_text: Delete label
+```
+
+連続する空白と改行を1つの空白とみなしたうえで、表示されたテキストが`has_text`を含む要素を残し、そのうち最も内側の要素だけを選びます。そのため、`has_text`だけを書いても、ボタンを囲むカードではなくボタンが見つかります。コンポーネントのslotに入れた要素は、その要素を表示するslotの中にあるものとして扱います。`<slot>`のように自身の描画領域を持たない要素は、クリックも表示の確認もできないため選びません。大文字と小文字は区別します。非表示の要素には表示されたテキストがないため、表示されてから見つかります。SVGでは描画されるテキストだけが対象で、`<title>`は含みません。
+
+`text`と`wait_text`は、要素の表示されたテキストに加えて、その中にある開いたshadow rootのテキストを、slotが表示するノードをその位置に入れて読みます。`innerText`はどちらも含みません。そのため、shadow rootに描画したメール本文を持つ要素に`wait_text`を使うと本文を読めます。また、`has_text`では、コンポーネントがslotの中身の周りに表示するテキストでそのコンポーネントを探せます。shadow rootのテキストは、`innerText`が文書のテキストを組み立てるのと同じ規則で組み立てます。段落の前後には空行が入り、`<br>`は改行になり、空白はテキストのスタイルに従ってまとめます。
 
 ### 移動と待機
 
@@ -70,7 +96,7 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 |--------|--------------|
 | `navigate` | `url`を開き、ページの読み込みを待つ。`net::ERR_CONNECTION_REFUSED`のようにブラウザがネットワークのエラーを返すとすぐに失敗する。応答のないアドレスでは`timeout`まで待つ |
 | `wait_visible` | `selector`が表示されるまで待つ |
-| `wait_not_visible` | `selector`が表示されなくなるまで待つ |
+| `wait_not_visible` | `selector`に一致する要素がどれも表示されなくなるまで待つ。条件付きの描画で取り除かれた要素のように、ページからなくなった要素も表示されていないとみなす。最初から存在しない要素も同じなので、要素を表示させる操作の後では、先に`wait_visible`で要素を待つ |
 | `wait_enabled` | `selector`が表示され、有効になるまで待つ |
 | `wait_ready` | ページの`body`の準備ができるまで待つ。`selector`は使わない |
 
@@ -80,11 +106,12 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 
 | アクション | 結果 |
 |--------|--------|
-| `text` | `selector`のテキスト |
-| `wait_text` | `selector`が表示されるまで待ち、そのテキスト。`equals`、`contains`、`matches`を書くと、テキストが期待どおりになるまでも待つ。[テキストを待つ](#テキストを待つ)を参照 |
+| `text` | `selector`の表示されたテキスト。中にある開いたshadow rootのテキストも含む。非表示なら空文字列 |
+| `wait_text` | `selector`が表示されるまで待ち、`text`と同じように読んだ表示されたテキスト。`equals`、`contains`、`not_contains`、`matches`を書くと、テキストが期待どおりになるまでも待つ。[テキストを待つ](#テキストを待つ)を参照 |
 | `value` | `input`などのフォーム項目の値 |
 | `get_attribute` | `selector`の、`attribute`の最初の属性の値。要素がその属性を持たなければ空文字列 |
 | `get_html` | 表示された`selector`の外側のHTML |
+| `get_cookie` | 開いているページにブラウザが送るクッキー`cookie_name`の値。`HttpOnly`のものも含む。サインインの少し後に設定されるクッキーのように、ページがクッキーを持つまで待つ。先に`timeout`が尽きると、ページが持つクッキーの名前（値は含まない）を示してステップが失敗する。同じ名前のクッキーが2つあれば、ブラウザが先に送る、パスの長いほうの値を返す。パスが同じでドメインだけが違う2つは、ブラウザがどちらを先に送るか決められないため、ステップが失敗する |
 
 ### 操作
 
@@ -94,7 +121,9 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 |--------|--------------|
 | `click` | 表示された`selector`をクリックする |
 | `double_click` | 表示された`selector`をダブルクリックする |
-| `type`、`send_keys` | `selector`の内容を消してから`value`を入力する |
+| `type`、`send_keys` | `selector`が表示されたら、その内容の代わりに`value`を入力する。`input`と`textarea`では先に値を消す。リッチテキストエディタのようなcontenteditableの要素では、Ctrl+Aの後のように内容を選択してから上書きし、エディタが変更を受け取れるようにする。空の`value`は内容を消す。それ以外の要素ではステップが失敗する |
+| `press` | `selector`が表示されたら、その要素でキー`value`を押す。`selector`がなければ、フォーカスのある要素で押す。[キーを押す](#キーを押す)を参照 |
+| `set_value` | `selector`の`input`、`textarea`、`select`が表示されたら、値を`value`にし、利用者が編集したときと同じく`input`と`change`のイベントを発生させる。入力はしないため、日付はブラウザのロケールによらず`2000-01-02`の形で渡す。日付の`2000-13-01`のように項目が受け付けない値では、ステップが失敗する |
 | `submit` | `selector`が属するフォームを送信する |
 | `focus` | `selector`にフォーカスを移す |
 | `scroll` | `selector`が見える位置までスクロールする |
@@ -118,6 +147,16 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 |--------|--------------|
 | `save_storage_state` | ブラウザのクッキーと、開いているページのオリジンのlocalStorageをJSONファイルに書き出し、そのパスを`res.filepaths`に、`id`またはアクション名をキーにして入れる。ファイルは`path`に書く。`path`がなければ一時ディレクトリに`probe-browser-state-*.json`を新しく作る。[ログイン状態の引き継ぎ](#ログイン状態の引き継ぎ)を参照 |
 
+### パスキー
+
+以下は仮想認証器を使うため、`virtual_authenticator`か`passkeys`が必要です。[パスキーでのサインイン](#パスキーでのサインイン)を参照してください。
+
+| アクション | 内容 |
+|--------|--------------|
+| `wait_passkey` | 仮想認証器がパスキーを登録するか、パスキーでサインインするまで待ち、どちらを行ったか（`registration`か`authentication`）を`res.results`に、`id`またはアクション名をキーにして入れる。[パスキーを待つ](#パスキーを待つ)を参照 |
+| `set_user_verified` | 以後のユーザー検証を、`value: true`なら成功させ、`value: false`なら失敗させる。`user_verification`のある認証器が必要 |
+| `save_passkeys` | 仮想認証器が持つパスキーを秘密鍵も含めてJSONファイルに書き出し、そのパスを`res.filepaths`に、`id`またはアクション名をキーにして入れる。ファイルは`path`に書く。`path`がなければ一時ディレクトリに`probe-browser-passkeys-*.json`を新しく作る。`virtual_authenticator`か`passkeys`が必要で、認証器がパスキーを持っていなければ失敗する。[パスキーの引き継ぎ](#パスキーの引き継ぎ)を参照 |
+
 ## レスポンスオブジェクト
 
 すべての操作が成功すると、ステップからは次の値を参照できます。
@@ -126,7 +165,7 @@ Chromeの起動にも`timeout`の一部を使い、1秒以上かかることも�
 |-------|------|-------------|
 | `res.code` | Integer | `0` |
 | `res.results` | Object | 読み取りのアクションが返した値。キーは`id`またはアクション名 |
-| `res.filepaths` | Object | スクリーンショットとストレージの状態の保存先。キーは`id`またはアクション名 |
+| `res.filepaths` | Object | スクリーンショット、ストレージの状態、パスキーの保存先。キーは`id`またはアクション名 |
 | `res.console_errors` | List | 操作の実行中にページがコンソールに書いたエラー。書いた順に並ぶ。[コンソールの確認](#コンソールの確認)を参照 |
 | `rt.duration` | String | ステップにかかった時間。`"663.268333ms"`など |
 | `status` | Integer | `0` |
@@ -153,7 +192,7 @@ jobs:
 - name: Sign in
   steps:
   - name: Log in and reach the dashboard
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       timeout: 30s
       actions:
@@ -181,7 +220,7 @@ jobs:
 
 ```yaml
   - name: Product page
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       actions:
         - name: navigate
@@ -206,11 +245,11 @@ jobs:
 
 ### テキストを待つ
 
-データを取得して表示するページでは、読み込みから少し遅れてデータが表示されます。そのため、要素が表示された時点で`text`で読むと`Loading`が返り、テストが失敗することがあります。`wait_text`に`equals`、`contains`、`matches`を書くと、テキストが期待どおりになるまで読み直します。
+データを取得して表示するページでは、読み込みから少し遅れてデータが表示されます。そのため、要素が表示された時点で`text`で読むと`Loading`が返り、テストが失敗することがあります。`wait_text`に`equals`、`contains`、`not_contains`、`matches`を書くと、テキストが期待どおりになるまで読み直します。モデルが書く要約のように、表示されれば何が入ってもよいテキストでは、`not_contains`で仮の表示が消えるのを待ちます。
 
 ```yaml
   - name: Order list
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       timeout: 30s
       actions:
@@ -231,6 +270,56 @@ jobs:
 wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": context deadline exceeded (page at failure: ...)
 ```
 
+### キーを押す
+
+`press`のキーは、`Enter`、`Tab`、`Escape`、`Backspace`、`ArrowDown`のように`KeyboardEvent.key`と同じ名前で書くか、`a`のように1文字で書きます。`Space`は`" "`として扱います。修飾キー（`Alt`、`Control`、`Meta`、`Shift`）は、`Shift+Tab`や`Control+a`のようにキーの前に`+`でつないで書きます。知らないキーは、ブラウザを起動する前にエラーになります。
+
+クリックするボタンがなく、Enterで送信する検索欄の例です。
+
+```yaml
+  - name: Search
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/"
+        - name: type
+          selector: "#search"
+          value: probe
+        - name: press
+          value: Enter
+        - name: wait_text
+          id: heading
+          selector: h1
+          contains: probe
+    test: res.code == 0
+```
+
+`value`が`"\r"`で終わる`type`もEnterを押しますが、YAMLのダブルクォートの文字列の場合に限ります。クォートなしやシングルクォートでは、`\r`は2文字として入力されます。
+
+### クッキーを読む
+
+サインインするステップは、アプリがクッキーに持つトークンを`get_cookie`で読み、そのユーザーとしてアプリのAPIを呼ぶときのように、後のステップに渡せます。
+
+```yaml
+  - name: Sign up
+    id: signup
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/signup"
+        # ... the actions that sign up
+        - name: get_cookie
+          id: token
+          cookie_name: access_token
+    test: res.code == 0
+    outputs:
+      token: res.results.token
+```
+
 ### ログイン状態の引き継ぎ
 
 ログインするステップで`save_storage_state`を使ってログイン状態を保存し、後のステップで`storage_state`にそのファイルを指定すると、後のステップのブラウザはログインした状態で始まります。ステップごとにログインし直す必要はありません。
@@ -238,7 +327,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Sign in
     id: login
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       timeout: 30s
       actions:
@@ -261,7 +350,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
       state: res.filepaths.state
 
   - name: Orders
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       storage_state: "{{outputs.login.state}}"
       actions:
@@ -279,6 +368,162 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 クッキーを使えばそのユーザーとしてログインできるため、ファイルはProbeを実行したユーザーだけが読めるようにします。`path`を指定しなければ一時ディレクトリに書くため、リポジトリには入りません。`path`を指定する場合は、バージョン管理の対象と、CIでアップロードするファイルから外してください。
 
+### パスキーでのサインイン
+
+`virtual_authenticator`を指定すると、ブラウザはTouch IDやセキュリティキーのようなプラットフォームの認証器の代わりに、仮想認証器でWebAuthnに応答します。センサーに触れる人がいなくても、ページはパスキーを登録し、それでサインインできます。`true`では、パスキーを保持でき、ユーザー検証に成功する認証器を使います。
+
+```yaml
+  - name: Register a passkey and sign in with it
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      virtual_authenticator: true
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/account/passkeys"
+        - name: click
+          selector: "#add-passkey"
+        - name: wait_visible
+          selector: ".passkey-added"
+        - name: navigate
+          url: "{{vars.url}}/logout"
+        - name: navigate
+          url: "{{vars.url}}/login"
+        - name: click
+          selector: "#sign-in-with-passkey"
+        - name: wait_visible
+          selector: "#dashboard"
+    test: res.code == 0
+```
+
+`true`の代わりにマップを書くと、書いたオプションだけを変え、ほかはデフォルトのままにします。
+
+| オプション | デフォルト | 説明 |
+|--------|---------|-------------|
+| `transport` | `internal` | 認証器への接続方法。端末に内蔵された認証器なら`internal`、ほかに`usb`、`nfc`、`ble`、`hybrid` |
+| `resident_key` | `true` | パスキーである、発見可能な資格情報を保持できるか |
+| `user_verification` | `true` | 指紋やPINなどでユーザーを検証できるか |
+| `user_verified` | `user_verification`と同じ | ユーザーの検証が成功するか。`false`にすると、検証が拒否されたときのページの動きを確かめられる |
+| `backup_eligible` | `false` | パスワードマネージャーの資格情報のように、資格情報がバックアップ可能だと示すか |
+| `backed_up` | `false` | 資格情報がバックアップ済みだと示すか。`backup_eligible`が必要 |
+
+```yaml
+      virtual_authenticator:
+        user_verified: false
+```
+
+知らないオプションや受け付けない値は、ブラウザを起動する前にステップを失敗させます。
+
+認証器はCTAP2で通信し、利用者が触れたときと同じようにすぐに応答します。認証器はページのタブに属するため、ページが開くポップアップには認証器がありません。WebAuthnは安全なコンテキストでしか動かないため、ページは`https`か`localhost`で開く必要があります。認証器とそのパスキーは、ブラウザのほかの状態と同じくステップの終わりに消えます。後のステップでパスキーを使ってサインインするには、[パスキーの引き継ぎ](#パスキーの引き継ぎ)のとおり保存します。
+
+#### パスキーを待つ
+
+パスキーを登録するページは、新しい資格情報を先にサーバーに送るため、登録したと表示するまでに少し時間がかかることがあります。`wait_passkey`は認証器そのものの動作を待ち、何を行ったかを返します。
+
+```yaml
+  - name: Register a passkey
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      virtual_authenticator: true
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/account/passkeys"
+        - name: click
+          selector: "#add-passkey"
+        - name: wait_passkey
+          id: added
+        - name: save_passkeys
+    test: res.code == 0 && res.results.added == "registration"
+```
+
+認証器の動作はステップの始めから記録します。各`wait_passkey`は、それより前の`wait_passkey`が受け取っていない最も早い動作を受け取るため、`wait_passkey`が始まる前に終わった登録も取りこぼしません。`passkeys`で渡したパスキーは登録には数えません。先にステップの`timeout`が尽きると、ステップは失敗します。
+
+#### ユーザー検証を失敗させる
+
+`set_user_verified`は、指紋が一致しなくなったときのように、以後の操作で認証器がユーザーの検証に成功するかを変えます。1つのステップでパスキーを登録し、続けて検証に失敗するサインインをページがどう扱うかを確かめられます。
+
+```yaml
+      virtual_authenticator: true
+      actions:
+        # ... register a passkey ...
+        - name: set_user_verified
+          value: false
+        - name: click
+          selector: "#sign-in-with-passkey"
+        - name: wait_visible
+          selector: ".passkey-error"
+```
+
+最初から失敗させるには、代わりに`virtual_authenticator`に`user_verified: false`を書きます。
+
+### パスキーの引き継ぎ
+
+パスキーを登録するステップで`save_passkeys`を使ってパスキーを保存し、後のステップで`passkeys`にそのファイルを指定すると、後のステップの認証器はそのパスキーを持った状態で始まります。
+
+```yaml
+  - name: Register a passkey
+    id: register
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      virtual_authenticator: true
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/account/passkeys"
+        - name: click
+          selector: "#add-passkey"
+        - name: wait_visible
+          selector: ".passkey-added"
+        - name: save_passkeys
+          id: passkeys
+    test: res.code == 0
+    outputs:
+      passkeys: res.filepaths.passkeys
+
+  - name: Sign in with it
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    with:
+      timeout: 30s
+      passkeys: "{{outputs.register.passkeys}}"
+      actions:
+        - name: navigate
+          url: "{{vars.url}}/login"
+        - name: click
+          selector: "#sign-in-with-passkey"
+        - name: wait_visible
+          selector: "#dashboard"
+    test: res.code == 0
+```
+
+`passkeys`は、デフォルトの設定か、`virtual_authenticator`のオプションの認証器を使います。`virtual_authenticator: false`と一緒に書くとステップが失敗します。`save_passkeys`は認証器がまだパスキーを持っていないと失敗するため、ページがパスキーの登録を表示するのを待ってから使います。
+
+ファイルは、リライングパーティが保持するのと同じくバイト列をbase64urlで表し、パスキーを`passkeys`の下に並べます。
+
+```json
+{
+  "passkeys": [
+    {
+      "credentialId": "Wq2b...",
+      "rpId": "example.com",
+      "userHandle": "dXNlci03",
+      "userName": "user-7",
+      "privateKey": "MIGHAgEA...",
+      "signCount": 1,
+      "isResidentCredential": true,
+      "backupEligibility": false,
+      "backupState": false
+    }
+  ]
+}
+```
+
+ファイルは手で書くこともできます。定期的な確認で、実行のたびにパスキーを登録する代わりに、テスト用のアカウントに一度登録したパスキーでサインインするときに使います。`credentialId`、`rpId`、`privateKey`（PKCS#8のECDSA P-256の鍵）は必須で、`isResidentCredential`は省くと`true`になります。ファイルがない場合や、認証器が使えないパスキーがある場合は、ブラウザを起動する前にステップが失敗します。パスキーは、その`rpId`のページにだけ提示します。
+
+`signCount`はパスキーの署名カウンタの初期値です。リライングパーティは、複製された鍵の兆候として、カウンタが前回より大きくないサインインを拒否することがあります。そのため、同じファイルを繰り返し使うときは、サインインのたびに`save_passkeys`でカウンタを進めるか、`"signCount": -1`でカウンタを持たないパスキーにします。
+
+秘密鍵を使えばそのユーザーとしてサインインできるため、ファイルはProbeを実行したユーザーだけが読めるようにします。バージョン管理の対象と、CIでアップロードするファイルから外し、手で書いたファイルはシークレットに入れてください。
+
 ### コンソールの確認
 
 クリックの処理で例外が起きるなど、ページは表示に出ないところで壊れていることがあります。`res.console_errors`には、操作の実行中にページがコンソールにエラーとして書いたものが入ります。`console.error`の呼び出し、失敗した`console.assert`、捕まえられなかった例外と、処理されなかったPromiseのrejectです。各要素は次のフィールドを持ちます。
@@ -295,7 +540,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       actions:
         - name: navigate
@@ -311,7 +556,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 操作が失敗したときは、失敗のメッセージに最初のいくつかのエラーが入ります。操作が失敗した原因がそのエラーであることが多いためです。
 
 ```
-... context deadline exceeded (console errors: "Uncaught TypeError: Cannot read properties of null (reading 'total') (http://localhost:8090/checkout.js:42:17)") (page at failure: ...)
+action error in step_execute: action execution failed (caused by: ... context deadline exceeded (console errors: "Uncaught TypeError: Cannot read properties of null (reading 'total') (http://localhost:8090/checkout.js:42:17)") (page at failure: ...))
 ```
 
 ### スクリーンショットを残す
@@ -320,7 +565,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
     with:
       window_w: 1280
       window_h: 800
@@ -342,16 +587,16 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 アクションが失敗すると、Probeはその時点のページを保存します。ページ全体のPNGのスクリーンショットと、文書のHTMLです。2つのファイルには`probe-browser-failure-1947177907.png`と`.html`のように同じ名前が付きます。失敗のメッセージには、ページのURLとあわせて両方のファイルのパスが入ります。
 
 ```
-... context deadline exceeded (page at failure: url http://localhost:8090/, screenshot /tmp/probe-browser-failure-1947177907.png, html /tmp/probe-browser-failure-1947177907.html)
+action error in step_execute: action execution failed (caused by: ... context deadline exceeded (page at failure: url http://localhost:8090/, screenshot /tmp/probe-browser-failure-1947177907.png, html /tmp/probe-browser-failure-1947177907.html))
 ```
 
-`--report`で書き出すファイルでも、このメッセージが失敗の`message`になります。テストがfalseになるのはアクションの失敗ではないため、そのときはページを保存しません。テキストが期待どおりでないときに保存させるには、`test`で確かめる代わりに[`wait_text`](#テキストを待つ)に`equals`、`contains`、`matches`を書きます。どんな場合でもページを残すには`capture_screenshot`アクションを加えます。
+`--report`で書き出すファイルでも、このメッセージが失敗の`message`になります。テストがfalseになるのはアクションの失敗ではないため、そのときはページを保存しません。テキストが期待どおりでないときに保存させるには、`test`で確かめる代わりに[`wait_text`](#テキストを待つ)に`equals`、`contains`、`not_contains`、`matches`を書きます。どんな場合でもページを残すには`capture_screenshot`アクションを加えます。
 
 ファイルはシステムの一時ディレクトリに保存します。`evidence_dir`を指定するとそこに保存し、ディレクトリは必要に応じて作成します。CIのアーティファクトとしてアップロードする場合に便利です。ページには個人の情報が写りうるため、ファイルはProbeを実行したユーザーだけが読めるようにします。
 
 ```yaml
 - name: Checkout page
-  uses: github.com/mozership/probe-browser@634baa8dff2b273ed326996fec4d91c2dba9d38b # v0.2.0
+  uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
   with:
     evidence_dir: out/browser
     actions:
