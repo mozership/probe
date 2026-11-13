@@ -2,6 +2,7 @@ package probe
 
 import (
 	"bytes"
+	"errors"
 	"maps"
 	"reflect"
 	"strings"
@@ -364,5 +365,77 @@ func TestNotesOfAnAsyncRepeatedJob(t *testing.T) {
 	}
 	if e := got[0].(map[string]any); e["body"] != "run 3" || e["run"] != 3 {
 		t.Errorf("notes = %v, want those of run 3", e)
+	}
+}
+
+// flakyRunner answers the first call of each step as notesRunner does, so
+// that the step leaves the notes its with gives, and fails every later
+// call of it with an error, as an action that stops answering does.
+type flakyRunner struct {
+	notesRunner
+	mu       sync.Mutex
+	attempts map[string]int
+}
+
+func (r *flakyRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+	if _, ok := call.With["flaky"]; ok {
+		r.mu.Lock()
+		if r.attempts == nil {
+			r.attempts = map[string]int{}
+		}
+		r.attempts[call.Step.Name]++
+		n := r.attempts[call.Step.Name]
+		r.mu.Unlock()
+		if n > 1 {
+			return nil, nil, errors.New("connection refused")
+		}
+	}
+	return r.notesRunner.Run(name, call, opts)
+}
+
+// A step whose last attempt ended in an error of its action leaves no
+// notes, though an earlier attempt returned some: the action of the last
+// attempt returned none. So does such a run of a repeated job.
+func TestNotesOfAStepWhoseActionFailed(t *testing.T) {
+	flaky := map[string]any{"flaky": true, "notes": []any{note("critical", "", "from the first attempt")}}
+	w := &Workflow{
+		Name: "Failed action",
+		Jobs: []Job{
+			{
+				ID: "retried", Name: "Retried",
+				Steps: []*Step{{
+					Name: "Retried", Uses: "hello", Test: "false", With: flaky,
+					Retry: &StepRetry{MaxAttempts: 2, Interval: Interval{Duration: time.Millisecond}},
+				}},
+			},
+			{
+				ID: "repeated", Name: "Repeated",
+				Repeat: &Repeat{Count: 2},
+				Steps: []*Step{{
+					Name: "Repeated", Uses: "hello", Test: "true", With: flaky,
+				}},
+			},
+			{
+				ID: "after", Name: "After", Needs: []string{"retried", "repeated"}, Always: true,
+				Steps: []*Step{{Name: "Read", Uses: "hello", With: map[string]any{"got": "{{ notes }}"}}},
+			},
+		},
+		printer: newBufferPrinter(),
+	}
+	runner := &flakyRunner{}
+	r := startWithReport(t, w, runner)
+
+	if st := reportStep(t, r, "retried", "Retried"); st.Failure == nil || st.Failure.Kind != FailureAction {
+		t.Fatalf("Retried = %+v, want it to fail with an action error", st)
+	}
+	read := runner.calls("Read")
+	if len(read) != 1 {
+		t.Fatalf("Read was called %d times, want once", len(read))
+	}
+	// The repeated step's notes are those of its first failing run, its
+	// second, an action error, which has none; its first run's are not
+	// kept in their place.
+	if got, _ := read[0]["got"].([]any); got == nil || len(got) != 0 {
+		t.Errorf("notes = %#v, want none", got)
 	}
 }
