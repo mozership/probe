@@ -1032,3 +1032,30 @@ func TestMasker_QueryCredentialsInMarkup(t *testing.T) {
 		})
 	}
 }
+
+// The generation changes when String would mask more, and only then.
+func TestGeneration(t *testing.T) {
+	var none *Masker
+	if g := none.Generation(); g != 0 {
+		t.Errorf("nil Generation() = %d, want 0", g)
+	}
+
+	m := New([]string{"TOKEN"}, map[string]string{"TOKEN": "s3cr3t-token-value"})
+	g := m.Generation()
+
+	m.Learn(map[string]any{"headers": map[string]any{"X-Trace": "abc"}})
+	if got := m.Generation(); got != g {
+		t.Errorf("Generation() after learning nothing = %d, want %d", got, g)
+	}
+
+	m.Learn(map[string]any{"headers": map[string]any{"Authorization": "Bearer a-token-learned-at-run-time"}})
+	if got := m.Generation(); got == g {
+		t.Errorf("Generation() after learning a credential = %d, want another than %d", got, g)
+	}
+	g = m.Generation()
+
+	m.Learn(map[string]any{"headers": map[string]any{"Authorization": "Bearer a-token-learned-at-run-time"}})
+	if got := m.Generation(); got != g {
+		t.Errorf("Generation() after learning the same credential again = %d, want %d", got, g)
+	}
+}

@@ -80,6 +80,7 @@ func TestStepContext_testEnv(t *testing.T) {
 		Outputs:     map[string]any{"o": 2},
 		Status:      3,
 		RepeatIndex: 4,
+		Notes:       []any{map[string]any{"level": "info", "body": "b"}},
 	}
 	env := ctx.testEnv()
 
@@ -105,9 +106,17 @@ func TestStepContext_testEnv(t *testing.T) {
 		"rt":           map[string]any{"duration": "250ms", "sec": 0.25},
 		"report":       "r",
 		"repeat_index": 4,
+		"notes":        ctx.Notes,
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("testEnv() = %v, want %v", env, want)
+	}
+
+	// With no notes, it is what it was before there were notes.
+	ctx.Notes = []any{}
+	delete(want, "notes")
+	if env := ctx.testEnv(); !reflect.DeepEqual(env, want) {
+		t.Errorf("testEnv() with no notes = %v, want %v", env, want)
 	}
 }
 

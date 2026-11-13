@@ -232,10 +232,11 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter {
 	rep := ctx.repeat
 	counters := rep.snapshotCounters()
-	if ctx.Result != nil {
-		for n, counter := range counters {
-			ctx.Result.AddStepResult(e.job.ID, repeatStepResult(n, counter, rep.reads[counter.ID]))
-		}
+	// The context is the job's, not that of one of its runs, which is
+	// where the id of the job is set.
+	ctx.CurrentJobID = e.job.ID
+	for n, counter := range counters {
+		ctx.addStepResult(repeatStepResult(n, counter, rep.reads[counter.ID]))
 	}
 	return counters
 }
@@ -297,6 +298,7 @@ func repeatStepResult(index int, counter StepRepeatCounter, readByTest bool) Ste
 		RepeatCounter: &counter,
 		Test:          counter.Test,
 		Contract:      counter.Contract,
+		notes:         counter.notes,
 	}
 	if counter.Failure != nil {
 		// The runs the step was not run in are runs of the job too, as the
