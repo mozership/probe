@@ -757,8 +757,93 @@ jobs:
 | `status` | Integer | アクションの終了ステータス。成功は`0` |
 | `outputs` | Object | 先行ステップが公開した値 |
 | `repeat_index` | Integer | ジョブ繰り返し時の現在のインデックス。0から始まり、`warmup`の回も数える |
+| `notes` | Array | 先行ステップのアクションが人に向けて残したもの。[`notes`](#notes)を参照 |
 
 このコンテキストに`env`、`jobs`、`steps`はありません。
+
+### `notes`
+
+アクションは、ステップの成否とは別に、人に向けたノートを残せます。
+たとえばprobe-agentが試験の途中で気づいたことです。
+Probeはノートをどこにも投稿しません。
+投稿するのは後続のステップで、プルリクエストやチャットに投稿するアクションを使い、どのタイミングでどのノートを送るかをワークフローに書きます。
+
+アクションはノートを`res.notes`に、オブジェクトのリストとして返します。
+
+| フィールド | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `level` | String | Yes | ノートが求める注意の度合い。`info`、`warning`、`critical`のいずれか |
+| `body` | String | Yes | ノートの本文。Markdownで書き、空にはできない |
+| `title` | String | No | ノートを表す1行 |
+
+`level`はステップの成否とは独立しています。
+成功したステップが`critical`のノートを残すこともあります。
+リストでない`res.notes`と、上の形に合わない要素（`level`が`high`のものなど）は、警告を出したうえで除かれます。
+ステップの成否は、それらが無かった場合と変わりません。
+
+ステップは、そのステップに到達した時点で結果が確定しているすべてのステップのノートを、`notes`として読めます。
+各要素には次のフィールドがあります。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `job`、`job_id` | String | ジョブの名前とid |
+| `step`、`index` | String、Integer | ステップの名前と、ジョブ内でのインデックス |
+| `status` | String | ステップの結果。`passed`、`failed`、`untested`のいずれか |
+| `level`、`title`、`body` | String | ノートのもの。`title`が無いノートでは`""` |
+| `run` | Integer | [`repeat`](#repeat)するジョブのステップでは、ノートを取った回。`warmup`の回を除いて1から数える。それ以外のステップには無い |
+
+要素は、ジョブが終わった順に関係なくワークフローに書かれたジョブの順に並び、ジョブの中ではステップの順、ステップの中ではアクションが返した順に並びます。
+`title`と`body`では、[`secrets`](#secrets)の値と、Probeがほかの場所で隠している認証情報が、レポートと同じように伏せられます。
+一方、ステップ自身の`test`や`outputs`から読む`res.notes`は、`res`のほかの値と同じく実際の値のままです。
+ノートを残すアクションが無いワークフローでは、`notes`は空のリストです。
+
+ジョブは並行して実行されるので、ステップから読めるのは、その時点で終わっているジョブのノートです。
+すべてのノートを読むには、ほかのジョブを`needs`に挙げ、[`always`](#always)を付けたジョブで読みます。
+こうすると、ほかのジョブの成否にかかわらずそのジョブが実行されます。
+
+```yaml fragment
+jobs:
+  - name: Agent
+    id: agent
+    steps:
+      - name: First-time shopper
+        uses: agent
+        with:
+          persona: Someone who has never used the site, on a phone
+          goal: Find a gift under $30 and check out
+        test: res.verdict == "pass"
+
+  - name: Report
+    needs: [agent]
+    always: true
+    steps:
+      # すべてのノートを1件のコメントにまとめる
+      - name: Comment on the pull request
+        uses: github-comment
+        with:
+          notes: "{{ notes }}"
+      # criticalのノートを1件ずつ投稿する
+      - name: Post to Slack
+        uses: slack
+        iteration: "{{ filter(notes, .level == 'critical') }}"
+        with:
+          text: "*{{ vars.title }}* ({{ vars.job }} / {{ vars.step }})\n{{ vars.body }}"
+```
+
+`with`の値全体を`{{ notes }}`と書くと、リストは文字列にならず、そのまま渡ります。
+`iteration`では、要素ごとに1回ずつステップが実行され、要素のフィールドを`vars`から読めます。
+
+繰り返すジョブのステップは、最初に失敗した回のノートを残し、失敗した回が無ければ、そのステップが実行された回のうち番号が最後の回のノートを残します。
+`async`で回が番号順に終わらなくても同じです。
+`skipif`や、[`fail_fast`](#fail_fast)のジョブで先に失敗したことによってステップが飛ばされた回は、ノートを置き換えません。
+そのステップの結果は、ジョブのすべての回が終わったときに確定します。
+そのため、同じジョブのステップからはそのノートを読めず、後続のジョブからは読めます。
+`repeat`が1回だけで、`warmup`も回をまたぐテストも無いジョブは、`repeat`の無いジョブと同じように実行されます。
+そのノートも同じ扱いになり、`run`は付きません。
+
+[`hello`](/ja/reference/actions/hello)のように受け取った値をそのまま`res`として返すアクションに、ノートを`notes`という名前で渡すと、そのアクション自身のノートとして再び残ります。
+そうしたアクションには、別の名前で渡してください。
+ノートを投稿するアクションは、受け取ったノートを自分の`res.notes`で返さないようにします。
 
 ### `http`の`res`
 
