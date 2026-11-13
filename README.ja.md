@@ -137,6 +137,7 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 | [android](https://probe.linyo.ws/ja/reference/actions/android) | Androidのエミュレータや実機の上のアプリの操作 |
 | [browser](https://probe.linyo.ws/ja/reference/actions/browser) | 実際のブラウザの操作 |
 | [container](https://probe.linyo.ws/ja/reference/actions/container) | 実行のためのコンテナの起動と、終了後の削除 |
+| [github-notes](https://probe.linyo.ws/ja/reference/actions/github-notes) | 実行のノートのGitHubへの投稿 |
 | [graphql](https://probe.linyo.ws/ja/reference/actions/graphql) | HTTPでのGraphQLのクエリ |
 | [ios](https://probe.linyo.ws/ja/reference/actions/ios) | iOSシミュレータ上のアプリの操作 |
 | [jmap](https://probe.linyo.ws/ja/reference/actions/jmap) | JMAPのメソッドの呼び出し |

@@ -25,6 +25,7 @@ These are published alongside Probe, each in a repository of its own. A step nam
 - **[android](/reference/actions/android)** - Drive an app on an Android emulator or device through adb
 - **[browser](/reference/actions/browser)** - Drive a real Chrome with chromedp
 - **[container](/reference/actions/container)** - Start a container for the steps of a run, and remove it once the run is over
+- **[github-notes](/reference/actions/github-notes)** - Put the notes of a run on GitHub: a pull request comment, the job summary or an issue
 - **[graphql](/reference/actions/graphql)** - Send a GraphQL query over HTTP
 - **[ios](/reference/actions/ios)** - Drive an app on an iOS simulator through XCUITest
 - **[jmap](/reference/actions/jmap)** - Call JMAP methods

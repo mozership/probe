@@ -137,6 +137,7 @@ These are external actions, each in a repository of its own, which a step pins b
 | [android](https://probe.linyo.ws/reference/actions/android) | Driving an app on an Android emulator or device |
 | [browser](https://probe.linyo.ws/reference/actions/browser) | Driving a real browser |
 | [container](https://probe.linyo.ws/reference/actions/container) | Containers started for a run, and removed after it |
+| [github-notes](https://probe.linyo.ws/reference/actions/github-notes) | Putting the notes of a run on GitHub |
 | [graphql](https://probe.linyo.ws/reference/actions/graphql) | GraphQL queries over HTTP |
 | [ios](https://probe.linyo.ws/reference/actions/ios) | Driving an app on an iOS simulator |
 | [jmap](https://probe.linyo.ws/reference/actions/jmap) | JMAP methods |
