@@ -221,3 +221,39 @@ jobs:
 		{SeverityError, 19, `test: res.code not in [res.stdout] is always true`},
 	})
 }
+
+// The entries of notes are known by their fields, in a test, a template
+// and the iteration of a step, and a field they do not have may hold
+// anything.
+func TestCheck_TypesNotes(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: notes
+jobs:
+- name: Report
+  steps:
+  - name: Wrong
+    uses: hello
+    with:
+      count: "{{ notes[0].index + 'x' }}"
+    test: len(filter(notes, .level == 1)) == 0
+  - name: Each
+    uses: hello
+    iteration: "{{ filter(notes, .run == 'first') }}"
+  - name: Right
+    uses: hello
+    with:
+      all: "{{ notes }}"
+      first: "{{ notes[0].title + ': ' + notes[0].body }}"
+    test: len(filter(notes, .level == "critical" && .status == "passed" && .index > 0 && .run >= 1)) == 0 && notes[0].other == 1
+`)
+	opts := checkActions
+	opts.ReqTypes, opts.ResTypes = reqTypes, resTypes
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 8, `with.count: template {{ notes[0].index + 'x' }}: notes[0].index + "x" fails`},
+		{SeverityError, 9, `test: .level == 1 is never true: .level is a string and 1 a number`},
+		{SeverityError, 12, `iteration: template {{ filter(notes, .run == 'first') }}`},
+	})
+}

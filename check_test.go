@@ -883,7 +883,7 @@ jobs:
 `,
 			want: []want{
 				{SeverityWarning, 12, "test: vars.nope is not defined by the workflow, so it is nil unless --var gives it"},
-				{SeverityError, 16, "test: steps is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs"},
+				{SeverityError, 16, "test: steps is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs"},
 			},
 		},
 		{
@@ -908,13 +908,13 @@ jobs:
 `,
 			want: []want{
 				{SeverityWarning, 4, `vars: vars.bsae is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
-				{SeverityError, 7, `skipif: var is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "vars"?`},
+				{SeverityError, 7, `skipif: var is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; did you mean "vars"?`},
 				{SeverityWarning, 13, `with: vars.bse is not defined by the workflow, so it is nil unless --var gives it; did you mean "base"?`},
-				{SeverityError, 13, `with: API_TOKEN is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; the environment is read only by the workflow's vars, as api_token: "{{API_TOKEN}}", which a step reads as vars.api_token`},
-				{SeverityError, 14, "test: null is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
+				{SeverityError, 13, `with: API_TOKEN is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; the environment is read only by the workflow's vars, as api_token: "{{API_TOKEN}}", which a step reads as vars.api_token`},
+				{SeverityError, 14, "test: null is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
 				{SeverityError, 16, "outputs.region: us is not defined"},
 				{SeverityError, 16, "outputs.region: east is not defined"},
-				{SeverityError, 17, `echo: output is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean "outputs"?`},
+				{SeverityError, 17, `echo: output is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; did you mean "outputs"?`},
 			},
 		},
 		{
@@ -950,7 +950,7 @@ jobs:
 				{SeverityError, 6, `skipif: expressions have no startsWith() method: write vars.host startsWith "prod"`},
 				{SeverityError, 9, `repeat.test: expressions have no trim() method: write trim(string(steps.a.runs))`},
 				{SeverityError, 15, `with: expressions have no split() method: write split(vars.host, ".")`},
-				{SeverityError, 16, `test: None is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?`},
+				{SeverityError, 16, `test: None is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?`},
 				{SeverityError, 16, `test: expressions have no contains() method: write res.body contains "ok" for a string, or "ok" in res.body for a list`},
 				{SeverityError, 22, `test: unexpected token Operator("=") (1:12); expressions have no ===: write ==`},
 				{SeverityError, 25, `test: unexpected token Operator("startsWith") (1:1); startsWith is an operator: write res.body startsWith "ok", or hasPrefix(res.body, "ok")`},
@@ -985,7 +985,7 @@ jobs:
 `,
 			want: []want{
 				{SeverityWarning, 7, "name: vars.nme is not defined by the workflow"},
-				{SeverityError, 7, "name: undefined is not defined; it can read outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
+				{SeverityError, 7, "name: undefined is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; did you mean nil?"},
 				{SeverityWarning, 11, "vars: vars.a is not defined yet: a step's vars read only those of the workflow, so it is nil unless --var gives it"},
 				{SeverityWarning, 12, "vars: vars.id is not defined yet: a step's vars read only those of the workflow"},
 				{SeverityWarning, 15, "wait: vars.delay is not defined by the workflow"},

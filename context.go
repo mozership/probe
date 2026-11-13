@@ -32,14 +32,18 @@ type StepContext struct {
 	Outputs     map[string]any `expr:"outputs"`
 	Status      int            `expr:"status"`
 	RepeatIndex int            `expr:"repeat_index"`
+	// Notes are those the steps whose results are final left for people;
+	// see noteBook.snapshot.
+	Notes []any `expr:"notes"`
 }
 
 // testEnv is what a verbose run shows of the context of a step whose test
 // it evaluated in, by the names the test reads it by. The request and the
 // response are left out, as the step has just shown them, under Request
-// and Response.
+// and Response, and so are the notes when there are none, so that a run
+// whose actions leave none shows what it did before there were notes.
 func (c StepContext) testEnv() map[string]any {
-	return map[string]any{
+	env := map[string]any{
 		"vars":         c.Vars,
 		"outputs":      c.Outputs,
 		"status":       c.Status,
@@ -47,6 +51,10 @@ func (c StepContext) testEnv() map[string]any {
 		"report":       c.Report,
 		"repeat_index": c.RepeatIndex,
 	}
+	if len(c.Notes) > 0 {
+		env["notes"] = c.Notes
+	}
+	return env
 }
 
 // JobContext is what a run of a job runs with. It is copied for each run,
@@ -99,6 +107,9 @@ type runEnv struct {
 	// The names the workflow gives its external actions, which an action
 	// that runs steps of its own is told
 	actions map[string]string
+	// The notes the steps of the run left for people, which the steps
+	// after them read
+	notes *noteBook
 }
 
 // runner returns the ActionRunner the steps of the run run their actions
@@ -180,4 +191,33 @@ func (j *JobContext) recordFailure(kind string) {
 		return
 	}
 	j.Result.recordFailure(kind)
+}
+
+// addStepResult records sr, the final result of a step of the job, in the
+// result of the run, and keeps its notes for the steps after it.
+func (j *JobContext) addStepResult(sr StepResult) {
+	name := j.jobName
+	if j.Result != nil {
+		j.Result.AddStepResult(j.CurrentJobID, sr)
+		// The name of the job is that of its result, which a repeated job,
+		// whose steps' results are added after its runs, has as each run
+		// left it.
+		if jr, ok := j.Result.Jobs[j.CurrentJobID]; ok {
+			jr.mutex.Lock()
+			name = jr.JobName
+			jr.mutex.Unlock()
+		}
+	}
+	if j.runEnv != nil {
+		j.notes.record(j.CurrentJobID, name, sr)
+	}
+}
+
+// noteSnapshot returns the notes a step reads when it is reached; see
+// noteBook.snapshot.
+func (j *JobContext) noteSnapshot() []any {
+	if j.runEnv == nil {
+		return []any{}
+	}
+	return j.notes.snapshot()
 }
