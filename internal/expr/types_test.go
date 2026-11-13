@@ -219,6 +219,49 @@ func TestCheckTypesShapes(t *testing.T) {
 	}
 }
 
+// The shape of the entries of a list reaches what reads one of them: an
+// index, and the predicate of a function that walks the list. A key of an
+// entry that the shape does not give may hold anything, as may an entry of
+// a list with no shape for them.
+func TestCheckTypesListEntries(t *testing.T) {
+	entry := Shape{Kind: kind.Map, Fields: map[string]Shape{
+		"level": {Kind: kind.String},
+		"index": {Kind: kind.Number},
+	}}
+	names := map[string]Shape{
+		"notes": {Kind: kind.List, Elem: &entry},
+		"rows":  {Kind: kind.List},
+	}
+
+	wrong := []struct{ input, want string }{
+		{`filter(notes, .level == 1)`, `is never true`},
+		{`notes[0].level == 1`, `is never true`},
+		{`notes[0].index + "x"`, ``},
+		{`all(notes, .index == "1")`, `is never true`},
+		{`map(notes, .level + 1)`, ``},
+	}
+	for _, tt := range wrong {
+		err := CheckTypes(tt.input, names, false)
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("CheckTypes(%q) = %v, want an error that says %q", tt.input, err, tt.want)
+		}
+	}
+
+	right := []string{
+		`len(filter(notes, .level == "critical")) == 0`,
+		`notes[0].index + 1 > 1`,
+		`notes[0].run == 3`,
+		`filter(notes, .run == "x") != nil`,
+		`rows[0] == "a"`,
+		`rows[0] + 1 > 0`,
+	}
+	for _, input := range right {
+		if err := CheckTypes(input, names, true); err != nil {
+			t.Errorf("CheckTypes(%q) = %v, want nil", input, err)
+		}
+	}
+}
+
 // The hint of a comparison of a number with the number as a string does not
 // tell to compare the string with itself.
 func TestCheckTypesCompareHint(t *testing.T) {
