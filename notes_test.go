@@ -439,3 +439,22 @@ func TestNotesOfAStepWhoseActionFailed(t *testing.T) {
 		t.Errorf("notes = %#v, want none", got)
 	}
 }
+
+// A secret too short to be masked inside other text is masked in a note
+// where it is the whole title or body.
+func TestNoteBookMasksShortSecretsAsWholeValues(t *testing.T) {
+	m := mask.New([]string{"PIN"}, map[string]string{"PIN": "123"})
+	book := newNoteBook([]string{"a"}, func() *mask.Masker { return m })
+	book.record("a", "A", StepResult{Name: "s", Status: StatusSuccess,
+		notes: []notes.Note{{Level: notes.Info, Title: "123", Body: "123"}, {Level: notes.Info, Body: "PIN 123 was taken"}}})
+
+	got := book.snapshot()
+	if e := got[0].(map[string]any); e["title"] != "<secret:PIN>" || e["body"] != "<secret:PIN>" {
+		t.Errorf("note of the PIN alone = %v, want it masked", e)
+	}
+	// Inside other text it is shown, as everywhere else; the masker warns
+	// of a secret that short when the run starts.
+	if e := got[1].(map[string]any); e["body"] != "PIN 123 was taken" {
+		t.Errorf("note with the PIN in it = %v, want it as it is", e)
+	}
+}

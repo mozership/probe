@@ -106,6 +106,12 @@ func (b *noteBook) snapshot() []any {
 // render makes the entries of the notes kept, masked with m. Callers must
 // hold mu.
 func (b *noteBook) render(m *mask.Masker) []map[string]any {
+	// A text is masked as a whole value, so that a secret too short to be
+	// masked inside other text is still masked where it is all there is.
+	text := func(s string) string {
+		v, _ := m.Value(s).(string)
+		return v
+	}
 	var out []map[string]any
 	seen := make(map[string]bool, len(b.order))
 	add := func(id string) {
@@ -115,14 +121,14 @@ func (b *noteBook) render(m *mask.Masker) []map[string]any {
 		seen[id] = true
 		for _, e := range b.byJob[id] {
 			entry := map[string]any{
-				"job":    m.String(e.job),
+				"job":    text(e.job),
 				"job_id": e.jobID,
-				"step":   m.String(e.step),
+				"step":   text(e.step),
 				"index":  e.index,
 				"status": e.status,
 				"level":  string(e.note.Level),
-				"title":  m.String(e.note.Title),
-				"body":   m.String(e.note.Body),
+				"title":  text(e.note.Title),
+				"body":   text(e.note.Body),
 			}
 			if e.run > 0 {
 				entry["run"] = e.run
