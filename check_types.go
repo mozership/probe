@@ -16,7 +16,29 @@ import (
 // reads, from the fields of what it is evaluated against. What a step's
 // action returns, under res and req, is added to them for the fields read
 // once it has.
-var stepShapes = contextShapes(reflect.TypeFor[StepContext]())
+var stepShapes = withNoteShapes(contextShapes(reflect.TypeFor[StepContext]()))
+
+// withNoteShapes gives the entries of notes in shapes their fields: the
+// context holds them as maps, for iteration and with to take as they are,
+// so their fields are not those of a struct to read the shapes from. run
+// is there only for a step of a repeated job.
+func withNoteShapes(shapes map[string]expr.Shape) map[string]expr.Shape {
+	str := expr.Shape{Kind: kind.String}
+	number := expr.Shape{Kind: kind.Number}
+	entry := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{
+		"job":    str,
+		"job_id": str,
+		"step":   str,
+		"index":  number,
+		"status": str,
+		"level":  str,
+		"title":  str,
+		"body":   str,
+		"run":    number,
+	}}
+	shapes["notes"] = expr.Shape{Kind: kind.List, Elem: &entry}
+	return shapes
+}
 
 // contextShapes returns the shapes of the names that a value of t, a struct
 // an expression is evaluated against, gives by its fields' expr tags.
