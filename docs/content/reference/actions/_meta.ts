@@ -17,6 +17,7 @@ export default {
   android: 'ANDROID',
   browser: 'BROWSER',
   container: 'CONTAINER',
+  'github-notes': 'GITHUB-NOTES',
   graphql: 'GRAPHQL',
   ios: 'IOS',
   jmap: 'JMAP',
