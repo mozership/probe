@@ -72,6 +72,18 @@ type StepRepeatCounter struct {
 	notesWarned bool
 }
 
+// keepNotes keeps the notes of run, a run of the step that failed or not,
+// as those of the step, while no run has failed: the notes are those of the
+// run the failure is of, so that the two tell of one run, and until one
+// fails, those of the last run. The runs of an async job end in any order,
+// so a run that passed replaces the notes only of an earlier run.
+func (c *StepRepeatCounter) keepNotes(n []notes.Note, run int, failed bool) {
+	if !failed && run < c.notesRun {
+		return
+	}
+	c.notes, c.notesRun = n, run
+}
+
 // StepResult represents the result of a step execution
 type StepResult struct {
 	Index int

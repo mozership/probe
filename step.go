@@ -640,11 +640,8 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	if counter.Contract == nil {
 		counter.Contract = st.contractMatched()
 	}
-	// The notes are those of the run the failure is of, so that the two
-	// tell of one run: they change with each run until one fails.
 	if counter.Failure == nil {
-		counter.notes = runNotes
-		counter.notesRun = jCtx.RepeatCurrent - jCtx.repeat.warmup + 1
+		counter.keepNotes(runNotes, jCtx.RepeatCurrent-jCtx.repeat.warmup+1, failure != nil)
 		counter.Failure = failure
 	}
 	warnOfNotes := len(notesErrs) > 0 && !counter.notesWarned
