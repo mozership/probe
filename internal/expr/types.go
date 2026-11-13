@@ -22,10 +22,13 @@ import (
 // kind, when that is known, and for a map, the shapes of the keys that are
 // known. Kind is number, string, bool, map or list; a value of any other
 // kind or none, and a key of a map that is not among its fields, may hold
-// anything. A shape with fields and no kind is of a map.
+// anything. A shape with fields and no kind is of a map. Elem is, for a
+// list, the shape of each of its entries, or nil when they may hold
+// anything.
 type Shape struct {
 	Kind   string
 	Fields map[string]Shape
+	Elem   *Shape
 }
 
 // ErrNotBool is the error of an expression that is to come to true or
@@ -182,6 +185,9 @@ func shapeType(s Shape) types.Type {
 	case kind.Bool:
 		return types.Bool
 	case kind.List:
+		if s.Elem != nil {
+			return types.Array(shapeType(*s.Elem))
+		}
 		return types.Array(types.Any)
 	case kind.Map:
 		m := types.Map{types.Extra: types.Any}
