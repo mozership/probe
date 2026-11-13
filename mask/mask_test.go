@@ -1000,4 +1000,11 @@ func TestGeneration(t *testing.T) {
 	if got := m.Generation(); got != g {
 		t.Errorf("Generation() after learning the same credential again = %d, want %d", got, g)
 	}
+
+	// A value too short to mask inside other text changes what Value masks,
+	// so it changes the generation too.
+	m.Learn(map[string]any{"headers": map[string]any{"Cookie": "a=1"}})
+	if got := m.Generation(); got == g {
+		t.Errorf("Generation() after learning a short credential = %d, want another than %d", got, g)
+	}
 }

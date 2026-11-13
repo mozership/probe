@@ -92,8 +92,9 @@ type Masker struct {
 	replacer *strings.Replacer
 	exact    map[string]string // short value -> its label, masked only whole
 	tooShort []string          // declared secrets too short to mask in text
-	// gen counts the changes of the replacer, by which a caller that keeps
-	// text String masked tells whether it would mask it otherwise now.
+	// gen counts the changes of the replacer and of exact, by which a
+	// caller that keeps text masked tells whether it would mask it
+	// otherwise now.
 	gen uint64
 }
 
@@ -128,8 +129,8 @@ func (m *Masker) TooShort() []string {
 }
 
 // Generation is a number that changes whenever the masker learns a value
-// that String hides, so that what was masked with it can be kept until it
-// does. A nil Masker learns nothing, and its generation is always 0.
+// that String or Value hides, so that what was masked with it can be kept
+// until it does. A nil Masker learns nothing, and its generation is always 0.
 func (m *Masker) Generation() uint64 {
 	if m == nil {
 		return 0
@@ -159,6 +160,9 @@ func (m *Masker) addLocked(value, label string) bool {
 		for _, v := range escapedForms(value) {
 			if _, exists := m.exact[v]; !exists {
 				m.exact[v] = label
+				// What a whole value is masked to changes, though the
+				// replacer does not.
+				m.gen++
 			}
 		}
 		return false
