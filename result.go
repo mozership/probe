@@ -6,6 +6,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
@@ -62,6 +63,25 @@ type StepRepeatCounter struct {
 	// Contract is what the first iteration's response was matched to in
 	// its contract.
 	Contract *report.Contract
+	// notes are those of the first run that failed, or of the last run
+	// while none has, and notesRun is that run, counted from 1 without the
+	// warmup runs. notesWarned is whether a run's notes were warned of, so
+	// that a repeated job warns of them once.
+	notes       []notes.Note
+	notesRun    int
+	notesWarned bool
+}
+
+// keepNotes keeps the notes of run, a run of the step that failed or not,
+// as those of the step, while no run has failed: the notes are those of the
+// run the failure is of, so that the two tell of one run, and until one
+// fails, those of the last run. The runs of an async job end in any order,
+// so a run that passed replaces the notes only of an earlier run.
+func (c *StepRepeatCounter) keepNotes(n []notes.Note, run int, failed bool) {
+	if !failed && run < c.notesRun {
+		return
+	}
+	c.notes, c.notesRun = n, run
 }
 
 // StepResult represents the result of a step execution
@@ -94,6 +114,9 @@ type StepResult struct {
 	// Contract is what the response was matched to in the contract the
 	// action checked it against; nil when it checked none.
 	Contract *report.Contract
+	// notes are what the action left for people in res.notes; for a
+	// repeated step, those of its counter.
+	notes []notes.Note
 }
 
 // Failure kinds recorded on a StepFailure. They are the kinds a report

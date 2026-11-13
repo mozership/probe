@@ -304,6 +304,7 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 	evalCtx := StepContext{
 		Vars:    ctx.Vars,
 		Outputs: outputs,
+		Notes:   ctx.noteSnapshot(),
 	}
 
 	result, err := ev.Eval(j.SkipIf, evalCtx)
@@ -502,6 +503,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 			baseDir:    baseDir,
 			runID:      runID,
 			actions:    cfg.actions,
+			notes:      newNoteBook([]string{jobID}, printer.Masker),
 		},
 		Vars:    vars,
 		Outputs: NewOutputs(),

@@ -239,6 +239,7 @@ func (r *workflowRun) newJobContext(vars map[string]any, reporter Reporter) JobC
 			baseDir:    r.w.basePath,
 			runID:      r.id,
 			actions:    r.w.named,
+			notes:      newNoteBook(r.jobIDs(), p.Masker),
 		},
 		Vars:    vars,
 		Outputs: r.outputs,
