@@ -302,3 +302,67 @@ func reportStep(t *testing.T, r report.Report, jobID, name string) report.Step {
 	t.Fatalf("no step %q in the job %q of the report", name, jobID)
 	return report.Step{}
 }
+
+// A step keeps the notes of its first failing run, and until one fails,
+// those of the last run by number, whatever order the runs end in.
+func TestStepRepeatCounterKeepNotes(t *testing.T) {
+	n := func(body string) []notes.Note { return []notes.Note{{Level: notes.Info, Body: body}} }
+	var c StepRepeatCounter
+	for _, r := range []struct {
+		run    int
+		failed bool
+	}{{3, false}, {1, false}, {2, false}} {
+		c.keepNotes(n("run"), r.run, r.failed)
+	}
+	if c.notesRun != 3 {
+		t.Errorf("notesRun after runs 3, 1, 2 passed = %d, want 3", c.notesRun)
+	}
+
+	// The first failure is kept whatever its number: the step's failure is
+	// of the run that failed first.
+	c.keepNotes(n("failed"), 2, true)
+	if c.notesRun != 2 || c.notes[0].Body != "failed" {
+		t.Errorf("notes after run 2 failed = run %d %v, want those of run 2", c.notesRun, c.notes)
+	}
+}
+
+// The runs of an async job end in any order; the notes are still those of
+// the last run by number.
+func TestNotesOfAnAsyncRepeatedJob(t *testing.T) {
+	w := &Workflow{
+		Name: "Async notes",
+		Jobs: []Job{
+			{
+				ID: "smoke", Name: "Smoke",
+				Repeat: &Repeat{Count: 3, Async: true, Interval: Interval{Duration: time.Millisecond}},
+				Steps: []*Step{{
+					Name: "Search", Uses: "hello", Test: "true",
+					With: map[string]any{
+						// The first run ends last.
+						"sleep": "{{ string((3 - repeat_index) * 60) + 'ms' }}",
+						"notes": []any{note("info", "", "run {{ repeat_index + 1 }}")},
+					},
+				}},
+			},
+			{
+				ID: "after", Name: "After", Needs: []string{"smoke"},
+				Steps: []*Step{{Name: "Read", Uses: "hello", With: map[string]any{"got": "{{ notes }}"}}},
+			},
+		},
+		printer: newBufferPrinter(),
+	}
+	runner := &notesRunner{}
+	startWithReport(t, w, runner)
+
+	read := runner.calls("Read")
+	if len(read) != 1 {
+		t.Fatalf("Read was called %d times, want once", len(read))
+	}
+	got, _ := read[0]["got"].([]any)
+	if len(got) != 1 {
+		t.Fatalf("notes = %#v, want 1", got)
+	}
+	if e := got[0].(map[string]any); e["body"] != "run 3" || e["run"] != 3 {
+		t.Errorf("notes = %v, want those of run 3", e)
+	}
+}
