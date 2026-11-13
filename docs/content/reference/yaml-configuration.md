@@ -757,8 +757,72 @@ Inside a step, an expression sees exactly these names:
 | `status` | Integer | Action exit status, `0` on success |
 | `outputs` | Object | Outputs published by earlier steps |
 | `repeat_index` | Integer | Current index when the job repeats, from 0, the `warmup` runs included |
+| `notes` | Array | What the actions of earlier steps left for people; see [Notes](#notes) |
 
 There is no `env`, `jobs` or `steps` in this context.
+
+### Notes
+
+An action can leave notes for people, besides whether its step passed: what probe-agent finds on the way, for example. Probe does not post them anywhere. A later step does, with an action that posts to a pull request or a chat, at the time and with the notes the workflow chooses.
+
+An action leaves them in `res.notes`, a list of objects:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `level` | String | Yes | How much attention the note asks for: `info`, `warning` or `critical` |
+| `body` | String | Yes | The note, in Markdown. Not empty |
+| `title` | String | No | A line naming the note |
+
+The level is apart from the status of the step: a step that passed can leave a critical note. A `res.notes` that is not a list, and an entry that is not a note as above, such as one with a level of `high`, are left out with a warning; the step passes or fails as it would without them.
+
+A step reads, as `notes`, the notes of every step whose result is final when it is reached. Each entry has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `job`, `job_id` | String | The name and the id of the job |
+| `step`, `index` | String, Integer | The name of the step and its index in the job |
+| `status` | String | The status of the step: `passed`, `failed` or `untested` |
+| `level`, `title`, `body` | String | Those of the note; `title` is `""` when it has none |
+| `run` | Integer | For a step of a job with [`repeat`](#repeat), the run the notes are of, from 1 without the `warmup` runs. Absent otherwise |
+
+The entries follow the jobs in the order of the workflow, whatever order they end in, the steps of a job in their order, and the notes of a step in the order the action returned them. The values of [`secrets`](#secrets), and the credentials Probe hides elsewhere, are hidden in `title` and `body` as they are in the report; `res.notes` in the step's own `test` and `outputs` keeps the real values, as the rest of `res` does. A workflow whose actions leave no notes reads an empty list.
+
+Jobs run at once, so a step sees the notes of the jobs that are over by then. To see them all, read them in a job that `needs` the others, with [`always`](#always), so that it runs however they ended:
+
+```yaml fragment
+jobs:
+  - name: Agent
+    id: agent
+    steps:
+      - name: First-time shopper
+        uses: agent
+        with:
+          persona: Someone who has never used the site, on a phone
+          goal: Find a gift under $30 and check out
+        test: res.verdict == "pass"
+
+  - name: Report
+    needs: [agent]
+    always: true
+    steps:
+      # Every note, in one comment
+      - name: Comment on the pull request
+        uses: github-comment
+        with:
+          notes: "{{ notes }}"
+      # Each critical note, one message at a time
+      - name: Post to Slack
+        uses: slack
+        iteration: "{{ filter(notes, .level == 'critical') }}"
+        with:
+          text: "*{{ vars.title }}* ({{ vars.job }} / {{ vars.step }})\n{{ vars.body }}"
+```
+
+`{{ notes }}` as the whole of a value in `with` gives the list as it is, not as text, and `iteration` runs the step once for each entry, with its fields as `vars`.
+
+A step of a repeated job leaves the notes of its first failing run, or when none failed, of the last run by number that it ran in, also when `async` ends the runs in another order. A run that skipped the step, by its `skipif` or after a failure in a [`fail_fast`](#fail_fast) job, does not replace the notes of the runs before it. Its result is final once every run of the job is over, so the steps of the job itself do not see them; the jobs after it do. A job with a `repeat` of one run, with no `warmup` and no test over its runs, runs as a job without `repeat` does, and so do its notes, which have no `run`.
+
+An action that returns what it is given as its `res`, as [`hello`](/reference/actions/hello) does, leaves the notes again as its own when it is given them as `notes`; give them to such an action under another name. An action that posts notes should not return them in its `res.notes`.
 
 ### The `res` Object for `http`
 
