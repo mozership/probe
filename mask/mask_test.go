@@ -444,6 +444,64 @@ func TestHoldsCredential(t *testing.T) {
 	}
 }
 
+// The credentials of an Authorization header are learned on their own as
+// well as with their scheme: a token is told without it as often, such as in
+// a response that returned it, or in what an action says it used.
+func TestLearn_AuthorizationCredentials(t *testing.T) {
+	m := New(nil, nil)
+	m.Learn(map[string]any{
+		"headers": map[string]any{
+			"Authorization":       "Bearer eyJ-a-token-learned",
+			"Proxy-Authorization": []any{"Basic cHJveHk6cGFzcw=="},
+		},
+	})
+	m.Learn(map[string]any{"headers": map[string]string{"authorization": "  Token  tok-from-a-string-map  "}})
+
+	for in, want := range map[string]string{
+		"Authorization: Bearer eyJ-a-token-learned": "Authorization: <redacted>",
+		`{"access_token":"eyJ-a-token-learned"}`:    `{"access_token":"<redacted>"}`,
+		"proxy cHJveHk6cGFzcw==":                    "proxy <redacted>",
+		"found tok-from-a-string-map":               "found <redacted>",
+	} {
+		if got := m.String(in); got != want {
+			t.Errorf("String(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	// The scheme alone is not a credential, nor is a value with no scheme
+	// anything but itself, nor a header other than those of authorization.
+	m = New(nil, nil)
+	m.Learn(map[string]any{"headers": map[string]any{
+		"Authorization": "a-bare-token-value",
+		"Cookie":        "session abcdefgh",
+	}})
+	for in, want := range map[string]string{
+		"Bearer is a scheme":        "Bearer is a scheme",
+		"a-bare-token-value":        "<redacted>",
+		"session and abcdefgh only": "session and abcdefgh only",
+	} {
+		if got := m.String(in); got != want {
+			t.Errorf("String(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCredentials(t *testing.T) {
+	for in, want := range map[string]string{
+		"Bearer abc.def":             "abc.def",
+		"  Token   xyz  ":            "xyz",
+		"Digest username=\"a\", r=1": `username="a", r=1`,
+		"no-scheme":                  "",
+		"Bearer ":                    "",
+		"a=b c":                      "",
+		"":                           "",
+	} {
+		if got := credentials(in); got != want {
+			t.Errorf("credentials(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestLearn_BasicAuth(t *testing.T) {
 	// "Basic " + base64("alice@example.test:pa55-word")
 	const header = "Basic YWxpY2VAZXhhbXBsZS50ZXN0OnBhNTUtd29yZA=="

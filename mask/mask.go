@@ -279,7 +279,9 @@ func collectSensitive(v any, found *[]string) {
 				continue
 			}
 			if sensitiveKeys[strings.ToLower(k)] {
+				from := len(*found)
 				collectStrings(e, found)
+				addCredentials(k, found, from)
 				continue
 			}
 			if dsn, ok := e.(string); ok && holdsURL(k) {
@@ -292,7 +294,9 @@ func collectSensitive(v any, found *[]string) {
 		for k, s := range val {
 			switch {
 			case sensitiveKeys[strings.ToLower(k)]:
+				from := len(*found)
 				*found = append(*found, s)
+				addCredentials(k, found, from)
 			case holdsURL(k):
 				*found = append(*found, dsnPassword(s)...)
 			}
@@ -302,6 +306,37 @@ func collectSensitive(v any, found *[]string) {
 			collectSensitive(e, found)
 		}
 	}
+}
+
+// authKeys are the headers whose value is a scheme and the credentials after
+// it, as Bearer <token> is.
+var authKeys = map[string]bool{"authorization": true, "proxy-authorization": true}
+
+// addCredentials adds the credentials of each value found from from on, the
+// values of the header named key, when it is one of authKeys: a token is
+// shown on its own as often as in the header, such as in what a response
+// or an action's notes say of it, and a value that holds the scheme too
+// does not match it there.
+func addCredentials(key string, found *[]string, from int) {
+	if !authKeys[strings.ToLower(key)] {
+		return
+	}
+	for _, v := range (*found)[from:] {
+		if c := credentials(v); c != "" {
+			*found = append(*found, c)
+		}
+	}
+}
+
+// credentials returns what follows the scheme in the value of an
+// Authorization header, as the token of Bearer <token>, or an empty string
+// when the value is not a scheme followed by something else.
+func credentials(v string) string {
+	scheme, rest, ok := strings.Cut(strings.TrimSpace(v), " ")
+	if !ok || scheme == "" || strings.ContainsAny(scheme, "=,\"\t") {
+		return ""
+	}
+	return strings.TrimSpace(rest)
 }
 
 // basicAuthValues returns the Authorization header the http action builds from
