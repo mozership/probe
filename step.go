@@ -14,6 +14,7 @@ import (
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/fielderr"
+	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
@@ -415,9 +416,7 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 	stepResult := st.createFailedStepResult(name, jCtx)
 
 	// Add step result to workflow buffer
-	if jCtx.Result != nil {
-		jCtx.Result.AddStepResult(jCtx.CurrentJobID, stepResult)
-	}
+	jCtx.addStepResult(stepResult)
 
 	if jCtx.Verbose {
 		jCtx.Printer.PrintSeparator()
@@ -456,9 +455,7 @@ func (st *stepRun) finalize(name string, jCtx *JobContext) {
 	stepResult := st.createStepResult(name, jCtx, st.verdict(jCtx))
 
 	// Add step result to workflow buffer
-	if jCtx.Result != nil {
-		jCtx.Result.AddStepResult(jCtx.CurrentJobID, stepResult)
-	}
+	jCtx.addStepResult(stepResult)
 
 	if jCtx.Verbose {
 		jCtx.Printer.PrintSeparator()
@@ -492,6 +489,11 @@ func (st *stepRun) createStepResult(name string, jCtx *JobContext, status Status
 	if status == StatusError {
 		result.Failure = st.failure
 	}
+	// The notes are read only of an action that returned: what the context
+	// holds after an error is what an earlier attempt of a retry returned.
+	var errs []error
+	result.notes, errs = notes.Parse(st.ctx.Res["notes"])
+	warnNotes(jCtx.Printer, st.idx, name, errs)
 
 	if st.Echo != "" {
 		result.Echo = st.evalEcho()
@@ -540,6 +542,14 @@ func (st *stepRun) baseResult(name string, jCtx *JobContext) StepResult {
 	return result
 }
 
+// warnNotes warns of the notes of the step at idx, called name, that errs
+// say were left out of what it left for people.
+func warnNotes(p *Printer, idx int, name string, errs []error) {
+	for _, err := range errs {
+		p.LogWarn("step %d %q: %v; it is left out of the notes", idx, name, err)
+	}
+}
+
 // evalEcho returns what the step's echo comes to; see echoText.
 func (st *stepRun) evalEcho() string {
 	exprOut, err := st.expr.EvalTemplate(st.Echo, st.ctx)
@@ -584,6 +594,14 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 		failure = st.failure
 	}
 
+	// An action that ended in an error returned no notes; see
+	// createStepResult.
+	var runNotes []notes.Note
+	var notesErrs []error
+	if !hasError {
+		runNotes, notesErrs = notes.Parse(st.ctx.Res["notes"])
+	}
+
 	// Evaluate echo before taking the lock so we can store what it came to
 	// on the counter alongside the success/failure increment.
 	var echoRaw string
@@ -622,8 +640,16 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	if counter.Contract == nil {
 		counter.Contract = st.contractMatched()
 	}
+	// The notes are those of the run the failure is of, so that the two
+	// tell of one run: they change with each run until one fails.
 	if counter.Failure == nil {
+		counter.notes = runNotes
+		counter.notesRun = jCtx.RepeatCurrent - jCtx.repeat.warmup + 1
 		counter.Failure = failure
+	}
+	warnOfNotes := len(notesErrs) > 0 && !counter.notesWarned
+	if warnOfNotes {
+		counter.notesWarned = true
 	}
 
 	if st.Echo != "" {
@@ -634,6 +660,10 @@ func (st *stepRun) handleRepeatExecution(jCtx *JobContext, name string, hasError
 	// counter once every run is done (Executor.appendRepeatStepResults).
 	jCtx.repeat.counters[st.counterKey()] = counter
 	jCtx.repeat.mu.Unlock()
+
+	if warnOfNotes {
+		warnNotes(jCtx.Printer, st.idx, name, notesErrs)
+	}
 
 	if st.Echo != "" {
 		if echoErr != nil {
@@ -856,11 +886,16 @@ func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 		outputs = j.Outputs.GetAll()
 	}
 
+	// The notes are those final when the step is reached, the same for its
+	// vars and for the rest of it.
+	noteList := j.noteSnapshot()
+
 	// Create context for step vars evaluation
 	evalCtx := StepContext{
 		Vars:        j.Vars,
 		Outputs:     outputs,
 		RepeatIndex: j.RepeatCurrent,
+		Notes:       noteList,
 	}
 
 	// Evaluate step-level vars with access to outputs. A var that cannot be
@@ -892,6 +927,7 @@ func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 		Vars:        vers,
 		Outputs:     outputs,
 		RepeatIndex: j.RepeatCurrent,
+		Notes:       noteList,
 	}
 }
 
@@ -1117,9 +1153,7 @@ func (st *stepRun) handleSkip(name, reason string, notRun bool, jCtx *JobContext
 	stepResult := st.createSkippedStepResult(name, jCtx)
 
 	// Add step result to workflow buffer
-	if jCtx.Result != nil {
-		jCtx.Result.AddStepResult(jCtx.CurrentJobID, stepResult)
-	}
+	jCtx.addStepResult(stepResult)
 }
 
 // handleSkipRepeatExecution handles skipped step in repeat mode. A step

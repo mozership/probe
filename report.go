@@ -91,16 +91,7 @@ func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 		DurationMs: sr.Elapsed.Milliseconds(),
 	}
 
-	switch sr.Status {
-	case StatusSuccess:
-		step.Status = report.Passed
-	case StatusError:
-		step.Status = report.Failed
-	case StatusSkipped:
-		step.Status = report.Skipped
-	default:
-		step.Status = report.Untested
-	}
+	step.Status = reportStatus(sr)
 
 	if sr.RetryAttempt > 0 {
 		step.Retry = &report.Retry{Attempts: sr.RetryAttempt, Max: sr.RetryMax}
@@ -115,19 +106,6 @@ func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 			Skipped: c.SkippedCount,
 			Warmup:  c.Warmup,
 			Latency: report.NewLatency(c.RTs),
-		}
-		// The terminal report marks a mix of passing and failing iterations as
-		// a warning. Any failing iteration fails the job, so it fails the step,
-		// unless the job has a test over its runs, which counts them instead.
-		switch {
-		case c.FailureCount > 0 && !c.Tested:
-			step.Status = report.Failed
-		case c.SuccessCount == 0 && c.FailureCount == 0 && c.SkippedCount > 0:
-			step.Status = report.Skipped
-		case sr.HasTest:
-			step.Status = report.Passed
-		default:
-			step.Status = report.Untested
 		}
 	} else {
 		// The report files hold the echo without the white space around it.
@@ -147,6 +125,37 @@ func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 	}
 
 	return step
+}
+
+// reportStatus is the status of the step sr is the result of, as the
+// report files and the notes tell it: passed, failed, skipped or untested.
+func reportStatus(sr StepResult) string {
+	if c := sr.RepeatCounter; c != nil {
+		// The terminal report marks a mix of passing and failing iterations
+		// as a warning. Any failing iteration fails the job, so it fails the
+		// step, unless the job has a test over its runs, which counts them
+		// instead.
+		switch {
+		case c.FailureCount > 0 && !c.Tested:
+			return report.Failed
+		case c.SuccessCount == 0 && c.FailureCount == 0 && c.SkippedCount > 0:
+			return report.Skipped
+		case sr.HasTest:
+			return report.Passed
+		default:
+			return report.Untested
+		}
+	}
+	switch sr.Status {
+	case StatusSuccess:
+		return report.Passed
+	case StatusError:
+		return report.Failed
+	case StatusSkipped:
+		return report.Skipped
+	default:
+		return report.Untested
+	}
 }
 
 // jsonSafeMap returns m unchanged when it encodes as JSON, and otherwise a
