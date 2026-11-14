@@ -13,7 +13,7 @@ browserステップでは、行う操作を`actions`に順番に並べます。�
 ```yaml
 steps:
   - name: Read the heading
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       actions:
         - name: navigate
@@ -192,7 +192,7 @@ jobs:
 - name: Sign in
   steps:
   - name: Log in and reach the dashboard
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       actions:
@@ -220,7 +220,7 @@ jobs:
 
 ```yaml
   - name: Product page
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       actions:
         - name: navigate
@@ -249,7 +249,7 @@ jobs:
 
 ```yaml
   - name: Order list
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       actions:
@@ -278,7 +278,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Search
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       actions:
@@ -305,7 +305,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Sign up
     id: signup
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       actions:
@@ -327,7 +327,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Sign in
     id: login
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       actions:
@@ -350,7 +350,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
       state: res.filepaths.state
 
   - name: Orders
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       storage_state: "{{outputs.login.state}}"
       actions:
@@ -364,7 +364,11 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ファイルには、ブラウザが持つすべてのサイトのクッキー（`HttpOnly`のものも含む）と、保存したときに開いていたページのオリジンのlocalStorageが入ります。別のオリジンのlocalStorageも残すには、そのオリジンのページを開いた状態で保存します。ファイルは[Playwrightのstorage state](https://playwright.dev/docs/auth)と同じ形式なので、どちらのツールで書いたファイルももう一方で読めます。
 
-`storage_state`を指定したブラウザは、最初の操作の前にクッキーを読み込みます。localStorageは、項目のあるオリジンごとにそのオリジンのページを開いて書き込みます。このページへのリクエストにはブラウザの中で空のページを返すため、サーバーには届かず、アプリのスクリプトも動きません。最初の操作が始まるときには、ブラウザは`about:blank`に戻っています。ファイルがない場合や形式が違う場合は、ブラウザを起動する前にステップが失敗します。ファイルを書くステップが失敗していた場合も同じです。
+`storage_state`を指定したブラウザは、最初の操作の前にクッキーを読み込みます。localStorageは、項目のあるオリジンごとにそのオリジンのページを開いて書き込みます。このページへのリクエストにはブラウザの中で空のページを返すため、サーバーには届かず、アプリのスクリプトも動きません。最初の操作が始まるときには、ブラウザは`about:blank`に戻っています。ファイルがない場合や、`cookies`と`origins`のリスト（空でもよい）を持つstorage stateでない場合は、ブラウザを起動する前にステップが失敗します。ファイルを書くステップが失敗していた場合や、`save_passkeys`が書くファイルを代わりに渡した場合がこれに当たります。エラーには、何が足りないかが出ます。
+
+```
+storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it has no list of cookies
+```
 
 クッキーを使えばそのユーザーとしてログインできるため、ファイルはProbeを実行したユーザーだけが読めるようにします。`path`を指定しなければ一時ディレクトリに書くため、リポジトリには入りません。`path`を指定する場合は、バージョン管理の対象と、CIでアップロードするファイルから外してください。
 
@@ -374,7 +378,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Register a passkey and sign in with it
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -422,7 +426,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Register a passkey
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -464,7 +468,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Register a passkey
     id: register
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -482,7 +486,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
       passkeys: res.filepaths.passkeys
 
   - name: Sign in with it
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       timeout: 30s
       passkeys: "{{outputs.register.passkeys}}"
@@ -540,7 +544,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       actions:
         - name: navigate
@@ -565,7 +569,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
     with:
       window_w: 1280
       window_h: 800
@@ -596,7 +600,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
 - name: Checkout page
-  uses: github.com/mozership/probe-browser@9d223e37dbe0af334d922a88c0e8786f7a8c2cb8 # v0.5.1
+  uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
   with:
     evidence_dir: out/browser
     actions:
