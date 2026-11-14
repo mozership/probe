@@ -13,7 +13,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@76735813d682751a3b743a0dbce0ad49a8d372ad # v0.1.0
+  github-notes: github.com/mozership/probe-github-notes@80357adece0113f73e9c8ad31b12350bd885ddec # v0.1.1
 secrets:
   - GITHUB_TOKEN
 vars:
