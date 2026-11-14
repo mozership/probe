@@ -11,7 +11,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Orders
 actions:
-  container: github.com/mozership/probe-container@cd5c071a029cc1c6d4afe31750bf33ec6d9aa5b8 # v0.1.0
+  container: github.com/mozership/probe-container@94e2c11ba7ab0b4528302350767eb49826414b09 # v0.2.0
 vars:
   pg_password: "{{PG_PASSWORD}}"
 jobs:
@@ -47,7 +47,7 @@ A step is over once its container is started, and ready if the step has a `wait`
 |-----------|------|----------|---------|-------------|
 | `image` | String | Yes | - | The image to start |
 | `command` | List | No | the command of the image | The command to run in the container, with one entry for each word, as `[redis-server, --appendonly, "yes"]` |
-| `env` | Map | No | - | The environment of the container, as names and values |
+| `env` | Map | No | - | The environment of the container, as names and values. See [Passwords](#passwords) |
 | `ports` | List | No | - | The ports of the container to reach from the machine. See [Ports](#ports) |
 | `volumes` | List | No | - | What to mount, each as the runtime takes it for `--volume`, such as `/abs/path/init.sql:/docker-entrypoint-initdb.d/init.sql:ro` |
 | `network` | String | No | the default of the runtime | The network to connect the container to. It is one that exists; the action makes none |
@@ -56,9 +56,32 @@ A step is over once its container is started, and ready if the step has a `wait`
 | `wait` | Map | No | - | What the container has to do before the step is over. See [Waiting](#waiting) |
 | `keep` | Boolean | No | `false` | Leave the container once the run is over. See [Keeping Containers](#keeping-containers) |
 
-A key of `with` that is not one of these fails the step before anything is started. Its `action.yml` declares them as `params`, so `probe check` reports such a key with its line.
+The rest are options of the runtime, and are given to it as they are written. Each is left out by default.
 
-The action leaves the values of `env` out of its result and its log, which name the variables alone. The values are given to the runtime as arguments, so they can be seen in the list of processes of the machine while the container is being started, and in what the runtime tells of the container afterwards.
+| Parameter | Type | Option | Description |
+|-----------|------|--------|-------------|
+| `add_hosts` | List | `--add-host` | Names for the container to resolve, each as `name:address`. See [Reaching the Machine](#reaching-the-machine) |
+| `hostname` | String | `--hostname` | The name the container knows itself by |
+| `network_aliases` | List | `--network-alias` | More names other containers on `network` reach it by. The default network of a runtime takes none |
+| `dns` | List | `--dns` | The DNS servers of the container |
+| `entrypoint` | String | `--entrypoint` | The executable to run in place of the entrypoint of the image. Its arguments are `command` |
+| `user` | String | `--user` | Who the command runs as, as `1000` or `1000:1000` |
+| `workdir` | String | `--workdir` | The directory the command runs in |
+| `env_files` | List | `--env-file` | Files of `NAME=value` lines to add to the environment, each by its absolute path. See [Passwords](#passwords) |
+| `labels` | Map | `--label` | Labels of the container, as names and values. `probe.run_id` and `probe.keep` are the action's |
+| `platform` | String | `--platform` | The platform of the image, as `linux/amd64` |
+| `tmpfs` | List | `--tmpfs` | Directories to keep in memory, as `/run` or `/tmp:size=64m` |
+| `shm_size` | String | `--shm-size` | The size of `/dev/shm`, as `256m` |
+| `memory` | String | `--memory` | The most memory the container may use, as `512m` |
+| `cpus` | Number | `--cpus` | The most CPUs it may use, as `1.5` |
+| `ulimits` | List | `--ulimit` | Limits of its processes, as `nofile=65536:65536` |
+| `cap_add` | List | `--cap-add` | Capabilities to give the container, as `NET_ADMIN` |
+| `cap_drop` | List | `--cap-drop` | Capabilities to take from it, as `ALL` |
+| `privileged` | Boolean | `--privileged` | `true` gives the container every capability and device of the machine |
+| `read_only` | Boolean | `--read-only` | `true` mounts the root of the container read-only |
+| `init` | Boolean | `--init` | `true` runs an init in the container, which forwards signals and reaps processes |
+
+A key of `with` that is not one of these fails the step before anything is started. Its `action.yml` declares them as `params`, so `probe check` reports such a key with its line. There is no parameter that takes any option of the runtime: a [`shell`](/reference/actions/shell) step can run the runtime itself, though nothing then removes its container.
 
 ## Ports
 
@@ -87,7 +110,7 @@ When more than one is given, every one of them has to hold. The time it takes to
 
 The step fails when the container stops while it is waited for, or is not ready in time, and the error ends with the last lines of its log. The container is removed with the others once the run is over.
 
-A server that takes connections before it can answer, as a database may, is better waited for by its log or its health check.
+A server that takes connections before it can answer, as a database may, is better waited for by its log or its health check, or by a step after it that Probe [retries](/reference/yaml-configuration#retry).
 
 ```yaml
 steps:
@@ -104,6 +127,24 @@ steps:
         timeout: 90s
 ```
 
+## Reaching the Machine
+
+A container that has to call back to the machine, such as a proxy in front of the API under test, or a server that sends webhooks to it, needs a name for the machine. `host-gateway` stands for its address:
+
+```yaml fragment
+with:
+  image: nginx:1.29
+  add_hosts: ["host.docker.internal:host-gateway"]
+```
+
+Docker Desktop gives a container that name without being asked. Docker on Linux does not, so a workflow that passes on a laptop can fail in CI without it.
+
+## Passwords
+
+The action leaves the values of `env` out of its result and its log, which name the variables alone. Probe hides a value that is one of the workflow's [`secrets`](/reference/yaml-configuration#secrets) wherever it shows a step.
+
+The values are given to the runtime as arguments, so they can be seen in the list of processes of the machine while the container is being started, and in what the runtime tells of the container afterwards. A variable of `env_files` is read by the runtime from its file, and is in no argument.
+
 ## Response Object
 
 | Property | Type | Description |
@@ -114,7 +155,7 @@ steps:
 | `res.host` | String | The address the first entry of `ports` is reached at: `127.0.0.1`, unless the entry names another |
 | `res.port` | Integer | The port on the machine for the first entry of `ports` |
 | `res.addr` | String | `res.host` and `res.port` together, as `127.0.0.1:51110` |
-| `req` | Object | What the container was started with, with `env` as the names of its variables |
+| `req` | Object | What the container was started with, with `env` as the names of its variables. An option that is empty or `false` is left out |
 | `rt` | Duration | How long the step took |
 | `status` | Integer | `0` |
 
@@ -158,7 +199,7 @@ PROBE_CONTAINER_RUNTIME=podman probe workflow.yml
 
 It is read from the environment and not from a step, as it belongs to the machine and not to the workflow, and the cleanup of a run has to use the runtime its steps did.
 
-The action builds no image and runs nothing in a container that is already there. A [`shell`](/reference/actions/shell) step can do either with the runtime itself.
+The action uses `run`, `inspect`, `port`, `logs`, `ps` and `rm` of the runtime. It builds no image and runs nothing in a container that is already there. A [`shell`](/reference/actions/shell) step can do either with the runtime itself.
 
 ## Under a Guard
 
