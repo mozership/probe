@@ -14,6 +14,7 @@ import (
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // notesRunner answers every action with its own parameters as res, as
@@ -456,5 +457,35 @@ func TestNoteBookMasksShortSecretsAsWholeValues(t *testing.T) {
 	// of a secret that short when the run starts.
 	if e := got[1].(map[string]any); e["body"] != "PIN 123 was taken" {
 		t.Errorf("note with the PIN in it = %v, want it as it is", e)
+	}
+}
+
+// TestNotesAreWhatActionsParse checks that the entries of the notes context,
+// as an action receives them over the wire, are what actionrpc.ParseNotes
+// reads: the entries and the parser are written apart, and an action reads
+// the notes with the parser.
+func TestNotesAreWhatActionsParse(t *testing.T) {
+	m := mask.New([]string{"CARD"}, map[string]string{"CARD": "4111111111111111"})
+	book := newNoteBook([]string{"a"}, func() *mask.Masker { return m })
+	book.record("a", "Job A", StepResult{Index: 1, Name: "a1", Status: StatusSuccess, HasTest: true,
+		notes: []notes.Note{{Level: notes.Critical, Title: "t1", Body: "paid with 4111111111111111"}}})
+	book.record("a", "Job A", StepResult{Index: 4, Name: "a4", Status: StatusWarning,
+		RepeatCounter: &StepRepeatCounter{SuccessCount: 1, FailureCount: 1, notesRun: 2},
+		notes:         []notes.Note{{Level: notes.Info, Body: "b4"}}})
+
+	wire, err := structpb.NewList(book.snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := actionrpc.ParseNotes(wire.AsSlice())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []actionrpc.Note{
+		{Job: "Job A", JobID: "a", Step: "a1", Index: 1, Status: "passed", Level: actionrpc.NoteCritical, Title: "t1", Body: "paid with <secret:CARD>"},
+		{Job: "Job A", JobID: "a", Step: "a4", Index: 4, Status: "failed", Level: actionrpc.NoteInfo, Body: "b4", Run: 2},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseNotes() =\n%+v\nwant\n%+v", got, want)
 	}
 }
