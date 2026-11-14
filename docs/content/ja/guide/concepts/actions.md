@@ -1049,11 +1049,11 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | アクション | 内容 | 最新 |
 |---|---|---|
 | [agent](/ja/reference/actions/agent) | 自然言語で書いたタスク、またはペルソナと目標からWebアプリケーションをテストします。モデルが実際のChromeで操作し、別に呼び出したモデルがページに表示された内容から判定します。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます | v0.4.0 |
-| [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした | v0.2.0 |
-| [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます | v0.1.0 |
+| [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした | v0.6.1 |
+| [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます | v0.2.0 |
 | [github-notes](/ja/reference/actions/github-notes) | 実行の[ノート](/ja/reference/yaml-configuration#notes)をGitHubに投稿します。投稿先はプルリクエストのコメント、ジョブのサマリー、Issueのいずれかで、次の実行では同じものを編集します | v0.1.1 |
 | [graphql](/ja/reference/actions/graphql) | GraphQLのクエリをHTTPで送り、レスポンスの`data`と`errors`を分けて返します | v0.2.0 |
-| [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます | v0.2.0 |
+| [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます | v0.3.0 |
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした | v0.1.0 |
 | [redis](/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでコマンドを実行し、その応答を返します。サーバーが返したエラーは`res.errors`に集めます。`--read-only`の下では、読み取りだけと分かっているコマンドだけを実行します | v0.1.0 |
 | [s3](/ja/reference/actions/s3) | S3と、MinIOやCloudflare R2のようなS3互換ストレージのオブジェクトを読み、一覧し、書き、削除します。リクエストの署名はアクション自身が行います | v0.1.0 |
