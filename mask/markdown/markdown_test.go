@@ -49,6 +49,13 @@ func TestEscape(t *testing.T) {
 		{"<secret:_TOKEN_> <secret:API_TOKEN>", "&lt;secret:\\_TOKEN\\_&gt; &lt;secret:API_TOKEN&gt;", "`<secret:_TOKEN_>` `<secret:API_TOKEN>`"},
 		// A secret named with a space is a placeholder too.
 		{"<secret:API TOKEN>", "&lt;secret:API TOKEN&gt;", "`<secret:API TOKEN>`"},
+		// A table row is cut into its cells first, so a code span does
+		// not go on from one cell to the next, but one in a cell is code.
+		{"| a | b | c |\n|---|---|---|\n| `x | <redacted> | y` |", "| a | b | c |\n|---|---|---|\n| `x | &lt;redacted&gt; | y` |", "| a | b | c |\n|---|---|---|\n| `x | ``<redacted>`` | y` |"},
+		{"| a |\n|---|\n| `<redacted>` and <redacted> |", "| a |\n|---|\n| `<redacted>` and &lt;redacted&gt; |", "| a |\n|---|\n| `<redacted>` and ``<redacted>`` |"},
+		// A | of a name ends no cell, though it does outside a table only
+		// as text.
+		{"| a |\n|---|\n| <secret:A|B> |\n\n<secret:A|B>", "| a |\n|---|\n| &lt;secret:A\\|B&gt; |\n\n&lt;secret:A\\|B&gt;", "| a |\n|---|\n| `<secret:A\\|B>` |\n\n`<secret:A|B>`"},
 		// What is not a placeholder is left alone.
 		{"<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>"},
 	} {

@@ -10,6 +10,7 @@
 package markdown
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"unicode"
@@ -17,8 +18,16 @@ import (
 	"github.com/mozership/probe/mask"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 )
+
+// gfm reads Markdown as CommonMark with the tables of GitHub Flavored
+// Markdown, which GitHub and the markdown blocks of Slack both render. A
+// table row is cut into its cells before their text is read, so a code
+// span does not go on from one cell to the next as it would in a paragraph.
+var gfm = goldmark.New(goldmark.WithExtensions(extension.Table)).Parser()
 
 // Style is how Escape writes a placeholder.
 type Style int
@@ -40,7 +49,8 @@ type span struct{ start, end int }
 // placeholder outside code written as style says, so that a reader sees
 // where a value was hidden. A placeholder in a code block or a code span is
 // shown as it is, so it is left alone there. The code of s is found as a
-// CommonMark parser finds it, with its blocks, quotes, lists and headings.
+// CommonMark parser finds it, with its blocks, quotes, lists and headings,
+// and the tables of GitHub Flavored Markdown.
 //
 // A backslash right before a placeholder is escaped, so that it does not
 // escape what is written in its place. With AsEntity, what the placeholder
@@ -49,13 +59,14 @@ type span struct{ start, end int }
 // in a span of a number of backticks no run of s has, so that no backtick
 // left unmatched before it can close the span, and it is kept apart by a
 // space from a backtick or another placeholder right next to it, whose
-// backticks would make one run with those of its span.
+// backticks would make one run with those of its span. In a table row, a |
+// of the name is escaped too, so that it does not end the cell.
 func Escape(s string, style Style) string {
 	found := mask.Placeholder.FindAllStringIndex(s, -1)
 	if found == nil {
 		return s
 	}
-	code := codeSpans([]byte(s))
+	code, rows := parse([]byte(s))
 	delim := strings.Repeat("`", unusedRun(s))
 
 	var b strings.Builder
@@ -64,6 +75,9 @@ func Escape(s string, style Style) string {
 	// next is the first code span that does not end before the placeholder;
 	// the placeholders and the spans are both in order, so it only moves on.
 	next := 0
+	// row is the first table row that does not end before the
+	// placeholder, which moves on as next does.
+	row := 0
 	for _, m := range found {
 		for next < len(code) && code[next].end < m[1] {
 			next++
@@ -75,14 +89,23 @@ func Escape(s string, style Style) string {
 		if trailingBackslashes(s[:m[0]])%2 == 1 {
 			before += `\`
 		}
+		for row < len(rows) && rows[row].end < m[1] {
+			row++
+		}
+		inTable := row < len(rows) && rows[row].start <= m[0]
 		label := s[m[0]:m[1]]
 		if style == AsEntity {
+			// literal escapes a | as it does all punctuation.
 			b.WriteString(before + "&lt;" + literal(label[1:len(label)-1]) + "&gt;")
 			last = m[1]
 			continue
 		}
 		if (m[0] > 0 && s[m[0]-1] == '`') || m[0] == prevEnd {
 			before += " "
+		}
+		if inTable {
+			// A table reads \| as a | of the cell, in a code span too.
+			label = strings.ReplaceAll(label, "|", `\|`)
 		}
 		b.WriteString(before + delim + label + delim)
 		if m[1] < len(s) && s[m[1]] == '`' {
@@ -94,15 +117,15 @@ func Escape(s string, style Style) string {
 	return b.String()
 }
 
-// codeSpans returns the spans of src that are code: the lines of code
-// blocks, fenced or indented, and the text of code spans.
-func codeSpans(src []byte) []span {
-	doc := goldmark.DefaultParser().Parse(text.NewReader(src))
-	var out []span
+// parse returns the spans of src that are code, the lines of code blocks,
+// fenced or indented, and the text of code spans, and the spans of the
+// rows of its tables, each in order.
+func parse(src []byte) (code, rows []span) {
+	doc := gfm.Parse(text.NewReader(src))
 	add := func(lines *text.Segments) {
 		for i := range lines.Len() {
 			seg := lines.At(i)
-			out = append(out, span{seg.Start, seg.Stop})
+			code = append(code, span{seg.Start, seg.Stop})
 		}
 	}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -116,18 +139,46 @@ func codeSpans(src []byte) []span {
 		case *ast.CodeBlock:
 			add(n.Lines())
 			return ast.WalkSkipChildren, nil
+		case *east.TableHeader, *east.TableRow:
+			// A row is from the start of its first cell: a | that the
+			// masker wrote in a name cuts the row into more cells, but
+			// stays in the row.
+			row := span{-1, -1}
+			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+				lines := c.Lines()
+				for i := range lines.Len() {
+					seg := lines.At(i)
+					if row.start < 0 || seg.Start < row.start {
+						row.start = seg.Start
+					}
+					row.end = max(row.end, seg.Stop)
+				}
+			}
+			if row.start >= 0 {
+				// A row is one line, and goes on to its end: cells past
+				// the columns of the header are dropped, as the parts of a
+				// name cut at its | may be.
+				if i := bytes.IndexByte(src[row.end:], '\n'); i >= 0 {
+					row.end += i
+				} else {
+					row.end = len(src)
+				}
+				rows = append(rows, row)
+			}
 		case *ast.CodeSpan:
 			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 				if t, ok := c.(*ast.Text); ok {
-					out = append(out, span{t.Segment.Start, t.Segment.Stop})
+					code = append(code, span{t.Segment.Start, t.Segment.Stop})
 				}
 			}
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
 	})
-	slices.SortFunc(out, func(a, b span) int { return a.start - b.start })
-	return out
+	byStart := func(a, b span) int { return a.start - b.start }
+	slices.SortFunc(code, byStart)
+	slices.SortFunc(rows, byStart)
+	return code, rows
 }
 
 func trailingBackslashes(s string) int {
