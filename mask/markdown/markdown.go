@@ -92,18 +92,25 @@ func Escape(s string, style Style) string {
 		for next < len(code) && code[next].end < m[1] {
 			next++
 		}
+		for row < len(rows) && rows[row].end < m[1] {
+			row++
+		}
+		inTable := row < len(rows) && rows[row].start <= m[0]
+		label := s[m[0]:m[1]]
 		if next < len(code) && code[next].start <= m[0] {
+			// A placeholder in code shows as it is. In a table, which has
+			// no code block, the code is a span, and a | of the name would
+			// end the cell, and the span with it.
+			if inTable && strings.Contains(label, "|") {
+				b.WriteString(s[last:m[0]] + escapePipes(label))
+				last = m[1]
+			}
 			continue
 		}
 		before := s[last:m[0]]
 		if trailingBackslashes(s[:m[0]])%2 == 1 {
 			before += `\`
 		}
-		for row < len(rows) && rows[row].end < m[1] {
-			row++
-		}
-		inTable := row < len(rows) && rows[row].start <= m[0]
-		label := s[m[0]:m[1]]
 		if style == AsEntity {
 			// literal escapes a | as it does all punctuation.
 			b.WriteString(before + "&lt;" + literal(label[1:len(label)-1]) + "&gt;")
@@ -114,8 +121,7 @@ func Escape(s string, style Style) string {
 			before += " "
 		}
 		if inTable {
-			// A table reads \| as a | of the cell, in a code span too.
-			label = strings.ReplaceAll(label, "|", `\|`)
+			label = escapePipes(label)
 		}
 		b.WriteString(before + delim + label + delim)
 		if m[1] < len(s) && s[m[1]] == '`' {
@@ -197,6 +203,19 @@ func parse(src []byte) (code, rows []span) {
 	slices.SortFunc(code, byStart)
 	slices.SortFunc(rows, byStart)
 	return code, rows
+}
+
+// escapePipes escapes each | of s that is not escaped already, as a table
+// reads \| as a | of the cell, in a code span too.
+func escapePipes(s string) string {
+	var b strings.Builder
+	for i := range len(s) {
+		if s[i] == '|' && trailingBackslashes(s[:i])%2 == 0 {
+			b.WriteByte('\\')
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 func trailingBackslashes(s string) int {

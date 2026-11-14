@@ -63,6 +63,11 @@ func TestEscape(t *testing.T) {
 		// as a | of the cell.
 		{"| a |\n|---|\n| `<secret:A\\|B>` |", "| a |\n|---|\n| `<secret:A\\|B>` |", "| a |\n|---|\n| `<secret:A\\|B>` |"},
 		{"| a |\n|---|\n| `x \\| <redacted>` |", "| a |\n|---|\n| `x \\| <redacted>` |", "| a |\n|---|\n| `x \\| <redacted>` |"},
+		// A | of a name in a code span of a cell is escaped too, as it
+		// would end the cell and the span with it; one escaped is not.
+		{"| a | b |\n|---|---|\n| `<secret:A|B> and <redacted>` |", "| a | b |\n|---|---|\n| `<secret:A\\|B> and <redacted>` |", "| a | b |\n|---|---|\n| `<secret:A\\|B> and <redacted>` |"},
+		{"| a |\n|---|\n| <secret:A\\|B> |", "| a |\n|---|\n| &lt;secret:A\\\\\\|B&gt; |", "| a |\n|---|\n| `<secret:A\\|B>` |"},
+		{"```\n| <secret:A|B> |\n```", "```\n| <secret:A|B> |\n```", "```\n| <secret:A|B> |\n```"},
 		// What is not a placeholder is left alone.
 		{"<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>"},
 	} {
