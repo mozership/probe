@@ -102,7 +102,7 @@ func Escape(s string, style Style) string {
 			// no code block, the code is a span, and a | of the name would
 			// end the cell, and the span with it.
 			if inTable && strings.Contains(label, "|") {
-				b.WriteString(s[last:m[0]] + escapePipes(label))
+				b.WriteString(s[last:m[0]] + escapePipes(label, false))
 				last = m[1]
 			}
 			continue
@@ -121,7 +121,7 @@ func Escape(s string, style Style) string {
 			before += " "
 		}
 		if inTable {
-			label = escapePipes(label)
+			label = escapePipes(label, true)
 		}
 		b.WriteString(before + delim + label + delim)
 		if m[1] < len(s) && s[m[1]] == '`' {
@@ -205,12 +205,17 @@ func parse(src []byte) (code, rows []span) {
 	return code, rows
 }
 
-// escapePipes escapes each | of s that is not escaped already, as a table
-// reads \| as a | of the cell, in a code span too.
-func escapePipes(s string) string {
+// escapePipes escapes the | of s for a table, which reads a | right after
+// a backslash as a | of the cell, and leaves that backslash out, in a code
+// span too, however many backslashes come before it. In a code span the
+// action writes, every | is escaped, so that the name shows as written,
+// a backslash before a | of it among it. In one that s is in already, a |
+// right after a backslash is a | of the cell as it is, and only the others
+// are escaped, so that what the span shows does not change.
+func escapePipes(s string, every bool) string {
 	var b strings.Builder
 	for i := range len(s) {
-		if s[i] == '|' && trailingBackslashes(s[:i])%2 == 0 {
+		if s[i] == '|' && (every || i == 0 || s[i-1] != '\\') {
 			b.WriteByte('\\')
 		}
 		b.WriteByte(s[i])

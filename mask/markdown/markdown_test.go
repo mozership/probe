@@ -1,10 +1,13 @@
 package markdown
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/mozership/probe/mask"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 func TestEscape(t *testing.T) {
@@ -66,7 +69,8 @@ func TestEscape(t *testing.T) {
 		// A | of a name in a code span of a cell is escaped too, as it
 		// would end the cell and the span with it; one escaped is not.
 		{"| a | b |\n|---|---|\n| `<secret:A|B> and <redacted>` |", "| a | b |\n|---|---|\n| `<secret:A\\|B> and <redacted>` |", "| a | b |\n|---|---|\n| `<secret:A\\|B> and <redacted>` |"},
-		{"| a |\n|---|\n| <secret:A\\|B> |", "| a |\n|---|\n| &lt;secret:A\\\\\\|B&gt; |", "| a |\n|---|\n| `<secret:A\\|B>` |"},
+		{"| a |\n|---|\n| <secret:A\\|B> |", "| a |\n|---|\n| &lt;secret:A\\\\\\|B&gt; |", "| a |\n|---|\n| `<secret:A\\\\|B>` |"},
+		{"| a |\n|---|\n| `x \\\\| <secret:A|B>` |", "| a |\n|---|\n| `x \\\\| <secret:A\\|B>` |", "| a |\n|---|\n| `x \\\\| <secret:A\\|B>` |"},
 		{"```\n| <secret:A|B> |\n```", "```\n| <secret:A|B> |\n```", "```\n| <secret:A|B> |\n```"},
 		// What is not a placeholder is left alone.
 		{"<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>"},
@@ -115,5 +119,41 @@ func TestEscapeWhatAMaskerWrites(t *testing.T) {
 	want := "&lt;secret:API_TOKEN&gt;, &lt;secret:API TOKEN&gt; and &lt;redacted&gt;"
 	if got := Escape(masked, AsEntity); got != want {
 		t.Errorf("Escape(%q) = %q, want %q", masked, got, want)
+	}
+}
+
+// TestEscapeRendersInATable checks what a table shows of what Escape writes,
+// rendered as GitHub renders it: each placeholder, as the masker wrote it,
+// in the cell it was written in, and in code where it was in code.
+func TestEscapeRendersInATable(t *testing.T) {
+	md := goldmark.New(goldmark.WithExtensions(extension.Table))
+	render := func(s string) string {
+		var b bytes.Buffer
+		if err := md.Convert([]byte(s), &b); err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+	for _, tc := range []struct {
+		in   string
+		want []string
+	}{
+		// A name with a | in a cell.
+		{"| a |\n|---|\n| <secret:A|B> |", []string{"<td>&lt;secret:A|B&gt;</td>", "<td><code>&lt;secret:A|B&gt;</code></td>"}},
+		// A name with a \| in a cell, whose backslash is shown.
+		{"| a |\n|---|\n| <secret:A\\|B> |", []string{"<td>&lt;secret:A\\|B&gt;</td>", "<td><code>&lt;secret:A\\|B&gt;</code></td>"}},
+		// A code span of a cell that holds a name with a |, and another
+		// placeholder after it in the span.
+		{"| a |\n|---|\n| `<secret:A|B> and <redacted>` |", []string{"<td><code>&lt;secret:A|B&gt; and &lt;redacted&gt;</code></td>"}},
+		// A code span whose \\| shows a backslash, which stays as it was.
+		{"| a |\n|---|\n| `x \\\\| <redacted>` |", []string{"<td><code>x \\| &lt;redacted&gt;</code></td>"}},
+	} {
+		entity, code := render(Escape(tc.in, AsEntity)), render(Escape(tc.in, AsCode))
+		if !strings.Contains(entity, tc.want[0]) {
+			t.Errorf("Escape(%q, AsEntity) renders as\n%s\nwant it to have %q", tc.in, entity, tc.want[0])
+		}
+		if w := tc.want[len(tc.want)-1]; !strings.Contains(code, w) {
+			t.Errorf("Escape(%q, AsCode) renders as\n%s\nwant it to have %q", tc.in, code, w)
+		}
 	}
 }
