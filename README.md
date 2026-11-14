@@ -144,6 +144,7 @@ These are external actions, each in a repository of its own, which a step pins b
 | [mail-latency](https://probe.linyo.ws/reference/actions/mail-latency) | Measuring delivery latency from received messages |
 | [redis](https://probe.linyo.ws/reference/actions/redis) | Commands on a Redis or Valkey server |
 | [s3](https://probe.linyo.ws/reference/actions/s3) | Objects in S3 and S3-compatible storage |
+| [slack](https://probe.linyo.ws/reference/actions/slack) | Posting the notes of a run, or a text, to Slack |
 | [websocket](https://probe.linyo.ws/reference/actions/websocket) | Sending and receiving messages over WebSocket |
 
 Documentation
