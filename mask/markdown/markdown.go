@@ -66,7 +66,17 @@ func Escape(s string, style Style) string {
 	if found == nil {
 		return s
 	}
-	code, rows := parse([]byte(s))
+	// The text is parsed as it is written out, where a | of a name ends no
+	// cell of a table: each is read as a letter, which keeps every offset.
+	src := []byte(s)
+	for _, m := range found {
+		for i := m[0]; i < m[1]; i++ {
+			if src[i] == '|' {
+				src[i] = 'x'
+			}
+		}
+	}
+	code, rows := parse(src)
 	delim := strings.Repeat("`", unusedRun(s))
 
 	var b strings.Builder
@@ -140,9 +150,7 @@ func parse(src []byte) (code, rows []span) {
 			add(n.Lines())
 			return ast.WalkSkipChildren, nil
 		case *east.TableHeader, *east.TableRow:
-			// A row is from the start of its first cell: a | that the
-			// masker wrote in a name cuts the row into more cells, but
-			// stays in the row.
+			// A row is from the start of its first cell.
 			row := span{-1, -1}
 			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 				lines := c.Lines()
@@ -155,9 +163,9 @@ func parse(src []byte) (code, rows []span) {
 				}
 			}
 			if row.start >= 0 {
-				// A row is one line, and goes on to its end: cells past
-				// the columns of the header are dropped, as the parts of a
-				// name cut at its | may be.
+				// A row is one line, and goes on to its end, past the
+				// cells of more than the columns of the header, which are
+				// dropped.
 				if i := bytes.IndexByte(src[row.end:], '\n'); i >= 0 {
 					row.end += i
 				} else {
@@ -166,10 +174,20 @@ func parse(src []byte) (code, rows []span) {
 				rows = append(rows, row)
 			}
 		case *ast.CodeSpan:
+			// The span is from the start of its first text to the end of
+			// its last. In a table, its text is cut at a \| to leave the
+			// backslash out, and the span goes on over it.
+			cs := span{-1, -1}
 			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 				if t, ok := c.(*ast.Text); ok {
-					code = append(code, span{t.Segment.Start, t.Segment.Stop})
+					if cs.start < 0 {
+						cs.start = t.Segment.Start
+					}
+					cs.end = t.Segment.Stop
 				}
+			}
+			if cs.start >= 0 {
+				code = append(code, cs)
 			}
 			return ast.WalkSkipChildren, nil
 		}

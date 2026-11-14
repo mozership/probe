@@ -56,6 +56,13 @@ func TestEscape(t *testing.T) {
 		// A | of a name ends no cell, though it does outside a table only
 		// as text.
 		{"| a |\n|---|\n| <secret:A|B> |\n\n<secret:A|B>", "| a |\n|---|\n| &lt;secret:A\\|B&gt; |\n\n&lt;secret:A\\|B&gt;", "| a |\n|---|\n| `<secret:A\\|B>` |\n\n`<secret:A|B>`"},
+		// Nor a code span after it, though the | would cut the row into
+		// more cells than the header has.
+		{"| a |\n|---|\n| <secret:A|B> and `<redacted>` |", "| a |\n|---|\n| &lt;secret:A\\|B&gt; and `<redacted>` |", "| a |\n|---|\n| ``<secret:A\\|B>`` and `<redacted>` |"},
+		// A code span in a cell goes on over a \|, which the table reads
+		// as a | of the cell.
+		{"| a |\n|---|\n| `<secret:A\\|B>` |", "| a |\n|---|\n| `<secret:A\\|B>` |", "| a |\n|---|\n| `<secret:A\\|B>` |"},
+		{"| a |\n|---|\n| `x \\| <redacted>` |", "| a |\n|---|\n| `x \\| <redacted>` |", "| a |\n|---|\n| `x \\| <redacted>` |"},
 		// What is not a placeholder is left alone.
 		{"<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>", "<b>bold</b> and <https://example.com|a link>"},
 	} {
