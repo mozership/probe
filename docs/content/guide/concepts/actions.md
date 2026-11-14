@@ -854,6 +854,7 @@ These external actions are published alongside Probe, each in a repository of it
 | [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 | v0.1.0 |
 | [redis](/reference/actions/redis) | Runs commands on a Redis or Valkey server and returns their replies, with the errors the server answered gathered in `res.errors`. Under `--read-only` it runs only commands known to only read | v0.1.0 |
 | [s3](/reference/actions/s3) | Reads, lists, writes and deletes objects in S3 and S3-compatible storage such as MinIO or Cloudflare R2, signing each request itself | v0.1.0 |
+| [slack](/reference/actions/slack) | Posts the [notes](/reference/yaml-configuration#notes) of a run, a text, or both to a Slack channel, by an Incoming Webhook or with a bot token | v0.1.1 |
 | [websocket](/reference/actions/websocket) | Connects to a WebSocket server, sends and receives messages in order, and returns those it received. A receive takes the next message, a number of them, or every message until the server closes, optionally only those that match | v0.1.0 |
 
 #### action.yml

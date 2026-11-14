@@ -32,6 +32,7 @@ These are published alongside Probe, each in a repository of its own. A step nam
 - **[mail-latency](/reference/actions/mail-latency)** - Measure delivery latency from a Maildir
 - **[redis](/reference/actions/redis)** - Run commands on a Redis or Valkey server
 - **[s3](/reference/actions/s3)** - Read and write objects in S3 and S3-compatible storage
+- **[slack](/reference/actions/slack)** - Post the notes of a run, or a text, to a Slack channel
 - **[websocket](/reference/actions/websocket)** - Send and receive messages over a WebSocket connection
 
 ## Action Error Handling

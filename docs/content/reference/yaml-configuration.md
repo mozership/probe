@@ -763,7 +763,7 @@ There is no `env`, `jobs` or `steps` in this context.
 
 ### Notes
 
-An action can leave notes for people, besides whether its step passed: what probe-agent finds on the way, for example. Probe does not post them anywhere. A later step does, with an action that posts to a pull request or a chat, such as [github-notes](/reference/actions/github-notes), at the time and with the notes the workflow chooses.
+An action can leave notes for people, besides whether its step passed: what probe-agent finds on the way, for example. Probe does not post them anywhere. A later step does, with an action that posts to a pull request or a chat, such as [github-notes](/reference/actions/github-notes) or [slack](/reference/actions/slack), at the time and with the notes the workflow chooses.
 
 An action leaves them in `res.notes`, a list of objects:
 

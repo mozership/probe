@@ -24,5 +24,6 @@ export default {
   'mail-latency': 'MAIL-LATENCY',
   redis: 'REDIS',
   s3: 'S3',
+  slack: 'SLACK',
   websocket: 'WEBSOCKET',
 } satisfies MetaRecord

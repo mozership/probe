@@ -144,6 +144,7 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 | [mail-latency](https://probe.linyo.ws/ja/reference/actions/mail-latency) | 受信したメールからの配送遅延の計測 |
 | [redis](https://probe.linyo.ws/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでのコマンドの実行 |
 | [s3](https://probe.linyo.ws/ja/reference/actions/s3) | S3とS3互換ストレージのオブジェクトの読み書き |
+| [slack](https://probe.linyo.ws/ja/reference/actions/slack) | 実行のノートやテキストのSlackへの投稿 |
 | [websocket](https://probe.linyo.ws/ja/reference/actions/websocket) | WebSocketでのメッセージの送受信 |
 
 ドキュメント
