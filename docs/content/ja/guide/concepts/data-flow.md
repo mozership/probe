@@ -298,6 +298,42 @@ jobs:
         Activity Rate: {{(outputs['data-collection'].active_users / outputs['data-collection'].total_users) * 100}}%
 ```
 
+## 人に向けたノート
+
+`outputs`は、ステップが式で結果から取り出し、後続のステップが使う値です。ノートは向きが逆です。アクションはステップの成否とは別に、人に向けたものを`res.notes`に残します。たとえば[agent](/ja/reference/actions/agent)が途中で見つけた問題です。Probeはすべてのステップからそれを集めて`notes`にします。後続のステップは`notes`を読み、[github-notes](/ja/reference/actions/github-notes)や[slack](/ja/reference/actions/slack)で、人が作業している場所に投稿します。Probe自身はノートをどこにも投稿しません。
+
+ステップが読めるのは、そのステップの時点で結果が確定しているステップのノートです。最後のジョブで[`always`](/ja/reference/yaml-configuration#always)付きでほかのジョブを[`needs`](/ja/reference/yaml-configuration#needs)にすると、ほかのジョブがどう終わっても、すべてのノートを読めます。
+
+```yaml
+name: Notes
+jobs:
+- name: Checkout
+  id: checkout
+  steps:
+  # helloは受け取ったwithをそのままresとして返すので、
+  # ノートを残すアクションの代わりに使える
+  - name: A first-time shopper
+    uses: hello
+    with:
+      notes:
+      - level: critical
+        title: The checkout button is under the cookie banner
+        body: On a 390px wide screen the banner covers the button.
+      - level: info
+        body: The search took 4s to show results.
+
+- name: Report
+  needs: [checkout]
+  always: true
+  steps:
+  - name: "Critical: {{ vars.title }}"
+    uses: hello
+    iteration: "{{ filter(notes, .level == 'critical') }}"
+    echo: "{{ vars.job }} / {{ vars.step }} ({{ vars.status }}): {{ vars.body }}"
+```
+
+各エントリには、`job`と`job_id`、`step`と`index`、ステップの`status`、ノートの`level`、`title`、`body`があり、`repeat`のジョブでは何回目の実行かを示す`run`もあります。`secrets`の値は隠されています。詳しい規則は[ノート](/ja/reference/yaml-configuration#notes)を参照してください。
+
 ## 高度なデータフローパターン
 
 データは必ずしもステップからステップへそのまま渡されるわけではありません。途中で変換したり、条件で経路を分けたり、複数のステップにまたがって蓄積したりできます。

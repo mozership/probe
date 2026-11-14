@@ -71,7 +71,7 @@ jobs:
 ## Rules that are easy to get wrong
 
 - `jobs` and `steps` are lists. `needs` lists job `id`s, so a job others depend on needs an `id`.
-- Environment variables are read only in the top-level `vars`, by bare name: `"{{API_URL}}"`, with a fallback as `"{{API_URL ?? 'default'}}"`. Expressions in steps see `vars`, `res`, `req`, `rt`, `status`, `outputs` and `repeat_index`, and nothing else; there is no `env`.
+- Environment variables are read only in the top-level `vars`, by bare name: `"{{API_URL}}"`, with a fallback as `"{{API_URL ?? 'default'}}"`. Expressions in steps see `vars`, `res`, `req`, `rt`, `status`, `outputs`, `report`, `repeat_index` and `notes`, and nothing else; there is no `env`.
 - `test` and `outputs` values are expressions, written without braces. `with` values, `echo`, step and job names, and `vars` are templates with `{{ }}`.
 - Expressions are expr-lang, not JavaScript or Python: values have no methods. Write `res.body contains "x"`, `res.body startsWith "x"`, `"x" in list`, `len(res.body)`, `lower(s)`, `==` and `nil`, not `res.body.contains("x")`, `.startsWith("x")`, `.includes("x")`, `.length`, `.toLowerCase()`, `===` or `null`.
 - `test` must evaluate to a boolean. A number or string fails the step with `test_type`.
@@ -83,6 +83,7 @@ jobs:
 - `iteration` runs a step once per entry of a list of objects, read as `vars`. In place of the list it takes one template that comes to one when the step is reached: cases kept in a file, `"{{ parse_json(file('cases.json')) }}"`, or what an earlier step published, `"{{ outputs.users.rows }}"`.
 - A job that removes what others made, such as a test database, lists them in `needs` and sets `always: true`: it then runs when one of them failed too, where any other job is skipped.
 - An external action, `github.com/<owner>/<repo>@<commit SHA>`, used in more than one step is given a name once under the top-level `actions`, as `actions: {graphql: github.com/…@<SHA>}`, and `uses` and `defaults` then take the name. A name cannot be that of a built-in action. A job file run by `embedded` uses the names of the workflow that embeds it.
+- An action can leave notes for people in `res.notes`, besides whether its step passed, as `agent` does with what it finds. Probe posts them nowhere: a last job that `needs` the others with `always: true` reads them as `notes` and passes `notes: "{{ notes }}"` to an action that posts them, `github-notes` or `slack`. Use `outputs`, not `res.notes`, to hand a value to a later step. See `probe guide yaml` under Notes.
 - List secrets under `secrets` by environment variable name. Never write a credential into the YAML. A value shorter than 4 characters is masked only where it is a whole value, not inside other text, and Probe warns about it, so a credential that must stay out of the output needs a longer value.
 - Do not guess parameters. If a field is not on the action's `probe guide <action>` page, it does not exist.
 

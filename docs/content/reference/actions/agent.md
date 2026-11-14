@@ -2,7 +2,7 @@
 
 The agent action tests a web application from a task written in natural language. A model, the tester, uses the application through a real Chrome to carry out the task; another call of the model, the judge, then decides from what the pages showed whether the expectation holds. Chrome or Chromium has to be installed where Probe runs, and the model is reached with the API key of its provider.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-agent](https://github.com/mozership/probe-agent). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-agent](https://github.com/mozership/probe-agent). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later, and v1.32.0 or later for later steps to read its [notes](#notes).
 
 The action cannot tell what a page will do, nor what the model will click, so it keeps to no [guard](/guide/concepts/guard): under `--read-only` or `--allow-host`, a step that uses it is refused unless `--allow-action` names it. The tester is kept to `allow_hosts`: a page on another host is not opened, and the browser goes back from one a click led to.
 
@@ -20,7 +20,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
@@ -98,6 +98,7 @@ These go directly under `with`.
 | `timeout` | Duration string or number of seconds | `4m` | Limit for the whole test, the judge included. Keep it below the step's `timeout`, which is `5m` unless set |
 | `headless` | Boolean | `true` | Run Chrome without a window |
 | `window_w`, `window_h` | Integer | `1280`, `800` | The viewport, in pixels |
+| `storage_state` | String | none | A file of cookies and localStorage the browser starts with, as the browser action's `save_storage_state` writes it. See [Starting Signed In](#starting-signed-in) |
 | `cache` | String | none | A file to keep the steps of a scenario test that passed in, and to replay them from. See [Replay](#replay) |
 | `cache_mode` | String | `auto` | `auto`, `read`, `strict` or `refresh`. See [Replay](#replay) |
 | `evidence_dir` | String | the temporary directory | Where the screenshots and the report are written, each test in a directory of its own |
@@ -119,7 +120,7 @@ The action takes the API key from Probe's environment. List it under [`secrets`]
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
 secrets:
   - OPENAI_API_KEY
   - TEST_PASSWORD
@@ -152,6 +153,7 @@ A model that sees no images reads the pages by their elements and text alone: it
 | `res.mode` | String | `scenario` or `persona` |
 | `res.verdict` | String | `pass`, `fail`, or `blocked` when the test could not be judged. In a persona test, whether the persona reached the goal |
 | `res.findings` | List | In a persona test, what is wrong with the application, the most severe first: `title`, `severity` (`high`, `medium` or `low`), `category` (`error`, `functional`, `usability`, `performance`, `content` or `accessibility`), `expected`, `observed`, `evidence`, `steps`, `url`, `screenshot`, and `verified`, whether any of the evidence was found in the record |
+| `res.notes` | List | What the test leaves for people, which later steps read as [`notes`](/reference/yaml-configuration#notes): one for each finding of a persona test, and one for a scenario test that failed or was blocked. See [Notes](#notes) |
 | `res.reason` | String | Why, in the judge's words |
 | `res.evidence` | List | What the judge quoted: `quote`, and `verified`, whether a page showed it |
 | `res.stopped` | String | How the tester stopped: `done`, `blocked`, `max_steps`, `timeout`, `no_finish`, `refused`, or `stale` for a recording that no longer matched under `cache_mode: strict` |
@@ -169,6 +171,75 @@ A model that sees no images reads the pages by their elements and text alone: it
 | `status` | Integer | `0`; the verdict is for the step's `test` |
 
 `blocked` is kept apart from `fail`: it is what the tester could not get past, such as a CAPTCHA or information the task does not give, rather than what the application did wrong.
+
+## Notes
+
+The test leaves what people should know of it in `res.notes`, and later steps read it as the [`notes`](/reference/yaml-configuration#notes) of the run, to post where people work, with [github-notes](/reference/actions/github-notes) or [slack](/reference/actions/slack). Probe itself posts the notes nowhere.
+
+| Test | Notes |
+|---|---|
+| Persona | One for each finding, at the level of its severity: `critical` for `high`, `warning` for `medium` and `info` for `low` |
+| Scenario that failed | One `critical` note, `The expectation did not hold`, with the reason of the judge |
+| Scenario that was blocked | One `warning` note, `The test could not be carried out`, with why |
+| Scenario that passed | None |
+
+The title of a note of a finding is that of the finding. Its body gives:
+
+- what was expected and observed
+- the category, the steps and the URL
+- the quotes found in the record
+
+A finding none of whose evidence was found in the record is still a note. Its body says so, as the finding may be a misreading of the model, and the quotes not found are left out of it.
+
+A last job, which [`needs`](/reference/yaml-configuration#needs) the others with [`always`](/reference/yaml-configuration#always), reads the notes of them all, however they ended:
+
+```yaml
+name: Staging
+actions:
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+  slack: github.com/mozership/probe-slack@06717bb03b81a793fa2276d2837ef881e52e093c # v0.1.1
+secrets:
+  - ANTHROPIC_API_KEY
+  - SLACK_WEBHOOK_URL
+vars:
+  slack_webhook: "{{SLACK_WEBHOOK_URL}}"
+jobs:
+- name: Visitors
+  id: visitors
+  steps:
+  - name: A first-time visitor writes a first note
+    uses: agent
+    with:
+      url: https://staging.example.com/
+      persona: Carol, who has never used a notes app and is not technical.
+      goal: Write a first note that says "Buy milk".
+    timeout: 5m
+    test: res.verdict == "pass"
+
+- name: Tell the team
+  needs: [visitors]
+  always: true
+  steps:
+  - name: Post what the visitors found
+    uses: slack
+    with:
+      webhook_url: "{{vars.slack_webhook}}"
+      text: What the visitors found on staging
+      notes: "{{ notes }}"
+    test: status == 0
+```
+
+A note of a finding:
+
+```markdown
+**Expected:** A form to write the note in.
+
+**Observed:** The page says "Something went wrong" after New note is clicked.
+
+error · step 9 · https://staging.example.com/notes/new
+
+> Something went wrong
+```
 
 ## Replay
 
@@ -202,6 +273,63 @@ The recording is of the task, the expectation and the start URL; when one of the
 | `refresh` | no | a run that passed | |
 
 Commit the file, and run CI with `strict`, so that a recording that no longer matches fails the test rather than paying the tester on every run until someone records it again. Record it again with `auto` where someone looks at the change.
+
+## Starting Signed In
+
+A test of what a signed-in user does need not have the tester sign in first. Sign in with a deterministic step of the [browser action](/reference/actions/browser), save the login with its `save_storage_state`, and name the file in `storage_state`: the agent's browser starts with its cookies, `HttpOnly` ones included, and its localStorage, and the tester begins at `url` signed in.
+
+```yaml
+name: Orders
+actions:
+  browser: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+secrets:
+  - ANTHROPIC_API_KEY
+  - TEST_EMAIL
+  - TEST_PASSWORD
+vars:
+  email: "{{TEST_EMAIL}}"
+  password: "{{TEST_PASSWORD}}"
+jobs:
+- name: orders
+  steps:
+  - name: Sign in
+    id: login
+    uses: browser
+    with:
+      actions:
+        - name: navigate
+          url: https://staging.example.com/login
+        - name: type
+          selector: "#email"
+          value: "{{vars.email}}"
+        - name: type
+          selector: "#password"
+          value: "{{vars.password}}"
+        - name: click
+          selector: "button[type='submit']"
+        - name: wait_visible
+          selector: "#dashboard"
+        - name: save_storage_state
+          id: state
+    test: res.code == 0
+    outputs:
+      state: res.filepaths.state
+
+  - name: A signed-in user cancels an order
+    uses: agent
+    with:
+      url: https://staging.example.com/orders
+      storage_state: "{{outputs.login.state}}"
+      task: Cancel the most recent order.
+      expect: The order shows as cancelled, and the list no longer offers to cancel it.
+    timeout: 5m
+    test: res.verdict == "pass"
+```
+
+The file has the shape of [Playwright's storage state](https://playwright.dev/docs/auth), so one Playwright saves serves too. Before the first page, the browser takes the cookies, and opens a page of each origin with items in it to write the localStorage there. Those pages are answered with an empty one inside the browser, so they reach no server, run none of the application's scripts, are not counted in `res.metrics`, and need not be in `allow_hosts`. A file that is missing, or is not a storage state with a list of `cookies` and one of `origins`, empty or not, fails the step before the browser starts, as when the step that saves it failed, or when the file `save_passkeys` writes is given in its place.
+
+The model is not given the file: it sees only what the pages show. The cookies sign in as the user, so keep the file out of version control, and out of the files a CI run uploads. A login expires: save it in the same run, rather than committing one.
 
 ## Secrets
 

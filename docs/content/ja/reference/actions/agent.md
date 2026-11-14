@@ -2,7 +2,7 @@
 
 Agentアクションは、自然言語で書いたタスクからWebアプリケーションをテストします。テスターと呼ぶモデルが実際のChromeでアプリケーションを操作してタスクを行い、そのあと別に呼び出したモデル、ジャッジが、ページに表示された内容から期待どおりかどうかを判定します。Probeを実行する環境にChromeかChromiumが必要で、モデルはそのプロバイダーのAPIキーで呼び出します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-agent](https://github.com/mozership/probe-agent)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-agent](https://github.com/mozership/probe-agent)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。後続のステップで[ノート](#ノート)を読むには、v1.32.0以降が必要です。
 
 このアクションは、ページが何をするかも、モデルが何をクリックするかも判定できないため、[ガード](/ja/guide/concepts/guard)に従いません。`--read-only`や`--allow-host`の下では、`--allow-action`で指定しない限り、このアクションを使うステップを拒否します。テスターは`allow_hosts`の範囲にとどめます。ほかのホストのページは開かず、クリックでほかのホストに移ったときはブラウザを戻します。
 
@@ -20,7 +20,7 @@ Agentアクションは、自然言語で書いたタスクからWebアプリケ
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
@@ -100,6 +100,7 @@ jobs:
 | `timeout` | 期間の文字列、または秒数 | `4m` | ジャッジを含むテスト全体の制限時間。ステップの`timeout`（指定しなければ`5m`）より短くする |
 | `headless` | Boolean | `true` | ウィンドウを表示せずにChromeを動かす |
 | `window_w`、`window_h` | Integer | `1280`、`800` | ビューポートの大きさ（ピクセル） |
+| `storage_state` | String | なし | ブラウザの起動時に読み込むCookieとlocalStorageのファイル。browserアクションの`save_storage_state`が書く形式。[ログインした状態で始める](#ログインした状態で始める)を参照 |
 | `cache` | String | なし | 通ったシナリオテストのステップを保存し、そこから再生するファイル。[リプレイ](#リプレイ)を参照 |
 | `cache_mode` | String | `auto` | `auto`、`read`、`strict`、`refresh`のいずれか。[リプレイ](#リプレイ)を参照 |
 | `evidence_dir` | String | 一時ディレクトリ | スクリーンショットとレポートを書き出す場所。テストごとにディレクトリを分ける |
@@ -121,7 +122,7 @@ APIキーはProbeの環境から読みます。Probeの出力で値を隠すよ�
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
 secrets:
   - OPENAI_API_KEY
   - TEST_PASSWORD
@@ -154,6 +155,7 @@ jobs:
 | `res.mode` | String | `scenario`か`persona` |
 | `res.verdict` | String | `pass`、`fail`、または判定できなかったときの`blocked`。ペルソナのテストでは、ペルソナが目標にたどり着けたかどうか |
 | `res.findings` | List | ペルソナのテストで見つかったアプリケーションの問題。重いものから順に並ぶ。`title`、`severity`（`high`、`medium`、`low`）、`category`（`error`、`functional`、`usability`、`performance`、`content`、`accessibility`）、`expected`、`observed`、`evidence`、`steps`、`url`、`screenshot`、そして根拠のどれかが記録に見つかったかを示す`verified` |
+| `res.notes` | List | テストが人に向けて残すもの。後続のステップは[`notes`](/ja/reference/yaml-configuration#notes)として読む。ペルソナのテストではfindingごとに1件、シナリオのテストではfailかblockedのときに1件。[ノート](#ノート)を参照 |
 | `res.reason` | String | ジャッジが述べた判定の理由 |
 | `res.evidence` | List | ジャッジの引用。`quote`と、それがページに表示されていたかを示す`verified` |
 | `res.stopped` | String | テスターの止まり方。`done`、`blocked`、`max_steps`、`timeout`、`no_finish`、`refused`、または`cache_mode: strict`で記録が合わなくなったときの`stale` |
@@ -171,6 +173,75 @@ jobs:
 | `status` | Integer | `0`。判定はステップの`test`で確かめる |
 
 `blocked`は`fail`と分けています。CAPTCHAやタスクに書かれていない情報のように、アプリケーションの誤りではなく、テスターが先に進めなかったことを表します。
+
+## ノート
+
+テストは、人に知らせるべきことを`res.notes`に残します。後続のステップはそれを実行の[`notes`](/ja/reference/yaml-configuration#notes)として読み、[github-notes](/ja/reference/actions/github-notes)や[slack](/ja/reference/actions/slack)で、人が作業している場所に投稿できます。Probe自身はノートをどこにも投稿しません。
+
+| テスト | ノート |
+|---|---|
+| ペルソナ | findingごとに1件。レベルは重要度に合わせ、`high`は`critical`、`medium`は`warning`、`low`は`info` |
+| 失敗したシナリオ | `critical`のノートを1件。タイトルは`The expectation did not hold`で、本文はジャッジが述べた理由 |
+| blockedになったシナリオ | `warning`のノートを1件。タイトルは`The test could not be carried out`で、本文はその理由 |
+| 通ったシナリオ | なし |
+
+findingのノートのタイトルは、findingのタイトルです。本文には次のものを書きます。
+
+- 期待したことと、実際に起きたこと
+- カテゴリ、ステップ、URL
+- 記録の中に見つかった引用
+
+根拠がどれも記録の中に見つからなかったfindingも、ノートにします。モデルの読み違いの可能性があるので、そのことを本文に書き添え、見つからなかった引用は載せません。
+
+最後のジョブで[`always`](/ja/reference/yaml-configuration#always)付きでほかのジョブを[`needs`](/ja/reference/yaml-configuration#needs)にすると、ほかのジョブがどう終わっても、すべてのノートを読めます。
+
+```yaml
+name: Staging
+actions:
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+  slack: github.com/mozership/probe-slack@06717bb03b81a793fa2276d2837ef881e52e093c # v0.1.1
+secrets:
+  - ANTHROPIC_API_KEY
+  - SLACK_WEBHOOK_URL
+vars:
+  slack_webhook: "{{SLACK_WEBHOOK_URL}}"
+jobs:
+- name: Visitors
+  id: visitors
+  steps:
+  - name: A first-time visitor writes a first note
+    uses: agent
+    with:
+      url: https://staging.example.com/
+      persona: Carol, who has never used a notes app and is not technical.
+      goal: Write a first note that says "Buy milk".
+    timeout: 5m
+    test: res.verdict == "pass"
+
+- name: Tell the team
+  needs: [visitors]
+  always: true
+  steps:
+  - name: Post what the visitors found
+    uses: slack
+    with:
+      webhook_url: "{{vars.slack_webhook}}"
+      text: What the visitors found on staging
+      notes: "{{ notes }}"
+    test: status == 0
+```
+
+findingのノートの例です。
+
+```markdown
+**Expected:** A form to write the note in.
+
+**Observed:** The page says "Something went wrong" after New note is clicked.
+
+error · step 9 · https://staging.example.com/notes/new
+
+> Something went wrong
+```
 
 ## リプレイ
 
@@ -204,6 +275,63 @@ jobs:
 | `refresh` | しない | 通った実行 | |
 
 記録ファイルをコミットし、CIでは`strict`で実行してください。記録が合わなくなったとき、誰かが記録し直すまで毎回テスターの費用を払うのではなく、テストを失敗させるためです。記録し直すのは、変更を人が確かめられる場所で`auto`を使って行います。
+
+## ログインした状態で始める
+
+ログインしたユーザーの操作をテストするとき、テスターに毎回ログインさせる必要はありません。[browserアクション](/ja/reference/actions/browser)の決定的なステップでログインし、その`save_storage_state`でログイン状態を保存して、そのファイルを`storage_state`に指定します。agentのブラウザは、そのCookie（`HttpOnly`のものも含む）とlocalStorageを読み込んで起動し、テスターはログインした状態で`url`から始めます。
+
+```yaml
+name: Orders
+actions:
+  browser: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+secrets:
+  - ANTHROPIC_API_KEY
+  - TEST_EMAIL
+  - TEST_PASSWORD
+vars:
+  email: "{{TEST_EMAIL}}"
+  password: "{{TEST_PASSWORD}}"
+jobs:
+- name: orders
+  steps:
+  - name: Sign in
+    id: login
+    uses: browser
+    with:
+      actions:
+        - name: navigate
+          url: https://staging.example.com/login
+        - name: type
+          selector: "#email"
+          value: "{{vars.email}}"
+        - name: type
+          selector: "#password"
+          value: "{{vars.password}}"
+        - name: click
+          selector: "button[type='submit']"
+        - name: wait_visible
+          selector: "#dashboard"
+        - name: save_storage_state
+          id: state
+    test: res.code == 0
+    outputs:
+      state: res.filepaths.state
+
+  - name: A signed-in user cancels an order
+    uses: agent
+    with:
+      url: https://staging.example.com/orders
+      storage_state: "{{outputs.login.state}}"
+      task: Cancel the most recent order.
+      expect: The order shows as cancelled, and the list no longer offers to cancel it.
+    timeout: 5m
+    test: res.verdict == "pass"
+```
+
+ファイルは[Playwrightのstorage state](https://playwright.dev/docs/auth)と同じ形式なので、Playwrightが保存したファイルも使えます。ブラウザは最初のページを開く前にCookieを読み込み、localStorageに項目があるオリジンごとにページを開いて書き込みます。これらのページにはブラウザの中で空のページを返すので、サーバーには届かず、アプリケーションのスクリプトも実行せず、`res.metrics`にも数えず、`allow_hosts`に入れる必要もありません。ファイルがない場合や、`cookies`と`origins`のリスト（空でもよい）を持つstorage stateでない場合は、ブラウザを起動する前にステップが失敗します。保存するステップが失敗したときや、`save_passkeys`が書くファイルを代わりに渡したときがこれに当たります。
+
+モデルにはファイルを渡さず、モデルが見るのはページに表示された内容だけです。Cookieを使えばそのユーザーとしてログインできるので、ファイルはバージョン管理に入れず、CIでアップロードするファイルにも含めないでください。ログインには期限があるので、ファイルはコミットせず、同じ実行の中で保存してください。
 
 ## シークレット
 

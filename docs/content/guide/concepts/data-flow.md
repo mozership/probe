@@ -298,6 +298,42 @@ jobs:
         Activity Rate: {{(outputs['data-collection'].active_users / outputs['data-collection'].total_users) * 100}}%
 ```
 
+## Notes for People
+
+`outputs` are values a step picks out of its result with expressions, for the steps after it to use. Notes go the other way round: an action leaves them in `res.notes` for people, besides whether its step passed, such as what [agent](/reference/actions/agent) found wrong on the way, and Probe gathers them from every step into `notes`. A later step reads `notes` to post them where people work, with [github-notes](/reference/actions/github-notes) or [slack](/reference/actions/slack). Probe itself posts them nowhere.
+
+A step reads the notes of the steps whose result is final when it is reached. A last job that [`needs`](/reference/yaml-configuration#needs) the others with [`always`](/reference/yaml-configuration#always) reads them all, however those jobs ended:
+
+```yaml
+name: Notes
+jobs:
+- name: Checkout
+  id: checkout
+  steps:
+  # hello returns what it is given as res, as an action that leaves notes
+  # would return them.
+  - name: A first-time shopper
+    uses: hello
+    with:
+      notes:
+      - level: critical
+        title: The checkout button is under the cookie banner
+        body: On a 390px wide screen the banner covers the button.
+      - level: info
+        body: The search took 4s to show results.
+
+- name: Report
+  needs: [checkout]
+  always: true
+  steps:
+  - name: "Critical: {{ vars.title }}"
+    uses: hello
+    iteration: "{{ filter(notes, .level == 'critical') }}"
+    echo: "{{ vars.job }} / {{ vars.step }} ({{ vars.status }}): {{ vars.body }}"
+```
+
+Each entry has `job` and `job_id`, `step` and `index`, the `status` of the step, the `level`, `title` and `body` of the note, and, for a job with `repeat`, the `run`. The values of `secrets` are hidden in them. See [Notes](/reference/yaml-configuration#notes) for the rules.
+
 ## Advanced Data Flow Patterns
 
 Data does not always move straight from one step to the next. It can be transformed along the way, routed by a condition, or accumulated across several steps.
