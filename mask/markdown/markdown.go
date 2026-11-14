@@ -61,8 +61,14 @@ func Escape(s string, style Style) string {
 	var b strings.Builder
 	last := 0
 	prevEnd := -1
+	// next is the first code span that does not end before the placeholder;
+	// the placeholders and the spans are both in order, so it only moves on.
+	next := 0
 	for _, m := range found {
-		if inside(code, m[0], m[1]) {
+		for next < len(code) && code[next].end < m[1] {
+			next++
+		}
+		if next < len(code) && code[next].start <= m[0] {
 			continue
 		}
 		before := s[last:m[0]]
@@ -124,16 +130,6 @@ func codeSpans(src []byte) []span {
 	return out
 }
 
-// inside reports whether start to end is within one of spans.
-func inside(spans []span, start, end int) bool {
-	for _, c := range spans {
-		if c.start <= start && end <= c.end {
-			return true
-		}
-	}
-	return false
-}
-
 func trailingBackslashes(s string) int {
 	n := 0
 	for n < len(s) && s[len(s)-1-n] == '\\' {
@@ -170,15 +166,20 @@ func unusedRun(s string) int {
 // literal writes name, what a placeholder names, so that Markdown shows it
 // as it is: a & as an entity, and ASCII punctuation, which Markdown may read
 // as a part of its syntax, escaped with a backslash. A colon is no syntax,
-// and an underscore inside a word no emphasis, so the names of secrets as
-// they are mostly written, such as secret:API_TOKEN, read as written.
+// and an underscore between two letters or digits no emphasis, so the names
+// of secrets as they are mostly written, such as secret:API_TOKEN, read as
+// written.
 func literal(name string) string {
 	var b strings.Builder
-	for _, r := range name {
+	for i, r := range name {
 		switch {
 		case r == '&':
 			b.WriteString("&amp;")
-		case r == ':' || r == '_' || r >= 0x80:
+		case r == ':' || r >= 0x80:
+			b.WriteRune(r)
+		case r == '_' && i > 0 && i < len(name)-1 && alnum(name[i-1]) && alnum(name[i+1]):
+			// An underscore between two letters or digits opens and
+			// closes no emphasis.
 			b.WriteRune(r)
 		case unicode.IsPunct(r) || unicode.IsSymbol(r):
 			b.WriteString(`\` + string(r))
@@ -187,4 +188,8 @@ func literal(name string) string {
 		}
 	}
 	return b.String()
+}
+
+func alnum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
 }

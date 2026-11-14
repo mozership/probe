@@ -45,6 +45,8 @@ func TestEscape(t *testing.T) {
 		{"`a` ``b`` <redacted>", "`a` ``b`` &lt;redacted&gt;", "`a` ``b`` ```<redacted>```"},
 		// What a placeholder names is text, not an entity or emphasis.
 		{"<secret:API&copy;> <secret:*B*>", "&lt;secret:API&amp;copy\\;&gt; &lt;secret:\\*B\\*&gt;", "`<secret:API&copy;>` `<secret:*B*>`"},
+		// An underscore not between two letters or digits would be emphasis.
+		{"<secret:_TOKEN_> <secret:API_TOKEN>", "&lt;secret:\\_TOKEN\\_&gt; &lt;secret:API_TOKEN&gt;", "`<secret:_TOKEN_>` `<secret:API_TOKEN>`"},
 		// A secret named with a space is a placeholder too.
 		{"<secret:API TOKEN>", "&lt;secret:API TOKEN&gt;", "`<secret:API TOKEN>`"},
 		// What is not a placeholder is left alone.
@@ -71,6 +73,17 @@ func TestEscapeKeepsSpansShort(t *testing.T) {
 	}
 	if !strings.Contains(got, " `<redacted>` ") {
 		t.Errorf("Escape() does not put the placeholders in spans of one backtick")
+	}
+}
+
+// TestEscapeOfManySpansAndPlaceholders checks that a text of many code
+// spans and many placeholders is escaped in time, each placeholder looked
+// up against the spans without going through them all again.
+func TestEscapeOfManySpansAndPlaceholders(t *testing.T) {
+	s := strings.Repeat("`<redacted>` ", 20000) + strings.Repeat("<redacted> ", 20000)
+	got := Escape(s, AsEntity)
+	if strings.Count(got, "&lt;redacted&gt;") != 20000 || strings.Count(got, "`<redacted>`") != 20000 {
+		t.Errorf("Escape() did not escape the 20000 placeholders outside code, and only those")
 	}
 }
 
