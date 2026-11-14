@@ -12,6 +12,7 @@ package markdown
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/mozership/probe/mask"
 	"github.com/yuin/goldmark"
@@ -42,18 +43,20 @@ type span struct{ start, end int }
 // CommonMark parser finds it, with its blocks, quotes, lists and headings.
 //
 // A backslash right before a placeholder is escaped, so that it does not
-// escape what is written in its place. With AsCode, a placeholder is put
-// in a span of more backticks than any run of s, so that no backtick left
-// unmatched before it can close the span, and it is kept apart by a space
-// from a backtick or another placeholder right next to it, whose backticks
-// would make one run with those of its span.
+// escape what is written in its place. With AsEntity, what the placeholder
+// names is written as text, so that a & or a * in the name of a secret is
+// not read as an entity or as emphasis. With AsCode, a placeholder is put
+// in a span of a number of backticks no run of s has, so that no backtick
+// left unmatched before it can close the span, and it is kept apart by a
+// space from a backtick or another placeholder right next to it, whose
+// backticks would make one run with those of its span.
 func Escape(s string, style Style) string {
 	found := mask.Placeholder.FindAllStringIndex(s, -1)
 	if found == nil {
 		return s
 	}
 	code := codeSpans([]byte(s))
-	delim := strings.Repeat("`", longestRun(s)+1)
+	delim := strings.Repeat("`", unusedRun(s))
 
 	var b strings.Builder
 	last := 0
@@ -68,7 +71,7 @@ func Escape(s string, style Style) string {
 		}
 		label := s[m[0]:m[1]]
 		if style == AsEntity {
-			b.WriteString(before + "&lt;" + label[1:len(label)-1] + "&gt;")
+			b.WriteString(before + "&lt;" + literal(label[1:len(label)-1]) + "&gt;")
 			last = m[1]
 			continue
 		}
@@ -139,16 +142,49 @@ func trailingBackslashes(s string) int {
 	return n
 }
 
-// longestRun is the length of the longest run of backticks in s.
-func longestRun(s string) int {
-	longest, n := 0, 0
-	for i := range len(s) {
-		if s[i] == '`' {
+// unusedRun is the shortest length of a run of backticks that s does not
+// have. A code span closes only with a run of its own length, so a span of
+// it is closed by nothing of s. s cannot have runs of every length up to n
+// without being longer than n*(n+1)/2, so the length stays short whatever s
+// holds.
+func unusedRun(s string) int {
+	used := map[int]bool{}
+	n := 0
+	for i := range len(s) + 1 {
+		if i < len(s) && s[i] == '`' {
 			n++
-			longest = max(longest, n)
-		} else {
-			n = 0
+			continue
+		}
+		if n > 0 {
+			used[n] = true
+		}
+		n = 0
+	}
+	for l := 1; ; l++ {
+		if !used[l] {
+			return l
 		}
 	}
-	return longest
+}
+
+// literal writes name, what a placeholder names, so that Markdown shows it
+// as it is: a & as an entity, and ASCII punctuation, which Markdown may read
+// as a part of its syntax, escaped with a backslash. A colon is no syntax,
+// and an underscore inside a word no emphasis, so the names of secrets as
+// they are mostly written, such as secret:API_TOKEN, read as written.
+func literal(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r == '&':
+			b.WriteString("&amp;")
+		case r == ':' || r == '_' || r >= 0x80:
+			b.WriteRune(r)
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			b.WriteString(`\` + string(r))
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

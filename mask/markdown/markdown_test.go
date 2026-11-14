@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mozership/probe/mask"
@@ -14,9 +15,9 @@ func TestEscape(t *testing.T) {
 		// In a code span or a code block, a placeholder shows as it is.
 		{"sent `<secret:TOKEN>` and <redacted>", "sent `<secret:TOKEN>` and &lt;redacted&gt;", "sent `<secret:TOKEN>` and ``<redacted>``"},
 		{"``a ` <redacted>`` <redacted>", "``a ` <redacted>`` &lt;redacted&gt;", "``a ` <redacted>`` ```<redacted>```"},
-		{"```\ntoken=<secret:TOKEN>\n```\n<secret:TOKEN>", "```\ntoken=<secret:TOKEN>\n```\n&lt;secret:TOKEN&gt;", "```\ntoken=<secret:TOKEN>\n```\n````<secret:TOKEN>````"},
+		{"```\ntoken=<secret:TOKEN>\n```\n<secret:TOKEN>", "```\ntoken=<secret:TOKEN>\n```\n&lt;secret:TOKEN&gt;", "```\ntoken=<secret:TOKEN>\n```\n`<secret:TOKEN>`"},
 		{"~~~\n```\n<redacted>\n~~~", "~~~\n```\n<redacted>\n~~~", "~~~\n```\n<redacted>\n~~~"},
-		{"````\n```\n<redacted>\n````\n<redacted>", "````\n```\n<redacted>\n````\n&lt;redacted&gt;", "````\n```\n<redacted>\n````\n`````<redacted>`````"},
+		{"````\n```\n<redacted>\n````\n<redacted>", "````\n```\n<redacted>\n````\n&lt;redacted&gt;", "````\n```\n<redacted>\n````\n`<redacted>`"},
 		// A code span goes on over the lines of a paragraph, not past it.
 		{"a `span\nwith <redacted>` and <redacted>", "a `span\nwith <redacted>` and &lt;redacted&gt;", "a `span\nwith <redacted>` and ``<redacted>``"},
 		{"an open `\n\n<redacted> x", "an open `\n\n&lt;redacted&gt; x", "an open `\n\n``<redacted>`` x"},
@@ -39,6 +40,11 @@ func TestEscape(t *testing.T) {
 		{"`code`<redacted>`more`", "`code`&lt;redacted&gt;`more`", "`code` ``<redacted>`` `more`"},
 		{"a`<redacted>", "a`&lt;redacted&gt;", "a` ``<redacted>``"},
 		{"<redacted><redacted>", "&lt;redacted&gt;&lt;redacted&gt;", "`<redacted>` `<redacted>`"},
+		// The span is of a length no run of the text has: 1 and 2 are taken
+		// here, so it is of 3.
+		{"`a` ``b`` <redacted>", "`a` ``b`` &lt;redacted&gt;", "`a` ``b`` ```<redacted>```"},
+		// What a placeholder names is text, not an entity or emphasis.
+		{"<secret:API&copy;> <secret:*B*>", "&lt;secret:API&amp;copy\\;&gt; &lt;secret:\\*B\\*&gt;", "`<secret:API&copy;>` `<secret:*B*>`"},
 		// A secret named with a space is a placeholder too.
 		{"<secret:API TOKEN>", "&lt;secret:API TOKEN&gt;", "`<secret:API TOKEN>`"},
 		// What is not a placeholder is left alone.
@@ -50,6 +56,21 @@ func TestEscape(t *testing.T) {
 		if got := Escape(tc.in, AsCode); got != tc.code {
 			t.Errorf("Escape(%q, AsCode) = %q, want %q", tc.in, got, tc.code)
 		}
+	}
+}
+
+// TestEscapeKeepsSpansShort checks that the span a placeholder is put in
+// stays short however long the runs of backticks of the text are, so that
+// a text of many placeholders does not grow by the length of its longest
+// run for each.
+func TestEscapeKeepsSpansShort(t *testing.T) {
+	s := "~~~\n" + strings.Repeat("`", 100000) + "\n~~~\n\n" + strings.Repeat("<redacted> ", 10000)
+	got := Escape(s, AsCode)
+	if len(got) > len(s)+10000*3 {
+		t.Errorf("Escape() of %d bytes gave %d, want each placeholder to grow by a short span", len(s), len(got))
+	}
+	if !strings.Contains(got, " `<redacted>` ") {
+		t.Errorf("Escape() does not put the placeholders in spans of one backtick")
 	}
 }
 
