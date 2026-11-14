@@ -119,7 +119,8 @@ func parseNote(m map[string]any) (Note, error) {
 	return n, err
 }
 
-// wholeNumber reads v as a whole number, 0 when it is nil.
+// wholeNumber reads v as a whole number, 0 when it is nil. Its error tells
+// the type of v, not v.
 func wholeNumber(v any) (int, error) {
 	switch x := v.(type) {
 	case nil:
@@ -132,6 +133,9 @@ func wholeNumber(v any) (int, error) {
 		if x == math.Trunc(x) && math.Abs(x) <= math.MaxInt32 {
 			return int(x), nil
 		}
+		// The value is not told: what a step gives in with can hold
+		// anything, a secret among it.
+		return 0, fmt.Errorf("must be a whole number, not a fraction or one out of range")
 	}
-	return 0, fmt.Errorf("must be a whole number, not %v", v)
+	return 0, fmt.Errorf("must be a whole number, not %T", v)
 }

@@ -42,11 +42,16 @@ func TestParseNotesRefuses(t *testing.T) {
 		{[]any{map[string]any{"body": "b"}}, "notes[0]: level is missing"},
 		{[]any{map[string]any{"level": "info"}}, "notes[0]: body is missing"},
 		{[]any{map[string]any{"level": "info", "body": "b", "title": 1}}, "notes[0]: title must be a string, not int"},
-		{[]any{map[string]any{"level": "info", "body": "b", "run": 1.5}}, "notes[0]: run must be a whole number, not 1.5"},
-		{[]any{map[string]any{"level": "info", "body": "b", "index": "2"}}, "notes[0]: index must be a whole number"},
+		{[]any{map[string]any{"level": "info", "body": "b", "run": 1.5}}, "notes[0]: run must be a whole number, not a fraction"},
+		{[]any{map[string]any{"level": "info", "body": "b", "index": "2"}}, "notes[0]: index must be a whole number, not string"},
+		{[]any{map[string]any{"level": "info", "body": "b", "run": "sk-secret"}}, "notes[0]: run must be a whole number, not string"},
 	} {
-		if _, err := ParseNotes(tc.v); err == nil || !strings.Contains(err.Error(), tc.want) {
+		_, err := ParseNotes(tc.v)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("ParseNotes(%v) error = %v, want one with %q", tc.v, err, tc.want)
+		}
+		if err != nil && strings.Contains(err.Error(), "sk-secret") {
+			t.Errorf("error = %v, want the value not told", err)
 		}
 	}
 }
