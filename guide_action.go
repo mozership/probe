@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -140,7 +141,9 @@ func workflowActions(workflow string) (map[string]string, string, error) {
 	var w struct {
 		Actions map[string]string `yaml:"actions"`
 	}
-	if err := src.decode(&w); err != nil {
+	// The files override one another as a run reads them, a key written
+	// again taking the place of the first.
+	if err := src.decode(&w, yaml.AllowDuplicateMapKey()); err != nil {
 		return nil, "", fmt.Errorf("%s: %w", workflow, err)
 	}
 	abs, err := filepath.Abs(files[0])

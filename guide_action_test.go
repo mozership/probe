@@ -61,6 +61,27 @@ func TestGuideAction_Resolves(t *testing.T) {
 	}
 }
 
+// TestGuideAction_MergedWorkflow checks that the names of a workflow given
+// as files that override one another are those a run takes.
+func TestGuideAction_MergedWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.yml")
+	over := filepath.Join(dir, "over.yml")
+	if err := os.WriteFile(base, []byte("name: w\nactions:\n  my: ./old\njobs:\n  - name: j\n    steps:\n      - uses: my\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(over, []byte("actions:\n  my: ./new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var calls []docCall
+	if _, err := GuideAction("my", base+","+over, fakeDocs(&calls)); err != nil {
+		t.Fatal(err)
+	}
+	if want := (docCall{"./new", dir}); len(calls) != 1 || calls[0] != want {
+		t.Errorf("read %+v, want %+v", calls, want)
+	}
+}
+
 func TestGuideAction_Topics(t *testing.T) {
 	wf, _ := writeGuideWorkflow(t)
 	var calls []docCall
