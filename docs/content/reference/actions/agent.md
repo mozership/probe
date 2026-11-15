@@ -2,7 +2,7 @@
 
 The agent action tests a web application from a task written in natural language. A model, the tester, uses the application through a real Chrome to carry out the task; another call of the model, the judge, then decides from what the pages showed whether the expectation holds. Chrome or Chromium has to be installed where Probe runs, and the model is reached with the API key of its provider.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-agent](https://github.com/mozership/probe-agent). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later, and v1.32.0 or later for later steps to read its [notes](#notes).
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-agent](https://github.com/mozership/probe-agent). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later, and v1.32.0 or later for later steps to read its [notes](#notes). The examples write `<commit SHA>` for the commit to pin: `probe guide agent` prints the `uses` line of the latest release, and so do the notes of each release.
 
 The action cannot tell what a page will do, nor what the model will click, so it keeps to no [guard](/guide/concepts/guard): under `--read-only` or `--allow-host`, a step that uses it is refused unless `--allow-action` names it. The tester is kept to `allow_hosts`: a page on another host is not opened, and the browser goes back from one a click led to.
 
@@ -20,7 +20,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
@@ -120,7 +120,7 @@ The action takes the API key from Probe's environment. List it under [`secrets`]
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - OPENAI_API_KEY
   - TEST_PASSWORD
@@ -196,8 +196,8 @@ A last job, which [`needs`](/reference/yaml-configuration#needs) the others with
 ```yaml
 name: Staging
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
-  slack: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
+  agent: github.com/mozership/probe-agent@<commit SHA>
+  slack: github.com/mozership/probe-slack@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - SLACK_WEBHOOK_URL
@@ -281,8 +281,8 @@ A test of what a signed-in user does need not have the tester sign in first. Sig
 ```yaml
 name: Orders
 actions:
-  browser: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  browser: github.com/mozership/probe-browser@<commit SHA>
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_EMAIL

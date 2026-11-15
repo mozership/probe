@@ -2,7 +2,7 @@
 
 JMAPアクションは、[JMAP](https://jmap.io/)（[RFC 8620](https://www.rfc-editor.org/rfc/rfc8620)、[RFC 8621](https://www.rfc-editor.org/rfc/rfc8621)）のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、呼び出しを1回のリクエストで送ります。レスポンスは呼び出しのidごとに返し、メソッドのエラーは1つのリストにまとめます。呼び出しを書かないステップは、セッションだけを取得します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-jmap](https://github.com/mozership/probe-jmap)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。このバージョンから、`action.yml`が宣言するガードとパラメータを読みます。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-jmap](https://github.com/mozership/probe-jmap)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。このバージョンから、`action.yml`が宣言するガードとパラメータを読みます。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide jmap`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -11,7 +11,7 @@ JMAPアクションは、[JMAP](https://jmap.io/)（[RFC 8620](https://www.rfc-e
 ```yaml
 steps:
   - name: Read the latest message
-    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: https://jmap.example.com
       basic_auth:
@@ -172,7 +172,7 @@ JMAPのサーバーは、実行できなかったメソッドにもHTTP 200で�
 ```yaml
 steps:
   - name: Send a message to bob
-    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.alice}}", password: "{{vars.alice_pass}}"}
@@ -199,7 +199,7 @@ steps:
     test: status == 0 && res.results.submit.created.sub.id != nil
 
   - name: Wait for it in bob's mailbox
-    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.bob}}", password: "{{vars.bob_pass}}"}
@@ -224,7 +224,7 @@ steps:
 ```yaml
 steps:
   - name: A record that cannot be created
-    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.user}}", password: "{{vars.pass}}"}

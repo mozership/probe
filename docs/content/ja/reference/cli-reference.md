@@ -631,7 +631,7 @@ probe guide github.com/mozership/probe-slack
 > The action github.com/mozership/probe-slack at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:
 
 ```yaml
-uses: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
+uses: github.com/mozership/probe-slack@<commit SHA> # <tag>
 ```
 
 ---

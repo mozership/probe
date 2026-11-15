@@ -4,7 +4,7 @@ The Slack action posts a message to a Slack channel: the [notes](/reference/yaml
 
 An action can leave notes for people besides whether its step passed, and a later step reads them as `notes`, with the job and the step of each and the secrets hidden. Probe does not post them anywhere. This action posts them to Slack, so that a team hears of a critical note, or of a failed run on a schedule, where it talks. Posting a message is all it does with Slack.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-slack](https://github.com/mozership/probe-slack). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.32.0 or later, the first with the `notes` context.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-slack](https://github.com/mozership/probe-slack). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.32.0 or later, the first with the `notes` context. The examples write `<commit SHA>` for the commit to pin: `probe guide slack` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -13,7 +13,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 name: Nightly
 actions:
-  slack: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
+  slack: github.com/mozership/probe-slack@<commit SHA>
 secrets:
   - SLACK_WEBHOOK_URL
 vars:

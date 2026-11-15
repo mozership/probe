@@ -2,7 +2,7 @@
 
 The iOS action drives an app on an iOS simulator through XCUITest: it launches the app, taps and types into it, waits for elements, reads their text and takes screenshots. It runs on macOS alone, with Xcode.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-ios](https://github.com/mozership/probe-ios). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.27.0 or later, which [calls an action once a run is over](/guide/concepts/actions#cleaning-up-after-a-run).
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-ios](https://github.com/mozership/probe-ios). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.27.0 or later, which [calls an action once a run is over](/guide/concepts/actions#cleaning-up-after-a-run). The examples write `<commit SHA>` for the commit to pin: `probe guide ios` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## How It Works
 
@@ -24,7 +24,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Settings
 actions:
-  ios: github.com/mozership/probe-ios@836056e3b6a1f9d164ff5674c35b774423647bcc # v0.2.1
+  ios: github.com/mozership/probe-ios@<commit SHA>
 jobs:
   - name: settings
     steps:

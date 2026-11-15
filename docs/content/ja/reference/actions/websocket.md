@@ -2,7 +2,7 @@
 
 WebSocketアクションは、WebSocketのサーバーに接続し、ステップに並べた順にメッセージを送受信して、受け取ったものを返します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-websocket](https://github.com/mozership/probe-websocket)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.17.0以降が必要です。ガードの下で実行するには、また`probe check`で`with`を検査するには、v1.21.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-websocket](https://github.com/mozership/probe-websocket)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.17.0以降が必要です。ガードの下で実行するには、また`probe check`で`with`を検査するには、v1.21.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide websocket`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -11,7 +11,7 @@ WebSocketアクションは、WebSocketのサーバーに接続し、ステッ�
 ```yaml
 steps:
   - name: Subscribe and get an update
-    uses: github.com/mozership/probe-websocket@916ab2545501feae6aa7ef6cd62600ad62425463 # v0.1.1
+    uses: github.com/mozership/probe-websocket@<commit SHA>
     with:
       url: wss://stream.example.com/ws
       headers:
@@ -90,7 +90,7 @@ steps:
 ```yaml
 steps:
   - name: The feed sends two updates, then closes
-    uses: github.com/mozership/probe-websocket@916ab2545501feae6aa7ef6cd62600ad62425463 # v0.1.1
+    uses: github.com/mozership/probe-websocket@<commit SHA>
     with:
       url: wss://stream.example.com/replay
       messages:

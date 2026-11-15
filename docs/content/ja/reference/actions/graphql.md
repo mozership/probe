@@ -2,7 +2,7 @@
 
 GraphQLアクションは、GraphQLのクエリやミューテーションをHTTPで送り、レスポンスの`data`と`errors`を分けて返します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-graphql](https://github.com/mozership/probe-graphql)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.17.0以降が必要です。ガードの下で実行するには、また`probe check`で`with`を検査するには、v1.21.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-graphql](https://github.com/mozership/probe-graphql)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.17.0以降が必要です。ガードの下で実行するには、また`probe check`で`with`を検査するには、v1.21.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide graphql`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -11,7 +11,7 @@ GraphQLアクションは、GraphQLのクエリやミューテーションをHTT
 ```yaml
 steps:
   - name: Look up Japan
-    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+    uses: github.com/mozership/probe-graphql@<commit SHA>
     with:
       url: https://countries.trevorblades.com/graphql
       query: |
@@ -58,7 +58,7 @@ steps:
 ```yaml
 steps:
   - name: An unknown field is reported in res.errors
-    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+    uses: github.com/mozership/probe-graphql@<commit SHA>
     with:
       url: https://countries.trevorblades.com/graphql
       query: '{ country(code: "JP") { nope } }'

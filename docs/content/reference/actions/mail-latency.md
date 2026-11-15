@@ -2,7 +2,7 @@
 
 The mail-latency action reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes the result as a CSV file.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-mail-latency](https://github.com/mozership/probe-mail-latency); it was built into Probe up to v1.21.0. Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later. The notes of each [release](https://github.com/mozership/probe-mail-latency/releases) start with the `uses` line to copy.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-mail-latency](https://github.com/mozership/probe-mail-latency); it was built into Probe up to v1.21.0. Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later. The notes of each [release](https://github.com/mozership/probe-mail-latency/releases) start with the `uses` line to copy. The examples write `<commit SHA>` for the commit to pin: `probe guide mail-latency` prints the `uses` line of the latest release, and so do the notes of each release.
 
 The action connects to no host, so its `action.yml` declares `guard: [allow-host]`, and Probe runs it under `--allow-host` without `--allow-action`. It writes its CSV into `output_dir`, so it declares no `read-only`: under `--read-only`, a step that uses it is refused unless `--allow-action` names it. See [Guard](/guide/concepts/guard).
 
@@ -12,7 +12,7 @@ The action reads the messages in a directory and writes the measurements as a CS
 
 ```yaml
 - name: Measure delivery latency
-  uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
+  uses: github.com/mozership/probe-mail-latency@<commit SHA>
   with:
     mail_dir: "/var/mail/probe/new"
     output_dir: "./reports"
@@ -80,7 +80,7 @@ jobs:
 
     - name: Measure
       id: latency
-      uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
+      uses: github.com/mozership/probe-mail-latency@<commit SHA>
       wait: 30s
       with:
         mail_dir: "{{vars.maildir}}/new"

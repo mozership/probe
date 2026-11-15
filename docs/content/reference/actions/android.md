@@ -2,7 +2,7 @@
 
 The Android action drives an app on an Android emulator or device: it launches the app, taps and types into it, presses back, waits for elements, reads their text and takes screenshots. It runs on Linux and macOS.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-android](https://github.com/mozership/probe-android). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-android](https://github.com/mozership/probe-android). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. The examples write `<commit SHA>` for the commit to pin: `probe guide android` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## How It Works
 
@@ -25,7 +25,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Settings
 actions:
-  android: github.com/mozership/probe-android@f54bb8ffc7dec6b3322e52a584a284cf4aec12d8 # v0.2.1
+  android: github.com/mozership/probe-android@<commit SHA>
 jobs:
   - name: settings
     steps:

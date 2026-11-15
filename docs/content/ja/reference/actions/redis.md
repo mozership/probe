@@ -2,7 +2,7 @@
 
 Redisアクションは、RedisまたはValkeyのサーバーでコマンドを実行し、その応答を返します。APIがキャッシュやセッションストアに残したものを、ワークフローから確かめられます。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-redis](https://github.com/mozership/probe-redis)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-redis](https://github.com/mozership/probe-redis)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide redis`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -11,7 +11,7 @@ Redisアクションは、RedisまたはValkeyのサーバーでコマンドを�
 ```yaml
 name: Session
 actions:
-  redis: github.com/mozership/probe-redis@bcefcdd348653a93c838e6c7b5f668090cb52d17 # v0.1.1
+  redis: github.com/mozership/probe-redis@<commit SHA>
 vars:
   password: "{{PASSWORD}}"
   redis_password: "{{REDIS_PASSWORD}}"

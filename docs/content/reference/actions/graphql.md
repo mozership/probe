@@ -2,7 +2,7 @@
 
 The GraphQL action sends a GraphQL query or mutation over HTTP and returns the `data` and `errors` of the response apart.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-graphql](https://github.com/mozership/probe-graphql). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.17.0 or later, and v1.21.0 or later to run it under a guard and to have `probe check` check its `with`.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-graphql](https://github.com/mozership/probe-graphql). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.17.0 or later, and v1.21.0 or later to run it under a guard and to have `probe check` check its `with`. The examples write `<commit SHA>` for the commit to pin: `probe guide graphql` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -11,7 +11,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 steps:
   - name: Look up Japan
-    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+    uses: github.com/mozership/probe-graphql@<commit SHA>
     with:
       url: https://countries.trevorblades.com/graphql
       query: |
@@ -58,7 +58,7 @@ Any response the server sends is a result, so a test can assert on a GraphQL err
 ```yaml
 steps:
   - name: An unknown field is reported in res.errors
-    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+    uses: github.com/mozership/probe-graphql@<commit SHA>
     with:
       url: https://countries.trevorblades.com/graphql
       query: '{ country(code: "JP") { nope } }'

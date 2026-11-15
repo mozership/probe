@@ -2,7 +2,7 @@
 
 The Redis action runs commands on a Redis or Valkey server and returns their replies, so a workflow can check what an API left in a cache or a session store.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-redis](https://github.com/mozership/probe-redis). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-redis](https://github.com/mozership/probe-redis). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later. The examples write `<commit SHA>` for the commit to pin: `probe guide redis` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -11,7 +11,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Session
 actions:
-  redis: github.com/mozership/probe-redis@bcefcdd348653a93c838e6c7b5f668090cb52d17 # v0.1.1
+  redis: github.com/mozership/probe-redis@<commit SHA>
 vars:
   password: "{{PASSWORD}}"
   redis_password: "{{REDIS_PASSWORD}}"

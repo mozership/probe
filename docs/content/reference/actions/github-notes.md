@@ -4,7 +4,7 @@ The GitHub Notes action puts the [notes](/reference/yaml-configuration#notes) of
 
 An action can leave notes for people besides whether its step passed, and a later step reads them as `notes`, with the job and the step of each and the secrets hidden. Probe does not post them anywhere. This action does, at the time and with the notes the workflow chooses, and nothing else: it is not an action for GitHub at large.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-github-notes](https://github.com/mozership/probe-github-notes). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.32.0 or later, the first with the `notes` context.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-github-notes](https://github.com/mozership/probe-github-notes). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.32.0 or later, the first with the `notes` context. The examples write `<commit SHA>` for the commit to pin: `probe guide github-notes` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -13,7 +13,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@d2df0b2dbbbffd3e368d156e571bf9bf2f784b76 # v0.1.3
+  github-notes: github.com/mozership/probe-github-notes@<commit SHA>
 secrets:
   - GITHUB_TOKEN
 vars:

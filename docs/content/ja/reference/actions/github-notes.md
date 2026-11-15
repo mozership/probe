@@ -4,7 +4,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 
 アクションは、ステップが通ったかどうかとは別に、人に向けたノートを残せます。後続のステップはそれを`notes`として読み、各ノートにはジョブとステップが付き、シークレットは隠されています。Probeはノートをどこにも投稿しません。投稿するのはこのアクションで、どのタイミングでどのノートを投稿するかはワークフローに書きます。このアクションはノートを投稿するためだけのもので、GitHub全般を操作するアクションではありません。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-github-notes](https://github.com/mozership/probe-github-notes)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。`notes`コンテキストを持つ最初のバージョンであるProbe v1.32.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-github-notes](https://github.com/mozership/probe-github-notes)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。`notes`コンテキストを持つ最初のバージョンであるProbe v1.32.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide github-notes`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -13,7 +13,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@d2df0b2dbbbffd3e368d156e571bf9bf2f784b76 # v0.1.3
+  github-notes: github.com/mozership/probe-github-notes@<commit SHA>
 secrets:
   - GITHUB_TOKEN
 vars:

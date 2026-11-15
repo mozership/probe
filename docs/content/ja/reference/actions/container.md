@@ -2,7 +2,7 @@
 
 Containerアクションは、後続のステップのためにコンテナを起動し、実行が終わると削除します。テスト対象のAPIが必要とするデータベースやメールサーバーを、ワークフローの中で用意できます。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-container](https://github.com/mozership/probe-container)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。[実行の終了後にアクションを呼び出す](/ja/guide/concepts/actions#実行の後始末)Probe v1.27.0以降と、`docker`コマンドが必要です。同じ引数を受け付ける[別のランタイム](#ランタイム)も使えます。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-container](https://github.com/mozership/probe-container)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。[実行の終了後にアクションを呼び出す](/ja/guide/concepts/actions#実行の後始末)Probe v1.27.0以降と、`docker`コマンドが必要です。同じ引数を受け付ける[別のランタイム](#ランタイム)も使えます。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide container`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -11,7 +11,7 @@ Containerアクションは、後続のステップのためにコンテナを�
 ```yaml
 name: Orders
 actions:
-  container: github.com/mozership/probe-container@c0e618847b5adddde966e946fd513f98012ce92e # v0.2.1
+  container: github.com/mozership/probe-container@<commit SHA>
 vars:
   pg_password: "{{PG_PASSWORD}}"
 jobs:

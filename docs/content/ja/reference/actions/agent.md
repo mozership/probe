@@ -2,7 +2,7 @@
 
 Agentアクションは、自然言語で書いたタスクからWebアプリケーションをテストします。テスターと呼ぶモデルが実際のChromeでアプリケーションを操作してタスクを行い、そのあと別に呼び出したモデル、ジャッジが、ページに表示された内容から期待どおりかどうかを判定します。Probeを実行する環境にChromeかChromiumが必要で、モデルはそのプロバイダーのAPIキーで呼び出します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-agent](https://github.com/mozership/probe-agent)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。後続のステップで[ノート](#ノート)を読むには、v1.32.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-agent](https://github.com/mozership/probe-agent)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。後続のステップで[ノート](#ノート)を読むには、v1.32.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide agent`が表示し、各リリースのノートにもあります。
 
 このアクションは、ページが何をするかも、モデルが何をクリックするかも判定できないため、[ガード](/ja/guide/concepts/guard)に従いません。`--read-only`や`--allow-host`の下では、`--allow-action`で指定しない限り、このアクションを使うステップを拒否します。テスターは`allow_hosts`の範囲にとどめます。ほかのホストのページは開かず、クリックでほかのホストに移ったときはブラウザを戻します。
 
@@ -20,7 +20,7 @@ Agentアクションは、自然言語で書いたタスクからWebアプリケ
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
@@ -122,7 +122,7 @@ APIキーはProbeの環境から読みます。Probeの出力で値を隠すよ�
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - OPENAI_API_KEY
   - TEST_PASSWORD
@@ -198,8 +198,8 @@ findingのノートのタイトルは、findingのタイトルです。本文に
 ```yaml
 name: Staging
 actions:
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
-  slack: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
+  agent: github.com/mozership/probe-agent@<commit SHA>
+  slack: github.com/mozership/probe-slack@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - SLACK_WEBHOOK_URL
@@ -283,8 +283,8 @@ error · step 9 · https://staging.example.com/notes/new
 ```yaml
 name: Orders
 actions:
-  browser: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
-  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  browser: github.com/mozership/probe-browser@<commit SHA>
+  agent: github.com/mozership/probe-agent@<commit SHA>
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_EMAIL

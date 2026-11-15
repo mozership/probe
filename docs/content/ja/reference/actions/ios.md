@@ -2,7 +2,7 @@
 
 iOSアクションは、iOSシミュレータ上のアプリをXCUITestで操作します。アプリの起動、タップ、文字の入力、要素の待機、テキストの読み取り、スクリーンショットの保存ができます。Xcodeが必要なので、macOSでだけ動きます。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-ios](https://github.com/mozership/probe-ios)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。[実行の終了後にアクションを呼び出す](/ja/guide/concepts/actions#実行の後始末)Probe v1.27.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-ios](https://github.com/mozership/probe-ios)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。[実行の終了後にアクションを呼び出す](/ja/guide/concepts/actions#実行の後始末)Probe v1.27.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide ios`が表示し、各リリースのノートにもあります。
 
 ## 仕組み
 
@@ -24,7 +24,7 @@ iOSアクションは、iOSシミュレータ上のアプリをXCUITestで操作
 ```yaml
 name: Settings
 actions:
-  ios: github.com/mozership/probe-ios@836056e3b6a1f9d164ff5674c35b774423647bcc # v0.2.1
+  ios: github.com/mozership/probe-ios@<commit SHA>
 jobs:
   - name: settings
     steps:

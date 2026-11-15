@@ -2,7 +2,7 @@
 
 `mail-latency`アクションはMaildir形式のディレクトリからメールを読み、`Received`ヘッダーから配送にかかった時間を求めてCSVファイルに書き出します。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-mail-latency](https://github.com/mozership/probe-mail-latency)で公開しています。Probe v1.21.0までは組み込みアクションでした。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。各[リリース](https://github.com/mozership/probe-mail-latency/releases)のノートの先頭に、コピーして使う`uses`の行があります。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-mail-latency](https://github.com/mozership/probe-mail-latency)で公開しています。Probe v1.21.0までは組み込みアクションでした。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。各[リリース](https://github.com/mozership/probe-mail-latency/releases)のノートの先頭に、コピーして使う`uses`の行があります。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide mail-latency`が表示し、各リリースのノートにもあります。
 
 このアクションはどのホストにも接続しないため、`action.yml`で`guard: [allow-host]`を宣言しています。そのため、`--allow-host`の下でも`--allow-action`なしで実行します。`output_dir`にCSVを書くため`read-only`は宣言しておらず、`--read-only`の下では、`--allow-action`で指定しない限りこのアクションを使うステップを拒否します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
@@ -12,7 +12,7 @@
 
 ```yaml
 - name: Measure delivery latency
-  uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
+  uses: github.com/mozership/probe-mail-latency@<commit SHA>
   with:
     mail_dir: "/var/mail/probe/new"
     output_dir: "./reports"
@@ -80,7 +80,7 @@ jobs:
 
     - name: Measure
       id: latency
-      uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
+      uses: github.com/mozership/probe-mail-latency@<commit SHA>
       wait: 30s
       with:
         mail_dir: "{{vars.maildir}}/new"

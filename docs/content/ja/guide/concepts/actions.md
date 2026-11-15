@@ -1001,12 +1001,14 @@ httpアクションの`openapi`のように、ステップを契約に照らし�
 
 ```yaml
 - name: Ask the API who I am
-  uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+  uses: github.com/mozership/probe-graphql@<commit SHA>
   with:
     url: https://api.example.com/graphql
     query: '{ viewer { login } }'
   test: res.code == 200
 ```
+
+リリースのコミットはリリースのたびに変わるので、このドキュメントの例では固定するコミットを`<commit SHA>`と書きます。アクションの最新リリースの`uses`の行は`probe guide`が表示します。公式のアクションなら`probe guide graphql`、どのアクションでも`probe guide github.com/<owner>/<repo>`です。[`guide`](/ja/reference/cli-reference#外部アクション)を参照してください。
 
 `uses`で外部アクションを指定する形式は次の2つです。スラッシュを含まない名前は組み込みアクションです。
 
@@ -1025,7 +1027,7 @@ Probeは最初のジョブを始める前にすべての外部アクションを
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+  graphql: github.com/mozership/probe-graphql@<commit SHA>
 
 jobs:
 - name: Who am I

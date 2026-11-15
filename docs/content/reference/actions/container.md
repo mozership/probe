@@ -2,7 +2,7 @@
 
 The Container action starts a container for the steps after it, such as the database or the mail server an API under test needs, and removes it once the run is over.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-container](https://github.com/mozership/probe-container). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.27.0 or later, which [calls an action once a run is over](/guide/concepts/actions#cleaning-up-after-a-run), and the `docker` command, or [another runtime](#runtimes) that takes the same arguments.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-container](https://github.com/mozership/probe-container). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.27.0 or later, which [calls an action once a run is over](/guide/concepts/actions#cleaning-up-after-a-run), and the `docker` command, or [another runtime](#runtimes) that takes the same arguments. The examples write `<commit SHA>` for the commit to pin: `probe guide container` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -11,7 +11,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Orders
 actions:
-  container: github.com/mozership/probe-container@c0e618847b5adddde966e946fd513f98012ce92e # v0.2.1
+  container: github.com/mozership/probe-container@<commit SHA>
 vars:
   pg_password: "{{PG_PASSWORD}}"
 jobs:

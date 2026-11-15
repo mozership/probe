@@ -798,12 +798,14 @@ An action can also live outside Probe, in a repository of its own. Probe downloa
 
 ```yaml
 - name: Ask the API who I am
-  uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+  uses: github.com/mozership/probe-graphql@<commit SHA>
   with:
     url: https://api.example.com/graphql
     query: '{ viewer { login } }'
   test: res.code == 200
 ```
+
+The examples in these docs write `<commit SHA>` for the commit to pin, as the commit of a release changes with each release. `probe guide` prints the `uses` line of the latest release of an action, such as `probe guide graphql` for an official one, or `probe guide github.com/<owner>/<repo>` for any; see [`guide`](/reference/cli-reference#external-actions).
 
 `uses` names an external action in one of two forms. A name without a slash is a built-in action.
 
@@ -822,7 +824,7 @@ A workflow that uses an external action in several steps can give it a name once
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
+  graphql: github.com/mozership/probe-graphql@<commit SHA>
 
 jobs:
 - name: Who am I
