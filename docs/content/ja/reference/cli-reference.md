@@ -605,6 +605,42 @@ probe guide concepts/expressions > expressions.md
 
 未知のトピックを指定すると終了ステータス2で終わります。
 
+#### 外部アクション
+
+`probe guide`は[外部アクション](/ja/guide/concepts/actions#外部アクション)の説明も出力します。説明はProbeではなくアクションから読みます。読むのは`action.yml`と同じディレクトリにある`README.md`で、ないときは`action.yml`が宣言する名前、説明、`params`、`res`です。
+
+```bash
+probe guide <action> [workflow-file]
+```
+
+| `<action>` | 読むもの |
+|---|---|
+| `./tools/my-action`、`../x`、絶対パス | そのディレクトリにあるローカルのアクション。パスは今いるディレクトリから数える |
+| `github.com/<owner>/<repo>[/<dir>]` | 最新リリースのアクション。デフォルトブランチで`action.yml`を最後に変更したコミットを読む。アクションのリリースのワークフローは、リリースごとにチェックサムを書いた`action.yml`をコミットする |
+| `github.com/<owner>/<repo>[/<dir>]@<commit SHA>` | そのコミットのアクション |
+| `workflow-file`の[`actions`](/ja/reference/yaml-configuration#actions)にある名前 | ワークフローがその名前で実行するアクション。固定したコミットを読み、ローカルのアクションはワークフローのディレクトリから数える |
+
+名前は、まずワークフローの`actions`から探し、次に上のトピックから探します。出力の先頭には、どこから読んだかと、Probeではなくアクションの作者が書いた文章であることを示します。GitHubのアクションでは、固定に使う`uses`の行も示します。
+
+```bash
+probe guide github.com/mozership/probe-slack
+```
+
+````markdown
+> The action github.com/mozership/probe-slack at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:
+
+```yaml
+uses: github.com/mozership/probe-slack@b4470dd28860e43f48f61e9bcf51b960b2c2c5ff # v0.1.2
+```
+
+---
+
+# probe-slack
+...
+````
+
+最新リリースとして見つけたコミットの`action.yml`が、最新リリースとは別のリリースをダウンロードするときは、警告を1行出します。リリースせずに`action.yml`を変更したコミットがあった場合です。最新リリースはGitHubのREST APIで探し、`GITHUB_TOKEN`があればそのトークンを使います。トークンがないと、GitHubが受け付けるのは1時間に60回までです。あるコミットのアクションから読んだものは、ユーザーのキャッシュディレクトリの`probe/actions/docs`に保存し、オフラインでもそこから読みます。アクションを読めないときや、`action.yml`がProbeのアクションのものでないときは、終了ステータス2で終わります。
+
 ### `skill`
 
 Claude CodeなどのAIエージェントに、Probeのワークフローの書き方、実行の仕方、失敗の調べ方を教えるAIエージェントスキルを出力またはインストールします。スキルは、YAMLを書く前に`probe guide`を読むこと、間違えやすい規則、そして失敗した実行を終了コードとレポートから読み解く方法をAIエージェントに伝えます。

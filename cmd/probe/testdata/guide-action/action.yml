@@ -1,0 +1,5 @@
+name: guide-action
+description: An action for the tests of probe guide
+runs:
+  using: binary
+  path: guide-action

@@ -605,6 +605,42 @@ probe guide concepts/expressions > expressions.md
 
 An unknown topic exits with status 2.
 
+#### External Actions
+
+`probe guide` also prints the description of an [external action](/guide/concepts/actions#external-actions), which it reads from the action, not from Probe: the `README.md` of the directory of its `action.yml`, or, for an action that has none, the name, the description, `params` and `res` its `action.yml` declares.
+
+```bash
+probe guide <action> [workflow-file]
+```
+
+| `<action>` | What it reads |
+|---|---|
+| `./tools/my-action`, `../x` or an absolute path | The local action in that directory, taken from the working directory |
+| `github.com/<owner>/<repo>[/<dir>]` | The action at its latest release: the last commit of the default branch that changed its `action.yml`, which the release workflow of an action commits with the digests of each release |
+| `github.com/<owner>/<repo>[/<dir>]@<commit SHA>` | The action at that commit |
+| A name under [`actions`](/reference/yaml-configuration#actions) of `workflow-file` | The action the workflow runs by that name, at the commit it pins, and a local one taken from the directory of the workflow |
+
+A name is looked for under `actions` of the workflow first, then among the topics above. The first lines say where the page comes from, and that it is written by the authors of the action, not by Probe. For an action on GitHub they give the `uses` line that pins it:
+
+```bash
+probe guide github.com/mozership/probe-slack
+```
+
+````markdown
+> The action github.com/mozership/probe-slack at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:
+
+```yaml
+uses: github.com/mozership/probe-slack@b4470dd28860e43f48f61e9bcf51b960b2c2c5ff # v0.1.2
+```
+
+---
+
+# probe-slack
+...
+````
+
+A line warns when the `action.yml` of the commit found as the latest release downloads another release than the latest, as after a commit that changed it without a release. The latest release is found with the REST API of GitHub, with the token in `GITHUB_TOKEN` when it is set; without one, GitHub allows 60 requests an hour. What an action holds at a commit is kept under `probe/actions/docs` in the user's cache directory, and read again from there offline. An action that cannot be read, or whose `action.yml` is not that of a Probe action, exits with status 2.
+
 ### `skill`
 
 Print or install the agent skill that teaches a coding agent, such as Claude Code, to write, run and debug Probe workflows. The skill tells the agent to read `probe guide` before writing YAML, lists the rules that are easy to get wrong, and explains how to read a failed run from its exit code and report.

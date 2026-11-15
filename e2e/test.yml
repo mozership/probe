@@ -341,6 +341,44 @@ jobs:
     test: |
       res.code == 0 &&
       res.stdout startsWith "# HTTP Action"
+  - name: guide reads a local action from its README
+    uses: shell
+    with:
+      cmd: ./probe guide ./cmd/probe/testdata/guide-action
+    test: |
+      res.code == 0 &&
+      res.stdout startsWith "> The local action in " &&
+      res.stdout contains "What follows is its README.md, written by the authors of the action, not by Probe." &&
+      res.stdout contains "# guide-action" &&
+      !(res.stdout contains "uses: ")
+  - name: guide reads a name the workflow gives, from the directory of the workflow
+    uses: shell
+    with:
+      cmd: ./probe guide mine cmd/probe/testdata/guide-action/workflow.yml
+    test: |
+      res.code == 0 &&
+      res.stdout contains "/cmd/probe/testdata/guide-action." &&
+      res.stdout contains "# guide-action"
+  - name: guide tells a local action without a README by its action.yml
+    uses: shell
+    with:
+      cmd: |
+        dir=$(mktemp -d)
+        printf 'name: bare\ndescription: Do bare things\nparams: [a]\nruns:\n  using: binary\n  path: bare\n' > "$dir/action.yml"
+        ./probe guide "$dir"
+        code=$?
+        rm -rf "$dir"
+        exit $code
+    test: |
+      res.code == 0 &&
+      res.stdout contains "What follows is what its action.yml declares, as it has no README.md" &&
+      res.stdout contains "# bare" &&
+      res.stdout contains "- `a`"
+  - name: guide fails for a directory that is no action
+    uses: shell
+    with:
+      cmd: ./probe guide ./examples
+    test: res.code == 2 && res.stderr contains "action.yml"
   - name: skill install writes the skill built into the binary
     uses: shell
     with:
@@ -1174,6 +1212,50 @@ jobs:
       timeout: 2m
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: guide reads an action at the commit given, and from the cache offline
+    uses: shell
+    with:
+      cmd: |
+        cache=$(mktemp -d)
+        XDG_CACHE_HOME="$cache" ./probe guide github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 > "$cache/online.md" &&
+          HTTPS_PROXY=http://127.0.0.1:1 XDG_CACHE_HOME="$cache" ./probe guide github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 > "$cache/offline.md" &&
+          cmp "$cache/online.md" "$cache/offline.md" && echo same &&
+          cat "$cache/online.md"
+        code=$?
+        rm -rf "$cache"
+        exit $code
+      timeout: 1m
+    test: |
+      res.code == 0 &&
+      res.stdout startsWith "same" &&
+      res.stdout contains "> The action github.com/mozership/probe-graphql at the commit given." &&
+      res.stdout contains "uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0" &&
+      res.stdout contains "# probe-graphql"
+  - name: guide reads a name the workflow gives at the commit it pins
+    uses: shell
+    with:
+      cmd: ./probe guide graphql e2e/external-action.yml
+      timeout: 1m
+    test: |
+      res.code == 0 &&
+      res.stdout contains "uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0"
+  - name: guide reads an action at its latest release
+    uses: shell
+    with:
+      cmd: ./probe guide github.com/mozership/probe-graphql
+      timeout: 1m
+    test: |
+      res.code == 0 &&
+      res.stdout contains "> The action github.com/mozership/probe-graphql at its latest release." &&
+      res.stdout contains "uses: github.com/mozership/probe-graphql@" &&
+      !(res.stdout contains "Warning:")
+  - name: guide refuses a repository that is no action of Probe
+    uses: shell
+    with:
+      # probe-action is a GitHub Action, whose action.yml runs node.
+      cmd: ./probe guide github.com/mozership/probe-action@b3f365eba72bd5ab6f4cf003717a388752281f6c
+      timeout: 1m
+    test: res.code == 2 && res.stderr contains "runs.using must be \"binary\""
   - name: An action pinned to a tag is refused
     uses: shell
     with:
