@@ -152,6 +152,7 @@ type github struct {
 	mu    sync.Mutex
 	files map[string][]byte
 	hits  map[string]int
+	auth  string
 }
 
 func newGitHub(t *testing.T) *github {
@@ -160,6 +161,7 @@ func newGitHub(t *testing.T) *github {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		g.hits[r.URL.Path]++
+		g.auth = r.Header.Get("Authorization")
 		data, ok := g.files[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)

@@ -190,6 +190,12 @@ type Resolver struct {
 	// RawBaseURL is where file contents of a GitHub repository are served. It
 	// defaults to https://raw.githubusercontent.com.
 	RawBaseURL string
+	// APIBaseURL is the REST API of GitHub, which Doc asks for the latest
+	// release of an action. It defaults to https://api.github.com.
+	APIBaseURL string
+	// Token authorizes the requests to the REST API. It defaults to
+	// GITHUB_TOKEN, without which GitHub allows fewer requests an hour.
+	Token string
 	// OS and Arch are the platform to resolve for. They default to the
 	// platform Probe runs on.
 	OS   string
@@ -468,7 +474,7 @@ func (r *Resolver) fetch(url string, w io.Writer, limit int64) error {
 	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: %s", url, res.Status)
+		return &statusError{url: url, status: res.Status, code: res.StatusCode}
 	}
 
 	var body io.Reader = res.Body
@@ -483,6 +489,22 @@ func (r *Resolver) fetch(url string, w io.Writer, limit int64) error {
 		return fmt.Errorf("GET %s: response is larger than %d bytes", url, limit)
 	}
 	return nil
+}
+
+// statusError is a response whose status is not 200 OK.
+type statusError struct {
+	url, status string
+	code        int
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("GET %s: %s", e.url, e.status)
+}
+
+// isNotFound reports whether err is a response of 404 Not Found.
+func isNotFound(err error) bool {
+	var se *statusError
+	return errors.As(err, &se) && se.code == http.StatusNotFound
 }
 
 func (r *Resolver) expand(s string) string {

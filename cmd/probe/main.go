@@ -322,6 +322,7 @@ Usage: probe [options] <workflow-file>...
        probe fmt [--check] <workflow-file>...
        probe coverage <openapi-file|proto-file> <report-file>
        probe guide [topic]
+       probe guide <action> [workflow-file]
        probe skill [install [dir]]
        probe manifest init <owner>/<repo>
        probe manifest <tag> <checksums-file> [action-file]
@@ -349,6 +350,10 @@ Subcommands:
                    --report json file
   guide [topic]    Print a page of the documentation as Markdown
                    Without a topic, list the topics
+  guide <action> [workflow-file]
+                   Print the description of an external action: ./dir,
+                   github.com/<owner>/<repo>[@<commit SHA>], or a name the
+                   workflow gives under actions
   skill            Print the skill that teaches coding agents to use Probe
                    install [dir] writes it to dir (.claude/skills/probe)
   manifest init <owner>/<repo>
@@ -407,7 +412,7 @@ const (
 	jobUsage          = "Usage: probe --job <job> <workflow-file>...\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n"
 	checkUsage        = "Usage: probe check <workflow-file>...\n"
 	coverageUsage     = "Usage: probe coverage <openapi-file|proto-file> <report-file>\n"
-	guideUsage        = "Usage: probe guide [topic]\n"
+	guideUsage        = "Usage: probe guide [topic]\n       probe guide <action> [workflow-file]\n"
 	skillUsage        = "Usage: probe skill [install [dir]]\n"
 	manifestInitUsage = "Usage: probe manifest init <owner>/<repo>\n"
 	manifestUsage     = manifestInitUsage + "       probe manifest <tag> <checksums-file> [action-file]\n"
@@ -823,18 +828,23 @@ func (c *Cmd) runCoverage() int {
 	return 0
 }
 
-// runGuide prints the topic list, or the page for the topic given.
+// runGuide prints the topic list, or the page for the topic or the
+// external action given, with the workflow file whose names it may be.
 func (c *Cmd) runGuide() int {
 	if len(c.SubCommandArgs) == 0 {
 		_, _ = fmt.Fprint(c.outWriter, probe.GuideIndex())
 		return 0
 	}
-	if len(c.SubCommandArgs) > 1 {
-		c.usageError(guideUsage, "guide takes one topic, not %d", len(c.SubCommandArgs))
+	if len(c.SubCommandArgs) > 2 {
+		c.usageError(guideUsage, "guide takes a topic or an action, and a workflow file, not %d arguments", len(c.SubCommandArgs))
 		return probe.ExitConfigError
 	}
 
-	page, err := probe.Guide(c.SubCommandArgs[0])
+	workflow := ""
+	if len(c.SubCommandArgs) == 2 {
+		workflow = c.SubCommandArgs[1]
+	}
+	page, err := probe.GuideAction(c.SubCommandArgs[0], workflow, actionref.ReadDoc)
 	if err != nil {
 		c.errorf("%v", err)
 		return probe.ExitConfigError

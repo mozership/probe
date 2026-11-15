@@ -132,9 +132,14 @@ func Guide(topic string) (string, error) {
 // GuideIndex renders the list of topics probe guide prints without one.
 func GuideIndex() string {
 	var b strings.Builder
-	b.WriteString("Usage: probe guide <topic>\n\n")
+	b.WriteString("Usage: probe guide <topic>\n")
+	b.WriteString("       probe guide <action> [workflow-file]\n\n")
 	b.WriteString("Prints a page of the Probe documentation as Markdown, for the version\n")
-	b.WriteString("of Probe that is running. Topics:\n")
+	b.WriteString("of Probe that is running, or the description of an external action:\n")
+	b.WriteString("a local one by its directory, as ./my-action, or one on GitHub as\n")
+	b.WriteString("github.com/<owner>/<repo>, at its latest release, or @<commit SHA>.\n")
+	b.WriteString("With a workflow file, an action can be named as its actions names it.\n")
+	b.WriteString("Topics:\n")
 
 	topics := GuideTopics()
 	width := 0

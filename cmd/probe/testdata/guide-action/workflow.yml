@@ -1,0 +1,7 @@
+name: Guide
+actions:
+  mine: ./
+jobs:
+  - name: J
+    steps:
+      - uses: mine
