@@ -614,9 +614,11 @@ jobs:
     with:
       url: http://localhost:8080
       get: /get
+    # httpbin starts gunicorn, which takes longer than 6 seconds on a runner
+    # busy with the other servers starting.
     retry:
-      max_attempts: 5
-      interval: "1s"
+      max_attempts: 15
+      interval: "2s"
       initial_delay: "2s"
     test: res.code == 200
 
