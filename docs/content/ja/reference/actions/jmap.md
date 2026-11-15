@@ -11,7 +11,7 @@ JMAPアクションは、[JMAP](https://jmap.io/)（[RFC 8620](https://www.rfc-e
 ```yaml
 steps:
   - name: Read the latest message
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
     with:
       url: https://jmap.example.com
       basic_auth:
@@ -172,7 +172,7 @@ JMAPのサーバーは、実行できなかったメソッドにもHTTP 200で�
 ```yaml
 steps:
   - name: Send a message to bob
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.alice}}", password: "{{vars.alice_pass}}"}
@@ -199,7 +199,7 @@ steps:
     test: status == 0 && res.results.submit.created.sub.id != nil
 
   - name: Wait for it in bob's mailbox
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.bob}}", password: "{{vars.bob_pass}}"}
@@ -224,7 +224,7 @@ steps:
 ```yaml
 steps:
   - name: A record that cannot be created
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@f798cba0a13b3c01557c682463fbebe31aa5781d # v0.3.1
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.user}}", password: "{{vars.pass}}"}

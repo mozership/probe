@@ -13,7 +13,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@80357adece0113f73e9c8ad31b12350bd885ddec # v0.1.1
+  github-notes: github.com/mozership/probe-github-notes@d2df0b2dbbbffd3e368d156e571bf9bf2f784b76 # v0.1.3
 secrets:
   - GITHUB_TOKEN
 vars:
@@ -137,7 +137,7 @@ GitHubが受け付けるのは、コメントとIssueでは65536文字まで、�
 | `rt` | Duration | ステップにかかった時間 |
 | `status` | Integer | `0` |
 
-書き込めないトークンでの403や、存在しないプルリクエストへの404など、GitHubがエラーを返すと、ステップはGitHubのステータスとメッセージで失敗します。書き込みをGitHubが301や302でリダイレクトした場合も失敗します。そのまま従うと、書き込みが読み取りとして送り直されるためです。
+書き込めないトークンでの403や、存在しないプルリクエストへの404など、GitHubがエラーを返すと、ステップはGitHubのステータスとメッセージで失敗します。書き込みをGitHubが301、302、303でリダイレクトした場合も失敗します。そのまま従うと、書き込みが読み取りとして送り直されるためです。
 
 アクションは、GitHubに投稿したノートを`res.notes`として返しません。返すと、後続のステップに同じノートがもう一度残るためです。
 

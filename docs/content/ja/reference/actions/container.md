@@ -11,7 +11,7 @@ Containerアクションは、後続のステップのためにコンテナを�
 ```yaml
 name: Orders
 actions:
-  container: github.com/mozership/probe-container@94e2c11ba7ab0b4528302350767eb49826414b09 # v0.2.0
+  container: github.com/mozership/probe-container@c0e618847b5adddde966e946fd513f98012ce92e # v0.2.1
 vars:
   pg_password: "{{PG_PASSWORD}}"
 jobs:

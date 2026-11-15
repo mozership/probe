@@ -25,7 +25,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 ```yaml
 name: Settings
 actions:
-  android: github.com/mozership/probe-android@bd855d4c4c0a62c662f7e059e4ff5b0586c63732 # v0.2.0
+  android: github.com/mozership/probe-android@f54bb8ffc7dec6b3322e52a584a284cf4aec12d8 # v0.2.1
 jobs:
   - name: settings
     steps:

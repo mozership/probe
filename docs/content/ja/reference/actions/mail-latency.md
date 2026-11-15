@@ -12,7 +12,7 @@
 
 ```yaml
 - name: Measure delivery latency
-  uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+  uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
   with:
     mail_dir: "/var/mail/probe/new"
     output_dir: "./reports"
@@ -80,7 +80,7 @@ jobs:
 
     - name: Measure
       id: latency
-      uses: github.com/mozership/probe-mail-latency@2340503ddb7081e1a7e4cc7e4391ac6e5937574d # v0.1.0
+      uses: github.com/mozership/probe-mail-latency@7bff515aefc0783750adce4e3daf06deceb2f136 # v0.1.1
       wait: 30s
       with:
         mail_dir: "{{vars.maildir}}/new"

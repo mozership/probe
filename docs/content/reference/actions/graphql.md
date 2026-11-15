@@ -11,7 +11,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 steps:
   - name: Look up Japan
-    uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
     with:
       url: https://countries.trevorblades.com/graphql
       query: |
@@ -58,7 +58,7 @@ Any response the server sends is a result, so a test can assert on a GraphQL err
 ```yaml
 steps:
   - name: An unknown field is reported in res.errors
-    uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+    uses: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
     with:
       url: https://countries.trevorblades.com/graphql
       query: '{ country(code: "JP") { nope } }'

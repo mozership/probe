@@ -13,7 +13,7 @@ A browser step lists what to do under `actions`, in order. Every step starts a f
 ```yaml
 steps:
   - name: Read the heading
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       actions:
         - name: navigate
@@ -192,7 +192,7 @@ jobs:
 - name: Sign in
   steps:
   - name: Log in and reach the dashboard
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       actions:
@@ -220,7 +220,7 @@ Give each reading action an `id` so the results do not replace each other.
 
 ```yaml
   - name: Product page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       actions:
         - name: navigate
@@ -249,7 +249,7 @@ A page that fetches its data shows it a moment after it loads, so a `text` read 
 
 ```yaml
   - name: Order list
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       actions:
@@ -278,7 +278,7 @@ A search field that submits on Enter, with no button to click:
 
 ```yaml
   - name: Search
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       actions:
@@ -305,7 +305,7 @@ A step that signs in can hand the token the app keeps in a cookie to a later ste
 ```yaml
   - name: Sign up
     id: signup
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       actions:
@@ -327,7 +327,7 @@ A step that signs in can save the login with `save_storage_state`, and the steps
 ```yaml
   - name: Sign in
     id: login
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       actions:
@@ -350,7 +350,7 @@ A step that signs in can save the login with `save_storage_state`, and the steps
       state: res.filepaths.state
 
   - name: Orders
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       storage_state: "{{outputs.login.state}}"
       actions:
@@ -378,7 +378,7 @@ With `virtual_authenticator`, the browser answers WebAuthn with a virtual authen
 
 ```yaml
   - name: Register a passkey and sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -426,7 +426,7 @@ A page that registers a passkey can take a moment to say so, as it sends the new
 
 ```yaml
   - name: Register a passkey
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -468,7 +468,7 @@ A step that registers a passkey can save it with `save_passkeys`, and a later st
 ```yaml
   - name: Register a passkey
     id: register
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -486,7 +486,7 @@ A step that registers a passkey can save it with `save_passkeys`, and a later st
       passkeys: res.filepaths.passkeys
 
   - name: Sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       timeout: 30s
       passkeys: "{{outputs.register.passkeys}}"
@@ -544,7 +544,7 @@ To fail the step on any error, test that the list is empty:
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       actions:
         - name: navigate
@@ -569,7 +569,7 @@ The path of the saved image is in `res.filepaths`, ready to print or pass on.
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
     with:
       window_w: 1280
       window_h: 800
@@ -600,7 +600,7 @@ The files go to the system's temporary directory unless `evidence_dir` names ano
 
 ```yaml
 - name: Checkout page
-  uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+  uses: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
   with:
     evidence_dir: out/browser
     actions:

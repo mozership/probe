@@ -209,7 +209,7 @@ The defaults of a workflow do not reach a job file run by the [embedded](/refere
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+  graphql: github.com/mozership/probe-graphql@49da1d40b2e4f25a241aba4783abaeeb03c1f470 # v0.2.1
 
 jobs:
   - name: Countries API

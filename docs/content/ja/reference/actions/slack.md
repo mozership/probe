@@ -13,7 +13,7 @@ Slackアクションは、Slackのチャンネルにメッセージを投稿し�
 ```yaml
 name: Nightly
 actions:
-  slack: github.com/mozership/probe-slack@06717bb03b81a793fa2276d2837ef881e52e093c # v0.1.1
+  slack: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
 secrets:
   - SLACK_WEBHOOK_URL
 vars:

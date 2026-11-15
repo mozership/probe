@@ -20,7 +20,7 @@ Agentアクションは、自然言語で書いたタスクからWebアプリケ
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_PASSWORD
@@ -122,7 +122,7 @@ APIキーはProbeの環境から読みます。Probeの出力で値を隠すよ�
 ```yaml
 name: Sign-up
 actions:
-  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
 secrets:
   - OPENAI_API_KEY
   - TEST_PASSWORD
@@ -198,8 +198,8 @@ findingのノートのタイトルは、findingのタイトルです。本文に
 ```yaml
 name: Staging
 actions:
-  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
-  slack: github.com/mozership/probe-slack@06717bb03b81a793fa2276d2837ef881e52e093c # v0.1.1
+  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
+  slack: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
 secrets:
   - ANTHROPIC_API_KEY
   - SLACK_WEBHOOK_URL
@@ -283,8 +283,8 @@ error · step 9 · https://staging.example.com/notes/new
 ```yaml
 name: Orders
 actions:
-  browser: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
-  agent: github.com/mozership/probe-agent@96b4d09e0ac4c75dde144ec3f59248d9f9b58b5a # v0.4.0
+  browser: github.com/mozership/probe-browser@dbc8b986eab8ec5bcd50da736f2b5931788c0f35 # v0.6.2
+  agent: github.com/mozership/probe-agent@8ef86282625f5768fbd9bedf3d0b5322c803d83d # v0.4.1
 secrets:
   - ANTHROPIC_API_KEY
   - TEST_EMAIL

@@ -11,7 +11,7 @@ WebSocketアクションは、WebSocketのサーバーに接続し、ステッ�
 ```yaml
 steps:
   - name: Subscribe and get an update
-    uses: github.com/mozership/probe-websocket@a159244b9ab3f5ec4c61782af1e711bce705c8a8 # v0.1.0
+    uses: github.com/mozership/probe-websocket@916ab2545501feae6aa7ef6cd62600ad62425463 # v0.1.1
     with:
       url: wss://stream.example.com/ws
       headers:
@@ -90,7 +90,7 @@ steps:
 ```yaml
 steps:
   - name: The feed sends two updates, then closes
-    uses: github.com/mozership/probe-websocket@a159244b9ab3f5ec4c61782af1e711bce705c8a8 # v0.1.0
+    uses: github.com/mozership/probe-websocket@916ab2545501feae6aa7ef6cd62600ad62425463 # v0.1.1
     with:
       url: wss://stream.example.com/replay
       messages:

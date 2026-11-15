@@ -13,7 +13,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@80357adece0113f73e9c8ad31b12350bd885ddec # v0.1.1
+  github-notes: github.com/mozership/probe-github-notes@d2df0b2dbbbffd3e368d156e571bf9bf2f784b76 # v0.1.3
 secrets:
   - GITHUB_TOKEN
 vars:
@@ -137,7 +137,7 @@ GitHub takes at most 65536 characters in a comment or an issue, and 1 MiB in the
 | `rt` | Duration | How long the step took |
 | `status` | Integer | `0` |
 
-An error of GitHub, such as a 403 for a token that cannot write or a 404 for a pull request that is not there, fails the step with the status and the message of GitHub. So does a write that GitHub redirects with a 301 or a 302, which would be sent again as a read.
+An error of GitHub, such as a 403 for a token that cannot write or a 404 for a pull request that is not there, fails the step with the status and the message of GitHub. So does a write that GitHub redirects with a 301, a 302 or a 303, which would be sent again as a read.
 
 The action does not return the notes it puts on GitHub as `res.notes`, so that they are not left again for the steps after it.
 
