@@ -116,6 +116,18 @@ func TestGuideAction_Official(t *testing.T) {
 		}
 	}
 
+	// The pages of the official actions are not built in, so a name of
+	// one is read from its repository rather than found among the topics.
+	for _, a := range saved {
+		var calls []docCall
+		if _, err := GuideAction(a.Name, "", fakeDocs(&calls)); err != nil {
+			t.Fatal(err)
+		}
+		if want := (docCall{a.Repository(), ""}); len(calls) != 1 || calls[0] != want {
+			t.Errorf("GuideAction(%q) read %+v, want %+v", a.Name, calls, want)
+		}
+	}
+
 	_, err := GuideAction("zeat", "", fakeDocs(new([]docCall)))
 	if err == nil || err.Error() != `unknown guide topic: zeat; did you mean "zeta"?` {
 		t.Errorf("error = %v", err)
