@@ -594,7 +594,8 @@ probe guide <topic>    # 1ページを出力
 | トピック | ページ |
 |---|---|
 | `yaml`、`cli`、`functions`、`env`、`actions` | YAMLの設定、CLI、組み込み関数、環境変数、アクションの概要 |
-| `http`や`shell`などのアクション名 | そのアクションのリファレンス。`actions/http`の形でも指定可能 |
+| `http`や`shell`などの組み込みアクションの名前 | そのアクションのリファレンス。`actions/http`の形でも指定可能 |
+| `slack`などの公式の[外部アクション](#外部アクション)の名前 | そのアクションのリポジトリから、最新リリースで読んだ説明 |
 | `concepts/expressions`や`concepts/testing`などの`concepts/<name>` | コンセプトのガイド |
 
 **例:**
@@ -620,7 +621,7 @@ probe guide <action> [workflow-file]
 | `github.com/<owner>/<repo>[/<dir>]@<commit SHA>` | そのコミットのアクション |
 | `workflow-file`の[`actions`](/ja/reference/yaml-configuration#actions)にある名前 | ワークフローがその名前で実行するアクション。固定したコミットを読み、ローカルのアクションはワークフローのディレクトリから数える |
 
-名前は、まずワークフローの`actions`から探し、次に上のトピックから探します。出力の先頭には、どこから読んだかと、Probeではなくアクションの作者が書いた文章であることを示します。GitHubのアクションでは、固定に使う`uses`の行も示します。
+名前は、まずワークフローの`actions`から探し、次にProbeに組み込んだトピックから、最後にProbeとあわせて公開している外部アクションから探します。公開している外部アクションは、`probe guide`の一覧に別の見出しで並びます。名前が`slack`なら`github.com/mozership/probe-slack`で、最新リリースで読みます。これらのページはProbeに組み込んでいないので、アクションのリリースはProbeのリリースなしに表示に反映されます。出力の先頭には、どこから読んだかと、Probeではなくアクションの作者が書いた文章であることを示します。GitHubのアクションでは、固定に使う`uses`の行も示します。
 
 ```bash
 probe guide github.com/mozership/probe-slack
@@ -630,7 +631,7 @@ probe guide github.com/mozership/probe-slack
 > The action github.com/mozership/probe-slack at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:
 
 ```yaml
-uses: github.com/mozership/probe-slack@b4470dd28860e43f48f61e9bcf51b960b2c2c5ff # v0.1.2
+uses: github.com/mozership/probe-slack@3f5ae62b66e08a1f98d350a5ab0aff6717a5f262 # v0.1.3
 ```
 
 ---
