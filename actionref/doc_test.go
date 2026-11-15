@@ -185,6 +185,18 @@ func TestDocLocal(t *testing.T) {
 	}
 }
 
+func TestDocLocalManifestTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	big := "name: x\nruns:\n  using: binary\n  path: x\n#" + strings.Repeat("x", maxManifestSize) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ManifestFile), []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (&Resolver{}).Doc(dir, "")
+	if err == nil || !strings.Contains(err.Error(), "is larger than") {
+		t.Errorf("error = %v", err)
+	}
+}
+
 func TestDownloadTag(t *testing.T) {
 	for u, want := range map[string]string{
 		"https://github.com/o/r/releases/download/v0.1.2/x_{os}_{arch}": "v0.1.2",

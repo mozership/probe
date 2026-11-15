@@ -340,7 +340,8 @@ func (r *Resolver) forget(key string, res *resolution) {
 }
 
 func readLocalManifest(dir string) (*Manifest, error) {
-	data, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+	// A local action.yml is held to the size of a remote one.
+	data, err := readFileLimited(filepath.Join(dir, ManifestFile), maxManifestSize)
 	if err != nil {
 		return nil, err
 	}
