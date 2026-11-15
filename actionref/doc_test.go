@@ -200,6 +200,7 @@ func TestDocLocalManifestTooLarge(t *testing.T) {
 func TestDownloadTag(t *testing.T) {
 	for u, want := range map[string]string{
 		"https://github.com/o/r/releases/download/v0.1.2/x_{os}_{arch}": "v0.1.2",
+		"https://github.com/o/r/releases/download/pkg%2Fv1.0.0/x":       "pkg/v1.0.0",
 		"https://example.com/x": "",
 	} {
 		if got := downloadTag(u); got != want {

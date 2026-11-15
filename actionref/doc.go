@@ -161,13 +161,17 @@ func manifestText(m *Manifest) string {
 }
 
 // downloadTag returns the tag of the GitHub release a URL downloads from,
-// as .../releases/download/<tag>/..., or empty.
+// as .../releases/download/<tag>/..., unescaped, or empty.
 func downloadTag(u string) string {
 	_, rest, ok := strings.Cut(u, "/releases/download/")
 	if !ok {
 		return ""
 	}
 	tag, _, _ := strings.Cut(rest, "/")
+	// A tag with a slash, such as pkg/v1.0.0, is escaped in the path.
+	if unescaped, err := url.PathUnescape(tag); err == nil {
+		return unescaped
+	}
 	return tag
 }
 
