@@ -209,7 +209,7 @@ jobs:
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+  graphql: github.com/mozership/probe-graphql@<commit SHA>
 
 jobs:
   - name: Countries API

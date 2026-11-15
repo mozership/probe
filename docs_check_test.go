@@ -1,6 +1,7 @@
 package probe_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -55,6 +56,15 @@ type docsBlock struct {
 	base    bool
 	variant bool
 }
+
+// The docs pin an external action as @<commit SHA>, rather than at a commit
+// that falls behind each release of the action: probe guide prints the pin
+// of the latest. A workflow is checked with a commit in its place, as probe
+// check refuses the placeholder.
+const (
+	docsCommitPlaceholder = "<commit SHA>"
+	docsCommitSHA         = "0123456789abcdef0123456789abcdef01234567"
+)
 
 // TestDocsWorkflowsCheck runs what probe check runs on every workflow in the
 // docs, and fails on any error or warning, so that an example a reader copies
@@ -116,6 +126,7 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 				base:    slices.Contains(meta, baseMarker),
 				variant: slices.Contains(meta, variantMarker),
 			}
+			body = bytes.ReplaceAll(body, []byte("@"+docsCommitPlaceholder), []byte("@"+docsCommitSHA))
 			if err := os.WriteFile(b.file, body, 0o600); err != nil {
 				return err
 			}
@@ -317,5 +328,38 @@ func TestMergeSets(t *testing.T) {
 		if got := names(mergeSets(tt.group)); !slices.Equal(got, tt.want) {
 			t.Errorf("%s: sets = %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+// TestDocs_NoCommitPinned keeps the docs free of the commit of a release of
+// an official action, which falls behind the next release: they write
+// <commit SHA>, and probe guide prints the pin of the latest.
+func TestDocs_NoCommitPinned(t *testing.T) {
+	pinned := regexp.MustCompile(`mozership/probe-[a-z0-9-]+@[0-9a-f]{40}`)
+	err := filepath.WalkDir(filepath.Join("docs", "content"), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, loc := range pinned.FindAllIndex(data, -1) {
+			line := strings.Count(string(data[:loc[0]]), "\n") + 1
+			t.Errorf("%s:%d: %s pins a commit; write @%s", path, line, data[loc[0]:loc[1]], docsCommitPlaceholder)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

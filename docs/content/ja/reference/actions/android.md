@@ -2,7 +2,7 @@
 
 Androidアクションは、Androidのエミュレータまたは実機の上のアプリを操作します。アプリの起動、タップ、文字の入力、戻るボタン、要素の待機、テキストの読み取り、スクリーンショットの保存ができます。LinuxとmacOSで動きます。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-android](https://github.com/mozership/probe-android)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-android](https://github.com/mozership/probe-android)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide android`が表示し、各リリースのノートにもあります。
 
 ## 仕組み
 
@@ -25,7 +25,7 @@ Androidアクションは、Androidのエミュレータまたは実機の上の
 ```yaml
 name: Settings
 actions:
-  android: github.com/mozership/probe-android@bd855d4c4c0a62c662f7e059e4ff5b0586c63732 # v0.2.0
+  android: github.com/mozership/probe-android@<commit SHA>
 jobs:
   - name: settings
     steps:

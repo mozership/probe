@@ -15,7 +15,17 @@ import (
 // the binary, so that probe guide works offline and always matches the
 // version that runs. A coding agent reads them before writing a workflow.
 //
-//go:embed docs/content/reference/*.md docs/content/reference/actions/*.md docs/content/guide/concepts/*.md
+// Of the pages of actions, only those of the built-in actions are: an
+// external action is described by its own repository, at the commit a
+// workflow pins, and its page in the docs is left out, so that Probe needs
+// no release to follow one of the action.
+//
+//go:embed docs/content/reference/*.md docs/content/guide/concepts/*.md
+//go:embed docs/content/reference/actions/db.md docs/content/reference/actions/dns.md
+//go:embed docs/content/reference/actions/embedded.md docs/content/reference/actions/grpc.md
+//go:embed docs/content/reference/actions/hello.md docs/content/reference/actions/http.md
+//go:embed docs/content/reference/actions/imap.md docs/content/reference/actions/shell.md
+//go:embed docs/content/reference/actions/smtp.md docs/content/reference/actions/ssh.md
 var guideFS embed.FS
 
 // GuideTopic is one page probe guide can print.
@@ -30,6 +40,7 @@ const (
 	guideGroupReference = "Reference"
 	guideGroupActions   = "Actions"
 	guideGroupConcepts  = "Concepts"
+	guideGroupExternal  = "External actions, read from GitHub"
 )
 
 // guideReferences names the reference pages that are not about one action.
@@ -138,17 +149,28 @@ func GuideIndex() string {
 	b.WriteString("of Probe that is running, or the description of an external action:\n")
 	b.WriteString("a local one by its directory, as ./my-action, or one on GitHub as\n")
 	b.WriteString("github.com/<owner>/<repo>, at its latest release, or @<commit SHA>.\n")
-	b.WriteString("With a workflow file, an action can be named as its actions names it.\n")
+	b.WriteString("With a workflow file, an action can be named as its actions names it.\n\n")
 	b.WriteString("Topics:\n")
 
-	topics := GuideTopics()
+	// The official actions are listed after the built-in ones, under a
+	// heading of their own, with the line of description the list keeps,
+	// as their pages are not in the binary.
+	var lines []GuideTopic
+	for _, t := range GuideTopics() {
+		if t.Group == guideGroupConcepts && len(lines) > 0 && lines[len(lines)-1].Group == guideGroupActions {
+			for _, a := range officialActions {
+				lines = append(lines, GuideTopic{Name: a.Name, Group: guideGroupExternal, Title: a.Description})
+			}
+		}
+		lines = append(lines, t)
+	}
 	width := 0
-	for _, t := range topics {
+	for _, t := range lines {
 		width = max(width, len(t.Name))
 	}
 
 	group := ""
-	for _, t := range topics {
+	for _, t := range lines {
 		if t.Group != group {
 			group = t.Group
 			fmt.Fprintf(&b, "\n%s:\n", group)

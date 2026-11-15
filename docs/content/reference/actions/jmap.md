@@ -2,7 +2,7 @@
 
 The JMAP action calls [JMAP](https://jmap.io/) methods ([RFC 8620](https://www.rfc-editor.org/rfc/rfc8620), [RFC 8621](https://www.rfc-editor.org/rfc/rfc8621)). It fetches the session, fills in the account of each call, sends the calls in one request, and returns the responses by call id, with the method errors gathered in one list. A step that names no calls fetches the session alone.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-jmap](https://github.com/mozership/probe-jmap). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later, which reads the guard and the params its `action.yml` declares.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-jmap](https://github.com/mozership/probe-jmap). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later, which reads the guard and the params its `action.yml` declares. The examples write `<commit SHA>` for the commit to pin: `probe guide jmap` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -11,7 +11,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 steps:
   - name: Read the latest message
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: https://jmap.example.com
       basic_auth:
@@ -172,7 +172,7 @@ Any response the server sends is a result, so a test can assert on a method erro
 ```yaml
 steps:
   - name: Send a message to bob
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.alice}}", password: "{{vars.alice_pass}}"}
@@ -199,7 +199,7 @@ steps:
     test: status == 0 && res.results.submit.created.sub.id != nil
 
   - name: Wait for it in bob's mailbox
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.bob}}", password: "{{vars.bob_pass}}"}
@@ -224,7 +224,7 @@ steps:
 ```yaml
 steps:
   - name: A record that cannot be created
-    uses: github.com/mozership/probe-jmap@f64bf107c6fd7435c4bb3f84e2f9116da761aadf # v0.3.0
+    uses: github.com/mozership/probe-jmap@<commit SHA>
     with:
       url: "{{vars.url}}"
       basic_auth: {username: "{{vars.user}}", password: "{{vars.pass}}"}

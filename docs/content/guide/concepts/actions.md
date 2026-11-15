@@ -798,12 +798,14 @@ An action can also live outside Probe, in a repository of its own. Probe downloa
 
 ```yaml
 - name: Ask the API who I am
-  uses: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+  uses: github.com/mozership/probe-graphql@<commit SHA>
   with:
     url: https://api.example.com/graphql
     query: '{ viewer { login } }'
   test: res.code == 200
 ```
+
+The examples in these docs write `<commit SHA>` for the commit to pin, as the commit of a release changes with each release. `probe guide` prints the `uses` line of the latest release of an action, such as `probe guide graphql` for an official one, or `probe guide github.com/<owner>/<repo>` for any; see [`guide`](/reference/cli-reference#external-actions).
 
 `uses` names an external action in one of two forms. A name without a slash is a built-in action.
 
@@ -822,7 +824,7 @@ A workflow that uses an external action in several steps can give it a name once
 
 ```yaml
 actions:
-  graphql: github.com/mozership/probe-graphql@41e4ffa222db58c63c7169117c919e6d252bdbf9 # v0.2.0
+  graphql: github.com/mozership/probe-graphql@<commit SHA>
 
 jobs:
 - name: Who am I
@@ -841,21 +843,23 @@ The commit is then written in one place, which is the line to change for a newer
 
 #### Published Actions
 
-These external actions are published alongside Probe, each in a repository of its own. Each page describes its parameters and result, and the notes of each release start with the `uses` line to copy.
+These external actions are published alongside Probe, each in a repository of its own. Each page describes its parameters and result. `probe guide <name>` prints the `README.md` of the action at its latest release, which describes that release, and starts with the `uses` line that pins it, as do the notes of each release. See [`guide`](/reference/cli-reference#external-actions).
 
-| Action | What it does | Latest |
-|---|---|---|
-| [agent](/reference/actions/agent) | Tests a web application from a task, or a persona and a goal, written in natural language: a model uses it through a real Chrome, and another call of the model judges it from what the pages showed. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine | v0.4.0 |
-| [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 | v0.6.1 |
-| [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman | v0.2.0 |
-| [github-notes](/reference/actions/github-notes) | Puts the [notes](/reference/yaml-configuration#notes) of a run on GitHub: in a comment on the pull request, the summary of the job, or an issue, and edits the same one on the next run | v0.1.1 |
-| [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart | v0.2.0 |
-| [jmap](/reference/actions/jmap) | Calls [JMAP](https://jmap.io/) methods: fetches the session, fills in the account of each call, and gathers the method errors, which come with HTTP 200, in `res.errors` | v0.3.0 |
-| [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 | v0.1.0 |
-| [redis](/reference/actions/redis) | Runs commands on a Redis or Valkey server and returns their replies, with the errors the server answered gathered in `res.errors`. Under `--read-only` it runs only commands known to only read | v0.1.0 |
-| [s3](/reference/actions/s3) | Reads, lists, writes and deletes objects in S3 and S3-compatible storage such as MinIO or Cloudflare R2, signing each request itself | v0.1.0 |
-| [slack](/reference/actions/slack) | Posts the [notes](/reference/yaml-configuration#notes) of a run, a text, or both to a Slack channel, by an Incoming Webhook or with a bot token | v0.1.1 |
-| [websocket](/reference/actions/websocket) | Connects to a WebSocket server, sends and receives messages in order, and returns those it received. A receive takes the next message, a number of them, or every message until the server closes, optionally only those that match | v0.1.0 |
+| Action | What it does |
+|---|---|
+| [agent](/reference/actions/agent) | Tests a web application from a task, or a persona and a goal, written in natural language: a model uses it through a real Chrome, and another call of the model judges it from what the pages showed. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine |
+| [android](/reference/actions/android) | Drives an app on an Android emulator or device through adb: launches it, taps and types into it, waits for elements, reads their text and takes screenshots |
+| [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 |
+| [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman |
+| [github-notes](/reference/actions/github-notes) | Puts the [notes](/reference/yaml-configuration#notes) of a run on GitHub: in a comment on the pull request, the summary of the job, or an issue, and edits the same one on the next run |
+| [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart |
+| [ios](/reference/actions/ios) | Drives an app on an iOS simulator through XCUITest: launches it, taps and types into it, waits for elements, reads their text and takes screenshots. It runs on macOS, with Xcode |
+| [jmap](/reference/actions/jmap) | Calls [JMAP](https://jmap.io/) methods: fetches the session, fills in the account of each call, and gathers the method errors, which come with HTTP 200, in `res.errors` |
+| [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 |
+| [redis](/reference/actions/redis) | Runs commands on a Redis or Valkey server and returns their replies, with the errors the server answered gathered in `res.errors`. Under `--read-only` it runs only commands known to only read |
+| [s3](/reference/actions/s3) | Reads, lists, writes and deletes objects in S3 and S3-compatible storage such as MinIO or Cloudflare R2, signing each request itself |
+| [slack](/reference/actions/slack) | Posts the [notes](/reference/yaml-configuration#notes) of a run, a text, or both to a Slack channel, by an Incoming Webhook or with a bot token |
+| [websocket](/reference/actions/websocket) | Connects to a WebSocket server, sends and receives messages in order, and returns those it received. A receive takes the next message, a number of them, or every message until the server closes, optionally only those that match |
 
 #### action.yml
 

@@ -2,7 +2,7 @@
 
 The browser action drives a real Chrome through [chromedp](https://github.com/chromedp/chromedp): it opens pages, reads and types into them, waits for elements, and takes screenshots. Chrome or Chromium has to be installed where Probe runs.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-browser](https://github.com/mozership/probe-browser); it was built into Probe up to v1.21.0. Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later. The notes of each [release](https://github.com/mozership/probe-browser/releases) start with the `uses` line to copy.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-browser](https://github.com/mozership/probe-browser); it was built into Probe up to v1.21.0. Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.21.0 or later. The notes of each [release](https://github.com/mozership/probe-browser/releases) start with the `uses` line to copy. The examples write `<commit SHA>` for the commit to pin: `probe guide browser` prints the `uses` line of the latest release, and so do the notes of each release.
 
 The action cannot tell what a page will do, so it keeps to no [guard](/guide/concepts/guard): under `--read-only` or `--allow-host`, a step that uses it is refused unless `--allow-action` names it.
 
@@ -13,7 +13,7 @@ A browser step lists what to do under `actions`, in order. Every step starts a f
 ```yaml
 steps:
   - name: Read the heading
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -192,7 +192,7 @@ jobs:
 - name: Sign in
   steps:
   - name: Log in and reach the dashboard
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -220,7 +220,7 @@ Give each reading action an `id` so the results do not replace each other.
 
 ```yaml
   - name: Product page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -249,7 +249,7 @@ A page that fetches its data shows it a moment after it loads, so a `text` read 
 
 ```yaml
   - name: Order list
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -278,7 +278,7 @@ A search field that submits on Enter, with no button to click:
 
 ```yaml
   - name: Search
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -305,7 +305,7 @@ A step that signs in can hand the token the app keeps in a cookie to a later ste
 ```yaml
   - name: Sign up
     id: signup
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -327,7 +327,7 @@ A step that signs in can save the login with `save_storage_state`, and the steps
 ```yaml
   - name: Sign in
     id: login
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -350,7 +350,7 @@ A step that signs in can save the login with `save_storage_state`, and the steps
       state: res.filepaths.state
 
   - name: Orders
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       storage_state: "{{outputs.login.state}}"
       actions:
@@ -378,7 +378,7 @@ With `virtual_authenticator`, the browser answers WebAuthn with a virtual authen
 
 ```yaml
   - name: Register a passkey and sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -426,7 +426,7 @@ A page that registers a passkey can take a moment to say so, as it sends the new
 
 ```yaml
   - name: Register a passkey
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -468,7 +468,7 @@ A step that registers a passkey can save it with `save_passkeys`, and a later st
 ```yaml
   - name: Register a passkey
     id: register
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -486,7 +486,7 @@ A step that registers a passkey can save it with `save_passkeys`, and a later st
       passkeys: res.filepaths.passkeys
 
   - name: Sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       passkeys: "{{outputs.register.passkeys}}"
@@ -544,7 +544,7 @@ To fail the step on any error, test that the list is empty:
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -569,7 +569,7 @@ The path of the saved image is in `res.filepaths`, ready to print or pass on.
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       window_w: 1280
       window_h: 800
@@ -600,7 +600,7 @@ The files go to the system's temporary directory unless `evidence_dir` names ano
 
 ```yaml
 - name: Checkout page
-  uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+  uses: github.com/mozership/probe-browser@<commit SHA>
   with:
     evidence_dir: out/browser
     actions:

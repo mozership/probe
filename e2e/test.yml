@@ -1249,6 +1249,15 @@ jobs:
       res.stdout contains "> The action github.com/mozership/probe-graphql at its latest release." &&
       res.stdout contains "uses: github.com/mozership/probe-graphql@" &&
       !(res.stdout contains "Warning:")
+  - name: guide reads an official action by its name, from its repository
+    uses: shell
+    with:
+      cmd: ./probe guide graphql
+      timeout: 1m
+    test: |
+      res.code == 0 &&
+      res.stdout contains "> The action github.com/mozership/probe-graphql at its latest release." &&
+      res.stdout contains "uses: github.com/mozership/probe-graphql@"
   - name: guide refuses a repository that is no action of Probe
     uses: shell
     with:

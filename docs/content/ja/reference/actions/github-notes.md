@@ -4,7 +4,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 
 アクションは、ステップが通ったかどうかとは別に、人に向けたノートを残せます。後続のステップはそれを`notes`として読み、各ノートにはジョブとステップが付き、シークレットは隠されています。Probeはノートをどこにも投稿しません。投稿するのはこのアクションで、どのタイミングでどのノートを投稿するかはワークフローに書きます。このアクションはノートを投稿するためだけのもので、GitHub全般を操作するアクションではありません。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-github-notes](https://github.com/mozership/probe-github-notes)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。`notes`コンテキストを持つ最初のバージョンであるProbe v1.32.0以降が必要です。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-github-notes](https://github.com/mozership/probe-github-notes)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。`notes`コンテキストを持つ最初のバージョンであるProbe v1.32.0以降が必要です。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide github-notes`が表示し、各リリースのノートにもあります。
 
 ## 基本的な構文
 
@@ -13,7 +13,7 @@ GitHub Notesアクションは、実行の[ノート](/ja/reference/yaml-configu
 ```yaml
 name: Shop
 actions:
-  github-notes: github.com/mozership/probe-github-notes@80357adece0113f73e9c8ad31b12350bd885ddec # v0.1.1
+  github-notes: github.com/mozership/probe-github-notes@<commit SHA>
 secrets:
   - GITHUB_TOKEN
 vars:
@@ -137,7 +137,7 @@ GitHubが受け付けるのは、コメントとIssueでは65536文字まで、�
 | `rt` | Duration | ステップにかかった時間 |
 | `status` | Integer | `0` |
 
-書き込めないトークンでの403や、存在しないプルリクエストへの404など、GitHubがエラーを返すと、ステップはGitHubのステータスとメッセージで失敗します。書き込みをGitHubが301や302でリダイレクトした場合も失敗します。そのまま従うと、書き込みが読み取りとして送り直されるためです。
+書き込めないトークンでの403や、存在しないプルリクエストへの404など、GitHubがエラーを返すと、ステップはGitHubのステータスとメッセージで失敗します。書き込みをGitHubが301、302、303でリダイレクトした場合も失敗します。そのまま従うと、書き込みが読み取りとして送り直されるためです。
 
 アクションは、GitHubに投稿したノートを`res.notes`として返しません。返すと、後続のステップに同じノートがもう一度残るためです。
 

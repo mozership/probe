@@ -69,7 +69,7 @@ A step of the job file can use a name the workflow gives an external action unde
 **workflow.yml:**
 ```yaml
 actions:
-  redis: github.com/mozership/probe-redis@7d60e0699a914e3c987ed5f2403ed8a7f3d176fa # v0.1.0
+  redis: github.com/mozership/probe-redis@<commit SHA>
 
 jobs:
 - name: Session

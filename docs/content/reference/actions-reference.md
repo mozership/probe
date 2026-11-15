@@ -19,7 +19,7 @@ hold for all of them are at the end of this page.
 
 ## External actions
 
-These are published alongside Probe, each in a repository of its own. A step names one by repository and commit, and Probe downloads it the first time a workflow uses it. See [External Actions](/guide/concepts/actions#external-actions).
+These are published alongside Probe, each in a repository of its own. A step names one by repository and commit, and Probe downloads it the first time a workflow uses it. See [External Actions](/guide/concepts/actions#external-actions). Their pages are not built into Probe: `probe guide <name>` reads the description of each from its repository, at its latest release, and with a workflow file, at the commit the workflow pins.
 
 - **[agent](/reference/actions/agent)** - Test a web application from a task written in natural language, with a model that uses it through a real Chrome
 - **[android](/reference/actions/android)** - Drive an app on an Android emulator or device through adb

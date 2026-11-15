@@ -2,6 +2,8 @@ package probe
 
 import (
 	"io/fs"
+	"os"
+	"path"
 	"strings"
 	"testing"
 )
@@ -32,6 +34,34 @@ func TestGuideTopics_CoverEveryEmbeddedPage(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestGuide_ActionPages checks that every page of an action in the docs is
+// either built in, as that of a built-in action, or that of an official
+// action, which is read from its repository and must not be built in.
+func TestGuide_ActionPages(t *testing.T) {
+	dir := "docs/content/reference/actions"
+	official := make(map[string]bool)
+	for _, a := range OfficialActions() {
+		official[a.Name] = true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), ".md")
+		if !ok {
+			continue
+		}
+		_, err := guideFS.ReadFile(path.Join(dir, e.Name()))
+		switch embedded := err == nil; {
+		case official[name] && embedded:
+			t.Errorf("the page of the official action %q is built in; it is read from its repository", name)
+		case !official[name] && !embedded:
+			t.Errorf("%s/%s is neither built in nor the page of an official action; add it to the go:embed of guideFS", dir, e.Name())
+		}
 	}
 }
 
@@ -104,6 +134,17 @@ func TestGuideIndex(t *testing.T) {
 		// Every name is followed by at least two spaces before its title.
 		if !strings.Contains(index, "  "+topic.Name+"  ") {
 			t.Errorf("index should list %q with room before its title", topic.Name)
+		}
+	}
+	_, external, ok := strings.Cut(index, "\nExternal actions, read from GitHub:\n")
+	if !ok {
+		t.Fatal("index is missing the external actions")
+	}
+	external, _, _ = strings.Cut(external, "\n\n")
+	external += "\n"
+	for _, a := range OfficialActions() {
+		if !strings.Contains(external, "  "+a.Name+"  ") || !strings.Contains(external, "  "+a.Description+"\n") {
+			t.Errorf("index should list the official action %q with its description", a.Name)
 		}
 	}
 }

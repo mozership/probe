@@ -2,7 +2,7 @@
 
 The WebSocket action connects to a WebSocket server, sends and receives messages in the order a step lists them, and returns what it received.
 
-It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-websocket](https://github.com/mozership/probe-websocket). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.17.0 or later, and v1.21.0 or later to run it under a guard and to have `probe check` check its `with`.
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-websocket](https://github.com/mozership/probe-websocket). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.17.0 or later, and v1.21.0 or later to run it under a guard and to have `probe check` check its `with`. The examples write `<commit SHA>` for the commit to pin: `probe guide websocket` prints the `uses` line of the latest release, and so do the notes of each release.
 
 ## Basic Syntax
 
@@ -11,7 +11,7 @@ A step pins the action by a full commit SHA. The notes of each [release](https:/
 ```yaml
 steps:
   - name: Subscribe and get an update
-    uses: github.com/mozership/probe-websocket@a159244b9ab3f5ec4c61782af1e711bce705c8a8 # v0.1.0
+    uses: github.com/mozership/probe-websocket@<commit SHA>
     with:
       url: wss://stream.example.com/ws
       headers:
@@ -90,7 +90,7 @@ When every entry is done and the server has not closed the connection, the actio
 ```yaml
 steps:
   - name: The feed sends two updates, then closes
-    uses: github.com/mozership/probe-websocket@a159244b9ab3f5ec4c61782af1e711bce705c8a8 # v0.1.0
+    uses: github.com/mozership/probe-websocket@<commit SHA>
     with:
       url: wss://stream.example.com/replay
       messages:

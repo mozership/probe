@@ -594,7 +594,8 @@ probe guide <topic>    # print one page
 | Topics | Pages |
 |---|---|
 | `yaml`, `cli`, `functions`, `env`, `actions` | The YAML configuration, the CLI, the built-in functions, the environment variables, and the overview of actions |
-| An action name, such as `http` or `shell` | That action's reference. `actions/http` works too |
+| The name of a built-in action, such as `http` or `shell` | That action's reference. `actions/http` works too |
+| The name of an official [external action](#external-actions), such as `slack` | The action's description, read from its repository at its latest release |
 | `concepts/<name>`, such as `concepts/expressions` or `concepts/testing` | The concept guides |
 
 **Example:**
@@ -620,7 +621,7 @@ probe guide <action> [workflow-file]
 | `github.com/<owner>/<repo>[/<dir>]@<commit SHA>` | The action at that commit |
 | A name under [`actions`](/reference/yaml-configuration#actions) of `workflow-file` | The action the workflow runs by that name, at the commit it pins, and a local one taken from the directory of the workflow |
 
-A name is looked for under `actions` of the workflow first, then among the topics above. The first lines say where the page comes from, and that it is written by the authors of the action, not by Probe. For an action on GitHub they give the `uses` line that pins it:
+A name is looked for under `actions` of the workflow first, then among the topics built into Probe, and then among the external actions published alongside Probe, which `probe guide` lists under a heading of their own: the name `slack` is `github.com/mozership/probe-slack`, read at its latest release. Their pages are not built into Probe, so a release of an action is printed without a release of Probe. The first lines say where the page comes from, and that it is written by the authors of the action, not by Probe. For an action on GitHub they give the `uses` line that pins it:
 
 ```bash
 probe guide github.com/mozership/probe-slack
@@ -630,7 +631,7 @@ probe guide github.com/mozership/probe-slack
 > The action github.com/mozership/probe-slack at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:
 
 ```yaml
-uses: github.com/mozership/probe-slack@b4470dd28860e43f48f61e9bcf51b960b2c2c5ff # v0.1.2
+uses: github.com/mozership/probe-slack@<commit SHA> # <tag>
 ```
 
 ---

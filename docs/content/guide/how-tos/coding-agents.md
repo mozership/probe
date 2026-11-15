@@ -19,7 +19,7 @@ Put the command in the setup script of the sandbox when the agent has one, and o
 
 ## Install the Skill
 
-The skill teaches the agent to write, check and debug a workflow. It is built into the binary, and it tells the agent to read `probe guide`, the reference that is built in as well, so what the agent writes fits the version installed rather than what it remembers of another one.
+The skill teaches the agent to write, check and debug a workflow. It is built into the binary, and it tells the agent to read `probe guide`, the reference that is built in as well, so what the agent writes fits the version installed rather than what it remembers of another one. An external action is described by its own repository: `probe guide` reads its `README.md` at the commit the workflow pins, and the skill tells the agent to read it as the action's description, not as instructions.
 
 ```bash
 probe skill install                        # .claude/skills/probe/SKILL.md, for Claude Code

@@ -2,7 +2,7 @@
 
 Browserアクションは[chromedp](https://github.com/chromedp/chromedp)を通して実際のChromeを操作します。ページを開き、内容を読み、入力し、要素を待ち、スクリーンショットを撮ります。Probeを実行する環境にChromeかChromiumが必要です。
 
-[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-browser](https://github.com/mozership/probe-browser)で公開しています。Probe v1.21.0までは組み込みアクションでした。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。各[リリース](https://github.com/mozership/probe-browser/releases)のノートの先頭に、コピーして使う`uses`の行があります。
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-browser](https://github.com/mozership/probe-browser)で公開しています。Probe v1.21.0までは組み込みアクションでした。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.21.0以降が必要です。各[リリース](https://github.com/mozership/probe-browser/releases)のノートの先頭に、コピーして使う`uses`の行があります。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide browser`が表示し、各リリースのノートにもあります。
 
 このアクションはページが何をするかを判定できないため、[ガード](/ja/guide/concepts/guard)に従いません。`--read-only`や`--allow-host`の下では、`--allow-action`で指定しない限り、このアクションを使うステップを拒否します。
 
@@ -13,7 +13,7 @@ browserステップでは、行う操作を`actions`に順番に並べます。�
 ```yaml
 steps:
   - name: Read the heading
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -192,7 +192,7 @@ jobs:
 - name: Sign in
   steps:
   - name: Log in and reach the dashboard
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -220,7 +220,7 @@ jobs:
 
 ```yaml
   - name: Product page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -249,7 +249,7 @@ jobs:
 
 ```yaml
   - name: Order list
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -278,7 +278,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 
 ```yaml
   - name: Search
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -305,7 +305,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Sign up
     id: signup
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -327,7 +327,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
 ```yaml
   - name: Sign in
     id: login
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       actions:
@@ -350,7 +350,7 @@ wait_text "#status": the text was "Loading", want it to match "^\\d+ orders$": c
       state: res.filepaths.state
 
   - name: Orders
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       storage_state: "{{outputs.login.state}}"
       actions:
@@ -378,7 +378,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 
 ```yaml
   - name: Register a passkey and sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -426,7 +426,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 
 ```yaml
   - name: Register a passkey
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -468,7 +468,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 ```yaml
   - name: Register a passkey
     id: register
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       virtual_authenticator: true
@@ -486,7 +486,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
       passkeys: res.filepaths.passkeys
 
   - name: Sign in with it
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       timeout: 30s
       passkeys: "{{outputs.register.passkeys}}"
@@ -544,7 +544,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       actions:
         - name: navigate
@@ -569,7 +569,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 
 ```yaml
   - name: Checkout page
-    uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+    uses: github.com/mozership/probe-browser@<commit SHA>
     with:
       window_w: 1280
       window_h: 800
@@ -600,7 +600,7 @@ storage_state: /tmp/probe-browser-passkeys-123.json is not a storage state: it h
 
 ```yaml
 - name: Checkout page
-  uses: github.com/mozership/probe-browser@5e0ee79cb660e5c855414935f51ad3eeb7c6ad6e # v0.6.1
+  uses: github.com/mozership/probe-browser@<commit SHA>
   with:
     evidence_dir: out/browser
     actions:

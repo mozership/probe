@@ -1125,6 +1125,21 @@ func TestGuide_EveryActionHasAPage(t *testing.T) {
 	}
 }
 
+// TestGuide_EveryActionPageIsBuiltIn checks the other way: a page under
+// Actions is that of a built-in action, an external one being read from
+// its repository.
+func TestGuide_EveryActionPageIsBuiltIn(t *testing.T) {
+	builtin := make(map[string]bool)
+	for _, name := range actions.Names() {
+		builtin[name] = true
+	}
+	for _, topic := range probe.GuideTopics() {
+		if topic.Group == "Actions" && !builtin[topic.Name] {
+			t.Errorf("guide topic %q is listed under Actions but is no built-in action", topic.Name)
+		}
+	}
+}
+
 func TestCmd_skill(t *testing.T) {
 	dir := t.TempDir()
 

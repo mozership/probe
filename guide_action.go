@@ -31,7 +31,7 @@ func (a OfficialAction) Repository() string {
 // GitHub Action, not one of Probe, and so that they are known offline. No
 // version is kept: a release of an action is found when it is read.
 var officialActions = []OfficialAction{
-	{"agent", "Test a web application from a task, or a persona and a goal, written in natural language, with a model that uses it through a browser"},
+	{"agent", "Test a web application from a task written in natural language, with a model that drives a browser"},
 	{"android", "Drive an app on an Android emulator or device through adb"},
 	{"browser", "Drive a browser with chromedp"},
 	{"container", "Start a container, and remove it once the run is over"},
