@@ -53,6 +53,11 @@ jobs:
         go-version-file: go.mod
     - name: Run probe
       uses: mozership/probe-action@b3f365eba72bd5ab6f4cf003717a388752281f6c # v1.2.2
+      # probe guide finds the latest release of an action with the REST API,
+      # which allows a runner far fewer requests without a token. The token
+      # of the run reads public repositories, from a fork too.
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       with:
         path: e2e/test.yml
         options: ${{ github.event.inputs.options }}
