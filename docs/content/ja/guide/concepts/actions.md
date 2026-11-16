@@ -1149,6 +1149,13 @@ Probeは、アクションが記録したログをレベルに応じて表示し
 
 各ログは`[LEVEL] <アクション>: <メッセージ>`の形で表示し、その下にフィールドをYAMLに似た行で並べます。マップやリストも展開して表示します。
 
+アクションが結果の`report`に返す文字列は、ステップの下に、各行をステップと同じだけ字下げして表示します。判定とその理由のように、実行を読む人がひと目で知るべきことを書いてください。Probeの`style`パッケージには、Probeが状態を示す印（アイコンとその色）があります。`style.Success`は緑の`✓`、`style.Failure`は赤の`✗`、`style.NoTest`は青の`△`、`style.Skipped`は青の`⏭`、`style.Warning`は黄の`⚠︎`、`style.Info`は青の`⏺`です。`style.NoteLevel`はノートのレベルに対応する印を返します。印に色が付くのは、Probeが端末に表示するとき（Probeはこれを`PROBE_TTY`を`1`にしてアクションに伝えます）と、`FORCE_COLOR`が`1`のときです。それ以外ではアイコンだけになります。
+
+```go
+fmt.Fprintf(&b, "%s %s\n", style.Success, "the page shows the name")
+fmt.Fprintf(&b, "%s %s\n", style.Failure, style.Failure.Paint("the name is not shown"))
+```
+
 アクションは現在のProbeの`actionrpc`でビルドしてください。Probeは、現在の`actionrpc`がエラーに付ける印で、アクションが返したエラーと接続の切断とを区別します。印のないエラーのgRPCコードが`Unavailable`だと、Probeはプロセスが終了したかどうかを確かめるために少し待ちます。
 
 対応するプラットフォームごとにビルドして実行ファイルを公開し、そのURLとダイジェストを書いた`action.yml`をコミットします。利用者はその`action.yml`を含むコミットを指定します。[mozership/probe-graphql](https://github.com/mozership/probe-graphql)では、GoReleaserと、リリースのたびにダイジェストをコミットするワークフローでこれを行っています。

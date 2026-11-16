@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/dump"
 	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/style"
 )
 
 // Printer implements PrintWriter for console print
@@ -50,7 +51,7 @@ func (p *Printer) Masker() *mask.Masker {
 // embedded job: that one runs in the process of an action, whose standard
 // output is not the terminal, and what it writes is printed by the run.
 func NewPrinter(verbose bool) *Printer {
-	if os.Getenv("FORCE_COLOR") == "1" || os.Getenv("PROBE_TTY") == "1" {
+	if style.Colored() {
 		color.NoColor = false
 	}
 

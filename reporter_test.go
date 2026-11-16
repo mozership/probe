@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+
+	"github.com/mozership/probe/style"
 )
 
 // newTestStreamPrinter builds a printer writing into buffers, together with a
@@ -525,6 +527,22 @@ func TestStatusIcon(t *testing.T) {
 		icon, c := statusIcon(tt.status)
 		if icon != tt.icon || !c.Equals(tt.color) {
 			t.Errorf("statusIcon(%d) = %q, %v; want %q, %v", tt.status, icon, c, tt.icon, tt.color)
+		}
+	}
+}
+
+// The icons of the statuses are those of the marks an action prints with,
+// so that what it reports under its step looks like the step.
+func TestStatusIconsAreMarks(t *testing.T) {
+	tests := map[string]style.Mark{
+		IconSuccess:  style.Success,
+		IconError:    style.Failure,
+		IconTriangle: style.NoTest,
+		IconSkip:     style.Skipped,
+	}
+	for icon, m := range tests {
+		if want := m.Icon() + " "; icon != want {
+			t.Errorf("icon %q, want %q", icon, want)
 		}
 	}
 }

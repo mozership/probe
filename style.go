@@ -1,25 +1,30 @@
 package probe
 
-import "github.com/fatih/color"
+import (
+	"github.com/fatih/color"
+
+	"github.com/mozership/probe/style"
+)
 
 // The colors and the icons of what probe prints: the report, the progress
 // of a run and the log. They are shared by the printer, the renderer of the
 // report and the reporters, so that a status looks the same wherever it is
-// shown.
+// shown. The colors and the icons of the statuses are those of the style
+// package, which an action uses for what it reports under its step.
 
 // colorSuccess returns a *color.Color for success (RGB 0,175,0)
 func colorSuccess() *color.Color {
-	return color.RGB(0, 175, 0)
+	return style.Success.Color()
 }
 
 // colorError returns a *color.Color for errors (red)
 func colorError() *color.Color {
-	return color.New(color.FgRed)
+	return style.Failure.Color()
 }
 
 // colorInfo returns a *color.Color for info messages (blue)
 func colorInfo() *color.Color {
-	return color.New(color.FgBlue)
+	return style.Skipped.Color()
 }
 
 // colorDim returns a *color.Color for subdued text
@@ -29,7 +34,7 @@ func colorDim() *color.Color {
 
 // colorWarning returns a *color.Color for warnings (yellow)
 func colorWarning() *color.Color {
-	return color.New(color.FgYellow)
+	return style.Warning.Color()
 }
 
 // colorSkipped returns a *color.Color for skipped items (gray)
@@ -38,10 +43,11 @@ func colorSkipped() *color.Color {
 }
 
 func colorNoTest() *color.Color {
-	return color.RGB(0, 102, 204)
+	return style.NoTest.Color()
 }
 
-// Icon constants
+// Icon constants. Those of the statuses are the icons of the marks of the
+// style package, followed by a space.
 const (
 	IconSuccess  = "✓ "
 	IconError    = "✗ "
@@ -57,16 +63,18 @@ const (
 // that sets it apart in the report; the progress trims it. A status the
 // report does not know is shown by a question mark.
 func statusIcon(status StatusType) (string, *color.Color) {
+	var m style.Mark
 	switch status {
 	case StatusSuccess:
-		return IconSuccess, colorSuccess()
+		m = style.Success
 	case StatusError:
-		return IconError, colorError()
+		m = style.Failure
 	case StatusWarning:
-		return IconTriangle, colorNoTest()
+		m = style.NoTest
 	case StatusSkipped:
-		return IconSkip, colorInfo()
+		m = style.Skipped
 	default:
 		return "?", colorWarning()
 	}
+	return m.Icon() + " ", m.Color()
 }
