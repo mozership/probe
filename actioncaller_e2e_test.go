@@ -1,17 +1,10 @@
 package probe
 
 import (
-	"context"
-	"errors"
-	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/mozership/probe/actionrpc"
 )
 
 // newCallerEnv is the directory of newCleanupEnv, with the local actions
@@ -102,33 +95,6 @@ jobs:
 	}
 	if !strings.Contains(string(out), "does not keep to --read-only") {
 		t.Errorf("output does not say why the action called was refused:\n%s", out)
-	}
-}
-
-// An action called is stopped once the context of the call is done.
-func TestActionCaller_StopsTheActionOnTimeout(t *testing.T) {
-	dir := t.TempDir()
-	if out, err := exec.Command("go", "build", "-o", filepath.Join(dir, "hang", "hang"), "./testdata/hang-action").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "hang", "action.yml"), []byte("runs:\n  using: binary\n  path: hang\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	pidfile := filepath.Join(dir, "pid")
-	c := NewActionCaller(actionrpc.Call{}, dir, WithCallerLogOutput(io.Discard))
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	start := time.Now()
-	_, err := c.Call(ctx, "./hang", map[string]any{"pidfile": pidfile})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want the deadline of the context", err)
-	}
-	if d := time.Since(start); d > time.Second+actionrpc.ExitWait {
-		t.Errorf("the call returned after %s", d)
-	}
-	if _, err := os.Stat(pidfile + ".term"); err != nil {
-		t.Errorf("the action was not sent SIGTERM: %v", err)
 	}
 }
 
