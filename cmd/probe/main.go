@@ -29,6 +29,7 @@ var (
 
 func main() {
 	exportTTY(os.Stdout)
+	exportExecutable()
 	c := newCmd()
 	if c != nil {
 		os.Exit(c.start(os.Args))
@@ -44,6 +45,16 @@ func main() {
 func exportTTY(out *os.File) {
 	if isatty.IsTerminal(out.Fd()) {
 		_ = os.Setenv("PROBE_TTY", "1")
+	}
+}
+
+// exportExecutable sets PROBE_EXECUTABLE to the executable of this process,
+// for an action that calls an action of Probe with probe.ActionCaller to
+// start it from: the action's own executable is not probe. It is left as it
+// is when the executable cannot be told.
+func exportExecutable() {
+	if exe, err := os.Executable(); err == nil {
+		_ = os.Setenv(probe.ExecutableEnv, exe)
 	}
 }
 

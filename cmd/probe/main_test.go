@@ -1396,6 +1396,18 @@ func TestExportTTY(t *testing.T) {
 	}
 }
 
+func TestExportExecutable(t *testing.T) {
+	t.Setenv(probe.ExecutableEnv, "")
+	exportExecutable()
+	want, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv(probe.ExecutableEnv); got != want {
+		t.Errorf("%s = %q, want the executable of the process %q", probe.ExecutableEnv, got, want)
+	}
+}
+
 func TestCmd_parseArgs_var(t *testing.T) {
 	c := newBufferCmd()
 	err := c.parseArgs([]string{"--var", "url=http://localhost:8080", "w.yml", "--var=token=a=b", "--var", "empty=", "--var", "url=http://other"})
