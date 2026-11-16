@@ -7,13 +7,16 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/textwidth"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
 // reportRenderer renders the report of a run as text: a block for each job,
-// in the order the workflow writes them, and a footer. What it renders is
-// shown as it is, so the secrets the masker knows are hidden in it.
+// in the order the workflow writes them, and a footer, and the lines of the
+// progress of a run. What it renders is shown as it is, so the secrets the
+// masker knows are hidden in it. It writes nothing itself: a Reporter tells
+// when what it renders is printed, and where.
 //
 // Its methods named write* write their part of the report to the builder
 // they are given, and those named *Text return theirs.
@@ -466,4 +469,47 @@ func (r *reportRenderer) headerText(name, description string) string {
 	}
 	output.WriteString("\n")
 	return output.String()
+}
+
+// progressLine is where a line of the progress of a run is: when it is
+// written, and the job it is of, by its label and the width the labels of
+// the jobs are padded to.
+type progressLine struct {
+	at    time.Time
+	label string
+	width int
+}
+
+// stepStartText returns the line of the progress of a run that tells a
+// step, named stepName, started.
+func (r *reportRenderer) stepStartText(p progressLine, stepName string) string {
+	return r.progressText(p, colorDim().Sprint(IconStepStart), stepName, "")
+}
+
+// stepDoneText returns the line of the progress of a run that tells sr
+// is done: its status, and how many of its runs succeeded when it was
+// repeated, or the time it took.
+func (r *reportRenderer) stepDoneText(p progressLine, sr StepResult) string {
+	icon, c := statusIcon(sr.Status)
+	suffix := ""
+	if sr.RepeatCounter != nil {
+		suffix = colorDim().Sprintf(" (%d/%d success)",
+			sr.RepeatCounter.SuccessCount, sr.RepeatCounter.RepeatTotal)
+	} else if sr.RT != "" {
+		suffix = colorDim().Sprintf(" (%s)", sr.RT)
+	}
+	return r.progressText(p, c.Sprint(strings.TrimSpace(icon)), stepTitle(sr), suffix)
+}
+
+// progressText returns a line of the progress of a run: the time, the
+// label of its job, the icon, the text and the suffix. Jobs run at once,
+// so a line is labelled by its job, and the labels are padded to one width,
+// so that the steps line up in a log.
+func (r *reportRenderer) progressText(p progressLine, icon, text, suffix string) string {
+	ts := colorDim().Sprint(p.at.Format("15:04:05.000"))
+	job := colorDim().Sprintf("[%s]", p.label)
+	if pad := p.width - textwidth.Width(p.label); pad > 0 {
+		job += strings.Repeat(" ", pad)
+	}
+	return fmt.Sprintf("%s %s %s %s%s\n", ts, job, icon, text, suffix)
 }
