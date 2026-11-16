@@ -1,0 +1,358 @@
+package probe
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/hashicorp/go-hclog"
+	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/actionrpc"
+)
+
+// localAction writes a local action in a directory named name under dir,
+// with manifest added to its action.yml, and returns its directory. Its
+// executable is not one: the tests run it with a fake.
+func localAction(t *testing.T, dir, name, manifest string) string {
+	t.Helper()
+	actionDir := filepath.Join(dir, name)
+	if err := os.MkdirAll(actionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(actionDir, "bin"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yml := "runs:\n  using: binary\n  path: bin\n" + manifest
+	if err := os.WriteFile(filepath.Join(actionDir, "action.yml"), []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	full, err := actionref.Full(actionDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return full
+}
+
+// fakeRun records the calls it is given, and returns what ret makes of each.
+type fakeRun struct {
+	calls []actionrpc.Call
+	ret   func(call actionrpc.Call) (map[string]any, map[string]any, error)
+}
+
+func (f *fakeRun) external(_ context.Context, _ *actionref.Executable, call actionrpc.Call, _ hclog.Logger) (map[string]any, map[string]any, error) {
+	f.calls = append(f.calls, call)
+	if f.ret == nil {
+		return map[string]any{"status": 0}, nil, nil
+	}
+	return f.ret(call)
+}
+
+func newTestCaller(call actionrpc.Call, baseDir string, f *fakeRun, opts ...CallerOption) *ActionCaller {
+	c := NewActionCaller(call, baseDir, append([]CallerOption{WithCallerLog(hclog.NewNullLogger())}, opts...)...)
+	c.runExternal = f.external
+	return c
+}
+
+func TestActionCaller_ReadsNamesOfTheWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "greet", "")
+	f := &fakeRun{}
+	step := actionrpc.Step{RunID: "run-1", JobID: "job"}
+	c := newTestCaller(actionrpc.Call{Step: step, Actions: map[string]string{"greet": full}}, "", f)
+
+	res, err := c.Call(context.Background(), "greet", map[string]any{"name": "probe"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Result["status"] != 0 {
+		t.Errorf("result = %v", res.Result)
+	}
+	if len(f.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(f.calls))
+	}
+	got := f.calls[0]
+	if got.With["name"] != "probe" {
+		t.Errorf("with = %v", got.With)
+	}
+	if got.Step != step {
+		t.Errorf("step = %+v, want the step of the calling action %+v", got.Step, step)
+	}
+	if got.Actions["greet"] != full {
+		t.Errorf("actions = %v, want those of the calling action", got.Actions)
+	}
+}
+
+func TestActionCaller_ResolvesALocalActionAgainstBaseDir(t *testing.T) {
+	dir := t.TempDir()
+	localAction(t, dir, "greet", "")
+	f := &fakeRun{}
+	c := newTestCaller(actionrpc.Call{}, dir, f)
+	if _, err := c.Call(context.Background(), "./greet", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(f.calls))
+	}
+}
+
+func TestActionCaller_EmptyUses(t *testing.T) {
+	c := newTestCaller(actionrpc.Call{}, "", &fakeRun{})
+	if _, err := c.Call(context.Background(), "", nil); err == nil {
+		t.Fatal("an empty uses was called")
+	}
+}
+
+func TestActionCaller_KeepsStateBetweenCalls(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "count", "")
+	f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+		// The state is kept in the form it takes when it is sent, in
+		// which a number may be a float64.
+		var n int
+		switch v := call.State["n"].(type) {
+		case int:
+			n = v
+		case int64:
+			n = int(v)
+		case float64:
+			n = int(v)
+		}
+		if call.With["fail"] == true {
+			return nil, map[string]any{"n": 100}, errors.New("failed")
+		}
+		if call.With["keep"] == true {
+			return map[string]any{"n": n}, nil, nil
+		}
+		return map[string]any{"n": n}, map[string]any{"n": n + 1}, nil
+	}}
+	c := newTestCaller(actionrpc.Call{Actions: map[string]string{"count": full}}, "", f)
+	call := func(with map[string]any) any {
+		t.Helper()
+		res, err := c.Call(context.Background(), "count", with)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Result["n"]
+	}
+	if n := call(nil); n != 0 {
+		t.Errorf("first n = %v, want 0", n)
+	}
+	if n := call(nil); n != 1 {
+		t.Errorf("second n = %v, want 1", n)
+	}
+	// A nil state keeps the one there was.
+	if n := call(map[string]any{"keep": true}); n != 2 {
+		t.Errorf("third n = %v, want 2", n)
+	}
+	// The state of a call that failed is not kept.
+	if _, err := c.Call(context.Background(), "count", map[string]any{"fail": true}); err == nil {
+		t.Fatal("want the error of the action")
+	}
+	if n := call(nil); n != 2 {
+		t.Errorf("n after a failed call = %v, want 2", n)
+	}
+	// The same action under another name keeps the same state.
+	if _, err := c.Call(context.Background(), full, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := call(nil); n != 4 {
+		t.Errorf("n after a call by the full name = %v, want 4", n)
+	}
+}
+
+func TestActionCaller_Guard(t *testing.T) {
+	dir := t.TempDir()
+	keeps := localAction(t, dir, "keeps", "guard: [read-only]\n")
+	keepsNone := localAction(t, dir, "none", "")
+	names := map[string]string{"keeps": keeps, "none": keepsNone}
+
+	tests := []struct {
+		name    string
+		guard   actionrpc.Guard
+		uses    string
+		refused bool
+	}{
+		{name: "no guard", uses: "none"},
+		{name: "keeps to it", guard: actionrpc.Guard{ReadOnly: true}, uses: "keeps"},
+		{name: "does not keep to it", guard: actionrpc.Guard{ReadOnly: true}, uses: "none", refused: true},
+		{name: "keeps to one kind of two", guard: actionrpc.Guard{ReadOnly: true, AllowHosts: []string{"example.com"}}, uses: "keeps", refused: true},
+		{name: "allowed by its full name", guard: actionrpc.Guard{ReadOnly: true, AllowActions: []string{keepsNone}}, uses: "none"},
+		{name: "allowed by the name called", guard: actionrpc.Guard{ReadOnly: true, AllowActions: []string{"none"}}, uses: "none"},
+		{
+			// What the action.yml declares replaces what the guard came
+			// with, as for a step.
+			name:    "declares less than the guard came with",
+			guard:   actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{keepsNone: {actionrpc.KindReadOnly}}},
+			uses:    "none",
+			refused: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeRun{}
+			c := newTestCaller(actionrpc.Call{Guard: tt.guard, Actions: names}, "", f)
+			_, err := c.Call(context.Background(), tt.uses, nil)
+			var refused *actionrpc.Refused
+			if got := errors.As(err, &refused); got != tt.refused {
+				t.Fatalf("refused = %v, want %v (err %v)", got, tt.refused, err)
+			}
+			if tt.refused {
+				if len(f.calls) != 0 {
+					t.Error("a refused action was run")
+				}
+				if !strings.Contains(err.Error(), "--allow-action") {
+					t.Errorf("error = %q, want it to tell how to let the action run", err)
+				}
+				return
+			}
+			if len(f.calls) != 1 {
+				t.Fatalf("calls = %d, want 1", len(f.calls))
+			}
+			if got := f.calls[0].Guard; got.ReadOnly != tt.guard.ReadOnly || !slices.Equal(got.AllowHosts, tt.guard.AllowHosts) {
+				t.Errorf("guard = %+v, want the guard of the run", got)
+			}
+		})
+	}
+}
+
+func TestActionCaller_BuiltinUnderTheGuard(t *testing.T) {
+	var ran []string
+	run := func(_ context.Context, probe, name string, _ actionrpc.Call, _ hclog.Logger) (map[string]any, map[string]any, error) {
+		ran = append(ran, probe+" "+name)
+		return map[string]any{"status": 0}, nil, nil
+	}
+	guard := actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {actionrpc.KindReadOnly}}}
+	c := newTestCaller(actionrpc.Call{Guard: guard}, "", &fakeRun{}, WithProbeExecutable("/bin/probe"))
+	c.runBuiltin = run
+
+	if _, err := c.Call(context.Background(), "http", nil); err != nil {
+		t.Fatal(err)
+	}
+	var refused *actionrpc.Refused
+	if _, err := c.Call(context.Background(), "shell", nil); !errors.As(err, &refused) {
+		t.Fatalf("err = %v, want shell refused under --read-only", err)
+	}
+	if !slices.Equal(ran, []string{"/bin/probe http"}) {
+		t.Errorf("ran = %v", ran)
+	}
+}
+
+func TestActionCaller_BuiltinWithoutProbeExecutable(t *testing.T) {
+	t.Setenv(ExecutableEnv, "")
+	c := newTestCaller(actionrpc.Call{}, "", &fakeRun{})
+	c.runBuiltin = func(context.Context, string, string, actionrpc.Call, hclog.Logger) (map[string]any, map[string]any, error) {
+		t.Fatal("a built-in action was run without a probe to start it from")
+		return nil, nil, nil
+	}
+	_, err := c.Call(context.Background(), "http", nil)
+	if err == nil || !strings.Contains(err.Error(), ExecutableEnv) {
+		t.Fatalf("err = %v, want it to name %s", err, ExecutableEnv)
+	}
+}
+
+func TestActionCaller_ProbeExecutableFromTheEnvironment(t *testing.T) {
+	t.Setenv(ExecutableEnv, "/usr/local/bin/probe")
+	var from string
+	c := newTestCaller(actionrpc.Call{}, "", &fakeRun{})
+	c.runBuiltin = func(_ context.Context, probe, _ string, _ actionrpc.Call, _ hclog.Logger) (map[string]any, map[string]any, error) {
+		from = probe
+		return nil, nil, nil
+	}
+	if _, err := c.Call(context.Background(), "hello", nil); err != nil {
+		t.Fatal(err)
+	}
+	if from != "/usr/local/bin/probe" {
+		t.Errorf("started from %q", from)
+	}
+}
+
+func TestActionCaller_Cleanups(t *testing.T) {
+	dir := t.TempDir()
+	cleans := localAction(t, dir, "cleans", "cleanup: true\n")
+	plain := localAction(t, dir, "plain", "")
+	names := map[string]string{"cleans": cleans, "plain": plain}
+
+	t.Run("owed once, also when the call fails", func(t *testing.T) {
+		owed := &actionrpc.Cleanups{}
+		f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+			if call.Cleanups == nil {
+				t.Error("the action was not told the runner cleans up")
+			}
+			if call.With["fail"] == true {
+				return nil, nil, errors.New("failed")
+			}
+			return nil, nil, nil
+		}}
+		c := newTestCaller(actionrpc.Call{Cleanups: owed, Actions: names}, "", f)
+		for _, with := range []map[string]any{{"fail": true}, nil, nil} {
+			_, _ = c.Call(context.Background(), "cleans", with)
+		}
+		if _, err := c.Call(context.Background(), "plain", nil); err != nil {
+			t.Fatal(err)
+		}
+		if got := owed.List(); !slices.Equal(got, []string{cleans}) {
+			t.Errorf("owed = %v, want [%s]", got, cleans)
+		}
+	})
+
+	t.Run("those the action ran", func(t *testing.T) {
+		owed := &actionrpc.Cleanups{}
+		f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+			call.Cleanups.Add("github.com/o/r@" + strings.Repeat("a", 40))
+			return nil, nil, errors.New("failed after it ran one")
+		}}
+		c := newTestCaller(actionrpc.Call{Cleanups: owed, Actions: names}, "", f)
+		_, _ = c.Call(context.Background(), "plain", nil)
+		if got := owed.List(); len(got) != 1 || !strings.HasPrefix(got[0], "github.com/o/r@") {
+			t.Errorf("owed = %v", got)
+		}
+	})
+
+	t.Run("a runner that does not clean up", func(t *testing.T) {
+		f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+			if call.Cleanups != nil {
+				t.Error("the action was told the runner cleans up")
+			}
+			return nil, nil, nil
+		}}
+		c := newTestCaller(actionrpc.Call{Actions: names}, "", f)
+		if _, err := c.Call(context.Background(), "cleans", nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestActionCaller_PassesOnProcessesAndContract(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "serve", "")
+	procs := &actionrpc.Processes{}
+	f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+		call.Processes.Add(actionrpc.Process{PID: 4242})
+		call.Contract.Report(actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml"}})
+		return map[string]any{"status": 0}, nil, nil
+	}}
+	c := newTestCaller(actionrpc.Call{Processes: procs, Actions: map[string]string{"serve": full}}, "", f)
+	res, err := c.Call(context.Background(), "serve", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := procs.List(); len(got) != 1 || got[0].PID != 4242 {
+		t.Errorf("processes = %+v, want the one the action left", got)
+	}
+	if res.Contract == nil || res.Contract.Matched == nil || res.Contract.Matched.Spec != "openapi.yml" {
+		t.Errorf("contract = %+v", res.Contract)
+	}
+}
+
+func TestActionCaller_MissingAction(t *testing.T) {
+	c := newTestCaller(actionrpc.Call{}, t.TempDir(), &fakeRun{})
+	_, err := c.Call(context.Background(), "./nowhere", nil)
+	var pe *ProbeError
+	if !errors.As(err, &pe) || pe.Type != ErrorTypeConfiguration {
+		t.Fatalf("err = %v, want a configuration error", err)
+	}
+}

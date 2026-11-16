@@ -1024,6 +1024,33 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 }
 ```
 
+#### Calling an Action from an Action
+
+An action that drives a target through the action of that target, as an agent drives an app through probe-ios, calls it with `probe.ActionCaller`. Each call is what a step of the workflow would be, for the step the calling action runs for:
+
+```go
+func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+    caller := probe.NewActionCaller(call, "", probe.WithCallerLog(a.log))
+    res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
+    if err != nil {
+        return nil, nil, err // a Refused error refuses the step
+    }
+    tree := res.Result["res"]
+    // ...
+}
+```
+
+- **Names.** `uses` is read as a step's is: a name the workflow gives an action under [`actions`](/reference/yaml-configuration#actions), an external action, or an action of Probe. A local action that `actions` does not name is taken relative to the directory given to `NewActionCaller`.
+- **Guard.** On the first call of an external action, what its `action.yml` declares under `guard` is put in the guard of the run, and an action that does not keep to the guard is refused with an `actionrpc.Refused` error, unless `--allow-action` names it. An action the guard refuses is not fetched.
+- **Run.** The action is told the step of the calling action, so that `Step.RunID` is the run's.
+- **State.** The caller keeps the state each action leaves, and gives it to the next call of that action, as a job does. Make one caller for a step, and call through it.
+- **Cleanup.** An action whose `action.yml` sets `cleanup` is cleaned up once the run is over, once however many times it was called, as are the processes it leaves running.
+- **Contract.** `CallResult.Contract` is the check the action made against a contract, such as the `openapi` of the http action. Probe does not take it as the test of the calling step; the calling action decides what it means.
+- **Log.** The records of the action go to the logger given with `WithCallerLog`, at their levels, and Probe shows them as it shows those of the calling action.
+- **Timeout.** Once the context of `Call` is done, the action is sent `SIGTERM`, and killed two seconds later.
+
+An action of Probe is started from the probe that runs the calling action, which the CLI names in `PROBE_EXECUTABLE`. Under a Probe that does not set it, calling an action of Probe is an error that says so, and external actions can still be called.
+
 ### Building a Custom Action into Probe
 
 A custom action can instead be built into Probe itself. Probe runs each built-in action in a process of its own, by starting its own executable again as `<executable> builtin-actions <name>`. Such an action therefore lives in your own build of Probe: a program that uses Probe as a library, serves your action under that subcommand, and hands the other names to the built-in actions.

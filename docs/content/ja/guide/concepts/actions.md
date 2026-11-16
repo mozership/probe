@@ -1227,6 +1227,33 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 }
 ```
 
+#### アクションからアクションを呼ぶ
+
+操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`probe.ActionCaller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
+
+```go
+func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+    caller := probe.NewActionCaller(call, "", probe.WithCallerLog(a.log))
+    res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
+    if err != nil {
+        return nil, nil, err // Refused のエラーはステップを拒否します
+    }
+    tree := res.Result["res"]
+    // ...
+}
+```
+
+- **名前**：`uses`はステップの`uses`と同じく読みます。ワークフローが[`actions`](/ja/reference/yaml-configuration#actions)で付けた名前、外部アクション、Probeのアクションのいずれかです。`actions`が名前を付けていないローカルのアクションは、`NewActionCaller`に渡したディレクトリからの相対パスとして扱います。
+- **ガード**：外部アクションを初めて呼ぶときに、その`action.yml`が`guard`で宣言している種類を実行のガードに加えます。ガードを守らないアクションは、`--allow-action`で名前を指定されていない限り、`actionrpc.Refused`のエラーで拒否されます。拒否したアクションはダウンロードしません。
+- **実行**：呼ばれたアクションには呼び出し元のステップを伝えるので、`Step.RunID`は実行のIDになります。
+- **状態**：各アクションが残した状態をcallerが保持し、そのアクションの次の呼び出しに渡します。ジョブが状態を受け渡すのと同じです。callerはステップごとにひとつ作り、そのステップの呼び出しはすべてそれを通してください。
+- **後始末**：`action.yml`で`cleanup`を指定しているアクションは、何度呼んでも、実行の終了時に一度だけ後始末されます。アクションがバックグラウンドで動かし続けているプロセスも、同じく実行の終了時に止まります。
+- **契約**：`CallResult.Contract`は、httpアクションの`openapi`のような契約に対してアクションが行った検証の結果です。Probeはこれを呼び出し元のステップのテストとしては扱いません。その意味は呼び出し元のアクションが決めます。
+- **ログ**：アクションのレコードは`WithCallerLog`で渡したロガーに、それぞれのレベルのまま送られます。Probeは呼び出し元のアクションのレコードと同じように表示します。
+- **タイムアウト**：`Call`に渡したコンテキストが終わると、アクションに`SIGTERM`を送り、2秒後にkillします。
+
+Probeのアクションは、呼び出し元のアクションを実行しているprobeから起動します。CLIはその実行ファイルを`PROBE_EXECUTABLE`に設定します。これを設定しないProbeの下では、Probeのアクションを呼ぶとその旨のエラーになります。外部アクションはその場合も呼べます。
+
 ### Probeへのカスタムアクションの組み込み
 
 カスタムアクションをProbe自体に組み込むこともできます。Probeは組み込みアクションごとに別のプロセスを使い、自身の実行ファイルを`<実行ファイル> builtin-actions <名前>`として起動し直します。そのため、このようなアクションは独自にビルドしたProbeに組み込みます。Probeをライブラリとして使うプログラムを作り、このサブコマンドで自分のアクションを提供し、それ以外の名前では組み込みアクションを提供します。

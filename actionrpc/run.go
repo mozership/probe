@@ -41,7 +41,15 @@ const ExitWait = TermGrace + time.Second
 // Once ctx is done, the action is sent SIGTERM, and killed if it has not
 // exited TermGrace later, and ctx's error is returned.
 func RunBuiltin(ctx context.Context, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	return runStep(ctx, command(ctx, os.Args[0], BuiltinCmd, name), nil, call, log)
+	return RunBuiltinFrom(ctx, os.Args[0], name, call, log)
+}
+
+// RunBuiltinFrom starts the built-in action named name from the probe
+// executable at probe, as RunBuiltin does from the running one. An action
+// that calls a built-in action runs it from the probe that runs the action,
+// which the CLI names in PROBE_EXECUTABLE, as the action is not probe.
+func RunBuiltinFrom(ctx context.Context, probe, name string, call Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	return runStep(ctx, command(ctx, probe, BuiltinCmd, name), nil, call, log)
 }
 
 // RunExecutable starts the action served by the executable at path, calls it
