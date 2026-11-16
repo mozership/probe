@@ -999,3 +999,30 @@ func TestReportRenderer_failureText_MasksTheClause(t *testing.T) {
 		t.Error("failureText() changed the failure's clause, want it kept as it is")
 	}
 }
+
+// A line of the progress of a run starts with the time it is written, and
+// the label of its job is padded to the width of the labels, by the width
+// the label takes on a terminal, so that the steps line up.
+func TestReportRenderer_progressText(t *testing.T) {
+	defer func(was bool) { color.NoColor = was }(color.NoColor)
+	color.NoColor = true
+
+	r := newReportRenderer(nil, nil, nil)
+	at := time.Date(2026, 11, 16, 9, 5, 3, 7_000_000, time.UTC)
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"start", r.stepStartText(progressLine{at: at, label: "unit", width: 6}, "go test"), "09:05:03.007 [unit]   ▸ go test\n"},
+		{"wide label", r.stepStartText(progressLine{at: at, label: "結合", width: 6}, "probe"), "09:05:03.007 [結合]   ▸ probe\n"},
+		{"widest label", r.stepStartText(progressLine{at: at, label: "e2e", width: 3}, "probe"), "09:05:03.007 [e2e] ▸ probe\n"},
+		{"done", r.stepDoneText(progressLine{at: at, label: "unit", width: 4}, StepResult{Name: "go vet", Status: StatusSuccess, RT: "1.2s"}), "09:05:03.007 [unit] ✓ go vet (1.2s)\n"},
+		{"repeated", r.stepDoneText(progressLine{at: at, label: "unit", width: 4}, StepResult{Name: "poll", Status: StatusError, RT: "1s", RepeatCounter: &StepRepeatCounter{SuccessCount: 2, RepeatTotal: 3}}), "09:05:03.007 [unit] ✗ poll (2/3 success)\n"},
+	}
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("%s: %q, want %q", tt.name, tt.got, tt.want)
+		}
+	}
+}

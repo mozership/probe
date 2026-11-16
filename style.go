@@ -56,6 +56,8 @@ const (
 	IconWait     = "🕐︎"
 	IconSkip     = "⏭ "
 	IconRetry    = "⟳"
+	// IconStepStart marks a step that started, in the progress of a run.
+	IconStepStart = "▸"
 )
 
 // statusIcon returns the icon of a step of status, as the report and the

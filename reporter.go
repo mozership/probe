@@ -63,7 +63,8 @@ func (m OutputMode) resolve() OutputMode {
 	return OutputModeSpinner
 }
 
-// Reporter decides when the parts of a workflow report reach the user.
+// Reporter decides when the parts of a workflow report reach the user, and
+// on which of stdout and stderr; a reportRenderer renders them.
 // Jobs run concurrently, so implementations are called from several
 // goroutines and must serialize their own writes.
 type Reporter interface {
@@ -187,21 +188,15 @@ func (r *StreamReporter) Start(name, description string) {
 }
 
 func (r *StreamReporter) StepStart(jobID, stepName string) {
-	r.progress(jobID, colorDim().Sprint("▸"), stepName, "")
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.printer.Fprint(r.printer.errWriter, r.render.stepStartText(r.progressLineLocked(jobID), stepName))
 }
 
 func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
-	icon, c := statusIcon(sr.Status)
-
-	suffix := ""
-	if sr.RepeatCounter != nil {
-		suffix = colorDim().Sprintf(" (%d/%d success)",
-			sr.RepeatCounter.SuccessCount, sr.RepeatCounter.RepeatTotal)
-	} else if sr.RT != "" {
-		suffix = colorDim().Sprintf(" (%s)", sr.RT)
-	}
-
-	r.progress(jobID, c.Sprint(strings.TrimSpace(icon)), stepTitle(sr), suffix)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.printer.Fprint(r.printer.errWriter, r.render.stepDoneText(r.progressLineLocked(jobID), sr))
 }
 
 func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
@@ -267,22 +262,14 @@ func (r *StreamReporter) writeJobLocked(jr *JobResult) {
 	r.printer.Fprint(r.printer.outWriter, r.render.jobText(jr, &r.totals))
 }
 
-// progress writes one live line to stderr. The report on stdout only grows a
-// whole job at a time, so these lines are what show which step is running now.
-// Jobs run at once, so a line is labelled by its job, and the labels are
-// padded to one width, so that the steps line up in a log.
-func (r *StreamReporter) progress(jobID, icon, text, suffix string) {
-	ts := colorDim().Sprint(time.Now().Format("15:04:05.000"))
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// progressLineLocked is where a line of the progress of jobID is, as it is
+// written now: the label of the job and the width of the labels. The report
+// on stdout only grows a whole job at a time, so these lines, on stderr, are
+// what show which step is running now. Callers must hold r.mu.
+func (r *StreamReporter) progressLineLocked(jobID string) progressLine {
 	label, ok := r.labels[jobID]
 	if !ok {
 		label = jobID
 	}
-	job := colorDim().Sprintf("[%s]", label)
-	if pad := r.labelWidth - textwidth.Width(label); pad > 0 {
-		job += strings.Repeat(" ", pad)
-	}
-	r.printer.Fprintf(r.printer.errWriter, "%s %s %s %s%s\n", ts, job, icon, text, suffix)
+	return progressLine{at: time.Now(), label: label, width: r.labelWidth}
 }
