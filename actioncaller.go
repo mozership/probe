@@ -47,7 +47,9 @@ type ActionCaller struct {
 	read   map[string]bool
 	states *actionStates
 
+	// manifest reads the action.yml of an external action, and
 	// runExternal and runBuiltin run an action once; tests replace them.
+	manifest    func(full string) (*actionref.Manifest, error)
 	runExternal func(ctx context.Context, exe *actionref.Executable, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error)
 	runBuiltin  func(ctx context.Context, probe, name string, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error)
 }
@@ -88,6 +90,7 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 		guard:       call.Guard,
 		read:        make(map[string]bool),
 		states:      newActionStates(),
+		manifest:    func(full string) (*actionref.Manifest, error) { return actionref.ReadManifest(full, "") },
 		runExternal: runExternal,
 		runBuiltin:  actionrpc.RunBuiltinFrom,
 	}
@@ -241,18 +244,27 @@ func (c *ActionCaller) full(uses string) (string, error) {
 // readManifest reads the action.yml of the external action full on its
 // first call, and puts what it declares under guard in the guard. What it
 // declares replaces what the guard came with, as for a step.
+//
+// The action.yml is fetched without the lock, which a fetch given up on
+// would otherwise keep from the calls of other actions until it ends.
+// Two calls that fetch it at once get it once, as actionref keeps it.
 func (c *ActionCaller) readManifest(full string) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.read[full]; ok {
+	_, ok := c.read[full]
+	c.mu.Unlock()
+	if ok {
 		return nil
 	}
-	m, err := actionref.ReadManifest(full, "")
+	m, err := c.manifest(full)
 	if err != nil {
 		return NewConfigurationError("resolve_action", "failed to resolve an external action", err)
 	}
-	c.guard = c.guard.WithKeeps(full, m.Guard)
-	c.read[full] = m.Cleanup
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.read[full]; !ok {
+		c.guard = c.guard.WithKeeps(full, m.Guard)
+		c.read[full] = m.Cleanup
+	}
 	return nil
 }
 

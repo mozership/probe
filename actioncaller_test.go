@@ -478,3 +478,39 @@ func TestActionCaller_StopsTheActionOnTimeout(t *testing.T) {
 		t.Errorf("the action was not sent SIGTERM: %v", err)
 	}
 }
+
+// A fetch of an action.yml given up on keeps no other call waiting.
+func TestActionCaller_FetchGivenUpOnKeepsNoCallWaiting(t *testing.T) {
+	dir := t.TempDir()
+	slow := localAction(t, dir, "slow", "")
+	release := make(chan struct{})
+	defer close(release)
+	c := newTestCaller(actionrpc.Call{Actions: map[string]string{"slow": slow}}, "", &fakeRun{}, WithProbeExecutable("/bin/probe"))
+	c.manifest = func(full string) (*actionref.Manifest, error) {
+		<-release
+		return actionref.ReadManifest(full, "")
+	}
+	c.runBuiltin = func(context.Context, string, string, actionrpc.Call, hclog.Logger) (map[string]any, map[string]any, error) {
+		return map[string]any{"status": 0}, nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.Call(ctx, "slow", nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the deadline of the context", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Call(context.Background(), "hello", nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a call of another action waits for the fetch given up on")
+	}
+}
