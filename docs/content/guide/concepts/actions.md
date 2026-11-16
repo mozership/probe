@@ -1030,7 +1030,7 @@ An action that drives a target through the action of that target, as an agent dr
 
 ```go
 func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
-    caller := probe.NewActionCaller(call, "", probe.WithCallerLog(a.log))
+    caller := probe.NewActionCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
         return nil, nil, err // a Refused error refuses the step
@@ -1046,8 +1046,8 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 - **State.** The caller keeps the state each action leaves, and gives it to the next call of that action, as a job does. Make one caller for a step, and call through it.
 - **Cleanup.** An action whose `action.yml` sets `cleanup` is cleaned up once the run is over, once however many times it was called, as are the processes it leaves running.
 - **Contract.** `CallResult.Contract` is the check the action made against a contract, such as the `openapi` of the http action. Probe does not take it as the test of the calling step; the calling action decides what it means.
-- **Log.** The records of the action go to the logger given with `WithCallerLog`, at their levels, and Probe shows them as it shows those of the calling action.
-- **Timeout.** Once the context of `Call` is done, the action is sent `SIGTERM`, and killed two seconds later.
+- **Log.** The records of the action go to stderr, at their levels, and Probe shows them as it shows those of the calling action. The credentials of what the action was given and returned are hidden in them, although the step of the calling action was not given them.
+- **Timeout.** Once the context of `Call` is done, the action is sent `SIGTERM`, and killed two seconds later. A call whose context is done while the action is being fetched returns at once.
 
 An action of Probe is started from the probe that runs the calling action, which the CLI names in `PROBE_EXECUTABLE`. Under a Probe that does not set it, calling an action of Probe is an error that says so, and external actions can still be called.
 

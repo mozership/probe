@@ -1,8 +1,10 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -52,7 +54,7 @@ func (f *fakeRun) external(_ context.Context, _ *actionref.Executable, call acti
 }
 
 func newTestCaller(call actionrpc.Call, baseDir string, f *fakeRun, opts ...CallerOption) *ActionCaller {
-	c := NewActionCaller(call, baseDir, append([]CallerOption{WithCallerLog(hclog.NewNullLogger())}, opts...)...)
+	c := NewActionCaller(call, baseDir, append([]CallerOption{WithCallerLogOutput(io.Discard)}, opts...)...)
 	c.runExternal = f.external
 	return c
 }
@@ -354,5 +356,96 @@ func TestActionCaller_MissingAction(t *testing.T) {
 	var pe *ProbeError
 	if !errors.As(err, &pe) || pe.Type != ErrorTypeConfiguration {
 		t.Fatalf("err = %v, want a configuration error", err)
+	}
+}
+
+func TestActionCaller_SymlinkedAliasIsTheSameAction(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "real", "cleanup: true\n")
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(full, link); err != nil {
+		t.Fatal(err)
+	}
+	owed := &actionrpc.Cleanups{}
+	f := &fakeRun{ret: func(call actionrpc.Call) (map[string]any, map[string]any, error) {
+		n, _ := call.State["n"].(int64)
+		return map[string]any{"n": n}, map[string]any{"n": n + 1}, nil
+	}}
+	// The workflow names a local action by an absolute path that may pass
+	// through a link.
+	c := newTestCaller(actionrpc.Call{Cleanups: owed, Actions: map[string]string{"linked": link}}, "", f)
+	if _, err := c.Call(context.Background(), "linked", nil); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.Call(context.Background(), full, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := res.Result["n"].(int64); n != 1 {
+		t.Errorf("n = %v, want the state the call by the link left", res.Result["n"])
+	}
+	if got := owed.List(); !slices.Equal(got, []string{full}) {
+		t.Errorf("owed = %v, want [%s] once", got, full)
+	}
+}
+
+func TestActionCaller_DoneContext(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "greet", "")
+	f := &fakeRun{}
+	c := newTestCaller(actionrpc.Call{Actions: map[string]string{"greet": full}}, "", f)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := c.Call(ctx, "greet", nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want the context's", err)
+	}
+	if len(f.calls) != 0 {
+		t.Error("an action was run on a done context")
+	}
+}
+
+func TestWithContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	release := make(chan struct{})
+	defer close(release)
+	done := make(chan error, 1)
+	go func() { done <- withContext(ctx, func() error { <-release; return nil }) }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want the context's before f returns", err)
+	}
+	if err := withContext(context.Background(), func() error { return io.EOF }); err != io.EOF {
+		t.Errorf("err = %v, want f's", err)
+	}
+}
+
+func TestActionCaller_HidesCredentialsInRecords(t *testing.T) {
+	dir := t.TempDir()
+	full := localAction(t, dir, "login", "")
+	var out bytes.Buffer
+	f := &fakeRun{}
+	c := newTestCaller(actionrpc.Call{Actions: map[string]string{"login": full}}, "", f, WithCallerLogOutput(&out))
+	c.runExternal = func(_ context.Context, _ *actionref.Executable, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+		log.Debug("logging in", "with", call.With)
+		if call.With["password"] == nil {
+			log.Debug("using the token", "token", "issued-token-0987654321")
+		}
+		return map[string]any{"res": map[string]any{"session_token": "issued-token-0987654321"}}, nil, nil
+	}
+	if _, err := c.Call(context.Background(), "login", map[string]any{"password": "given-password-1234"}); err != nil {
+		t.Fatal(err)
+	}
+	// A credential the action returned is hidden from then on, as one a
+	// step returns is.
+	if _, err := c.Call(context.Background(), "login", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "logging in") {
+		t.Fatalf("the records are not written: %s", out.String())
+	}
+	for _, secret := range []string{"given-password-1234", "issued-token-0987654321"} {
+		if strings.Contains(out.String(), secret) {
+			t.Errorf("%s is shown in the records:\n%s", secret, out.String())
+		}
 	}
 }

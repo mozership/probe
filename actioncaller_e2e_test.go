@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
 )
 
@@ -48,14 +48,14 @@ jobs:
       uses: greet
       with:
         name: probe
-    test: res.greeting == "hello probe"
+    test: res.called.greeting == "hello probe"
   - name: an action of Probe
     uses: ./caller
     with:
       uses: hello
       with:
         name: probe
-    test: res.name == "probe"
+    test: res.called.name == "probe"
   - name: an action that cleans up
     uses: ./caller
     with:
@@ -63,7 +63,7 @@ jobs:
       times: 2
       with:
         name: a
-    test: res.promised == true
+    test: res.calls == 2 && res.called.promised == true
 `)
 	cmd := e.command()
 	out, err := cmd.CombinedOutput()
@@ -115,7 +115,7 @@ func TestActionCaller_StopsTheActionOnTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	pidfile := filepath.Join(dir, "pid")
-	c := NewActionCaller(actionrpc.Call{}, dir, WithCallerLog(hclog.NewNullLogger()))
+	c := NewActionCaller(actionrpc.Call{}, dir, WithCallerLogOutput(io.Discard))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -129,5 +129,36 @@ func TestActionCaller_StopsTheActionOnTimeout(t *testing.T) {
 	}
 	if _, err := os.Stat(pidfile + ".term"); err != nil {
 		t.Errorf("the action was not sent SIGTERM: %v", err)
+	}
+}
+
+// The credentials of what an action called is given are hidden in its
+// records, although the step of the calling action was not given them.
+func TestEndToEndActionCallerHidesCredentials(t *testing.T) {
+	e := newCallerEnv(t)
+	e.write(t, "workflow.yml", `name: caller
+actions:
+  greet: ./greet
+jobs:
+- name: call
+  steps:
+  - uses: ./caller
+    with:
+      uses: greet
+      with:
+        name: probe
+        password: nested-password-4242
+    test: res.called.greeting == "hello probe"
+`)
+	cmd := exec.Command(e.probe, "-vv", filepath.Join(e.dir, "workflow.yml"))
+	out, err := cmd.CombinedOutput()
+	if code := exitCode(t, err); code != ExitOK {
+		t.Fatalf("exit code = %d, want %d\n%s", code, ExitOK, out)
+	}
+	if !strings.Contains(string(out), "greeting") {
+		t.Fatalf("the records of the action called are not shown:\n%s", out)
+	}
+	if strings.Contains(string(out), "nested-password-4242") {
+		t.Errorf("the password given to the action called is shown:\n%s", out)
 	}
 }

@@ -1233,7 +1233,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 
 ```go
 func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
-    caller := probe.NewActionCaller(call, "", probe.WithCallerLog(a.log))
+    caller := probe.NewActionCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
         return nil, nil, err // Refused のエラーはステップを拒否します
@@ -1249,8 +1249,8 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 - **状態**：各アクションが残した状態をcallerが保持し、そのアクションの次の呼び出しに渡します。ジョブが状態を受け渡すのと同じです。callerはステップごとにひとつ作り、そのステップの呼び出しはすべてそれを通してください。
 - **後始末**：`action.yml`で`cleanup`を指定しているアクションは、何度呼んでも、実行の終了時に一度だけ後始末されます。アクションがバックグラウンドで動かし続けているプロセスも、同じく実行の終了時に止まります。
 - **契約**：`CallResult.Contract`は、httpアクションの`openapi`のような契約に対してアクションが行った検証の結果です。Probeはこれを呼び出し元のステップのテストとしては扱いません。その意味は呼び出し元のアクションが決めます。
-- **ログ**：アクションのレコードは`WithCallerLog`で渡したロガーに、それぞれのレベルのまま送られます。Probeは呼び出し元のアクションのレコードと同じように表示します。
-- **タイムアウト**：`Call`に渡したコンテキストが終わると、アクションに`SIGTERM`を送り、2秒後にkillします。
+- **ログ**：アクションのレコードは、それぞれのレベルのまま標準エラー出力に送られます。Probeは呼び出し元のアクションのレコードと同じように表示します。アクションに渡した値と返された値に含まれる認証情報は、呼び出し元のステップに渡されていなくても、レコードの中で伏せられます。
+- **タイムアウト**：`Call`に渡したコンテキストが終わると、アクションに`SIGTERM`を送り、2秒後にkillします。アクションのダウンロード中にコンテキストが終わった場合も、すぐに戻ります。
 
 Probeのアクションは、呼び出し元のアクションを実行しているprobeから起動します。CLIはその実行ファイルを`PROBE_EXECUTABLE`に設定します。これを設定しないProbeの下では、Probeのアクションを呼ぶとその旨のエラーになります。外部アクションはその場合も呼べます。
 

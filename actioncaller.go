@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/mask"
 )
 
 // ExecutableEnv is the environment variable in which the CLI names its own
@@ -29,7 +31,12 @@ type ActionCaller struct {
 	call    actionrpc.Call
 	baseDir string
 	log     hclog.Logger
+	logOut  io.Writer
 	probe   string
+	// masker hides in the records of the actions called the credentials
+	// of their parameters and results, which the runner of the calling
+	// action has not learned.
+	masker *mask.Masker
 
 	mu sync.Mutex
 	// guard is the guard of the call, with what the action.yml of each
@@ -48,14 +55,14 @@ type ActionCaller struct {
 // CallerOption changes how an ActionCaller calls actions.
 type CallerOption func(*ActionCaller)
 
-// WithCallerLog sends the records of the actions called to log, at the
-// levels the actions gave them, such as the log the calling action was
-// given by actionrpc.Serve. Without it, they go to stderr as JSON, as the
-// records of an action served by actionrpc.Serve do, for the runner to
-// filter.
-func WithCallerLog(log hclog.Logger) CallerOption {
+// WithCallerLogOutput writes the records of the actions called to w, as
+// JSON at the levels the actions gave them. Without it, they go to stderr,
+// where the records of the calling action go when it is served by
+// actionrpc.Serve, for the runner to filter. Either way, the credentials
+// of what the actions were given and returned are hidden in them.
+func WithCallerLogOutput(w io.Writer) CallerOption {
 	return func(c *ActionCaller) {
-		c.log = log
+		c.logOut = w
 	}
 }
 
@@ -75,7 +82,9 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 	c := &ActionCaller{
 		call:        call,
 		baseDir:     baseDir,
+		logOut:      os.Stderr,
 		probe:       os.Getenv(ExecutableEnv),
+		masker:      mask.New(nil, nil),
 		guard:       call.Guard,
 		read:        make(map[string]bool),
 		states:      newActionStates(),
@@ -85,13 +94,11 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 	for _, opt := range opts {
 		opt(c)
 	}
-	if c.log == nil {
-		c.log = hclog.New(&hclog.LoggerOptions{
-			Level:      hclog.Trace,
-			Output:     os.Stderr,
-			JSONFormat: true,
-		})
-	}
+	c.log = hclog.New(&hclog.LoggerOptions{
+		Level:      hclog.Trace,
+		Output:     c.masker.Writer(c.logOut),
+		JSONFormat: true,
+	})
 	return c
 }
 
@@ -121,13 +128,16 @@ type CallResult struct {
 // given to its next call. Once ctx is done, the action is stopped, and
 // ctx's error is returned.
 func (c *ActionCaller) Call(ctx context.Context, uses string, with map[string]any) (*CallResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	full, err := c.full(uses)
 	if err != nil {
 		return nil, err
 	}
 	external := actionref.IsExternal(full)
 	if external {
-		if err := c.readManifest(full); err != nil {
+		if err := withContext(ctx, func() error { return c.readManifest(full) }); err != nil {
 			return nil, err
 		}
 	} else if c.probe == "" {
@@ -170,10 +180,19 @@ func (c *ActionCaller) Call(ctx context.Context, uses string, with map[string]an
 	// with those of the calling action.
 	defer func() { c.call.Processes.Add(call.Processes.List()...) }()
 
+	// The credentials the action is about to be sent are learned before
+	// it runs, so that its own records already have them hidden, as for
+	// a step.
+	c.masker.Learn(with)
 	log := c.log.Named(uses)
 	var ret, state map[string]any
 	if external {
-		exe, err := actionref.Resolve(full, "")
+		var exe *actionref.Executable
+		err := withContext(ctx, func() error {
+			var err error
+			exe, err = actionref.Resolve(full, "")
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -190,6 +209,9 @@ func (c *ActionCaller) Call(ctx context.Context, uses string, with map[string]an
 	if err := c.states.set(full, state); err != nil {
 		return nil, err
 	}
+	if res, ok := ret["res"].(map[string]any); ok {
+		c.masker.Learn(res)
+	}
 	return &CallResult{Result: ret, Contract: call.Contract.Check()}, nil
 }
 
@@ -200,8 +222,15 @@ func (c *ActionCaller) full(uses string) (string, error) {
 	if uses == "" {
 		return "", errors.New("no action to call: uses is empty")
 	}
-	if full, ok := c.call.Actions[uses]; ok {
-		return full, nil
+	if named, ok := c.call.Actions[uses]; ok {
+		if !actionref.IsExternal(named) {
+			return named, nil
+		}
+		// A local action is named by an absolute path, which is taken to
+		// the directory a symbolic link on the way leads to, as when the
+		// action is called by the path, for both to keep one state and to
+		// be cleaned up once.
+		return actionref.Full(named, "")
 	}
 	if !actionref.IsExternal(uses) {
 		return uses, nil
@@ -225,4 +254,19 @@ func (c *ActionCaller) readManifest(full string) error {
 	c.guard = c.guard.WithKeeps(full, m.Guard)
 	c.read[full] = m.Cleanup
 	return nil
+}
+
+// withContext runs f, which cannot be stopped, such as the download of an
+// external action, and returns its error, or ctx's error once ctx is done
+// before f returns. f carries on then, and what it fetches is kept for a
+// later call.
+func withContext(ctx context.Context, f func() error) error {
+	done := make(chan error, 1)
+	go func() { done <- f() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
