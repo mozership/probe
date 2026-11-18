@@ -153,6 +153,37 @@ func TestDescribeOptionalFields(t *testing.T) {
 	}
 }
 
+// A message that holds itself is described once, and the messages and
+// enums a map holds as its values are described too.
+func TestDescribeRecursiveAndMapTypes(t *testing.T) {
+	src := `syntax = "proto3";
+package tree.v1;
+enum Color { COLOR_UNSPECIFIED = 0; RED = 1; }
+message Leaf { Color color = 1; }
+message Node { repeated Node children = 1; map<string, Leaf> leaves = 2; map<string, Color> colors = 3; }
+service Trees { rpc Get(Node) returns (Node); }
+`
+	ret, err := Request(map[string]any{"addr": "127.0.0.1:1", "list": true, "service": "Trees", "proto": protoOf(writeProto(t, src), false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	types := ret["res"].(map[string]any)["types"].(map[string]any)
+	if len(types) != 3 {
+		t.Errorf("types = %v, want Node, Leaf and Color", types)
+	}
+	if types["tree.v1.Leaf"] == nil || !reflect.DeepEqual(types["tree.v1.Color"], map[string]any{"kind": "enum", "values": []any{"COLOR_UNSPECIFIED", "RED"}}) {
+		t.Errorf("types = %v", types)
+	}
+	fields := map[string]any{}
+	for _, f := range types["tree.v1.Node"].(map[string]any)["fields"].([]any) {
+		fields[f.(map[string]any)["name"].(string)] = f.(map[string]any)["type"]
+	}
+	want := map[string]any{"children": "repeated tree.v1.Node", "leaves": "map<string, tree.v1.Leaf>", "colors": "map<string, tree.v1.Color>"}
+	if !reflect.DeepEqual(fields, want) {
+		t.Errorf("fields of Node = %v, want %v", fields, want)
+	}
+}
+
 func TestListRefused(t *testing.T) {
 	withRefl := startUserServer(t)
 	without := startUserServerWith(t, false)
