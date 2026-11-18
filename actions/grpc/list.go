@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -50,6 +51,7 @@ func (r *Req) doList(ctx context.Context) (*Result, error) {
 	}
 
 	result := &Result{Req: *r}
+	start := time.Now()
 	var l *listing
 	var err error
 	switch {
@@ -62,6 +64,7 @@ func (r *Req) doList(ctx context.Context) (*Result, error) {
 	default:
 		l, err = r.listReflection(ctx)
 	}
+	result.RT = time.Since(start)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +251,7 @@ func addMessage(types map[string]any, m protoreflect.MessageDescriptor) {
 		if o := f.ContainingOneof(); o != nil && !o.IsSynthetic() {
 			field["oneof"] = string(o.Name())
 		}
-		if f.HasPresence() && f.ContainingOneof() != nil && f.ContainingOneof().IsSynthetic() {
+		if f.HasOptionalKeyword() {
 			field["optional"] = true
 		}
 		fields = append(fields, field)

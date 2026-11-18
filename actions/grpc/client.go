@@ -112,6 +112,11 @@ func (r *Req) Do() (re *Result, er error) {
 		return nil, errors.New("Req.Addr is required")
 	}
 	if r.List {
+		switch r.Protocol {
+		case "", "grpc", "connect":
+		default:
+			return nil, fmt.Errorf("unknown protocol %q: use grpc or connect", r.Protocol)
+		}
 		timeout, err := mapping.ParseTimeout(r.Timeout)
 		if err != nil {
 			return nil, err

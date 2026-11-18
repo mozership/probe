@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,6 +23,9 @@ func TestListServicesByReflection(t *testing.T) {
 	}
 	if _, ok := res["methods"]; ok {
 		t.Errorf("res.methods = %v in a listing of the services", res["methods"])
+	}
+	if rt := fmt.Sprint(ret["rt"]); rt == "" || rt == "0s" || rt == "<nil>" {
+		t.Errorf("rt = %v, want the time the listing took", ret["rt"])
 	}
 }
 
@@ -129,6 +133,26 @@ func TestListByProto(t *testing.T) {
 	}
 }
 
+// A field declared optional is told so, in proto2 as in proto3.
+func TestDescribeOptionalFields(t *testing.T) {
+	for _, src := range []string{
+		"syntax = \"proto3\";\nmessage Req { optional string a = 1; string b = 2; oneof c { string d = 3; } }\nservice S { rpc M(Req) returns (Req); }\n",
+		"syntax = \"proto2\";\nmessage Req { optional string a = 1; required string b = 2; oneof c { string d = 3; } }\nservice S { rpc M(Req) returns (Req); }\n",
+	} {
+		ret, err := Request(map[string]any{"addr": "127.0.0.1:1", "list": true, "service": "S", "proto": protoOf(writeProto(t, src), false)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := map[string]map[string]any{}
+		for _, f := range ret["res"].(map[string]any)["types"].(map[string]any)["Req"].(map[string]any)["fields"].([]any) {
+			fields[f.(map[string]any)["name"].(string)] = f.(map[string]any)
+		}
+		if fields["a"]["optional"] != true || fields["b"]["optional"] != nil || fields["d"]["oneof"] != "c" || fields["a"]["oneof"] != nil {
+			t.Errorf("%s: fields = %v", src[:17], fields)
+		}
+	}
+}
+
 func TestListRefused(t *testing.T) {
 	withRefl := startUserServer(t)
 	without := startUserServerWith(t, false)
@@ -146,6 +170,7 @@ func TestListRefused(t *testing.T) {
 		{"a method without a service", map[string]any{"addr": withRefl, "list": true, "method": "GetUser"}, "method needs service"},
 		{"a body", map[string]any{"addr": withRefl, "list": true, "service": "UserService", "body": `{}`}, "list takes no body"},
 		{"connect without proto", map[string]any{"protocol": "connect", "addr": "http://127.0.0.1:1", "list": true}, "listed only with proto"},
+		{"an unknown protocol", map[string]any{"protocol": "grpc-web", "addr": withRefl, "list": true, "proto": files}, "unknown protocol"},
 	} {
 		if _, err := Request(tt.with); err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%s: err = %v, want %q", tt.name, err, tt.want)
