@@ -28,8 +28,9 @@ steps:
 |---|---|---|---|---|
 | `protocol` | String | 任意 | `grpc` | `grpc`、または[Connectプロトコル](#connectプロトコル)で呼び出す`connect` |
 | `addr` | String | 必須 | - | gRPCサーバーのホストとポート。`protocol: connect`ではサービスを提供しているURL |
-| `service` | String | 必須 | - | 完全修飾のサービス名 |
-| `method` | String | 必須 | - | メソッド名 |
+| `service` | String | `list`以外で必須 | - | 完全修飾のサービス名。`list`では説明するサービス |
+| `method` | String | `list`以外で必須 | - | メソッド名。`list`では、`service`のうち説明する1つのメソッド |
+| `list` | Boolean | 任意 | `false` | メソッドを呼び出す代わりに、サーバーのサービスを一覧するか、`service`のメソッドを説明する。[サービスとメソッドの一覧](#サービスとメソッドの一覧)を参照 |
 | `body` | String、Object、List | 任意 | `""` | リクエストメッセージ（JSON）。オブジェクトはJSONにシリアライズされます。リストはリクエストのストリームのメッセージです。[ストリーミングのメソッド](#ストリーミングのメソッド)を参照 |
 | `metadata` | Object | 任意 | `{}` | リクエストメタデータ（HTTPのヘッダーに相当） |
 | `timeout` | String | 任意 | `30s` | 接続とリフレクションによる解決を含めた、呼び出しの制限時間。`"10s"`のような期間か、`10`のような秒数。どちらでもない値や0以下の値はエラー |
@@ -60,6 +61,9 @@ steps:
 | `res.violations` | Array | 呼び出しのうち`.proto`ファイルが許可しないもの。すべて許可されていれば空です。`proto`を指定したときだけ入ります |
 | `res.messages` | Array | レスポンスをストリーミングするメソッドの全レスポンス。それぞれ`res.body`と同じくオブジェクトです。そのようなメソッドの場合だけ入ります |
 | `res.complete` | Boolean | レスポンスのストリームを、呼び出しが打ち切ったのではなくサーバーが終えたか。レスポンスをストリーミングするメソッドの場合だけ入ります |
+| `res.services` | Array | `list`で`service`がないとき、サービスの完全修飾名。名前順です |
+| `res.methods` | Array | `list`で`service`があるとき、各メソッド。`name`、`service`、メッセージの完全修飾名である`request`と`response`、`client_streaming`、`server_streaming`、`NO_SIDE_EFFECTS`のような`idempotency`が入ります |
+| `res.types` | Object | `list`で`service`があるとき、メソッドが使うメッセージと列挙型を、深さによらず完全修飾名ごとに入れたもの。メッセージは`kind: message`と`fields`で、各フィールドに`name`、`json_name`、`number`、`repeated string`のように`.proto`ファイルの書き方での`type`、oneofの中なら`oneof`、`optional`なら`optional`が入ります。列挙型は`kind: enum`と`values`です |
 | `res.contract` | Object | `.proto`ファイルで呼び出しを対応付けた先。`spec`（サービスを宣言するファイル。`proto.files`に書いたパス）と、`users.v1.UserService/GetUser`のような`operation`が入ります。ファイルがそのメソッドを宣言している場合だけ入ります。[`probe coverage`](/ja/reference/cli-reference#coverage)はこれを数えます |
 
 `res.status_code`は、呼び出しが終わったときのステータスの正式名です。`OK`、`CANCELLED`、`UNKNOWN`、`INVALID_ARGUMENT`、`DEADLINE_EXCEEDED`、`NOT_FOUND`、`ALREADY_EXISTS`、`PERMISSION_DENIED`、`RESOURCE_EXHAUSTED`、`FAILED_PRECONDITION`、`ABORTED`、`OUT_OF_RANGE`、`UNIMPLEMENTED`、`INTERNAL`、`UNAVAILABLE`、`DATA_LOSS`、`UNAUTHENTICATED`のいずれかになります。`OK`以外のステータスもサーバーの応答なので、ステップはそのままテストに進み、テストでそのステータスを期待できます。サーバーからステータスが得られなかった呼び出しだけが、エラーとしてステップを終わらせます。接続できないサーバーや、`.proto`ファイルが宣言していないのにリフレクションにもサービスが載っていない場合と、サーバーが応答する前に`timeout`を過ぎたり接続が切れたりした場合です。
@@ -228,12 +232,35 @@ message CreateUserRequest {
 
 ストリーミングするかどうかは、呼び出しに使う定義（サーバーのリフレクションか、`proto`の`.proto`ファイル）で判断します。Connectの呼び出しにはリフレクションがないため、ストリーミングのメソッドは`proto`があるときだけ呼び出せます。`proto`がなければ、リストの`body`と`max_messages`はエラーになり、メソッドはストリーミングしないものとして呼び出すため、サーバーが拒否します。`proto`があれば、ストリームの各メッセージをファイルと照合し、違反は`$[1].user.email`のように何件目のメッセージかを付けて示します。サーバーの定義がファイルの宣言と違う形でストリーミングする場合は、`contract_response`でステップが失敗します。
 
+## サービスとメソッドの一覧
+
+`list: true`のステップは何も呼び出さず、呼び出せるものを返します。サーバーのサービスか、`service`を指定すればそのメソッドと、メソッドが受け取って返すメッセージです。APIをテストするモデルやワークフローを書く人は、これで何を呼べるかを知ります。
+
+```yaml
+- name: The services
+  uses: grpc
+  with:
+    addr: "{{vars.grpc_addr}}"
+    list: true
+  test: '"user.v1.UserService" in res.services'
+
+- name: The methods of UserService
+  uses: grpc
+  with:
+    addr: "{{vars.grpc_addr}}"
+    service: user.v1.UserService
+    list: true
+  test: len(filter(res.methods, .name == "GetUser" && !.server_streaming)) == 1
+```
+
+一覧はサーバーのリフレクションから読み、リフレクション自身のサービスは除きます。`proto`があれば代わりに`.proto`ファイルから読み、サーバーには何も送らず、ファイルとの照合もしません。`protocol: connect`では、リフレクションにはHTTP/1.1の接続で運べないストリームが要るため、`proto`が必要です。リフレクションも`proto`もないサーバーや、リフレクションに載っていないサービスは、呼び出しと同じくアクションのエラーでステップを失敗させます。`list`と`method`を合わせるとそのメソッドだけを説明し、`service`も必要です。`body`と`max_messages`は`list`と合わせるとエラーです。`res.status_code`は`OK`です。
+
 ## ガードの下での実行
 
 grpcアクションは実行の[ガード](/ja/reference/cli-reference#--read-only)に従います。ガードが許可しない呼び出しは何も送らずに拒否し、種類`refused`でステップを失敗させます。
 
 - `--allow-host`では、`addr`のホストとポートを確かめます。ポートがなければ、grpc-goと同じく443として扱います。前に付いた`dns:///`と`passthrough:///`は外して読みます。`dns://server/`のDNSサーバーも確かめ、ポートがなければ53として扱います。`unix:///tmp/grpc.sock`のようにホストのない宛先は拒否します。`protocol: connect`ではURLのホストを確かめ、ポートがなければスキームの既定のポートとして扱います。
-- `--read-only`では、手元にあるメソッドの定義がすべて`option idempotency_level = NO_SIDE_EFFECTS;`で副作用がないと宣言しているときだけ呼び出します。手元の定義とは、リフレクションで得たサーバーの定義と、`proto`があればその`.proto`ファイルの定義です。リフレクションでの問い合わせは読み取りなので行います。Connectの呼び出しにはリフレクションがないため`proto`が必要で、ない場合は拒否します。
+- `--read-only`では、手元にあるメソッドの定義がすべて`option idempotency_level = NO_SIDE_EFFECTS;`で副作用がないと宣言しているときだけ呼び出します。手元の定義とは、リフレクションで得たサーバーの定義と、`proto`があればその`.proto`ファイルの定義です。リフレクションでの問い合わせは読み取りなので行います。Connectの呼び出しにはリフレクションがないため`proto`が必要で、ない場合は拒否します。一覧は読み取りだけなので`--read-only`でも行い、`--allow-host`には呼び出しと同じく従います。
 
 ```protobuf
 service UserService {

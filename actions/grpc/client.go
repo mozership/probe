@@ -37,10 +37,15 @@ type Req struct {
 	// Protocol is how the call is made: grpc, the default, or connect, the
 	// Connect protocol over HTTP, which reaches a server through an HTTP/1.1
 	// proxy too.
-	Protocol string            `map:"protocol"`
-	Addr     string            `map:"addr" validate:"required"`
-	Service  string            `map:"service" validate:"required"`
-	Method   string            `map:"method" validate:"required"`
+	Protocol string `map:"protocol"`
+	Addr     string `map:"addr" validate:"required"`
+	// Service and Method name the method to call. With List, Service names
+	// the service to describe, and Method the one method of it.
+	Service string `map:"service"`
+	Method  string `map:"method"`
+	// List lists the services the server has, or, with Service, describes
+	// the methods of one, rather than calling a method.
+	List     bool              `map:"list"`
 	Body     string            `map:"body"`
 	Timeout  string            `map:"timeout"`
 	TLS      bool              `map:"tls"`
@@ -82,6 +87,8 @@ type Res struct {
 	// than the call leaving it; nil for a call whose responses do not
 	// stream.
 	complete *bool
+	// listing is what a listing found; nil for a call.
+	listing *listing
 }
 
 type Result struct {
@@ -103,6 +110,20 @@ func NewReq() *Req {
 func (r *Req) Do() (re *Result, er error) {
 	if r.Addr == "" {
 		return nil, errors.New("Req.Addr is required")
+	}
+	if r.List {
+		switch r.Protocol {
+		case "", "grpc", "connect":
+		default:
+			return nil, fmt.Errorf("unknown protocol %q: use grpc or connect", r.Protocol)
+		}
+		timeout, err := mapping.ParseTimeout(r.Timeout)
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return r.doList(ctx)
 	}
 	if r.Service == "" {
 		return nil, errors.New("Req.Service is required")
@@ -741,6 +762,15 @@ func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, error) {
 		}
 		if ret.Res.complete != nil {
 			res["complete"] = *ret.Res.complete
+		}
+		if l := ret.Res.listing; l != nil {
+			if l.services != nil {
+				res["services"] = l.services
+			}
+			if l.methods != nil {
+				res["methods"] = l.methods
+				res["types"] = l.types
+			}
 		}
 	}
 

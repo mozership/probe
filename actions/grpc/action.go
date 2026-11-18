@@ -57,8 +57,9 @@ func serve() {
 // service, which it reads apart from Req, asks it to check a step against
 // them. Its res holds, besides the fields of Res, violations and contract,
 // for a call checked against .proto files, and messages and complete, for
-// one whose responses stream. It cannot run without addr, service and
-// method.
+// one whose responses stream, and services, methods and types, for a
+// listing. It cannot run without addr, nor without service and method
+// unless list asks for a listing.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
@@ -66,10 +67,10 @@ func Spec() actionspec.Spec {
 		Params:    append(mapping.FieldTags(Req{}), "proto"),
 		Contracts: []string{"proto"},
 		ReqFields: mapping.FieldTags(Req{}),
-		ResFields: append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "violations"),
+		ResFields: append(mapping.FieldTags(Res{}), "complete", "contract", "messages", "methods", "services", "types", "violations"),
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  resTypes(),
-		Required:  [][]string{{"addr"}, {"service"}, {"method"}},
+		Required:  [][]string{{"addr"}, {"service", "list"}, {"method", "list"}},
 	}
 }
 
@@ -80,6 +81,9 @@ func resTypes() map[string]string {
 	types["complete"] = kind.Bool
 	types["contract"] = kind.Map
 	types["messages"] = kind.List
+	types["methods"] = kind.List
+	types["services"] = kind.List
+	types["types"] = kind.Map
 	types["violations"] = kind.List
 	return types
 }
