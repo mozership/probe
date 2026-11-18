@@ -27,8 +27,9 @@ The fields below describe the call. All of them accept template expressions.
 |-----------|------|----------|---------|-------------|
 | `protocol` | String | No | `grpc` | `grpc`, or `connect` for the [Connect protocol](#connect-protocol) |
 | `addr` | String | Yes | - | Host and port of the gRPC server. With `protocol: connect`, the URL the service is served under |
-| `service` | String | Yes | - | Fully qualified service name |
-| `method` | String | Yes | - | Method name |
+| `service` | String | Yes, but with `list` | - | Fully qualified service name. With `list`, the service to describe |
+| `method` | String | Yes, but with `list` | - | Method name. With `list`, the one method of `service` to describe |
+| `list` | Boolean | No | `false` | List the services of the server, or describe the methods of `service`, rather than calling a method. See [Listing Services and Methods](#listing-services-and-methods) |
 | `body` | String, Object or List | No | `""` | Request message as JSON. An object is serialized as JSON. A list is the messages of a stream of requests; see [Streaming Methods](#streaming-methods) |
 | `metadata` | Object | No | `{}` | Request metadata (the gRPC equivalent of headers) |
 | `timeout` | String | No | `30s` | Time limit for the call, including connecting and the reflection lookup. A duration such as `"10s"`, or a number of seconds such as `10`. A value that is neither, or not above zero, is an error |
@@ -59,6 +60,9 @@ After the call, `res` holds the reply and the gRPC status.
 | `res.violations` | Array | What the `.proto` files do not allow in the call, empty when they allow all of it. Present only when `proto` is given |
 | `res.messages` | Array | Every response of a method that streams its responses, each an object as `res.body` is. Present only for such a method |
 | `res.complete` | Boolean | Whether the server ended the stream of responses, rather than the call leaving it. Present only for a method that streams its responses |
+| `res.services` | Array | With `list` and no `service`, the full names of the services, sorted |
+| `res.methods` | Array | With `list` and `service`, each method: `name`, `service`, `request` and `response`, the full names of its messages, `client_streaming`, `server_streaming`, and `idempotency`, such as `NO_SIDE_EFFECTS` |
+| `res.types` | Object | With `list` and `service`, the messages and enums the methods use, at any depth, by their full names: a message as `kind: message` and its `fields`, each with `name`, `json_name`, `number`, `type` as a `.proto` file writes it, such as `repeated string`, and `oneof` or `optional` when it is in one; an enum as `kind: enum` and its `values` |
 | `res.contract` | Object | What the call was matched to in the `.proto` files: `spec`, the file that declares the service as `proto.files` names it, and `operation`, such as `users.v1.UserService/GetUser`. Present only when the files declare the method; [`probe coverage`](/reference/cli-reference#coverage) counts it |
 
 `res.status_code` is the canonical name of the status the call ended with: `OK`, `CANCELLED`, `UNKNOWN`, `INVALID_ARGUMENT`, `DEADLINE_EXCEEDED`, `NOT_FOUND`, `ALREADY_EXISTS`, `PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, `FAILED_PRECONDITION`, `ABORTED`, `OUT_OF_RANGE`, `UNIMPLEMENTED`, `INTERNAL`, `UNAVAILABLE`, `DATA_LOSS` or `UNAUTHENTICATED`. A status other than `OK` is the server's answer, so the step goes on to its test, which can expect it. Only a call that gets no status from the server ends the step with an error: one to a server that cannot be reached, or whose reflection does not list the service when no `.proto` files declare it, or one that runs out of `timeout` or loses its connection before the server answers.
@@ -201,12 +205,35 @@ A method that streams its responses or its requests is called as one that does n
 
 What streams is told by the definition the call is made with: the server's reflection, or the `.proto` files of `proto`. A Connect call has no reflection, so it calls a streaming method only with `proto`; without it, a list `body` and `max_messages` are errors, and the method is called as one that does not stream, which the server refuses. With `proto`, each message of a stream is checked against the files, and a violation names the message by its index, such as `$[1].user.email`; a server whose definition streams another way than the files declare fails the step as `contract_response`.
 
+## Listing Services and Methods
+
+With `list: true`, the step calls nothing, and tells what can be called: the services of the server, or, with `service`, its methods and the messages they take and answer. A model that tests an API, or a person writing a workflow, learns from it what to call.
+
+```yaml
+- name: The services
+  uses: grpc
+  with:
+    addr: "{{vars.grpc_addr}}"
+    list: true
+  test: '"user.v1.UserService" in res.services'
+
+- name: The methods of UserService
+  uses: grpc
+  with:
+    addr: "{{vars.grpc_addr}}"
+    service: user.v1.UserService
+    list: true
+  test: len(filter(res.methods, .name == "GetUser" && !.server_streaming)) == 1
+```
+
+The listing is read from the server's reflection, which leaves out the services of reflection itself. With `proto`, it is read from the `.proto` files instead, and nothing is sent to the server, nor checked against the files. With `protocol: connect`, it needs `proto`, as reflection needs a stream an HTTP/1.1 connection cannot carry. A server without reflection and without `proto`, or a service its reflection does not list, fails the step as an action error, as a call does. `method` with `list` describes that method alone, and needs `service`; `body` and `max_messages` are errors with it. `res.status_code` is `OK`.
+
 ## Under a Guard
 
 The grpc action keeps to the [guard](/reference/cli-reference#--read-only) of a run, and refuses a call it does not allow before anything is sent, failing the step with the kind `refused`.
 
 - `--allow-host` is checked against the host and port of `addr`, with port 443 when none is named, as grpc-go takes it. `dns:///` and `passthrough:///` before it are read through, and the DNS server of `dns://server/` is checked too, at port 53 when none is named; a target that names no host, such as `unix:///tmp/grpc.sock`, is refused. With `protocol: connect`, the host of the URL is checked, at the port of its scheme when it names none.
-- Under `--read-only`, a method is called only when every definition of it at hand declares it free of side effects with `option idempotency_level = NO_SIDE_EFFECTS;`: the server's, as its reflection tells it, and the `.proto` files', when `proto` is given. The reflection lookup reads, and is made. A Connect call has no reflection, so it needs `proto`, and one without is refused.
+- Under `--read-only`, a method is called only when every definition of it at hand declares it free of side effects with `option idempotency_level = NO_SIDE_EFFECTS;`: the server's, as its reflection tells it, and the `.proto` files', when `proto` is given. The reflection lookup reads, and is made. A Connect call has no reflection, so it needs `proto`, and one without is refused. A listing reads only, and is made under `--read-only`; it keeps to `--allow-host` as a call does.
 
 ```protobuf
 service UserService {

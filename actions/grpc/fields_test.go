@@ -37,6 +37,18 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			kinds.Check(ret)
 		}
 	}
+	// A listing of the services, and the description of a service.
+	for _, with := range []map[string]any{
+		{"addr": grpcAddr, "list": true},
+		{"addr": grpcAddr, "list": true, "service": "UserService"},
+	} {
+		ret, _, err := a.RunStep(actionrpc.Call{With: with, Contract: &actionrpc.Contract{}})
+		if err != nil {
+			t.Fatalf("%v: %v", with, err)
+		}
+		actiontest.CheckFields(t, Spec().ReqFields, Spec().ResFields, nil, ret)
+		kinds.Check(ret)
+	}
 	kinds.Covered()
 }
 
