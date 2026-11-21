@@ -36,14 +36,31 @@ jobs:
     - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
       with:
         go-version-file: go.mod
+    # golangci-lint fails on any issue, not only on those of the lines a
+    # pull request changes.
     - name: golangci-lint
-      uses: reviewdog/action-golangci-lint@f9bba13753278f6a73b27a56a3ffb1bfda90ed71 # v2.8.0
+      uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+      with:
+        version: v2.15.0
     # go fix rewrites code to what the Go version in go.mod has, such as
     # maps.Copy for a loop that copies a map. -diff prints the rewrites
     # instead of applying them, and fails when there is any: run go fix ./...
     # and commit what it changes.
     - name: go fix
       run: go fix -diff ./...
+
+  # govulncheck fails on a vulnerability the code calls, in a module it
+  # requires or in the standard library of the Go in go.mod, which releases
+  # are built with: update the module, or the Go in go.mod.
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+      with:
+        go-version-file: go.mod
+    - name: govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
 
   # Builds probe for every platform .goreleaser.yaml releases, the way it does,
   # so that a release does not fail on a platform the tests do not run on.
