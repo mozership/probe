@@ -28,7 +28,7 @@ The cask is in [mozership/homebrew-tap](https://github.com/mozership/homebrew-ta
 
 ### 2. Install with Go
 
-If you have Go 1.26.6 or later installed, you can install Probe directly:
+If you have Go 1.26.11 or later installed, you can install Probe directly:
 
 ```bash
 go install github.com/mozership/probe/cmd/probe@latest

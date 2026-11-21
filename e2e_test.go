@@ -188,7 +188,7 @@ jobs:
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
 	select {
-	case <-waited:
+	case <-waited: //nolint:errcheck // ended by SIGINT, Wait errs: the state is checked below
 	case <-time.After(15 * time.Second):
 		t.Fatal("probe did not exit after SIGINT")
 	}

@@ -26,7 +26,7 @@ Homebrewはインストールの前にそのSHA-256を検証します。
 
 ### 2. Goでインストール
 
-Go 1.26.6以降がインストールされている場合、Probeを直接インストールできます。
+Go 1.26.11以降がインストールされている場合、Probeを直接インストールできます。
 
 ```bash
 go install github.com/mozership/probe/cmd/probe@latest
