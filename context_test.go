@@ -81,6 +81,7 @@ func TestStepContext_testEnv(t *testing.T) {
 		Status:      3,
 		RepeatIndex: 4,
 		Notes:       []any{map[string]any{"level": "info", "body": "b"}},
+		Job:         JobState{Failed: true},
 	}
 	env := ctx.testEnv()
 
@@ -107,14 +108,18 @@ func TestStepContext_testEnv(t *testing.T) {
 		"report":       "r",
 		"repeat_index": 4,
 		"notes":        ctx.Notes,
+		"job":          map[string]any{"failed": true},
 	}
 	if !reflect.DeepEqual(env, want) {
 		t.Errorf("testEnv() = %v, want %v", env, want)
 	}
 
-	// With no notes, it is what it was before there were notes.
+	// With no notes, and no step before failed, it is what it was before
+	// there were either.
 	ctx.Notes = []any{}
+	ctx.Job = JobState{}
 	delete(want, "notes")
+	delete(want, "job")
 	if env := ctx.testEnv(); !reflect.DeepEqual(env, want) {
 		t.Errorf("testEnv() with no notes = %v, want %v", env, want)
 	}
