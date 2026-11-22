@@ -22,11 +22,12 @@ steps:
 
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |---|---|---|---|---|
-| `url` | String | 必須 | - | リクエストURL。メソッド省略記法でパスを渡す場合はベースURL |
+| `url` | String | 必須 | - | リクエストURL。メソッド省略記法でパスを渡す場合はベースURL。`unix_socket`とメソッド省略記法を使うときは不要 |
 | `method` | String | 必須 | - | HTTPメソッド。メソッド省略記法を使う場合はそちらが設定します |
 | `headers` | Object | 任意 | - | リクエストヘッダー |
 | `body` | StringまたはObject | 任意 | - | リクエストボディ。`content-type`がJSONの型のとき、オブジェクトはJSONにシリアライズされます。JSONの型とは、`charset`などのパラメータの有無を問わない`application/json`と、`+json`で終わる型です |
 | `timeout` | Duration | 任意 | `30s` | レスポンスの読み取りまで含めた、リクエスト全体の制限時間 |
+| `unix_socket` | String | 任意 | - | リクエストを送るUnixドメインソケットのパス。[Unixソケット経由の送信](#unixソケット経由の送信)を参照 |
 | `basic_auth` | Object | 任意 | - | HTTP Basic認証の`username`と`password`。`Authorization`ヘッダーとして送ります |
 | `form` | Object | 任意 | - | フォームのフィールド。`application/x-www-form-urlencoded`のボディとして送ります。[フォームの送信](#フォームの送信)を参照 |
 | `multipart` | Object | 任意 | - | フォームのフィールドとファイル。`multipart/form-data`のボディとして送ります。[ファイルのアップロード](#ファイルのアップロード)を参照 |
@@ -106,6 +107,32 @@ jobs:
             name: "{{vars.user_name}}"
         test: res.code == 201
 ```
+
+### Unixソケット経由の送信
+
+`unix_socket`を指定すると、URLのホストに接続する代わりに、そのパスのUnixドメインソケットでリクエストを送ります。
+ホストは`Host`ヘッダーとして送るだけです。
+`url`を書かずにメソッド省略記法でパスだけを渡すと、ホストとして`localhost`を送ります。
+
+```yaml
+name: Socket
+vars:
+  socket: /run/app/app.sock
+jobs:
+  - name: Version
+    steps:
+      - name: The app answers on its socket
+        uses: http
+        with:
+          unix_socket: "{{vars.socket}}"
+          get: /version
+        test: res.code == 200 && res.body contains "1.2.0"
+```
+
+- サーバーが`Host`ヘッダーでリクエストを振り分けるときは、`url: http://app.internal`のように`url`を書きます。
+- リダイレクトも、行き先のホストにかかわらず同じソケットで追跡します。
+- `--allow-host`の下では、ソケット経由のリクエストを拒否します。ソケットは、実行が許可できるホストを示さないからです。[ガードの下での動作](#ガードの下での動作)を参照してください。
+- 別のマシンのソケットには届きません。パスはProbeを実行するマシンのものです。
 
 ### フォームの送信
 
@@ -417,7 +444,7 @@ X-Probe-Trace: run=7f3a9c21e4b05d68; job=login; step=auth; repeat=0; attempt=1
 
 ### ガードの下での動作
 
-`--read-only`を指定して実行すると、`GET`、`HEAD`、`OPTIONS`だけを送り、それ以外のメソッドは送る前に拒否します。`--allow-host`を指定して実行すると、許可されていないホストへのURLやリダイレクトを拒否します。ポートのないURLは、スキームの既定のポートとして扱います。拒否されたステップは種類`refused`で失敗します。[`--read-only`](/ja/reference/cli-reference#--read-only)を参照してください。
+`--read-only`を指定して実行すると、`GET`、`HEAD`、`OPTIONS`だけを送り、それ以外のメソッドは送る前に拒否します。`--allow-host`を指定して実行すると、許可されていないホストへのURLやリダイレクトを拒否します。ポートのないURLは、スキームの既定のポートとして扱います。[Unixソケット](#unixソケット経由の送信)経由のリクエストも拒否します。拒否されたステップは種類`refused`で失敗します。[`--read-only`](/ja/reference/cli-reference#--read-only)を参照してください。
 
 ### エラーレスポンスの検証
 
