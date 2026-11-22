@@ -1083,6 +1083,10 @@ func TestRequestStepOverAUnixSocket(t *testing.T) {
 	var hits atomic.Int32
 	socket := unixServer(t, hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
 		hits.Add(1)
+		if r.URL.Path == "/away" {
+			hp.Redirect(w, r, "http://elsewhere.example/final", hp.StatusFound)
+			return
+		}
 		_, _ = io.WriteString(w, r.Method+" "+r.Host+" "+r.URL.Path)
 	}))
 
@@ -1098,6 +1102,10 @@ func TestRequestStepOverAUnixSocket(t *testing.T) {
 		{name: "a url, sent as the Host header", with: map[string]any{"url": "http://app.internal:8080", "get": "/version"}, wantBody: "GET app.internal:8080 /version"},
 		{name: "a full url", with: map[string]any{"url": "http://app.internal/health", "method": "HEAD"}, wantBody: ""},
 		{name: "under read-only", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET localhost /version"},
+		{name: "a redirect, followed over the socket", with: map[string]any{"get": "/away"}, wantBody: "GET elsewhere.example /final"},
+		{name: "a redirect under read-only", with: map[string]any{"get": "/away"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET elsewhere.example /final"},
+		// Without a shorthand, the url is needed, as probe check says.
+		{name: "a method without a url", with: map[string]any{"method": "GET"}, wantErr: true},
 		{name: "a run that allows only some hosts", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{AllowHosts: []string{"localhost"}}, refused: "names no host the run can allow (localhost)"},
 		{name: "a socket that is not there", with: map[string]any{"get": "/version", "unix_socket": socket + ".missing"}, wantErr: true},
 	}

@@ -329,6 +329,17 @@ func unixTransport(path string) *hp.Transport {
 	return t
 }
 
+// hasShorthand reports whether m gives the method and the path in one key,
+// as get: /version does.
+func hasShorthand(m map[string]any) bool {
+	for _, method := range httpMethods {
+		if _, ok := m[strings.ToLower(method)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // unixSocketURL is the URL a request over a Unix socket is sent to when the
 // step gives a path alone, as get: /version: the host is only what the
 // Host header carries, so localhost stands for it.
@@ -482,10 +493,12 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	m := make(map[string]any)
 	maps.Copy(m, call.With)
 
-	// A request over a Unix socket needs no host, so a path alone, as
-	// get: /version, is sent to it without a url.
+	// A request over a Unix socket needs no host, so the path of a method
+	// shorthand alone, as get: /version, is sent to it without a url, as
+	// the action's required keys say. A request without a shorthand still
+	// needs its url.
 	if socket, ok := m["unix_socket"].(string); ok && socket != "" {
-		if _, ok := m["url"]; !ok {
+		if _, ok := m["url"]; !ok && hasShorthand(m) {
 			m["url"] = unixSocketURL
 		}
 	}
