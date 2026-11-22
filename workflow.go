@@ -227,7 +227,7 @@ func checkBuiltinUses(job *Job, builtin []string) error {
 		return nil
 	}
 	for i, st := range job.Steps {
-		if actionref.IsExternal(st.Uses) || slices.Contains(builtin, st.Uses) {
+		if st.Uses == "" || actionref.IsExternal(st.Uses) || slices.Contains(builtin, st.Uses) {
 			continue
 		}
 		return NewConfigurationError("resolve_action", "failed to resolve an action", fmt.Errorf("job %q, step %d: %w", job.Name, i, unknownAction(st.Uses, builtin)))

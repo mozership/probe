@@ -72,6 +72,7 @@ func (j *Job) problems(jp, where string) []problem {
 			out = append(out, problem{path: sp, where: sw, err: errors.New("the step is empty")})
 			continue
 		}
+		out = append(out, actionlessProblems(sp, sw, st)...)
 		out = append(out, templateProblems(sp+".name", sw, "name", st.Name)...)
 		out = append(out, templateProblems(sp+".with", sw, "with", st.With)...)
 		out = append(out, templateProblems(sp+".vars", sw, "vars", st.Vars)...)
@@ -83,6 +84,35 @@ func (j *Job) problems(jp, where string) []problem {
 		for _, key := range slices.Sorted(maps.Keys(st.Outputs)) {
 			out = append(out, expressionProblems(sp+".outputs."+key, sw, "outputs."+key, st.Outputs[key])...)
 		}
+	}
+	return out
+}
+
+// actionlessProblems returns what keeps st, a step without uses, from
+// running as it is written, with each path under sp, the path of the step:
+// with, which there is no action to give, nothing to do, without a test or
+// a wait, a retry without a test, which has nothing to wait for, and a
+// timeout, which has no action to stop.
+func actionlessProblems(sp, where string, st *Step) []problem {
+	if st.Uses != "" {
+		return nil
+	}
+	var out []problem
+	add := func(key string, err error) {
+		out = append(out, problem{path: sp + key, where: where, err: err})
+	}
+	hasTest := strings.TrimSpace(st.Test) != ""
+	if len(st.With) > 0 {
+		add(".with", errors.New("with: the step has no uses to give it to; name the action under uses"))
+	}
+	if !hasTest && st.Wait == "" {
+		add("", errors.New("the step has no uses, and nothing to do without one: give it the action under uses, or a test or a wait"))
+	}
+	if st.Retry != nil && !hasTest {
+		add(".retry", errors.New("retry: a step without uses runs nothing to retry, and has no test to wait for"))
+	}
+	if st.Timeout.Duration > 0 {
+		add(".timeout", errors.New("timeout: a step without uses runs no action for it to stop"))
 	}
 	return out
 }

@@ -182,7 +182,7 @@ jobs:
 steps:
   - name: Step Name          # オプション: 説明的な名前
     id: step-id             # オプション: 参照用の一意識別子
-    uses: http              # 必須: 実行するアクション
+    uses: http              # 任意: 実行するアクション
     with:                   # オプション: アクションパラメータ
       url: https://api.example.com
       method: GET
@@ -196,7 +196,8 @@ steps:
 
 ### ステップタイプ
 
-ステップはアクションを呼ぶか、何かを出力するか、その両方を1つで行うかのいずれかです。
+ステップはアクションを呼ぶか、何かを出力するか、その両方を1つで行います。
+アクションのないステップは、関数で読んだものを確かめるか、待ちます。
 
 #### 1. アクションステップ
 
@@ -220,7 +221,7 @@ HTTPリクエストなどの特定のアクションを実行：
 
 #### 2. Echoステップ
 
-メッセージや計算された値を表示します。どのステップもアクションを指定するため、表示だけをするステップは`hello`を使います：
+メッセージや計算された値を表示します。アクションのないステップには`test`か`wait`が必要なため、表示だけをするステップは`hello`を使います：
 
 ```yaml
 - name: Display Results
@@ -252,6 +253,22 @@ HTTPリクエストなどの特定のアクションを実行：
     Status Code: {{res.status}}
     Response Time: {{rt.duration}}
     API Version: {{res.body.version}}
+```
+
+#### 4. アクションのないステップ
+
+ログのようにほかのプロセスが書くファイルを、シェルを動かさずに確かめたり、待ったりします。
+`uses`のないステップは、`file`や`exists`のような関数で読んだものに対して`test`を確かめ、`retry`があれば成り立つまで待ちます。
+[`uses`のないステップ](/ja/reference/yaml-configuration#usesのないステップ)を参照してください：
+
+```yaml fragment
+- name: Wait for the app to start
+  test: file(vars.log) contains "started"
+  retry:
+    max_attempts: 30
+    interval: 2s
+- name: Let it settle
+  wait: 10s
 ```
 
 ### ステップ実行フロー

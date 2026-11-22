@@ -76,12 +76,21 @@ func (w *Workflow) Graph() dag.Graph {
 	return g
 }
 
+// stepLabel is what the graph shows st by: its name, or its action when it
+// has none, or Unknown Step, as the run reports it, when it has neither.
+func stepLabel(st *Step) string {
+	switch {
+	case st.Name != "":
+		return st.Name
+	case st.Uses != "":
+		return st.Uses
+	}
+	return "Unknown Step"
+}
+
 // step returns the graph step for st, with the steps of the job it embeds.
 func (b *graphBuilder) step(st *Step) dag.Step {
-	s := dag.Step{Name: st.Name, Embedded: st.Uses == embeddedAction}
-	if s.Name == "" {
-		s.Name = st.Uses
-	}
+	s := dag.Step{Name: stepLabel(st), Embedded: st.Uses == embeddedAction}
 	path, ok := embeddedJobFile(st)
 	if !ok {
 		return s
@@ -95,11 +104,7 @@ func (b *graphBuilder) step(st *Step) dag.Step {
 	}
 	s.EmbeddedFile = filepath.Base(expanded)
 	for _, es := range job.Steps {
-		name := es.Name
-		if name == "" {
-			name = es.Uses
-		}
-		s.EmbeddedSteps = append(s.EmbeddedSteps, name)
+		s.EmbeddedSteps = append(s.EmbeddedSteps, stepLabel(es))
 	}
 	return s
 }

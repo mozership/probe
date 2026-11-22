@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/rand/v2"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	ex "github.com/expr-lang/expr"
@@ -298,6 +300,32 @@ func (e *Expr) Options(env any) []ex.Option {
 			},
 		),
 		ex.Function(
+			"exists",
+			func(params ...any) (any, error) {
+				if len(params) != 1 {
+					return nil, fmt.Errorf("exists requires exactly 1 parameter")
+				}
+				path, ok := params[0].(string)
+				if !ok || path == "" {
+					return nil, fmt.Errorf("exists parameter must be a path")
+				}
+				return pathExists(path)
+			},
+		),
+		ex.Function(
+			"lines",
+			func(params ...any) (any, error) {
+				if len(params) != 1 {
+					return nil, fmt.Errorf("lines requires exactly 1 parameter")
+				}
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("lines parameter must be a string")
+				}
+				return splitLines(s), nil
+			},
+		),
+		ex.Function(
 			"template",
 			func(params ...any) (any, error) {
 				if len(params) != 1 {
@@ -336,6 +364,38 @@ func (e *Expr) Options(env any) []ex.Option {
 			},
 		),
 	}
+}
+
+// pathExists reports whether anything is at path, relative to the working
+// directory as the path of file is: a file, a directory, a socket or
+// anything else, following a symbolic link, as test -e does. A path under
+// a file, which nothing can be at, is not there either. What keeps it from
+// being told, such as a directory that cannot be read, is an error rather
+// than false.
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return false, nil
+	}
+	return false, fmt.Errorf("exists: %w", err)
+}
+
+// splitLines returns the lines of s, without their line endings, \n or
+// \r\n. The end of the last line is not a line of its own, so the lines of
+// a file read by file are those an editor shows, and an empty s has none.
+func splitLines(s string) []any {
+	if s == "" {
+		return []any{}
+	}
+	parts := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	out := make([]any, len(parts))
+	for i, p := range parts {
+		out[i] = strings.TrimSuffix(p, "\r")
+	}
+	return out
 }
 
 // readFile returns the content of the file at path, relative to the working
