@@ -38,7 +38,7 @@ jobs:                         # 必須: ジョブのリスト
     steps:                    # 必須: ステップのリスト
       - name: string          # 任意: ステップ名
         id: string            # 任意: ステップID。outputsをこのIDから読める
-        uses: string          # 必須: アクション名、またはactionsで付けた名前
+        uses: string          # 任意: アクション名、またはactionsで付けた名前
         with:                 # 任意: アクション引数
           key: value
         test: expression      # 任意: アサーション
@@ -545,7 +545,7 @@ jobs:
 
 | プロパティ | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `uses` | String | 必須 | 実行するアクション。`http`、`shell`などの組み込みアクションか、[外部アクション](/ja/guide/concepts/actions#外部アクション) |
+| `uses` | String | 任意 | 実行するアクション。`http`、`shell`などの組み込みアクションか、[外部アクション](/ja/guide/concepts/actions#外部アクション)。省くとアクションを実行しません。[`uses`のないステップ](#usesのないステップ)を参照 |
 | `name` | String | 任意 | ステップ名 |
 | `id` | String | 任意 | このステップの`outputs`の名前空間になる識別子 |
 | `with` | Object | 任意 | アクション引数 |
@@ -562,6 +562,42 @@ jobs:
 キーは`action`ではなく`uses`、条件は`if`ではなく`skipif`です。
 
 `steps`の要素には、[`include`](#include)で他のファイルのステップを取り込むこともできます。
+
+#### `uses`のないステップ
+
+`uses`のないステップは、アクションを実行しません。
+[`file`](/ja/reference/functions/probe#file)、[`exists`](/ja/reference/functions/probe#exists)、[`lines`](/ja/reference/functions/probe#lines)のような関数で読んだものに対して`test`を確かめ、`retry`があれば`test`が成り立つまで待ちます。
+待つだけのステップも書けます。
+ほかのプロセスが書くログやソケット、ファイルを、シェルを動かさずに確かめられます。
+
+```yaml
+name: Verify the deployment
+vars:
+  log: /var/log/app.log
+  socket: /run/app/app.sock
+
+jobs:
+  - name: Verify
+    steps:
+      - name: Wait for the new version to start
+        test: file(vars.log) contains "starting version 1.2.0"
+        retry:
+          max_attempts: 60
+          interval: 5s
+      - name: Wait for it to settle
+        wait: 30s
+      - name: No error is logged
+        test: '!(file(vars.log) contains "level=ERROR")'
+      - name: Two symlinks are created
+        test: 'count(lines(file(vars.log)), # contains "Create symlink") == 2'
+      - name: The socket is there
+        test: exists(vars.socket)
+```
+
+- アクションを実行しないので、`status`は`0`で、`res`、`req`、`rt`は空です。`uses`のないステップが`res`や`req`を読むと、`probe check`が報告します。
+- `uses`のないステップには`test`か`wait`が必要です。渡す先のアクションがない`with`や、`test`のない`retry`を書くと、最初のジョブの前に実行が止まります。
+- `skipif`、`vars`、`outputs`、`echo`、`iteration`は、ほかのステップと同じく使えます。
+- `count`や`filter`の述語のように` #`を含む`test`は引用符で囲みます。YAMLは` #`から行末までをコメントとして読むからです。
 
 #### `outputs`
 
@@ -927,7 +963,7 @@ headers:
 
 - ワークフローには`name`が必要で、`jobs`は空でないリストである必要があります
 - 各ジョブには`name`と1つ以上のステップが必要です
-- 各ステップには`uses`が必要で、アクションを指している必要があります。Probeのアクション、外部アクション、`actions`で付けた名前のいずれかです。どれでもない場合は、スキップされるステップであっても、最初のジョブの前に終了ステータス2で実行が止まります
+- ステップの`uses`は、アクションを指している必要があります。Probeのアクション、外部アクション、`actions`で付けた名前のいずれかです。どれでもない場合は、スキップされるステップであっても、最初のジョブの前に終了ステータス2で実行が止まります。`uses`のないステップには`test`か`wait`が必要で、`with`は書けません
 - `actions`の名前はProbeのアクションの名前であってはならず、コミットで固定した外部アクションかローカルのパスを指す必要があります
 - `needs`は存在するジョブIDを指し、依存関係は循環していない必要があります
 - `repeat.count`と`repeat.warmup`は0以上、`retry.max_attempts`は1以上である必要があります

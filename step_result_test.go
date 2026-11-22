@@ -250,7 +250,9 @@ func TestStep_createFailedStepResult_HasTestAsARunStepHas(t *testing.T) {
 func TestStep_createFailedStepResult_NoTest(t *testing.T) {
 	step := &stepRun{
 		Step: &Step{
-			// No Test field
+			// No Test field. A step without uses either only waits, which
+			// needs no test.
+			Uses: "http",
 		},
 		idx: 1,
 		ctx: StepContext{},

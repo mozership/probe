@@ -1005,6 +1005,86 @@ func TestFileFunction(t *testing.T) {
 	}
 }
 
+// exists tells whether anything is at a path, a directory or a link to a
+// file too, and what keeps it from being told is an error rather than false.
+func TestExistsFunction(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(file, link); err != nil {
+		t.Fatal(err)
+	}
+	dangling := filepath.Join(dir, "dangling")
+	if err := os.Symlink(filepath.Join(dir, "gone"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	e := &Expr{}
+	for _, tt := range []struct {
+		path string
+		want bool
+	}{
+		{file, true},
+		{dir, true},
+		{link, true},
+		{dangling, false},
+		{filepath.Join(dir, "missing"), false},
+	} {
+		got, err := e.Eval("exists(path)", map[string]any{"path": tt.path})
+		if err != nil || got != tt.want {
+			t.Errorf("exists(%q) = %v, %v; want %v", tt.path, got, err, tt.want)
+		}
+	}
+	for _, tt := range []struct {
+		input   string
+		wantErr string
+	}{
+		{"exists()", "exists requires exactly 1 parameter"},
+		{"exists(1)", "exists parameter must be a path"},
+		{"exists('')", "exists parameter must be a path"},
+		// A file is not a directory, so nothing can be under it.
+		{"exists('" + file + "/x')", "exists: stat " + file + "/x: not a directory"},
+	} {
+		if _, err := e.Eval(tt.input, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+			t.Errorf("Eval(%q) error = %v, want %q", tt.input, err, tt.wantErr)
+		}
+	}
+}
+
+// lines splits a text into its lines, without their endings, and the end
+// of the last line makes no line of its own.
+func TestLinesFunction(t *testing.T) {
+	e := &Expr{}
+	for _, tt := range []struct {
+		s    string
+		want []any
+	}{
+		{"", []any{}},
+		{"\n", []any{""}},
+		{"a", []any{"a"}},
+		{"a\n", []any{"a"}},
+		{"a\nb", []any{"a", "b"}},
+		{"a\r\nb\r\n", []any{"a", "b"}},
+		{"a\n\nb\n", []any{"a", "", "b"}},
+	} {
+		got, err := e.Eval("lines(s)", map[string]any{"s": tt.s})
+		if err != nil || !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("lines(%q) = %#v, %v; want %#v", tt.s, got, err, tt.want)
+		}
+	}
+
+	// It counts the lines that hold a text, as grep -c does.
+	got, err := e.Eval("count(lines(s), # contains 'Create symlink')", map[string]any{"s": "Create symlink a\nother\nCreate symlink b\n"})
+	if err != nil || got != 2 {
+		t.Errorf("count(lines()) = %v, %v; want 2", got, err)
+	}
+	if _, err := e.Eval("lines(1)", nil); err == nil || !strings.Contains(err.Error(), "lines parameter must be a string") {
+		t.Errorf("lines(1) error = %v", err)
+	}
+}
+
 func TestFileFunctionReadsUpToTheLimit(t *testing.T) {
 	full := filepath.Join(t.TempDir(), "full.txt")
 	if err := os.WriteFile(full, make([]byte, maxStringLength), 0o600); err != nil {

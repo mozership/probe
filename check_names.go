@@ -125,6 +125,14 @@ func (c *checker) checkResults() {
 			return
 		}
 		st := c.wf.Jobs[e.job].Steps[e.step]
+		if st.Uses == "" {
+			for _, name := range expr.Names(e.input) {
+				if name == "res" || name == "req" {
+					add(SeverityError, e, "%s is empty here, as the step has no uses to run; what a step without one checks, it reads by functions such as file and exists", name)
+				}
+			}
+			return
+		}
 		if !readsResult(e.field) {
 			for _, name := range expr.Names(e.input) {
 				if name == "res" || name == "req" {

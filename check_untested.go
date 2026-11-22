@@ -25,6 +25,11 @@ func (c *checker) checkTests() {
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
 			id := st.idAt(j)
 			switch {
+			// A step without an action has no response its test could
+			// read: it reads files, by file and exists, which may be
+			// written in it as they are. One without a test only waits,
+			// and its load refuses one that does nothing.
+			case st.Uses == "":
 			case strings.TrimSpace(st.Test) == "":
 				// A step of an action that does nothing that could go
 				// wrong, which is there for its echo or to publish what
