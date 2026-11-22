@@ -91,7 +91,8 @@ func (j *Job) problems(jp, where string) []problem {
 // actionlessProblems returns what keeps st, a step without uses, from
 // running as it is written, with each path under sp, the path of the step:
 // with, which there is no action to give, nothing to do, without a test or
-// a wait, and a retry without a test, which has nothing to wait for.
+// a wait, a retry without a test, which has nothing to wait for, and a
+// timeout, which has no action to stop.
 func actionlessProblems(sp, where string, st *Step) []problem {
 	if st.Uses != "" {
 		return nil
@@ -109,6 +110,9 @@ func actionlessProblems(sp, where string, st *Step) []problem {
 	}
 	if st.Retry != nil && !hasTest {
 		add(".retry", errors.New("retry: a step without uses runs nothing to retry, and has no test to wait for"))
+	}
+	if st.Timeout.Duration > 0 {
+		add(".timeout", errors.New("timeout: a step without uses runs no action for it to stop"))
 	}
 	return out
 }

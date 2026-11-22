@@ -1031,6 +1031,8 @@ func TestExistsFunction(t *testing.T) {
 		{link, true},
 		{dangling, false},
 		{filepath.Join(dir, "missing"), false},
+		// Nothing can be under a file, as test -e finds.
+		{file + "/x", false},
 	} {
 		got, err := e.Eval("exists(path)", map[string]any{"path": tt.path})
 		if err != nil || got != tt.want {
@@ -1044,8 +1046,6 @@ func TestExistsFunction(t *testing.T) {
 		{"exists()", "exists requires exactly 1 parameter"},
 		{"exists(1)", "exists parameter must be a path"},
 		{"exists('')", "exists parameter must be a path"},
-		// A file is not a directory, so nothing can be under it.
-		{"exists('" + file + "/x')", "exists: stat " + file + "/x: not a directory"},
 	} {
 		if _, err := e.Eval(tt.input, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 			t.Errorf("Eval(%q) error = %v, want %q", tt.input, err, tt.wantErr)

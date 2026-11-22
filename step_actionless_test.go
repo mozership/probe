@@ -106,6 +106,7 @@ func TestProbe_Load_RefusesAStepWithoutUses(t *testing.T) {
 	}{
 		{name: "with", step: "    test: 'true'\n    with:\n      cmd: ls\n", refused: `step 0 "S": with: the step has no uses to give it to`},
 		{name: "nothing to do", step: "    echo: hi\n", refused: `step 0 "S": the step has no uses, and nothing to do without one`},
+		{name: "timeout", step: "    test: 'true'\n    timeout: 5s\n", refused: `step 0 "S": timeout: a step without uses runs no action for it to stop`},
 		{name: "retry without a test", step: "    wait: 1s\n    retry:\n      max_attempts: 3\n      interval: 1s\n", refused: `step 0 "S": retry: a step without uses runs nothing to retry`},
 	}
 	for _, tt := range tests {

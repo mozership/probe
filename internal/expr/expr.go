@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	ex "github.com/expr-lang/expr"
@@ -367,15 +368,16 @@ func (e *Expr) Options(env any) []ex.Option {
 
 // pathExists reports whether anything is at path, relative to the working
 // directory as the path of file is: a file, a directory, a socket or
-// anything else, following a symbolic link, as test -e does. What keeps it
-// from being told, such as a directory that cannot be read, is an error
-// rather than false.
+// anything else, following a symbolic link, as test -e does. A path under
+// a file, which nothing can be at, is not there either. What keeps it from
+// being told, such as a directory that cannot be read, is an error rather
+// than false.
 func pathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
 	}
-	if errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		return false, nil
 	}
 	return false, fmt.Errorf("exists: %w", err)
