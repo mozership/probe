@@ -908,6 +908,7 @@ func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 		Outputs:     outputs,
 		RepeatIndex: j.RepeatCurrent,
 		Notes:       noteList,
+		Job:         JobState{Failed: j.Failed},
 	}
 
 	// Evaluate step-level vars with access to outputs. A var that cannot be
@@ -940,6 +941,7 @@ func (st *stepRun) bindContext(j JobContext, override map[string]any) {
 		Outputs:     outputs,
 		RepeatIndex: j.RepeatCurrent,
 		Notes:       noteList,
+		Job:         evalCtx.Job,
 	}
 }
 

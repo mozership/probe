@@ -794,8 +794,49 @@ jobs:
 | `outputs` | Object | 先行ステップが公開した値 |
 | `repeat_index` | Integer | ジョブ繰り返し時の現在のインデックス。0から始まり、`warmup`の回も数える |
 | `notes` | Array | 先行ステップのアクションが人に向けて残したもの。[`notes`](#notes)を参照 |
+| `job` | Object | ジョブのこの回のここまでの様子。`job.failed`はこのステップより前のステップが失敗したかどうか。[失敗したとき](#失敗したとき)を参照 |
 
 このコンテキストに`env`、`jobs`、`steps`はありません。
+
+### 失敗したとき
+
+`job.failed`は、ジョブのこの回でステップが1つでも失敗するとtrueになります。
+ログのように原因を探す手がかりを出すステップを、失敗したときだけ動かせます。
+
+```yaml
+name: Health with the log on failure
+vars:
+  api_url: "{{API_URL}}"
+
+jobs:
+  - name: Health
+    steps:
+      - name: Check the health
+        uses: http
+        with:
+          method: GET
+          url: "{{vars.api_url}}/health"
+        test: res.code == 200
+      - name: Check the version
+        uses: http
+        with:
+          method: GET
+          url: "{{vars.api_url}}/version"
+        test: res.code == 200
+      - name: Show the log
+        skipif: "!job.failed"
+        uses: shell
+        with:
+          cmd: cat /var/log/app.log
+        test: status == 0
+        echo: "{{ res.stdout }}"
+```
+
+- ステップは自分自身の失敗を見ません。`test`や`outputs`が読むのは、それより前のステップが失敗したかどうかです。
+- [`iteration`](#iteration)のある回が失敗すると、それ以降の回では`true`になります。
+- [`repeat`](#repeat)のジョブは、回ごとに`false`から始まります。
+- [`fail_fast`](#fail_fast)のジョブでは、失敗の後のステップは`skipif`を読む前にスキップされます。`job.failed`は`fail_fast`のないジョブで使います。
+- ジョブの`skipif`は、まだどのステップも動いていないので`false`を読みます。
 
 ### `notes`
 
