@@ -758,8 +758,48 @@ Inside a step, an expression sees exactly these names:
 | `outputs` | Object | Outputs published by earlier steps |
 | `repeat_index` | Integer | Current index when the job repeats, from 0, the `warmup` runs included |
 | `notes` | Array | What the actions of earlier steps left for people; see [Notes](#notes) |
+| `job` | Object | The run of the job so far: `job.failed` is whether a step before this one failed; see [After a Failure](#after-a-failure) |
 
 There is no `env`, `jobs` or `steps` in this context.
+
+### After a Failure
+
+`job.failed` is true once a step of the job has failed in the run. A step that shows what helps to find why, such as a log, can then run only when one did:
+
+```yaml
+name: Health with the log on failure
+vars:
+  api_url: "{{API_URL}}"
+
+jobs:
+  - name: Health
+    steps:
+      - name: Check the health
+        uses: http
+        with:
+          method: GET
+          url: "{{vars.api_url}}/health"
+        test: res.code == 200
+      - name: Check the version
+        uses: http
+        with:
+          method: GET
+          url: "{{vars.api_url}}/version"
+        test: res.code == 200
+      - name: Show the log
+        skipif: "!job.failed"
+        uses: shell
+        with:
+          cmd: cat /var/log/app.log
+        test: status == 0
+        echo: "{{ res.stdout }}"
+```
+
+- A step does not see its own failure: its `test` and `outputs` read whether a step before it failed.
+- An entry of an [`iteration`](#iteration) that failed counts for the entries after it.
+- Each run of a job with [`repeat`](#repeat) starts with `false`.
+- In a job with [`fail_fast`](#fail_fast), the steps after a failure are skipped before their `skipif` is read, so `job.failed` is for a job without it.
+- The `skipif` of a job reads `false`, as none of its steps has run.
 
 ### Notes
 

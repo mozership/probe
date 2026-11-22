@@ -450,7 +450,7 @@ probe check base.yml staging.yml
 workflow.yml:10: error: job 0 "Users", step 0 "Log in": unknown key "tset"; did you mean "test"?
 workflow.yml:14: error: job 0 "Users", step 1 "Read": unknown action "htp"; did you mean "http"?
 workflow.yml:18: error: job 0 "Users", step 1 "Read": with: outputs.login.tokn is not published: step "login" publishes token
-workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read notes, outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
+workflow.yml:21: error: job 0 "Users", step 1 "Read": test: steps is not defined; it can read job, notes, outputs, repeat_index, report, req, res, rt, status and vars; what an earlier step publishes is read under outputs
 workflow.yml:39: warning: job 1 "Other", step 0 "Reads users": with: outputs.login.token may not be published yet: job "Other" does not need job "Users", whose step publishes it
 workflow.yml:40: warning: job 1 "Other", step 0 "Reads users": with: vars.api_url is not defined by the workflow, so it is nil unless --var gives it; did you mean "API_URL"?
 

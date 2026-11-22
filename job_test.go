@@ -934,6 +934,50 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 	}
 }
 
+// A step reads as job.failed whether a step before it in the run failed:
+// one that shows a log only then is skipped when none did. A step does not
+// see its own failure, and the next run starts over.
+func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
+	tests := []struct {
+		name     string
+		test     string
+		wantShow StatusType
+	}{
+		{name: "none failed", test: "true", wantShow: StatusSkipped},
+		{name: "one failed", test: "!job.failed && false", wantShow: StatusSuccess},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := newMockRunner()
+			job := &Job{ID: "work", Name: "Work", Steps: []*Step{
+				{Name: "Check", Uses: "hello", Test: tt.test},
+				{Name: "Show log", Uses: "hello", SkipIf: "!job.failed", Test: "job.failed"},
+			}}
+			printer := newBufferPrinter()
+			printer.SetMasker(mask.New(nil, nil))
+			result := NewResult()
+			result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+			if _, err := job.run(JobContext{
+				runEnv: &runEnv{
+					Config:  Config{ActionRunner: runner},
+					Printer: printer,
+					Result:  result,
+				},
+				Outputs: NewOutputs(),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			srs := result.Jobs[job.ID].StepResults
+			if len(srs) != 2 {
+				t.Fatalf("step results = %+v, want 2", srs)
+			}
+			if srs[1].Status != tt.wantShow {
+				t.Errorf("Show log = %v, want %v", srs[1].Status, tt.wantShow)
+			}
+		})
+	}
+}
+
 func TestMergeDefaults(t *testing.T) {
 
 	tests := []struct {
