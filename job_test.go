@@ -936,7 +936,7 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 
 // A step reads as job.failed whether a step before it in the run failed:
 // one that shows a log only then is skipped when none did. A step does not
-// see its own failure, and the next run starts over.
+// see its own failure.
 func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -975,6 +975,47 @@ func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
 				t.Errorf("Show log = %v, want %v", srs[1].Status, tt.wantShow)
 			}
 		})
+	}
+}
+
+// An entry of an iteration that failed counts for the entries after it, and
+// a step's own vars read job.failed too. Each run of a repeated job starts
+// over, as a run is given a context of its own.
+func TestJob_JobFailedAcrossEntriesAndRuns(t *testing.T) {
+	job := &Job{ID: "work", Name: "Work", Steps: []*Step{
+		{Name: "Entry {{vars.n}}", Uses: "hello", Test: "!job.failed && (vars.n != 1 || repeat_index != 0)",
+			Iteration: Iteration{Entries: []map[string]any{{"n": 0}, {"n": 1}, {"n": 2}}}},
+		{Name: "Show log", Uses: "hello", Vars: map[string]any{"seen": "{{ job.failed }}"}, SkipIf: "!job.failed", Test: `vars.seen == "true"`},
+	}}
+	for run, want := range [][]StatusType{
+		// Entry 1 fails in the first run: entry 2 reads it, and fails.
+		{StatusSuccess, StatusError, StatusError, StatusSuccess},
+		{StatusSuccess, StatusSuccess, StatusSuccess, StatusSkipped},
+	} {
+		printer := newBufferPrinter()
+		printer.SetMasker(mask.New(nil, nil))
+		result := NewResult()
+		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		if _, err := job.run(JobContext{
+			runEnv: &runEnv{
+				Config:  Config{ActionRunner: newMockRunner()},
+				Printer: printer,
+				Result:  result,
+			},
+			Outputs:       NewOutputs(),
+			RepeatCurrent: run,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		srs := result.Jobs[job.ID].StepResults
+		if len(srs) != len(want) {
+			t.Fatalf("run %d: step results = %+v, want %d", run, srs, len(want))
+		}
+		for i, w := range want {
+			if srs[i].Status != w {
+				t.Errorf("run %d: step %d %q = %v, want %v (%+v)", run, i, srs[i].Name, srs[i].Status, w, srs[i].Failure)
+			}
+		}
 	}
 }
 
