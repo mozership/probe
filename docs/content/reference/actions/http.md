@@ -22,11 +22,12 @@ The fields below describe the request. All of them accept template expressions.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `url` | String | Yes | - | Request URL, or the base URL when a method shorthand carries a path |
+| `url` | String | Yes | - | Request URL, or the base URL when a method shorthand carries a path. Not needed with `unix_socket` and a method shorthand |
 | `method` | String | Yes | - | HTTP method. Supplied by a method shorthand when one is used |
 | `headers` | Object | No | - | Request headers |
 | `body` | String or Object | No | - | Request body. An object is serialized as JSON when `content-type` is a JSON type: `application/json`, with or without parameters such as `charset`, or one ending in `+json` |
 | `timeout` | Duration | No | `30s` | Time limit for the whole request, including reading the response |
+| `unix_socket` | String | No | - | Path of a Unix domain socket to send the request over. See [Over a Unix Socket](#over-a-unix-socket) |
 | `basic_auth` | Object | No | - | `username` and `password` for HTTP Basic authentication, sent as the `Authorization` header |
 | `form` | Object | No | - | Form fields, sent as an `application/x-www-form-urlencoded` body. See [Sending a Form](#sending-a-form) |
 | `multipart` | Object | No | - | Form fields and files, sent as a `multipart/form-data` body. See [Uploading Files](#uploading-files) |
@@ -106,6 +107,30 @@ jobs:
             name: "{{vars.user_name}}"
         test: res.code == 201
 ```
+
+### Over a Unix Socket
+
+`unix_socket` sends the request over the Unix domain socket at its path, in place of a connection to the host of the URL. The host is then sent only as the `Host` header, and a path alone, with a method shorthand and no `url`, is sent with `localhost` for it:
+
+```yaml
+name: Socket
+vars:
+  socket: /run/app/app.sock
+jobs:
+  - name: Version
+    steps:
+      - name: The app answers on its socket
+        uses: http
+        with:
+          unix_socket: "{{vars.socket}}"
+          get: /version
+        test: res.code == 200 && res.body contains "1.2.0"
+```
+
+- Give `url` when the server tells requests apart by their `Host` header, as `url: http://app.internal` does.
+- A redirect is followed over the same socket, whatever host it names.
+- A request over a socket is refused under `--allow-host`, as the socket names no host the run can allow. See [Under a Guard](#under-a-guard).
+- A socket of another machine cannot be reached: the path is one of the machine Probe runs on.
 
 ### Sending a Form
 
@@ -417,7 +442,7 @@ Which operation and response each step's response was matched to is in `res.cont
 
 ### Under a Guard
 
-Run with `--read-only`, the action sends only `GET`, `HEAD` and `OPTIONS`, and refuses any other method before sending it. Run with `--allow-host`, it refuses a URL, or a redirect, to a host the run does not allow, taking a URL without a port at the port of its scheme. A refused step fails with the kind `refused`. See [`--read-only`](/reference/cli-reference#--read-only).
+Run with `--read-only`, the action sends only `GET`, `HEAD` and `OPTIONS`, and refuses any other method before sending it. Run with `--allow-host`, it refuses a URL, or a redirect, to a host the run does not allow, taking a URL without a port at the port of its scheme, and any request over a [Unix socket](#over-a-unix-socket). A refused step fails with the kind `refused`. See [`--read-only`](/reference/cli-reference#--read-only).
 
 ### Checking an Error Response
 

@@ -2,12 +2,14 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	hp "net/http"
 	"net/url"
 	"path"
@@ -35,7 +37,11 @@ type Req struct {
 	Header  map[string]string `map:"headers"`
 	Body    string            `map:"body"` // Changed from []byte to string for text data
 	Timeout string            `map:"timeout"`
-	cb      *Callback
+	// UnixSocket is the path of a Unix domain socket to send the request
+	// over, in place of a connection to the host of the URL, which is then
+	// sent only as the Host header.
+	UnixSocket string `map:"unix_socket"`
+	cb         *Callback
 	// payload is sent in place of Body when it is set. It holds a multipart
 	// body, which may carry the bytes of files, and is never shown.
 	payload []byte
@@ -222,6 +228,9 @@ func (r *Req) Do() (*Result, error) {
 	}
 
 	cl := &hp.Client{Timeout: timeout, Jar: jar}
+	if r.UnixSocket != "" {
+		cl.Transport = unixTransport(r.UnixSocket)
+	}
 	if r.guard.Active() {
 		// A redirect is a request of its own, which the guard allows or
 		// refuses as it does the first.
@@ -294,13 +303,36 @@ var readMethods = []string{hp.MethodGet, hp.MethodHead, hp.MethodOptions}
 
 // checkGuard returns a Refused error when the guard of the run does not
 // allow req: a method that may write under --read-only, or a host it does
-// not allow. A host without a port is taken at the port of its scheme.
+// not allow. A host without a port is taken at the port of its scheme. A
+// request over a Unix socket connects to no host, and the guard cannot tell
+// where the socket leads, so it is refused whenever the run allows only
+// some hosts, as the grpc action refuses a unix: target.
 func (r *Req) checkGuard(req *hp.Request) error {
 	if r.guard.ReadOnly && !slices.Contains(readMethods, req.Method) {
 		return actionrpc.Refuse("%s %s may write, and the run is read-only; only GET, HEAD and OPTIONS are sent", req.Method, req.URL.Redacted())
 	}
+	if r.UnixSocket != "" && len(r.guard.AllowHosts) > 0 {
+		return actionrpc.Refuse("the request is sent over the Unix socket %s, which names no host the run can allow (%s)", r.UnixSocket, strings.Join(r.guard.AllowHosts, ", "))
+	}
 	return r.guard.CheckHost(hostport.OfURL(req.URL))
 }
+
+// unixTransport returns a transport that sends every request over the Unix
+// domain socket at path, whatever the host of its URL, redirects included.
+func unixTransport(path string) *hp.Transport {
+	t := hp.DefaultTransport.(*hp.Transport).Clone()
+	t.Proxy = nil
+	t.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", path)
+	}
+	return t
+}
+
+// unixSocketURL is the URL a request over a Unix socket is sent to when the
+// step gives a path alone, as get: /version: the host is only what the
+// Host header carries, so localhost stands for it.
+const unixSocketURL = "http://localhost"
 
 type Option func(*Callback)
 
@@ -449,6 +481,14 @@ func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]an
 	// Create a copy to avoid modifying the original data
 	m := make(map[string]any)
 	maps.Copy(m, call.With)
+
+	// A request over a Unix socket needs no host, so a path alone, as
+	// get: /version, is sent to it without a url.
+	if socket, ok := m["unix_socket"].(string); ok && socket != "" {
+		if _, ok := m["url"]; !ok {
+			m["url"] = unixSocketURL
+		}
+	}
 
 	// Resolve HTTP method fields (get, post, etc.) to method and url
 	if err := ResolveMethodAndURL(m); err != nil {
