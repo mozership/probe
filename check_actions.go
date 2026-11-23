@@ -226,18 +226,28 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 // withValue reports v, the value of key in with at path, when the key takes
 // only some values and v is not one of them. A value that holds a template
 // is known only when it runs, and an empty one leaves the key to its
-// default, so neither is checked.
+// default, so neither is checked. A number or a boolean is compared as the
+// text an action is given for it, as 1 for "1", and the spaces around a
+// value are left out, as some actions leave them out, so that only a value
+// no action could take is reported.
 func (c *checker) withValue(action, key string, v any, path, where, field string) {
 	choices, ok := c.choices[action][key]
 	if !ok || v == nil {
 		return
 	}
 	s, isString := v.(string)
-	if isString && (s == "" || expr.HasTemplate(s)) {
+	switch v.(type) {
+	case string:
+	case map[string]any, []any:
+	default:
+		s = fmt.Sprintf("%v", v)
+	}
+	text := strings.TrimSpace(s)
+	if isString && (text == "" || expr.HasTemplate(s)) {
 		return
 	}
-	if isString && slices.ContainsFunc(choices.Values, func(want string) bool {
-		return s == want || choices.IgnoreCase && strings.EqualFold(s, want)
+	if slices.ContainsFunc(choices.Values, func(want string) bool {
+		return text == want || choices.IgnoreCase && strings.EqualFold(text, want)
 	}) {
 		return
 	}
@@ -246,8 +256,8 @@ func (c *checker) withValue(action, key string, v any, path, where, field string
 		shown = strconv.Quote(s)
 	}
 	msg := fmt.Sprintf("%s: %s %s is not a value the %s action takes; it takes %s", field, key, shown, action, orList(choices.Values))
-	if isString {
-		msg += suggest.Hint(s, choices.Values)
+	if s != "" {
+		msg += suggest.Hint(text, choices.Values)
 	}
 	c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
 }

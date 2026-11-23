@@ -821,6 +821,22 @@ func TestReleaseWritesWhatParseReads(t *testing.T) {
 	}
 }
 
+// TestReleaseOfEmptyChoices checks that choices: {}, which declares
+// nothing, is read as no choices, and so can be released.
+func TestReleaseOfEmptyChoices(t *testing.T) {
+	manifest := "choices: {}\nruns:\n  using: binary\n  url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n"
+	m, err := ParseManifest([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Choices != nil {
+		t.Errorf("Choices = %#v, want nil", m.Choices)
+	}
+	if _, err := Release([]byte(manifest), "v0.2.0", strings.NewReader(strings.Repeat("0", 64)+"  probe-greet_linux_amd64\n")); err != nil {
+		t.Errorf("Release() error = %v", err)
+	}
+}
+
 func TestScaffold(t *testing.T) {
 	for _, repo := range []string{"example/probe-greet", "github.com/example/probe-greet"} {
 		got, err := Scaffold(repo)

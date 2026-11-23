@@ -1659,7 +1659,7 @@ jobs:
 func TestCheck_ExternalChoices(t *testing.T) {
 	dir := t.TempDir()
 	for name, manifest := range map[string]string{
-		"listed": "runs:\n  using: binary\n  path: x\nparams: [level, mode]\nchoices:\n  level: [info, warn]\n  mode: {values: [fast, safe], ignore_case: true}\n",
+		"listed": "runs:\n  using: binary\n  path: x\nparams: [level, mode, retries, flag]\nchoices:\n  level: [info, warn]\n  mode: {values: [fast, safe], ignore_case: true}\n  retries: [\"1\", \"2\"]\n  flag: [\"true\", \"false\"]\n",
 		"open":   "runs:\n  using: binary\n  path: x\nchoices:\n  level: [info, warn]\n",
 	} {
 		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
@@ -1681,6 +1681,17 @@ jobs:
     test: res.code == 0
   - uses: ./listed
     with:
+      level: " warn "
+      retries: 2
+      flag: true
+    test: res.code == 0
+  - uses: ./listed
+    with:
+      level: [info]
+      retries: 3
+    test: res.code == 0
+  - uses: ./listed
+    with:
       level: Info
       mode: slow
     test: res.code == 0
@@ -1697,9 +1708,11 @@ jobs:
 	}
 	checkFindings(t, findings, []want{
 		{SeverityError, 6, `defaults../open: level "debug" is not a value the ./open action takes; it takes info or warn`},
-		{SeverityError, 15, `with: level "Info" is not a value the ./listed action takes; it takes info or warn; did you mean "info"?`},
-		{SeverityError, 16, `with: mode "slow" is not a value the ./listed action takes; it takes fast or safe`},
-		{SeverityError, 21, `with: level "wrn" is not a value the ./open action takes; it takes info or warn; did you mean "warn"?`},
+		{SeverityError, 21, `with: level [info] is not a value the ./listed action takes; it takes info or warn`},
+		{SeverityError, 22, `with: retries 3 is not a value the ./listed action takes; it takes 1 or 2`},
+		{SeverityError, 26, `with: level "Info" is not a value the ./listed action takes; it takes info or warn; did you mean "info"?`},
+		{SeverityError, 27, `with: mode "slow" is not a value the ./listed action takes; it takes fast or safe`},
+		{SeverityError, 32, `with: level "wrn" is not a value the ./open action takes; it takes info or warn; did you mean "warn"?`},
 	})
 	if len(opts.Choices) != 0 {
 		t.Errorf("Check changed the Choices it was given: %v", opts.Choices)

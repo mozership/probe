@@ -939,3 +939,23 @@ func TestDeliverWaitsTwiceTheTimeoutForTheEndOfAMessage(t *testing.T) {
 		t.Errorf("a reply after twice the timeout: Deliver() error = %v, want one waiting 400ms for the end of the message", err)
 	}
 }
+
+// TestChoicesAreTaken checks that every value the spec declares for a key,
+// in upper case too when it is taken in any case, is one validate takes, so
+// that probe check reports no value the action runs with.
+func TestChoicesAreTaken(t *testing.T) {
+	for key, c := range Spec().Choices {
+		if key != "starttls" {
+			t.Fatalf("a check of %s is missing", key)
+		}
+		for _, v := range c.Values {
+			for _, given := range []string{v, strings.ToUpper(v), " " + v + " "} {
+				r := NewReq()
+				r.Addr, r.From, r.To, r.StartTLS = "localhost:25", "a@example.com", "b@example.com", given
+				if _, err := r.validate(); err != nil {
+					t.Errorf("starttls %q: %v", given, err)
+				}
+			}
+		}
+	}
+}

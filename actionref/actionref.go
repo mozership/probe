@@ -234,6 +234,11 @@ func ParseManifest(data []byte) (*Manifest, error) {
 			return nil, fmt.Errorf("runs.checksums.%s must be a SHA-256 digest in lowercase hex", platform)
 		}
 	}
+	// choices: {} declares nothing, as no choices does, and is written back
+	// as none.
+	if len(m.Choices) == 0 {
+		m.Choices = nil
+	}
 	for _, key := range slices.Sorted(maps.Keys(m.Choices)) {
 		if len(m.Choices[key].Values) == 0 {
 			return nil, fmt.Errorf("choices.%s must list a value", key)
