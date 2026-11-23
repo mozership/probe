@@ -1,6 +1,6 @@
 # File Action
 
-The `file` action looks at what is at a path, and reads it when it is a regular file. Use it to check what a server wrote to its log, the content of a file that what is tested produced, or, with `retry`, to wait for a file or a socket to come or to go.
+The `file` action looks at what is at a path, and reads it when it is a regular file. Use it to check what a server wrote to its log, the content of a file that what is tested produced, its permissions and owner, or, with `retry`, to wait for a file or a socket to come or to go.
 
 ## Basic Syntax
 
@@ -28,10 +28,17 @@ steps:
 | `res.exists` | Boolean | `true` when there is something at the path. A symbolic link to nothing is nothing |
 | `res.type` | String | What is at the path: `file`, `dir`, `socket`, `pipe`, `device` or `other`, and `""` when there is nothing |
 | `res.content` | String | The content of a regular file, as text, and `""` for anything else |
+| `res.mode` | String | The permissions in octal, as `chmod` takes them, with the setuid, setgid and sticky bits: `0644`, `0600`, `4755` |
+| `res.owner` | String | The name of the user that owns it, or the user's number when the system has no name for it |
+| `res.group` | String | The name of the group that owns it, or the group's number when the system has no name for it |
+| `res.size` | Integer | The size in bytes, as the system gives it; that of a directory depends on the file system |
+| `res.modified` | String | When it was last modified, as RFC 3339 with the time zone of the machine, such as `2026-11-01T09:30:00.5+09:00`. `date` reads it as a time |
 | `req.path` | String | The path given |
 | `status` | Integer | `0` when there is something at the path, and `1` otherwise |
 
 Only a regular file is read. A directory, a socket, a pipe or a device is told to be there, and its `res.content` is empty: a pipe is not opened, which would wait for a writer.
+
+With nothing at the path, `res.mode`, `res.owner`, `res.group` and `res.modified` are `""`, and `res.size` is `0`. A symbolic link is followed, so they are those of what it points to.
 
 `res.content` is the text of the file as it is, even when it looks like JSON, unlike the `body` of an HTTP response: a log of JSON lines is text to search. Read a file of JSON with `parse_json`.
 
@@ -76,6 +83,28 @@ A test that starts with a quote or holds ` #` is written in quotes, so that YAML
   with:
     path: ./out/orders.json
   test: len(parse_json(res.content).orders) == 3
+```
+
+### Permissions and Owner
+
+```yaml
+- name: The key is private to the app
+  uses: file
+  with:
+    path: /etc/app/key.pem
+  test: res.mode == "0600" && res.owner == "app" && res.group == "app"
+```
+
+### Written Recently
+
+`res.modified` is read as a time by `date`, and a time minus a time is a duration:
+
+```yaml
+- name: The backup ran in the last day
+  uses: file
+  with:
+    path: /var/backups/db.sql.gz
+  test: res.size > 0 && now() - date(res.modified) < duration("24h")
 ```
 
 ### A Socket Is Removed on Shutdown
