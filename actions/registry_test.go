@@ -374,6 +374,7 @@ func TestRegistryReturnsCopies(t *testing.T) {
 		"AllReqTypes":  func() any { return AllReqTypes() },
 		"AllResTypes":  func() any { return AllResTypes() },
 		"AllRequired":  func() any { return AllRequired() },
+		"AllChoices":   func() any { return AllChoices() },
 		"WithFields":   func() any { return WithFields() },
 		"Names":        func() any { return Names() },
 	} {
@@ -390,5 +391,29 @@ func TestRegistryReturnsCopies(t *testing.T) {
 func TestWithFields(t *testing.T) {
 	if got := WithFields(); !slices.Equal(got, []string{"hello"}) {
 		t.Errorf("WithFields() = %v, want [hello]", got)
+	}
+}
+
+// Each built-in action declares the values only of keys it takes, and some
+// values for each, and every action whose keys of with take any value is
+// left out of AllChoices.
+func TestChoices(t *testing.T) {
+	choices := AllChoices()
+	for _, name := range Names() {
+		params := AllParams()[name]
+		for key, c := range choices[name] {
+			if !slices.Contains(params, key) {
+				t.Errorf("%s declares the values of %q, which is not a key it takes", name, key)
+			}
+			if len(c.Values) == 0 {
+				t.Errorf("%s declares no value of %q", name, key)
+			}
+		}
+	}
+	if got := choices["file"]["op"].Values; !slices.Equal(got, []string{"read", "write", "append", "delete"}) {
+		t.Errorf("the op of file takes %v", got)
+	}
+	if _, ok := choices["shell"]; ok {
+		t.Error("shell is given values, want it left out")
 	}
 }

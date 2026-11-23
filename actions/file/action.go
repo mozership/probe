@@ -57,5 +57,8 @@ func Spec() actionspec.Spec {
 			"type":     kind.String,
 		},
 		Required: [][]string{{"path"}},
+		Choices: map[string]actionspec.Choices{
+			"op": {Values: []string{opRead, opWrite, opAppend, opDelete}},
+		},
 	}
 }

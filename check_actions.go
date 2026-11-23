@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mozership/probe/actionref"
@@ -203,13 +204,54 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 	for _, key := range slices.Sorted(maps.Keys(with)) {
 		// A key that holds a template names its key only when it runs. One
 		// that holds an opener left unclosed is text, which is sent as it is.
-		if slices.Contains(params, key) || expr.HasTemplate(key) || !own(key) {
+		if expr.HasTemplate(key) || !own(key) {
+			continue
+		}
+		if slices.Contains(params, key) {
+			c.withValue(action, key, with[key], path, where, field)
 			continue
 		}
 		msg := fmt.Sprintf("%s: unknown key %q for the %s action", field, key, action)
 		msg += suggest.Hint(key, params)
 		c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
 	}
+}
+
+// withValue reports v, the value of key in with at path, when the key takes
+// only some values and v is not one of them. A value that holds a template
+// is known only when it runs, and an empty one leaves the key to its
+// default, so neither is checked.
+func (c *checker) withValue(action, key string, v any, path, where, field string) {
+	choices, ok := c.opts.Choices[action][key]
+	if !ok || v == nil {
+		return
+	}
+	s, isString := v.(string)
+	if isString && (s == "" || expr.HasTemplate(s)) {
+		return
+	}
+	if isString && slices.ContainsFunc(choices.Values, func(want string) bool {
+		return s == want || choices.IgnoreCase && strings.EqualFold(s, want)
+	}) {
+		return
+	}
+	shown := fmt.Sprintf("%v", v)
+	if isString {
+		shown = strconv.Quote(s)
+	}
+	msg := fmt.Sprintf("%s: %s %s is not a value the %s action takes; it takes %s", field, key, shown, action, orList(choices.Values))
+	if isString {
+		msg += suggest.Hint(s, choices.Values)
+	}
+	c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
+}
+
+// orList joins values as a list of which one is meant: a, b or c.
+func orList(values []string) string {
+	if len(values) <= 1 {
+		return strings.Join(values, "")
+	}
+	return strings.Join(values[:len(values)-1], ", ") + " or " + values[len(values)-1]
 }
 
 // checkRequired reports a step whose with, the defaults merged into it,

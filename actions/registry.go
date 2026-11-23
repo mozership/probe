@@ -7,7 +7,10 @@
 package actions
 
 import (
+	"slices"
 	"sort"
+
+	"github.com/mozership/probe"
 
 	"github.com/mozership/probe/actions/db"
 	"github.com/mozership/probe/actions/dns"
@@ -159,6 +162,19 @@ func NeedsNoCheck() []string {
 func AllRequired() map[string][][]string {
 	return collect(func(s actionspec.Spec) ([][]string, bool) {
 		return s.Required, len(s.Required) > 0
+	})
+}
+
+// AllChoices returns the values that the keys of with which take only some
+// take, by the name of each built-in action and then the key's, such as the
+// op of the file action. An action whose keys take any value is left out.
+func AllChoices() map[string]map[string]probe.Choices {
+	return collect(func(s actionspec.Spec) (map[string]probe.Choices, bool) {
+		out := make(map[string]probe.Choices, len(s.Choices))
+		for key, c := range s.Choices {
+			out[key] = probe.Choices{Values: slices.Clone(c.Values), IgnoreCase: c.IgnoreCase}
+		}
+		return out, len(out) > 0
 	})
 }
 

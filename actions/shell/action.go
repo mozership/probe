@@ -91,5 +91,6 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"cmd"}},
+		Choices:   actionspec.NoChoices(),
 	}
 }

@@ -60,5 +60,6 @@ func Spec() actionspec.Spec {
 		WithFields:   true,
 		NeedsNoCheck: true,
 		Required:     actionspec.NoneRequired(),
+		Choices:      actionspec.NoChoices(),
 	}
 }

@@ -92,12 +92,28 @@ type CheckOptions struct {
 	// name, each as the keys that stand for one another, of which one is
 	// enough: as get stands for method in the http action.
 	Required map[string][][]string
+	// Choices are the values that the keys of with which take only some
+	// take, by the action's name and then the key's, so that a value
+	// written that is not one of them is reported, as op: remove is for the
+	// file action. A value that holds a template, which is known only when
+	// it runs, and an empty one, which leaves the key to its default, are
+	// not checked.
+	Choices map[string]map[string]Choices
 	// Manifest reads the action.yml of an external action, a local one
 	// relative to baseDir, so that its with is checked against the params
 	// it declares, and what a step reads of its res against the fields of
 	// res it declares. When it is nil, neither is checked, and nothing is
 	// read from the network.
 	Manifest func(uses, baseDir string) (*actionref.Manifest, error)
+}
+
+// Choices are the values a key of with takes, as CheckOptions.Choices
+// gives them.
+type Choices struct {
+	// Values are the values the key takes.
+	Values []string
+	// IgnoreCase says that the key takes a value in any case.
+	IgnoreCase bool
 }
 
 // Check reads the workflow at path, as a run reads it, and returns what is

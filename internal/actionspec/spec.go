@@ -8,7 +8,7 @@
 // package actions maps the action names to those functions.
 //
 // Every field is declared, an action that has none of something saying so
-// with KeepsNone, NoContracts, NoneRequired or AnyParams, so that one which
+// with KeepsNone, NoContracts, NoneRequired, NoChoices or AnyParams, so that one which
 // forgets a field is told apart from one that has nothing to give;
 // Undeclared reports the fields left out.
 package actionspec
@@ -57,6 +57,21 @@ type Spec struct {
 	// the keys that stand for one another, of which one is enough. An action
 	// that needs none declares NoneRequired.
 	Required [][]string
+	// Choices are the values that the keys of with which take only some
+	// take, by the key, for probe check to report a value written that is
+	// not one of them, as op: remove for the file action. An action whose
+	// keys take any value declares NoChoices.
+	Choices map[string]Choices
+}
+
+// Choices are the values a key of with takes. An empty value, which leaves
+// the key to its default, is taken whatever they are.
+type Choices struct {
+	// Values are the values the key takes.
+	Values []string
+	// IgnoreCase says that the key takes a value in any case, as the
+	// protocol of the dns action takes TCP for tcp.
+	IgnoreCase bool
 }
 
 // KeepsNone declares an action that keeps to no guard. It is empty but not
@@ -69,6 +84,9 @@ func NoContracts() []string { return []string{} }
 
 // NoneRequired declares an action that needs no key of with.
 func NoneRequired() [][]string { return [][]string{} }
+
+// NoChoices declares an action whose keys of with take any value.
+func NoChoices() map[string]Choices { return map[string]Choices{} }
 
 // Undeclared returns the names of the fields s leaves undeclared, in the
 // order Spec has them, or none when s declares every field. Params is
@@ -106,6 +124,9 @@ func (s Spec) Undeclared() []string {
 	}
 	if s.Required == nil {
 		out = append(out, "Required")
+	}
+	if s.Choices == nil {
+		out = append(out, "Choices")
 	}
 	return out
 }

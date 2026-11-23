@@ -1579,3 +1579,76 @@ jobs:
 		t.Errorf("Check changed the Fields it was given: %v", fields)
 	}
 }
+
+// TestCheck_Choices checks that a value of a key of with that takes only
+// some values is reported when it is not one of them, in the step's with and
+// in the defaults, and that a template, an empty value and one in another
+// case for a key that takes any case are not.
+func TestCheck_Choices(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: choices
+vars:
+  op: write
+defaults:
+  file:
+    op: remov
+jobs:
+- name: J
+  defaults:
+    dns:
+      protocol: quic
+  steps:
+  - name: An op that is there
+    uses: file
+    with:
+      path: a
+      op: write
+    test: res.exists
+  - name: An op that is not
+    uses: file
+    with:
+      path: a
+      op: Write
+    test: res.exists
+  - name: An op of a template
+    uses: file
+    with:
+      path: a
+      op: "{{ vars.op }}"
+    test: res.exists
+  - name: An empty op
+    uses: file
+    with:
+      path: a
+      op: ""
+    test: res.exists
+  - name: A number
+    uses: file
+    with:
+      path: a
+      op: 1
+    test: res.exists
+  - name: Another case
+    uses: dns
+    with:
+      name: example.com
+      protocol: TCP
+    test: res.code == 0
+`)
+	opts := checkActions
+	opts.Actions = append(opts.Actions, "dns", "file")
+	opts.Params = map[string][]string{"file": {"path", "op"}, "dns": {"name", "protocol"}}
+	opts.Choices = map[string]map[string]Choices{
+		"file": {"op": {Values: []string{"read", "write", "append", "delete"}}},
+		"dns":  {"protocol": {Values: []string{"udp", "tcp", "tls"}, IgnoreCase: true}},
+	}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 6, `defaults.file: op "remov" is not a value the file action takes; it takes read, write, append or delete`},
+		{SeverityError, 11, `defaults.dns: protocol "quic" is not a value the dns action takes; it takes udp, tcp or tls`},
+		{SeverityError, 23, `with: op "Write" is not a value the file action takes; it takes read, write, append or delete; did you mean "write"?`},
+		{SeverityError, 41, `with: op 1 is not a value the file action takes`},
+	})
+}

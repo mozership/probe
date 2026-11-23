@@ -71,6 +71,10 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  resTypes(),
 		Required:  [][]string{{"addr"}, {"service", "list"}, {"method", "list"}},
+		Choices: map[string]actionspec.Choices{
+			"protocol": {Values: []string{"grpc", "connect"}},
+			"codec":    {Values: []string{"json", "proto"}},
+		},
 	}
 }
 

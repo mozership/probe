@@ -80,6 +80,7 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  resTypes(),
 		Required:  required(),
+		Choices:   actionspec.NoChoices(),
 	}
 }
 

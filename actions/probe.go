@@ -27,5 +27,6 @@ func CheckOptions() probe.CheckOptions {
 		WithFields:   WithFields(),
 		NeedsNoCheck: NeedsNoCheck(),
 		Required:     AllRequired(),
+		Choices:      AllChoices(),
 	}
 }

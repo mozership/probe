@@ -60,5 +60,6 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"host"}, {"user"}, {"cmd"}, {"password", "key_file"}},
+		Choices:   actionspec.NoChoices(),
 	}
 }

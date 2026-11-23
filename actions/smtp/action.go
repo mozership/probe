@@ -55,5 +55,8 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"addr"}, {"from"}, {"to"}},
+		Choices: map[string]actionspec.Choices{
+			"starttls": {Values: []string{StartTLSOff, StartTLSAuto, StartTLSRequired}, IgnoreCase: true},
+		},
 	}
 }

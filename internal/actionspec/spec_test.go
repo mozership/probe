@@ -16,6 +16,7 @@ func TestUndeclared(t *testing.T) {
 		ReqTypes:  map[string]string{},
 		ResTypes:  map[string]string{},
 		Required:  NoneRequired(),
+		Choices:   NoChoices(),
 	}
 	tests := []struct {
 		name string
@@ -24,10 +25,11 @@ func TestUndeclared(t *testing.T) {
 	}{
 		{"every field declared", func(s Spec) Spec { return s }, nil},
 		{"any key taken", func(s Spec) Spec { s.Params, s.AnyParams = nil, true; return s }, nil},
-		{"nothing declared", func(Spec) Spec { return Spec{} }, []string{"Serve", "Keeps", "Params", "Contracts", "ReqFields", "ResFields", "ReqTypes", "ResTypes", "Required"}},
+		{"nothing declared", func(Spec) Spec { return Spec{} }, []string{"Serve", "Keeps", "Params", "Contracts", "ReqFields", "ResFields", "ReqTypes", "ResTypes", "Required", "Choices"}},
 		{"keeps forgotten", func(s Spec) Spec { s.Keeps = nil; return s }, []string{"Keeps"}},
 		{"params given with any key", func(s Spec) Spec { s.AnyParams = true; return s }, []string{"Params with AnyParams"}},
 		{"required forgotten", func(s Spec) Spec { s.Required = nil; return s }, []string{"Required"}},
+		{"choices forgotten", func(s Spec) Spec { s.Choices = nil; return s }, []string{"Choices"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

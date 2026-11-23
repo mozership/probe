@@ -85,5 +85,6 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"dsn"}, {"query"}},
+		Choices:   actionspec.NoChoices(),
 	}
 }
