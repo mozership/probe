@@ -12,6 +12,7 @@ import (
 	"github.com/mozership/probe/actions/db"
 	"github.com/mozership/probe/actions/dns"
 	"github.com/mozership/probe/actions/embedded"
+	"github.com/mozership/probe/actions/file"
 	"github.com/mozership/probe/actions/grpc"
 	"github.com/mozership/probe/actions/hello"
 	"github.com/mozership/probe/actions/http"
@@ -30,6 +31,7 @@ var specs = map[string]func() actionspec.Spec{
 	"db":       db.Spec,
 	"dns":      dns.Spec,
 	"embedded": embedded.Spec,
+	"file":     file.Spec,
 	"grpc":     grpc.Spec,
 	"hello":    hello.Spec,
 	"http":     http.Spec,

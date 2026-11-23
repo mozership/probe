@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"math/rand/v2"
 	"os"
@@ -19,6 +18,7 @@ import (
 	ex "github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"github.com/mozership/probe/internal/jsonutil"
+	"github.com/mozership/probe/internal/textfile"
 	"github.com/mozership/probe/internal/truncate"
 )
 
@@ -322,7 +322,7 @@ func (e *Expr) Options(env any) []ex.Option {
 				if !ok {
 					return nil, fmt.Errorf("lines parameter must be a string")
 				}
-				return splitLines(s), nil
+				return textfile.Lines(s), nil
 			},
 		),
 		ex.Function(
@@ -383,21 +383,6 @@ func pathExists(path string) (bool, error) {
 	return false, fmt.Errorf("exists: %w", err)
 }
 
-// splitLines returns the lines of s, without their line endings, \n or
-// \r\n. The end of the last line is not a line of its own, so the lines of
-// a file read by file are those an editor shows, and an empty s has none.
-func splitLines(s string) []any {
-	if s == "" {
-		return []any{}
-	}
-	parts := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-	out := make([]any, len(parts))
-	for i, p := range parts {
-		out[i] = strings.TrimSuffix(p, "\r")
-	}
-	return out
-}
-
 // readFile returns the content of the file at path, relative to the working
 // directory, as the paths of actions are. Only a regular file is read, and no
 // more of it than a string an expression may hold: a device such as
@@ -405,59 +390,11 @@ func splitLines(s string) []any {
 // on after the evaluation has timed out. A larger file is an error rather
 // than cut short.
 func readFile(path string) (string, error) {
-	// The path is looked at before it is opened: opening a FIFO to read
-	// waits for a writer.
-	info, err := os.Stat(path)
+	s, err := textfile.Read(path, maxStringLength)
 	if err != nil {
 		return "", fmt.Errorf("file: %w", err)
 	}
-	if err := checkRegular(path, info); err != nil {
-		return "", err
-	}
-	return readOpened(path, info)
-}
-
-// readOpened opens the file at path and reads it, as readFile does, once
-// info, what was found at path before it was opened, is known to be of a
-// regular file. The file opened must be the one info is of.
-func readOpened(path string, info os.FileInfo) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-
-	// It is looked at again once it is open, in case it was replaced.
-	opened, err := f.Stat()
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	if err := checkRegular(path, opened); err != nil {
-		return "", err
-	}
-	if !os.SameFile(info, opened) {
-		return "", fmt.Errorf("file: %s changed while it was opened", path)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(f, int64(maxStringLength)+1))
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	if len(data) > maxStringLength {
-		return "", fmt.Errorf("file: %s exceeds maximum length (%d bytes)", path, maxStringLength)
-	}
-	return string(data), nil
-}
-
-// checkRegular returns an error unless info is of a regular file.
-func checkRegular(path string, info os.FileInfo) error {
-	if info.IsDir() {
-		return fmt.Errorf("file: %s is a directory", path)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("file: %s is not a regular file", path)
-	}
-	return nil
+	return s, nil
 }
 
 // checkLength returns an error when input, an expression or a template, is

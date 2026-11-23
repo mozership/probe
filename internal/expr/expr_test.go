@@ -1096,40 +1096,6 @@ func TestFileFunctionReadsUpToTheLimit(t *testing.T) {
 	}
 }
 
-// TestReadOpened gives readOpened what readFile found at a path before it
-// opened it, as if the path had come to hold something else in between.
-func TestReadOpened(t *testing.T) {
-	dir := t.TempDir()
-	first := filepath.Join(dir, "first.txt")
-	second := filepath.Join(dir, "second.txt")
-	for _, p := range []string{first, second} {
-		if err := os.WriteFile(p, []byte(p), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	info, err := os.Stat(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, err := readOpened(first, info); err != nil || got != first {
-		t.Errorf("readOpened of the file found = %q, %v", got, err)
-	}
-	for _, tt := range []struct {
-		name, path, wantErr string
-	}{
-		{"another file", second, "file: " + second + " changed while it was opened"},
-		{"a directory", dir, "file: " + dir + " is a directory"},
-		{"nothing", filepath.Join(dir, "gone.txt"), "no such file or directory"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := readOpened(tt.path, info); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("readOpened(%q) error = %v, want %q", tt.path, err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestTemplateFunction(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := filepath.Join(dir, "user.json.tmpl")
