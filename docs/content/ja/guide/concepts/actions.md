@@ -781,7 +781,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
 
 # 組み込みアクションに別途インストールは不要:
 # http, db, shell, ssh, grpc, smtp, imap,
-# dns, embedded, hello
+# dns, file, embedded, hello
 ```
 
 ## アクションのベストプラクティス

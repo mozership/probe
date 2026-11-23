@@ -10,6 +10,7 @@ export default {
   imap: 'IMAP',
   grpc: 'GRPC',
   dns: 'DNS',
+  file: 'FILE',
   embedded: 'EMBEDDED',
   hello: 'HELLO',
   '-- external': { type: 'separator', title: 'External' },
