@@ -38,7 +38,7 @@ jobs:                         # Required: a list of jobs
     steps:                    # Required: a list of steps
       - name: string          # Optional: step name
         id: string            # Optional: step id, to read its outputs through
-        uses: string          # Optional: action name, or a name given under actions
+        uses: string          # Required: action name, or a name given under actions
         with:                 # Optional: action parameters
           key: value
         test: expression      # Optional: assertion
@@ -545,7 +545,7 @@ A step definition takes the properties below.
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `uses` | String | No | Action to run: a built-in such as `http` or `shell`, or an [external action](/guide/concepts/actions#external-actions). A step without it runs no action; see [A Step without `uses`](#a-step-without-uses) |
+| `uses` | String | Yes | Action to run: a built-in such as `http` or `shell`, or an [external action](/guide/concepts/actions#external-actions) |
 | `name` | String | No | Step name, shown in the report |
 | `id` | String | No | Identifier that namespaces this step's `outputs` |
 | `with` | Object | No | Action parameters |
@@ -562,39 +562,6 @@ A step definition takes the properties below.
 The key is `uses`, not `action`, and the conditional key is `skipif`, not `if`.
 
 An entry of `steps` can also stand for the steps of another file, with [`include`](#include).
-
-#### A Step without `uses`
-
-A step without `uses` runs no action. It checks its `test` against what the test reads by functions, such as [`file`](/reference/built-in-functions#file), [`exists`](/reference/built-in-functions#exists) and [`lines`](/reference/built-in-functions#lines), and with `retry` it waits until the test holds. A step that only waits is one too. A log, a socket or a file another process writes is checked without running a shell:
-
-```yaml
-name: Verify the deployment
-vars:
-  log: /var/log/app.log
-  socket: /run/app/app.sock
-
-jobs:
-  - name: Verify
-    steps:
-      - name: Wait for the new version to start
-        test: file(vars.log) contains "starting version 1.2.0"
-        retry:
-          max_attempts: 60
-          interval: 5s
-      - name: Wait for it to settle
-        wait: 30s
-      - name: No error is logged
-        test: '!(file(vars.log) contains "level=ERROR")'
-      - name: Two symlinks are created
-        test: 'count(lines(file(vars.log)), # contains "Create symlink") == 2'
-      - name: The socket is there
-        test: exists(vars.socket)
-```
-
-- `status` is `0`, and `res`, `req` and `rt` are empty, as no action ran. `probe check` reports a step without `uses` that reads `res` or `req`.
-- A step without `uses` needs a `test` or a `wait`. One that has `with`, which there is no action to give, `timeout`, which has no action to stop, or `retry` without a `test`, stops the run before its first job.
-- `skipif`, `vars`, `outputs`, `echo` and `iteration` work as they do in any step.
-- Quote a test that holds ` #`, as the predicate of `count` or `filter` does: YAML reads the rest of the line from ` #` as a comment.
 
 #### `outputs`
 
@@ -979,7 +946,7 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 
 - `name` is required at the workflow level, and `jobs` must be a non-empty list.
 - Every job needs a `name` and at least one step.
-- A step's `uses` must name an action: one of Probe, an external action, or a name given under `actions`. One that names none stops the run before its first job, with exit status 2, even in a step that would be skipped. A step without `uses` needs a `test` or a `wait`, and takes no `with` or `timeout`.
+- Every step needs a `uses`, and it must name an action: one of Probe, an external action, or a name given under `actions`. One that names none stops the run before its first job, with exit status 2, even in a step that would be skipped.
 - A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
 - `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.

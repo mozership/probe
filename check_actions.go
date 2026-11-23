@@ -36,11 +36,6 @@ func (c *checker) checkActions() {
 				continue
 			}
 			path := fmt.Sprintf("jobs[%d].steps[%d].uses", i, j)
-			// A step without an action runs none; its load tells what is
-			// wrong with it.
-			if st.Uses == "" {
-				continue
-			}
 			if actionref.IsExternal(st.Uses) {
 				if _, err := actionref.Parse(st.Uses); err != nil {
 					c.add(SeverityError, c.line(path), c.stepWhere(i, j), "uses: %s", firstLine(err.Error()))
@@ -82,11 +77,7 @@ func (c *checker) checkEmbedded() {
 			eachEmbeddedStep(st, map[string]bool{}, func(file string, k int, es *Step) {
 				uses := es.Uses
 				// A name still here is one that is wrong, which is told
-				// where the workflow gives it. A step without one runs no
-				// action.
-				if uses == "" {
-					return
-				}
+				// where the workflow gives it.
 				if _, named := c.wf.Actions[uses]; named || slices.Contains(c.opts.Actions, uses) {
 					return
 				}

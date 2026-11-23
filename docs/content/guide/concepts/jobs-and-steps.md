@@ -182,7 +182,7 @@ A step definition takes the properties below.
 steps:
   - name: Step Name          # Optional: Descriptive name
     id: step-id             # Optional: Unique identifier for referencing
-    uses: http              # Optional: Action to execute
+    uses: http              # Required: Action to execute
     with:                   # Optional: Action parameters
       url: https://api.example.com
       method: GET
@@ -196,7 +196,7 @@ steps:
 
 ### Step Types
 
-A step invokes an action, prints something, or does both in one. One without an action checks what it reads by functions, or waits.
+A step either invokes an action, prints something, or does both in one.
 
 #### 1. Action Steps
 
@@ -220,7 +220,7 @@ Execute specific actions like HTTP requests:
 
 #### 2. Echo Steps
 
-Display messages or computed values. A step without an action takes a test or a wait, so a step that only prints uses `hello`:
+Display messages or computed values. Every step names an action, so a step that only prints uses `hello`:
 
 ```yaml
 - name: Display Results
@@ -252,20 +252,6 @@ Combine actions with echo messages:
     Status Code: {{res.status}}
     Response Time: {{rt.duration}}
     API Version: {{res.body.version}}
-```
-
-#### 4. Steps without an Action
-
-Check a file another process writes, such as a log, without running a shell, or wait. A step without `uses` checks its test against what it reads by functions such as `file` and `exists`, and with `retry` waits until it holds. See [A Step without `uses`](/reference/yaml-configuration#a-step-without-uses):
-
-```yaml fragment
-- name: Wait for the app to start
-  test: file(vars.log) contains "started"
-  retry:
-    max_attempts: 30
-    interval: 2s
-- name: Let it settle
-  wait: 10s
 ```
 
 ### Step Execution Flow

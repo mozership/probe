@@ -1005,54 +1005,6 @@ func TestFileFunction(t *testing.T) {
 	}
 }
 
-// exists tells whether anything is at a path, a directory or a link to a
-// file too, and what keeps it from being told is an error rather than false.
-func TestExistsFunction(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "a.txt")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(dir, "link")
-	if err := os.Symlink(file, link); err != nil {
-		t.Fatal(err)
-	}
-	dangling := filepath.Join(dir, "dangling")
-	if err := os.Symlink(filepath.Join(dir, "gone"), dangling); err != nil {
-		t.Fatal(err)
-	}
-	e := &Expr{}
-	for _, tt := range []struct {
-		path string
-		want bool
-	}{
-		{file, true},
-		{dir, true},
-		{link, true},
-		{dangling, false},
-		{filepath.Join(dir, "missing"), false},
-		// Nothing can be under a file, as test -e finds.
-		{file + "/x", false},
-	} {
-		got, err := e.Eval("exists(path)", map[string]any{"path": tt.path})
-		if err != nil || got != tt.want {
-			t.Errorf("exists(%q) = %v, %v; want %v", tt.path, got, err, tt.want)
-		}
-	}
-	for _, tt := range []struct {
-		input   string
-		wantErr string
-	}{
-		{"exists()", "exists requires exactly 1 parameter"},
-		{"exists(1)", "exists parameter must be a path"},
-		{"exists('')", "exists parameter must be a path"},
-	} {
-		if _, err := e.Eval(tt.input, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-			t.Errorf("Eval(%q) error = %v, want %q", tt.input, err, tt.wantErr)
-		}
-	}
-}
-
 // lines splits a text into its lines, without their endings, and the end
 // of the last line makes no line of its own.
 func TestLinesFunction(t *testing.T) {

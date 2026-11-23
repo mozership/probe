@@ -399,8 +399,7 @@ func TestResolveExternalActions_UnknownAction(t *testing.T) {
 
 func TestWorkflow_CheckEmbeddedJobs(t *testing.T) {
 	dir := t.TempDir()
-	// A step without uses runs no action, and names none.
-	good := writeWorkflow(t, dir, "good.yml", "name: good\nsteps:\n- uses: cache\n- uses: http\n- uses: ./local\n- wait: 1s\n")
+	good := writeWorkflow(t, dir, "good.yml", "name: good\nsteps:\n- uses: cache\n- uses: http\n- uses: ./local\n")
 	bad := writeWorkflow(t, dir, "bad.yml", "name: bad\nsteps:\n- uses: http\n- uses: cash\n")
 	// A job file that embeds the bad one, and itself, which ends.
 	outerPath := filepath.Join(dir, "outer.yml")

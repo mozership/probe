@@ -26,12 +26,9 @@ const (
 )
 
 type Step struct {
-	Name string `yaml:"name"`
-	ID   string `yaml:"id,omitempty"`
-	// Uses is the action the step runs. A step without one runs no action:
-	// it waits, or checks its test, against what it reads by the functions
-	// of an expression, such as file, with retry to wait until it holds.
-	Uses      string            `yaml:"uses"`
+	Name      string            `yaml:"name"`
+	ID        string            `yaml:"id,omitempty"`
+	Uses      string            `yaml:"uses" validate:"required"`
 	With      map[string]any    `yaml:"with"`
 	Test      string            `yaml:"test"`
 	Echo      string            `yaml:"echo"`
@@ -174,9 +171,8 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 	st.attempt = 1
 
 	// An action that does not keep to every kind of guard the run is under
-	// is not run under it, unless the person running probe allowed it. A
-	// step without an action has nothing to refuse.
-	if st.Uses != "" && !jCtx.Guard.Runs(st.Uses) {
+	// is not run under it, unless the person running probe allowed it.
+	if !jCtx.Guard.Runs(st.Uses) {
 		flags := make([]string, 0, 2)
 		for _, kind := range jCtx.Guard.Missing(st.Uses) {
 			flags = append(flags, "--"+kind)
@@ -197,13 +193,6 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 // quiet marks an attempt whose failure will be retried, so that the action's
 // own error records stay out of the log.
 func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (actionResult, error) {
-	// A step without an action returns nothing, and its status is 0: what
-	// its test reads, it reads by the functions of an expression.
-	if st.Uses == "" {
-		st.contract = nil
-		return actionResult{}, nil
-	}
-
 	// Determine timeout duration
 	timeout := DefaultStepTimeout
 	if st.Timeout.Duration > 0 {
@@ -448,10 +437,7 @@ func (st *stepRun) processActionResult(r actionResult, jCtx *JobContext) {
 
 // finalize handles the final phase: test, echo, output save, and result creation
 func (st *stepRun) finalize(name string, jCtx *JobContext) {
-	// A step without an action has no exchange to show, only its test.
-	if jCtx.Verbose && st.Uses == "" {
-		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s", st.idx, name))
-	} else if jCtx.Verbose {
+	if jCtx.Verbose {
 		jCtx.Printer.PrintRequestResponse(st.idx, name, st.ctx.Req, st.ctx.Res, st.ctx.RT.Duration)
 	}
 
@@ -711,10 +697,9 @@ func (st *stepRun) checked() bool {
 // needsNoCheck reports whether the step passes without being checked: a step
 // of an action Config.NeedsNoCheck names, which does nothing that could
 // fail, so that one there for its echo, or to publish what it is given, is
-// not counted as untested, and a step without an action, which only waits.
-// probe check does not warn of either.
+// not counted as untested. probe check does not warn of it either.
 func (st *stepRun) needsNoCheck(jCtx *JobContext) bool {
-	return st.Uses == "" || slices.Contains(jCtx.NeedsNoCheck, st.Uses)
+	return slices.Contains(jCtx.NeedsNoCheck, st.Uses)
 }
 
 // contractFailure returns why the request or the response breaks its
