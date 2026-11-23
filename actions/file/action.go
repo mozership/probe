@@ -36,12 +36,12 @@ func Spec() actionspec.Spec {
 		Params:    mapping.FieldTags(Req{}),
 		Contracts: actionspec.NoContracts(),
 		ReqFields: mapping.FieldTags(Req{}),
-		ResFields: []string{"body", "exists", "type"},
+		ResFields: []string{"content", "exists", "type"},
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes: map[string]string{
-			"body":   kind.String,
-			"exists": kind.Bool,
-			"type":   kind.String,
+			"content": kind.String,
+			"exists":  kind.Bool,
+			"type":    kind.String,
 		},
 		Required: [][]string{{"path"}},
 	}

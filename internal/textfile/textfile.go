@@ -3,11 +3,16 @@
 package textfile
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 )
+
+// ErrChanged is the error, wrapped, of a path that came to hold another file
+// between being looked at and being opened, as when a log is rotated.
+var ErrChanged = errors.New("changed while it was opened")
 
 // Read returns the content of the file at path, relative to the working
 // directory, as the paths of actions are. Only a regular file is read, and no
@@ -46,7 +51,7 @@ func ReadOpened(path string, info os.FileInfo, limit int) (string, error) {
 		return "", err
 	}
 	if !os.SameFile(info, opened) {
-		return "", fmt.Errorf("%s changed while it was opened", path)
+		return "", fmt.Errorf("%s %w", path, ErrChanged)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))

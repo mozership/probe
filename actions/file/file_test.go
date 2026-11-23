@@ -1,6 +1,8 @@
 package file
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/internal/actiontest"
+	"github.com/mozership/probe/internal/textfile"
 )
 
 func TestRead(t *testing.T) {
@@ -32,8 +35,8 @@ func TestRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	read := map[string]any{"exists": true, "type": "file", "body": "started\r\nlevel=INFO ready\n"}
-	missing := map[string]any{"exists": false, "type": "", "body": ""}
+	read := map[string]any{"exists": true, "type": "file", "content": "started\r\nlevel=INFO ready\n"}
+	missing := map[string]any{"exists": false, "type": "", "content": ""}
 	tests := []struct {
 		name       string
 		path       string
@@ -41,9 +44,9 @@ func TestRead(t *testing.T) {
 		wantStatus int
 	}{
 		{"a file", log, read, 0},
-		{"an empty file", empty, map[string]any{"exists": true, "type": "file", "body": ""}, 0},
+		{"an empty file", empty, map[string]any{"exists": true, "type": "file", "content": ""}, 0},
 		{"a link to a file", link, read, 0},
-		{"a directory", dir, map[string]any{"exists": true, "type": "dir", "body": ""}, 0},
+		{"a directory", dir, map[string]any{"exists": true, "type": "dir", "content": ""}, 0},
 		{"nothing", filepath.Join(dir, "gone.log"), missing, 1},
 		{"a link to nothing", dangling, missing, 1},
 		{"a path under a file", filepath.Join(log, "x"), missing, 1},
@@ -88,7 +91,7 @@ func TestReadASocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
-	want := map[string]any{"exists": true, "type": "socket", "body": ""}
+	want := map[string]any{"exists": true, "type": "socket", "content": ""}
 	if !reflect.DeepEqual(ret["res"], want) || ret["status"] != 0 {
 		t.Errorf("Read() = %#v, want res %#v and status 0", ret, want)
 	}
@@ -108,7 +111,7 @@ func TestReadAPipe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
-	if res := ret["res"].(map[string]any); res["type"] != "pipe" || res["body"] != "" {
+	if res := ret["res"].(map[string]any); res["type"] != "pipe" || res["content"] != "" {
 		t.Errorf("res = %#v, want a pipe left unread", res)
 	}
 }
@@ -116,11 +119,11 @@ func TestReadAPipe(t *testing.T) {
 func TestReadErrors(t *testing.T) {
 	dir := t.TempDir()
 	big := filepath.Join(dir, "big")
-	if err := os.WriteFile(big, make([]byte, maxBody+1), 0o600); err != nil {
+	if err := os.WriteFile(big, make([]byte, maxContent+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	full := filepath.Join(dir, "full")
-	if err := os.WriteFile(full, make([]byte, maxBody), 0o600); err != nil {
+	if err := os.WriteFile(full, make([]byte, maxContent), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Read(map[string]any{"path": full}); err != nil {
@@ -181,4 +184,49 @@ func TestRequired(t *testing.T) {
 		_, err := a.Run(with)
 		return err
 	})
+}
+
+// TestLookAgainWhenTheFileIsReplaced checks that a path which comes to hold
+// another file between being looked at and being read, as a rotated log
+// does, is looked at again, up to lookAttempts times.
+func TestLookAgainWhenTheFileIsReplaced(t *testing.T) {
+	changed := fmt.Errorf("x %w", textfile.ErrChanged)
+	read := map[string]any{"exists": true, "type": "file", "content": "new"}
+	tests := []struct {
+		name      string
+		failures  int
+		wantCalls int
+		wantErr   bool
+	}{
+		{"replaced once", 1, 2, false},
+		{"replaced on every look but the last", lookAttempts - 1, lookAttempts, false},
+		{"replaced on every look", lookAttempts, lookAttempts, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			lookAt = func(string) (map[string]any, error) {
+				calls++
+				if calls <= tt.failures {
+					return nil, changed
+				}
+				return read, nil
+			}
+			t.Cleanup(func() { lookAt = lookOnce })
+
+			res, err := look("x")
+			if calls != tt.wantCalls {
+				t.Errorf("looked %d times, want %d", calls, tt.wantCalls)
+			}
+			if tt.wantErr {
+				if !errors.Is(err, textfile.ErrChanged) {
+					t.Errorf("look() error = %v, want ErrChanged", err)
+				}
+				return
+			}
+			if err != nil || !reflect.DeepEqual(res, read) {
+				t.Errorf("look() = %v, %v, want %v", res, err, read)
+			}
+		})
+	}
 }

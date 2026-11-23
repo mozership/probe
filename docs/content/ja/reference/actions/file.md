@@ -12,7 +12,7 @@ steps:
     uses: file
     with:
       path: ./server.log
-    test: res.exists && !(res.body contains "level=ERROR")
+    test: res.exists && !(res.content contains "level=ERROR")
 ```
 
 ## パラメータ
@@ -27,11 +27,13 @@ steps:
 |---|---|---|
 | `res.exists` | Boolean | パスに何かがあれば`true`。何も指していないシンボリックリンクは、何もないものとして扱います |
 | `res.type` | String | パスにあるものの種類。`file`、`dir`、`socket`、`pipe`、`device`、`other`のいずれかで、何もなければ`""` |
-| `res.body` | String | 通常のファイルの内容。それ以外では`""` |
+| `res.content` | String | 通常のファイルの内容をテキストのまま。それ以外では`""` |
 | `req.path` | String | 指定したパス |
 | `status` | Integer | パスに何かがあれば`0`、なければ`1` |
 
-読むのは通常のファイルだけです。ディレクトリ、ソケット、パイプ、デバイスはあることだけを返し、`res.body`は空です。パイプは開きません。開くと書き手を待ってしまうためです。
+読むのは通常のファイルだけです。ディレクトリ、ソケット、パイプ、デバイスはあることだけを返し、`res.content`は空です。パイプは開きません。開くと書き手を待ってしまうためです。
+
+`res.content`は、JSONのように見える内容でもファイルのテキストのままです。HTTPのレスポンスの`body`とは扱いが異なり、JSON Lines形式のログも検索できるテキストとして読めます。JSONのファイルは`parse_json`で読みます。
 
 ## 例
 
@@ -47,33 +49,33 @@ steps:
   retry:
     max_attempts: 60
     interval: 1s
-  test: res.body contains "server started"
+  test: res.content contains "server started"
 ```
 
 ### 行を数える
 
-`lines`で`res.body`を行のリストに分ければ、リストを受け取る式の関数に渡せます。
+`lines`で`res.content`を行のリストに分ければ、リストを受け取る式の関数に渡せます。
 
 ```yaml
 - name: Two workers are started
   uses: file
   with:
     path: ./server.log
-  test: 'count(lines(res.body), # contains "Worker started") == 2'
+  test: 'count(lines(res.content), # contains "Worker started") == 2'
 ```
 
 引用符で始まる`test`や、` #`を含む`test`は引用符で囲みます。囲まないと、YAMLが`#`以降をコメントとして読みます。
 
 ### テスト対象が書いたファイル
 
-`res.body`は文字列です。JSONのファイルは`parse_json`で読みます。
+`res.content`はテキストです。JSONのファイルは`parse_json`で読みます。
 
 ```yaml
 - name: The export holds every order
   uses: file
   with:
     path: ./out/orders.json
-  test: len(parse_json(res.body).orders) == 3
+  test: len(parse_json(res.content).orders) == 3
 ```
 
 ### 終了時にソケットが消える
@@ -97,7 +99,7 @@ steps:
 
 ## エラー処理
 
-パスに何もない場合と、通常のファイルの下のパスを指定した場合は、`res.exists`が`false`、`status`が`1`の結果を返します。次の場合、ステップはアクションのエラーで失敗します。
+パスに何もない場合と、通常のファイルの下のパスを指定した場合は、`res.exists`が`false`、`status`が`1`の結果を返します。ログのローテーションなどで、読んでいる間にファイルが置き換わった場合は、3回まで調べ直します。次の場合、ステップはアクションのエラーで失敗します。
 
 - `path`を指定していない
 - パスにあるものを調べられない、または読めない。読む権限のないファイルなど

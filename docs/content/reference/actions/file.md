@@ -12,7 +12,7 @@ steps:
     uses: file
     with:
       path: ./server.log
-    test: res.exists && !(res.body contains "level=ERROR")
+    test: res.exists && !(res.content contains "level=ERROR")
 ```
 
 ## Parameters
@@ -27,11 +27,13 @@ steps:
 |---|---|---|
 | `res.exists` | Boolean | `true` when there is something at the path. A symbolic link to nothing is nothing |
 | `res.type` | String | What is at the path: `file`, `dir`, `socket`, `pipe`, `device` or `other`, and `""` when there is nothing |
-| `res.body` | String | The content of a regular file, and `""` for anything else |
+| `res.content` | String | The content of a regular file, as text, and `""` for anything else |
 | `req.path` | String | The path given |
 | `status` | Integer | `0` when there is something at the path, and `1` otherwise |
 
-Only a regular file is read. A directory, a socket, a pipe or a device is told to be there, and its `res.body` is empty: a pipe is not opened, which would wait for a writer.
+Only a regular file is read. A directory, a socket, a pipe or a device is told to be there, and its `res.content` is empty: a pipe is not opened, which would wait for a writer.
+
+`res.content` is the text of the file as it is, even when it looks like JSON, unlike the `body` of an HTTP response: a log of JSON lines is text to search. Read a file of JSON with `parse_json`.
 
 ## Examples
 
@@ -47,33 +49,33 @@ The step is tried again until the log says the server has started:
   retry:
     max_attempts: 60
     interval: 1s
-  test: res.body contains "server started"
+  test: res.content contains "server started"
 ```
 
 ### Count Lines
 
-`lines` splits `res.body` into its lines, which the functions of expressions over lists take:
+`lines` splits `res.content` into its lines, which the functions of expressions over lists take:
 
 ```yaml
 - name: Two workers are started
   uses: file
   with:
     path: ./server.log
-  test: 'count(lines(res.body), # contains "Worker started") == 2'
+  test: 'count(lines(res.content), # contains "Worker started") == 2'
 ```
 
 A test that starts with a quote or holds ` #` is written in quotes, so that YAML does not take `#` for a comment.
 
 ### A File Written by What Is Tested
 
-`res.body` is a string. A file of JSON is read with `parse_json`:
+`res.content` is text. A file of JSON is read with `parse_json`:
 
 ```yaml
 - name: The export holds every order
   uses: file
   with:
     path: ./out/orders.json
-  test: len(parse_json(res.body).orders) == 3
+  test: len(parse_json(res.content).orders) == 3
 ```
 
 ### A Socket Is Removed on Shutdown
@@ -97,4 +99,4 @@ The action reads and connects to nothing, so it runs under `--read-only` and `--
 
 ## Error Handling
 
-Nothing at the path, or a path under a regular file, gives a result with `res.exists` false and `status` `1`. A step fails with an action error when `path` is not given, when what is at the path cannot be looked at or read, such as a file the run has no permission to read, and when a regular file is larger than 1,000,000 bytes, as much as the `file` function of expressions reads. A larger file is not cut short.
+Nothing at the path, or a path under a regular file, gives a result with `res.exists` false and `status` `1`. A file replaced while it is read, as a rotated log is, is looked at again, up to three times. A step fails with an action error when `path` is not given, when what is at the path cannot be looked at or read, such as a file the run has no permission to read, and when a regular file is larger than 1,000,000 bytes, as much as the `file` function of expressions reads. A larger file is not cut short.

@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	// maxBody is as much of a file as the file function of expressions
+	// maxContent is as much of a file as the file function of expressions
 	// reads: a larger file is an error rather than cut short.
-	maxBody       = 1000000
+	maxContent    = 1000000
 	statusFound   = 0
 	statusMissing = 1
 )
@@ -69,9 +69,31 @@ func Read(with map[string]any) (map[string]any, error) {
 	}, nil
 }
 
-// look returns the res of what is at path.
+// lookAttempts is how many times a path that comes to hold another file
+// between being looked at and being read, as a rotated log does, is looked
+// at before it is an error.
+const lookAttempts = 3
+
+// look returns the res of what is at path. The content is that of a regular
+// file as it is, never read as JSON: it is not given as body, which the
+// runner reads as JSON when it looks like JSON, so that a log of JSON lines,
+// or one that starts with [ and ends with ], is text.
 func look(path string) (map[string]any, error) {
-	missing := map[string]any{"exists": false, "type": "", "body": ""}
+	for attempt := 1; ; attempt++ {
+		res, err := lookAt(path)
+		if errors.Is(err, textfile.ErrChanged) && attempt < lookAttempts {
+			continue
+		}
+		return res, err
+	}
+}
+
+// lookAt looks at path once, as look does. The tests replace it.
+var lookAt = lookOnce
+
+// lookOnce looks at path once, as look does.
+func lookOnce(path string) (map[string]any, error) {
+	missing := map[string]any{"exists": false, "type": "", "content": ""}
 
 	// A symbolic link is followed, as test -e does, so that a link to
 	// nothing is nothing.
@@ -83,11 +105,11 @@ func look(path string) (map[string]any, error) {
 		return nil, err
 	}
 
-	res := map[string]any{"exists": true, "type": typeOf(info.Mode()), "body": ""}
+	res := map[string]any{"exists": true, "type": typeOf(info.Mode()), "content": ""}
 	if !info.Mode().IsRegular() {
 		return res, nil
 	}
-	body, err := textfile.ReadOpened(path, info, maxBody)
+	content, err := textfile.ReadOpened(path, info, maxContent)
 	// A file removed after it was looked at is gone by the time it would
 	// be read, as if it had never been there.
 	if isMissing(err) {
@@ -96,7 +118,7 @@ func look(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	res["body"] = body
+	res["content"] = content
 	return res, nil
 }
 
