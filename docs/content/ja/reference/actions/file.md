@@ -1,6 +1,6 @@
 # Fileアクション
 
-`file`アクションは、パスにあるものを調べ、通常のファイルであれば読みます。サーバーがログに書いた内容、テスト対象が出力したファイルの内容を確認できます。`retry`と組み合わせれば、ファイルやソケットが現れるまで、または消えるまで待つこともできます。
+`file`アクションは、パスにあるものを調べ、通常のファイルであれば読みます。サーバーがログに書いた内容、テスト対象が出力したファイルの内容、ファイルの権限や所有者を確認できます。`retry`と組み合わせれば、ファイルやソケットが現れるまで、または消えるまで待つこともできます。
 
 ## 基本構文
 
@@ -28,10 +28,19 @@ steps:
 | `res.exists` | Boolean | パスに何かがあれば`true`。何も指していないシンボリックリンクは、何もないものとして扱います |
 | `res.type` | String | パスにあるものの種類。`file`、`dir`、`socket`、`pipe`、`device`、`other`のいずれかで、何もなければ`""` |
 | `res.content` | String | 通常のファイルの内容をテキストのまま。それ以外では`""` |
+| `res.mode` | String | 権限を`chmod`に渡す8進数の形で表したもの。setuid、setgid、スティッキービットを含みます。`0644`、`0600`、`4755`など |
+| `res.owner` | String | 所有者のユーザー名。名前のないユーザーでは番号。下の説明も参照してください |
+| `res.group` | String | 所有グループの名前。名前のないグループでは番号。下の説明も参照してください |
+| `res.size` | Integer | システムが返すバイト数。ディレクトリの値はファイルシステムによって異なります |
+| `res.modified` | String | 最終更新時刻。マシンのタイムゾーンでのRFC 3339の形式で、`2026-11-01T09:30:00.5+09:00`のようになります。`date`で時刻として読めます |
 | `req.path` | String | 指定したパス |
 | `status` | Integer | パスに何かがあれば`0`、なければ`1` |
 
 読むのは通常のファイルだけです。ディレクトリ、ソケット、パイプ、デバイスはあることだけを返し、`res.content`は空です。パイプは開きません。開くと書き手を待ってしまうためです。
+
+パスに何もない場合、`res.mode`、`res.owner`、`res.group`、`res.modified`は`""`、`res.size`は`0`です。シンボリックリンクはたどるので、これらの値はリンク先のものです。
+
+Linuxでは、ユーザーとグループの名前を`/etc/passwd`と`/etc/group`からだけ読みます。LDAPなどのディレクトリサービスがNSS経由で名前を付けているユーザーやグループは、`ls -l`では名前が表示されても、Probeでは番号になります。そのようなホストでは番号と比べてください。macOSではシステムに問い合わせるので、ディレクトリサービスの名前も得られます。
 
 `res.content`は、JSONのように見える内容でもファイルのテキストのままです。HTTPのレスポンスの`body`とは扱いが異なり、JSON Lines形式のログも検索できるテキストとして読めます。JSONのファイルは`parse_json`で読みます。
 
@@ -76,6 +85,28 @@ steps:
   with:
     path: ./out/orders.json
   test: len(parse_json(res.content).orders) == 3
+```
+
+### 権限と所有者
+
+```yaml
+- name: The key is private to the app
+  uses: file
+  with:
+    path: /etc/app/key.pem
+  test: res.mode == "0600" && res.owner == "app" && res.group == "app"
+```
+
+### 最近更新されたか
+
+`res.modified`は`date`で時刻として読めます。時刻から時刻を引くと期間になります。
+
+```yaml
+- name: The backup ran in the last day
+  uses: file
+  with:
+    path: /var/backups/db.sql.gz
+  test: res.size > 0 && now() - date(res.modified) < duration("24h")
 ```
 
 ### 終了時にソケットが消える

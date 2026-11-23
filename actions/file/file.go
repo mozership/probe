@@ -93,7 +93,10 @@ var lookAt = lookOnce
 
 // lookOnce looks at path once, as look does.
 func lookOnce(path string) (map[string]any, error) {
-	missing := map[string]any{"exists": false, "type": "", "content": ""}
+	missing := map[string]any{
+		"exists": false, "type": "", "content": "",
+		"mode": "", "owner": "", "group": "", "size": int64(0), "modified": "",
+	}
 
 	// A symbolic link is followed, as test -e does, so that a link to
 	// nothing is nothing.
@@ -105,7 +108,15 @@ func lookOnce(path string) (map[string]any, error) {
 		return nil, err
 	}
 
-	res := map[string]any{"exists": true, "type": typeOf(info.Mode()), "content": ""}
+	owner, group := ownerOf(info)
+	res := map[string]any{
+		"exists": true, "type": typeOf(info.Mode()), "content": "",
+		"mode":     modeOf(info.Mode()),
+		"owner":    owner,
+		"group":    group,
+		"size":     info.Size(),
+		"modified": info.ModTime().Format(time.RFC3339Nano),
+	}
 	if !info.Mode().IsRegular() {
 		return res, nil
 	}
@@ -126,6 +137,22 @@ func lookOnce(path string) (map[string]any, error) {
 // such as one under a regular file.
 func isMissing(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
+}
+
+// modeOf returns the permissions of mode as chmod takes them in octal, with
+// the setuid, setgid and sticky bits, as "0644" or "4755".
+func modeOf(mode fs.FileMode) string {
+	m := uint32(mode.Perm())
+	if mode&fs.ModeSetuid != 0 {
+		m |= 0o4000
+	}
+	if mode&fs.ModeSetgid != 0 {
+		m |= 0o2000
+	}
+	if mode&fs.ModeSticky != 0 {
+		m |= 0o1000
+	}
+	return fmt.Sprintf("%04o", m)
 }
 
 // typeOf returns the type of what has mode, as res.type gives it.

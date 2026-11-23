@@ -3,13 +3,16 @@ package file
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/internal/actiontest"
@@ -57,8 +60,8 @@ func TestRead(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Read() error = %v", err)
 			}
-			if !reflect.DeepEqual(ret["res"], tt.wantRes) {
-				t.Errorf("res = %#v, want %#v", ret["res"], tt.wantRes)
+			if got := pick(ret["res"], "exists", "type", "content"); !reflect.DeepEqual(got, tt.wantRes) {
+				t.Errorf("res = %#v, want %#v", got, tt.wantRes)
 			}
 			if ret["status"] != tt.wantStatus {
 				t.Errorf("status = %v, want %d", ret["status"], tt.wantStatus)
@@ -92,7 +95,7 @@ func TestReadASocket(t *testing.T) {
 		t.Fatalf("Read() error = %v", err)
 	}
 	want := map[string]any{"exists": true, "type": "socket", "content": ""}
-	if !reflect.DeepEqual(ret["res"], want) || ret["status"] != 0 {
+	if got := pick(ret["res"], "exists", "type", "content"); !reflect.DeepEqual(got, want) || ret["status"] != 0 {
 		t.Errorf("Read() = %#v, want res %#v and status 0", ret, want)
 	}
 }
@@ -228,5 +231,88 @@ func TestLookAgainWhenTheFileIsReplaced(t *testing.T) {
 				t.Errorf("look() = %v, %v, want %v", res, err, read)
 			}
 		})
+	}
+}
+
+// pick returns the fields of res named by keys.
+func pick(res any, keys ...string) map[string]any {
+	m, _ := res.(map[string]any)
+	out := make(map[string]any, len(keys))
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func TestReadMetadata(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(path, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	modified := time.Date(2026, 11, 1, 9, 30, 0, 0, time.UTC)
+	if err := os.Chtimes(path, modified, modified); err != nil {
+		t.Fatal(err)
+	}
+
+	ret, err := Read(map[string]any{"path": path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := ret["res"].(map[string]any)
+	if res["mode"] != "0640" {
+		t.Errorf("res.mode = %v, want 0640", res["mode"])
+	}
+	if res["size"] != int64(7) {
+		t.Errorf("res.size = %#v, want 7", res["size"])
+	}
+	got, err := time.Parse(time.RFC3339Nano, res["modified"].(string))
+	if err != nil || !got.Equal(modified) {
+		t.Errorf("res.modified = %v (%v), want %v", res["modified"], err, modified)
+	}
+
+	// The owner is the user who wrote the file, by name where the system
+	// tells it, and by number otherwise.
+	me, err := user.Current()
+	if err != nil {
+		t.Skipf("the current user is unknown: %v", err)
+	}
+	if res["owner"] != me.Username && res["owner"] != me.Uid {
+		t.Errorf("res.owner = %v, want %s or %s", res["owner"], me.Username, me.Uid)
+	}
+	if res["group"] == "" {
+		t.Error("res.group is empty, want the group of the file")
+	}
+
+	missing, err := Read(map[string]any{"path": filepath.Join(dir, "gone")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"mode": "", "owner": "", "group": "", "size": int64(0), "modified": ""}
+	if got := pick(missing["res"], "mode", "owner", "group", "size", "modified"); !reflect.DeepEqual(got, want) {
+		t.Errorf("res of nothing = %#v, want %#v", got, want)
+	}
+}
+
+func TestModeOf(t *testing.T) {
+	for _, tt := range []struct {
+		mode fs.FileMode
+		want string
+	}{
+		{0o644, "0644"},
+		{0o600, "0600"},
+		{fs.ModeDir | 0o755, "0755"},
+		{fs.ModeSetuid | 0o755, "4755"},
+		{fs.ModeSetgid | 0o750, "2750"},
+		{fs.ModeDir | fs.ModeSticky | 0o777, "1777"},
+	} {
+		if got := modeOf(tt.mode); got != tt.want {
+			t.Errorf("modeOf(%v) = %s, want %s", tt.mode, got, tt.want)
+		}
 	}
 }
