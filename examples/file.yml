@@ -1,0 +1,119 @@
+name: File Action Examples
+description: |
+  Examples for using the file action. It reads a file, or tells that
+  nothing is at a path, and gives the content, the permissions, the owner,
+  the size and the modified time to the step's test.
+
+  The first job writes the files it reads under dir, and starts a command
+  that writes to a log a moment later, as a server would. Paths are
+  relative to the working directory, so run it from the root of the
+  repository:
+
+    probe examples/file.yml
+
+vars:
+  dir: /tmp/probe-file-example
+
+jobs:
+- name: Write the files
+  id: setup
+  steps:
+  - name: A log, a key and a log of JSON lines
+    uses: shell
+    with:
+      cmd: |
+        mkdir -p {{vars.dir}} &&
+        printf 'level=INFO msg="Worker started"\nlevel=INFO msg="Worker started"\n' > {{vars.dir}}/app.log &&
+        printf 'secret\n' > {{vars.dir}}/key.pem && chmod 600 {{vars.dir}}/key.pem &&
+        printf '{"level":"INFO","msg":"ready"}\n{"level":"ERROR","msg":"retrying"}\n' > {{vars.dir}}/events.log
+    test: status == 0
+  - name: A server that logs when it has started
+    uses: shell
+    with:
+      cmd: sleep 2 && echo 'level=INFO msg="server started"' >> {{vars.dir}}/app.log && sleep 60
+      background: true
+    test: res.pid > 0
+
+- name: Read a log
+  id: log
+  needs: [setup]
+  steps:
+  - name: Wait for the server to start
+    uses: file
+    with:
+      path: "{{vars.dir}}/app.log"
+    retry:
+      max_attempts: 10
+      interval: 1s
+    test: res.content contains "server started"
+  - name: No error is logged
+    uses: file
+    with:
+      path: "{{vars.dir}}/app.log"
+    test: res.exists && !(res.content contains "level=ERROR")
+  - name: Two workers are started
+    uses: file
+    with:
+      path: "{{vars.dir}}/app.log"
+    # lines splits the content into lines; quote a test that holds " #"
+    test: 'count(lines(res.content), # contains "Worker started") == 2'
+
+- name: Read what a file holds
+  id: content
+  needs: [setup]
+  steps:
+  - name: A file of JSON is read with parse_json
+    uses: file
+    with:
+      path: examples/fixtures/user.json
+    test: parse_json(res.content).name == "alice" && len(parse_json(res.content).roles) == 2
+  - name: A log of JSON lines is text, not JSON
+    uses: file
+    with:
+      path: "{{vars.dir}}/events.log"
+    test: 'count(lines(res.content), # contains "\"level\":\"ERROR\"") == 1'
+
+- name: Check permissions, owner, size and age
+  id: metadata
+  needs: [setup]
+  steps:
+  - name: The key is private to its owner
+    uses: file
+    with:
+      path: "{{vars.dir}}/key.pem"
+    test: res.type == "file" && res.mode == "0600" && res.owner != "" && res.size == 7
+  - name: It was written in the last hour
+    uses: file
+    with:
+      path: "{{vars.dir}}/key.pem"
+    test: now() - date(res.modified) < duration("1h")
+  - name: A directory is there, and is not read
+    uses: file
+    with:
+      path: "{{vars.dir}}"
+    test: res.exists && res.type == "dir" && res.content == ""
+
+- name: Nothing at a path
+  id: nothing
+  needs: [setup]
+  steps:
+  - name: Nothing there is a result, not a failure
+    uses: file
+    with:
+      path: "{{vars.dir}}/missing.log"
+    test: '!res.exists && status == 1 && res.type == ""'
+
+- name: Remove what the setup made
+  needs: [setup, log, content, metadata, nothing]
+  always: true
+  steps:
+  - name: Remove the files
+    uses: shell
+    with:
+      cmd: rm -rf {{vars.dir}}
+    test: status == 0
+  - name: They are gone
+    uses: file
+    with:
+      path: "{{vars.dir}}"
+    test: '!res.exists'
