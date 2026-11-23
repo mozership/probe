@@ -1579,3 +1579,142 @@ jobs:
 		t.Errorf("Check changed the Fields it was given: %v", fields)
 	}
 }
+
+// TestCheck_Choices checks that a value of a key of with that takes only
+// some values is reported when it is not one of them, in the step's with and
+// in the defaults, and that a template, an empty value and one in another
+// case for a key that takes any case are not.
+func TestCheck_Choices(t *testing.T) {
+	path := writeWorkflow(t, t.TempDir(), "workflow.yml", `name: choices
+vars:
+  op: write
+defaults:
+  file:
+    op: remov
+jobs:
+- name: J
+  defaults:
+    dns:
+      protocol: quic
+  steps:
+  - name: An op that is there
+    uses: file
+    with:
+      path: a
+      op: write
+    test: res.exists
+  - name: An op that is not
+    uses: file
+    with:
+      path: a
+      op: Write
+    test: res.exists
+  - name: An op of a template
+    uses: file
+    with:
+      path: a
+      op: "{{ vars.op }}"
+    test: res.exists
+  - name: An empty op
+    uses: file
+    with:
+      path: a
+      op: ""
+    test: res.exists
+  - name: A number
+    uses: file
+    with:
+      path: a
+      op: 1
+    test: res.exists
+  - name: Another case
+    uses: dns
+    with:
+      name: example.com
+      protocol: TCP
+    test: res.code == 0
+`)
+	opts := checkActions
+	opts.Actions = append(opts.Actions, "dns", "file")
+	opts.Params = map[string][]string{"file": {"path", "op"}, "dns": {"name", "protocol"}}
+	opts.Choices = map[string]map[string]Choices{
+		"file": {"op": {Values: []string{"read", "write", "append", "delete"}}},
+		"dns":  {"protocol": {Values: []string{"udp", "tcp", "tls"}, IgnoreCase: true}},
+	}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 6, `defaults.file: op "remov" is not a value the file action takes; it takes read, write, append or delete`},
+		{SeverityError, 11, `defaults.dns: protocol "quic" is not a value the dns action takes; it takes udp, tcp or tls`},
+		{SeverityError, 23, `with: op "Write" is not a value the file action takes; it takes read, write, append or delete; did you mean "write"?`},
+		{SeverityError, 41, `with: op 1 is not a value the file action takes`},
+	})
+}
+
+// TestCheck_ExternalChoices checks a value of with against the choices the
+// action.yml of an external action declares, with params or without, and
+// that what it declares does not change the options Check was given.
+func TestCheck_ExternalChoices(t *testing.T) {
+	dir := t.TempDir()
+	for name, manifest := range map[string]string{
+		"listed": "runs:\n  using: binary\n  path: x\nparams: [level, mode, retries, flag]\nchoices:\n  level: [info, warn]\n  mode: {values: [fast, safe], ignore_case: true}\n  retries: [\"1\", \"2\"]\n  flag: [\"true\", \"false\"]\n",
+		"open":   "runs:\n  using: binary\n  path: x\nchoices:\n  level: [info, warn]\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeWorkflow(t, filepath.Join(dir, name), "action.yml", manifest)
+	}
+	path := writeWorkflow(t, dir, "workflow.yml", `name: external
+jobs:
+- name: J
+  defaults:
+    ./open:
+      level: debug
+  steps:
+  - uses: ./listed
+    with:
+      level: info
+      mode: FAST
+    test: res.code == 0
+  - uses: ./listed
+    with:
+      level: " warn "
+      retries: 2
+      flag: true
+    test: res.code == 0
+  - uses: ./listed
+    with:
+      level: [info]
+      retries: 3
+    test: res.code == 0
+  - uses: ./listed
+    with:
+      level: Info
+      mode: slow
+    test: res.code == 0
+  - uses: ./open
+    with:
+      anything: 1
+      level: wrn
+    test: res.code == 0
+`)
+	opts := CheckOptions{Actions: []string{"http"}, Choices: map[string]map[string]Choices{}, Manifest: actionref.ReadManifest}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{
+		{SeverityError, 6, `defaults../open: level "debug" is not a value the ./open action takes; it takes info or warn`},
+		{SeverityError, 21, `with: level [info] is not a value the ./listed action takes; it takes info or warn`},
+		{SeverityError, 22, `with: retries 3 is not a value the ./listed action takes; it takes 1 or 2`},
+		{SeverityError, 26, `with: level "Info" is not a value the ./listed action takes; it takes info or warn; did you mean "info"?`},
+		{SeverityError, 27, `with: mode "slow" is not a value the ./listed action takes; it takes fast or safe`},
+		{SeverityError, 32, `with: level "wrn" is not a value the ./open action takes; it takes info or warn; did you mean "warn"?`},
+	})
+	if len(opts.Choices) != 0 {
+		t.Errorf("Check changed the Choices it was given: %v", opts.Choices)
+	}
+}

@@ -55,5 +55,8 @@ func Spec() actionspec.Spec {
 			"values":        kind.List,
 		},
 		Required: [][]string{{"name"}},
+		Choices: map[string]actionspec.Choices{
+			"protocol": {Values: []string{protocolUDP, protocolTCP, protocolTLS}, IgnoreCase: true},
+		},
 	}
 }

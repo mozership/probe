@@ -76,5 +76,6 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"path"}},
+		Choices:   actionspec.NoChoices(),
 	}
 }

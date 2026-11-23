@@ -420,3 +420,13 @@ func TestWriteContentOfScalars(t *testing.T) {
 		t.Errorf("res.content = %v, want 8080", got["content"])
 	}
 }
+
+// TestChoicesAreTaken checks that every op the spec declares is one parse
+// takes, so that probe check reports no op the action runs with.
+func TestChoicesAreTaken(t *testing.T) {
+	for _, op := range Spec().Choices["op"].Values {
+		if _, err := parse(map[string]any{"path": "a", "op": op}); err != nil {
+			t.Errorf("op %q: %v", op, err)
+		}
+	}
+}

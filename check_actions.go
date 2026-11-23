@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mozership/probe/actionref"
@@ -122,6 +123,13 @@ func (c *checker) readParams(uses string, line int, where string) {
 	if m.Res != nil {
 		c.resFields[uses] = m.Res
 	}
+	if len(m.Choices) > 0 {
+		choices := make(map[string]Choices, len(m.Choices))
+		for key, choice := range m.Choices {
+			choices[key] = Choices{Values: choice.Values, IgnoreCase: choice.IgnoreCase}
+		}
+		c.choices[uses] = choices
+	}
 }
 
 // checkWith checks the keys of each step's with, and of the defaults of
@@ -196,20 +204,70 @@ func (c *checker) checkDefaults(v any, jp, where string) {
 // withKeys checks the keys of with, at path, against those action takes,
 // for each key own says belongs there.
 func (c *checker) withKeys(action string, with map[string]any, path, where, field string, own func(string) bool) {
-	params, ok := c.params[action]
-	if !ok {
-		return
-	}
+	// An action whose keys are not known, as an external one whose
+	// action.yml lists no params, may still declare the values of some.
+	params, known := c.params[action]
 	for _, key := range slices.Sorted(maps.Keys(with)) {
 		// A key that holds a template names its key only when it runs. One
 		// that holds an opener left unclosed is text, which is sent as it is.
-		if slices.Contains(params, key) || expr.HasTemplate(key) || !own(key) {
+		if expr.HasTemplate(key) || !own(key) {
+			continue
+		}
+		if !known || slices.Contains(params, key) {
+			c.withValue(action, key, with[key], path, where, field)
 			continue
 		}
 		msg := fmt.Sprintf("%s: unknown key %q for the %s action", field, key, action)
 		msg += suggest.Hint(key, params)
 		c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
 	}
+}
+
+// withValue reports v, the value of key in with at path, when the key takes
+// only some values and v is not one of them. A value that holds a template
+// is known only when it runs, and an empty one leaves the key to its
+// default, so neither is checked. A number or a boolean is compared as the
+// text an action is given for it, as 1 for "1", and the spaces around a
+// value are left out, as some actions leave them out, so that only a value
+// no action could take is reported.
+func (c *checker) withValue(action, key string, v any, path, where, field string) {
+	choices, ok := c.choices[action][key]
+	if !ok || v == nil {
+		return
+	}
+	s, isString := v.(string)
+	switch v.(type) {
+	case string:
+	case map[string]any, []any:
+	default:
+		s = fmt.Sprintf("%v", v)
+	}
+	text := strings.TrimSpace(s)
+	if isString && (text == "" || expr.HasTemplate(s)) {
+		return
+	}
+	if slices.ContainsFunc(choices.Values, func(want string) bool {
+		return text == want || choices.IgnoreCase && strings.EqualFold(text, want)
+	}) {
+		return
+	}
+	shown := fmt.Sprintf("%v", v)
+	if isString {
+		shown = strconv.Quote(s)
+	}
+	msg := fmt.Sprintf("%s: %s %s is not a value the %s action takes; it takes %s", field, key, shown, action, orList(choices.Values))
+	if s != "" {
+		msg += suggest.Hint(text, choices.Values)
+	}
+	c.add(SeverityError, c.line(path+"."+key), where, "%s", msg)
+}
+
+// orList joins values as a list of which one is meant: a, b or c.
+func orList(values []string) string {
+	if len(values) <= 1 {
+		return strings.Join(values, "")
+	}
+	return strings.Join(values[:len(values)-1], ", ") + " or " + values[len(values)-1]
 }
 
 // checkRequired reports a step whose with, the defaults merged into it,

@@ -69,5 +69,6 @@ func Spec() actionspec.Spec {
 		ReqTypes:  kind.Fields(Req{}),
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"host"}, {"username"}, {"password"}},
+		Choices:   actionspec.NoChoices(),
 	}
 }

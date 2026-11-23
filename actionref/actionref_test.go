@@ -87,6 +87,14 @@ func TestParseManifest(t *testing.T) {
 		{name: "neither", yml: "runs:\n  using: binary\n", wantErr: "exactly one of url and path"},
 		{name: "both", yml: "runs:\n  using: binary\n  url: https://example.com/x\n  path: x\n", wantErr: "exactly one of url and path"},
 		{name: "bad checksum", yml: "runs:\n  using: binary\n  url: https://example.com/x\n  checksums:\n    linux_amd64: abc\n", wantErr: "runs.checksums.linux_amd64"},
+		{name: "choices", yml: "runs:\n  using: binary\n  path: x\nparams: [level]\nchoices:\n  level: [info, warn]\n"},
+		{name: "a choice of no value", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: []\n", wantErr: "choices.level must list a value"},
+		{name: "a choice of a key params does not list", yml: "runs:\n  using: binary\n  path: x\nparams: [mode]\nchoices:\n  level: [info]\n", wantErr: "choices.level is not a key params lists"},
+		{name: "a choice of a number", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: [1, \"2\"]\n", wantErr: "value 1 must be a string; quote it"},
+		{name: "a choice of a string", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: info\n", wantErr: "a choice must be a list of strings"},
+		{name: "a choice of an unknown key", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: {values: [info], case: true}\n", wantErr: `unknown key "case"`},
+		{name: "a choice without values", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: {ignore_case: true}\n", wantErr: "values must be a list of strings"},
+		{name: "an ignore_case that is not a bool", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: {values: [info], ignore_case: yes please}\n", wantErr: "ignore_case must be true or false"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -135,6 +143,14 @@ func TestParseManifestDeclarations(t *testing.T) {
 	}
 	if _, err := ParseManifest([]byte("runs:\n  using: binary\n  path: x\ncleanup: [a]\n")); err == nil {
 		t.Error("a cleanup that is not a boolean should fail")
+	}
+	m, err = ParseManifest([]byte("runs:\n  using: binary\n  path: x\nchoices:\n  level: [info, warn]\n  mode:\n    values: [fast]\n    ignore_case: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantChoices := map[string]Choice{"level": {Values: []string{"info", "warn"}}, "mode": {Values: []string{"fast"}, IgnoreCase: true}}
+	if !reflect.DeepEqual(m.Choices, wantChoices) {
+		t.Errorf("Choices = %#v, want %#v", m.Choices, wantChoices)
 	}
 	m, err = ParseManifest([]byte("runs:\n  using: binary\n  path: x\nparams: []\n"))
 	if err != nil {
@@ -774,6 +790,7 @@ func TestRelease(t *testing.T) {
 // something else unquoted.
 func TestReleaseWritesWhatParseReads(t *testing.T) {
 	manifest := "name: \"true\"\ndescription: \"two\\nlines # and: more\"\nguard: []\nparams: [\"123\", \"null\", \"a b\", \"[x]\", \"\"]\n" +
+		"choices:\n  \"null\": [\"true\", \"a, b\"]\n  \"a b\": {values: [\"1\"], ignore_case: true}\n" +
 		"runs:\n  using: binary\n  url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n"
 	sum := strings.Repeat("0", 64)
 	got, err := Release([]byte(manifest), "v0.2.0", strings.NewReader(sum+"  probe-greet_linux_amd64\n"))
@@ -789,6 +806,10 @@ func TestReleaseWritesWhatParseReads(t *testing.T) {
 		Description: "two\nlines # and: more",
 		Guard:       []string{},
 		Params:      []string{"123", "null", "a b", "[x]", ""},
+		Choices: map[string]Choice{
+			"null": {Values: []string{"true", "a, b"}},
+			"a b":  {Values: []string{"1"}, IgnoreCase: true},
+		},
 		Runs: Runs{
 			Using:     UsingBinary,
 			URL:       "https://github.com/example/probe-greet/releases/download/v0.2.0/probe-greet_{os}_{arch}",
@@ -797,6 +818,22 @@ func TestReleaseWritesWhatParseReads(t *testing.T) {
 	}
 	if !reflect.DeepEqual(m, want) {
 		t.Errorf("Release() wrote\n%s\nwhich reads as %+v, want %+v", got, m, want)
+	}
+}
+
+// TestReleaseOfEmptyChoices checks that choices: {}, which declares
+// nothing, is read as no choices, and so can be released.
+func TestReleaseOfEmptyChoices(t *testing.T) {
+	manifest := "choices: {}\nruns:\n  using: binary\n  url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n"
+	m, err := ParseManifest([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Choices != nil {
+		t.Errorf("Choices = %#v, want nil", m.Choices)
+	}
+	if _, err := Release([]byte(manifest), "v0.2.0", strings.NewReader(strings.Repeat("0", 64)+"  probe-greet_linux_amd64\n")); err != nil {
+		t.Errorf("Release() error = %v", err)
 	}
 }
 

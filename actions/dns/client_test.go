@@ -494,3 +494,22 @@ func TestParams(t *testing.T) {
 		t.Errorf("Spec().Params = %v, want %v", got, want)
 	}
 }
+
+// TestChoicesAreTaken checks that every value the spec declares for a key,
+// in upper case too when it is taken in any case, is one normalize takes,
+// so that probe check reports no value the action runs with.
+func TestChoicesAreTaken(t *testing.T) {
+	for key, c := range Spec().Choices {
+		if key != "protocol" {
+			t.Fatalf("a check of %s is missing", key)
+		}
+		for _, v := range c.Values {
+			for _, given := range []string{v, strings.ToUpper(v)} {
+				r := &Req{Name: "example.com", Protocol: given}
+				if _, _, err := r.normalize(); err != nil {
+					t.Errorf("protocol %q: %v", given, err)
+				}
+			}
+		}
+	}
+}

@@ -40,6 +40,7 @@ func TestCheckOptions(t *testing.T) {
 		WithFields:   WithFields(),
 		NeedsNoCheck: NeedsNoCheck(),
 		Required:     AllRequired(),
+		Choices:      AllChoices(),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("CheckOptions() = %+v, want %+v", got, want)
