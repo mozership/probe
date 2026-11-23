@@ -286,6 +286,10 @@ func TestParseErrors(t *testing.T) {
 		{"a mode that is not octal", map[string]any{"path": path, "op": "write", "mode": "0699"}, `mode "0699" is not octal digits`},
 		{"a mode too large", map[string]any{"path": path, "op": "write", "mode": "17777"}, `mode "17777" is not octal digits`},
 		{"a mode of words", map[string]any{"path": path, "op": "write", "mode": "u+rw"}, `mode "u+rw" is not octal digits`},
+		{"content of a map", map[string]any{"path": path, "op": "write", "content": map[string]any{"a": 1}}, "content must be text, not map"},
+		{"content of a list", map[string]any{"path": path, "op": "write", "content": []any{"a"}}, "content must be text, not []"},
+		{"content of nothing", map[string]any{"path": path, "op": "append", "content": nil}, "content must be text, not <nil>"},
+		{"a path to write that ends with a separator", map[string]any{"path": path + "/", "op": "write"}, "ends with a separator"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -320,5 +324,99 @@ func TestParseMode(t *testing.T) {
 		if back := modeOf(got); len(tt.mode) == 4 && back != tt.mode {
 			t.Errorf("modeOf(parseMode(%q)) = %s", tt.mode, back)
 		}
+	}
+}
+
+// TestDeleteKeepsAWorkingDirectoryReachedThroughALink checks the working
+// directory is kept when it is reached through a symbolic link, as /tmp is
+// on macOS, whichever way a path names it, and that what is checked is what
+// is deleted.
+func TestDeleteKeepsAWorkingDirectoryReachedThroughALink(t *testing.T) {
+	root := t.TempDir()
+	top := filepath.Join(root, "top")
+	wd := filepath.Join(top, "wd")
+	precious := filepath.Join(top, "precious")
+	for _, d := range []string{wd, filepath.Join(wd, "a")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(precious, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linktop := filepath.Join(root, "linktop")
+	if err := os.Symlink(top, linktop); err != nil {
+		t.Fatal(err)
+	}
+	// a/lnk/.. is wd/a as it is written, and top as the system follows it.
+	if err := os.Symlink(precious, filepath.Join(wd, "a", "lnk")); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(filepath.Join(linktop, "wd"))
+
+	for _, path := range []string{"..", "../", "../wd", linktop, top} {
+		t.Run(path, func(t *testing.T) {
+			_, err := Run(map[string]any{"path": path, "op": "delete", "recursive": true})
+			if err == nil || !strings.Contains(err.Error(), "holds the working directory") {
+				t.Errorf("Run() error = %v, want that it holds the working directory", err)
+			}
+		})
+	}
+	if got := readFile(t, precious); got != "x" {
+		t.Fatalf("precious = %q, want it kept", got)
+	}
+
+	// a/lnk/.. deletes wd/a, as it is written, and not what holds lnk's
+	// target.
+	run(t, map[string]any{"path": "a/lnk/..", "op": "delete", "recursive": true})
+	if _, err := os.Stat(filepath.Join(wd, "a")); !os.IsNotExist(err) {
+		t.Errorf("a is still there: %v", err)
+	}
+	if got := readFile(t, precious); got != "x" {
+		t.Errorf("precious = %q, want it kept", got)
+	}
+}
+
+// TestDeleteALinkWrittenWithASlash checks that a link to a directory written
+// with a trailing slash is deleted, not the directory it points to.
+func TestDeleteALinkWrittenWithASlash(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	run(t, map[string]any{"path": link + "/", "op": "delete"})
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("the link is still there: %v", err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Errorf("the directory it pointed to is gone: %v", err)
+	}
+}
+
+// TestWriteAModeTheRunCannotRead checks that a file written with a mode the
+// run cannot read is told without its content, rather than failing a step
+// that did what it was asked.
+func TestWriteAModeTheRunCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads whatever the mode")
+	}
+	path := filepath.Join(t.TempDir(), "drop")
+	ret := run(t, map[string]any{"path": path, "op": "write", "content": "x", "mode": "0200"})
+	want := map[string]any{"exists": true, "content": "", "mode": "0200", "size": int64(1)}
+	if got := pick(ret["res"], "exists", "content", "mode", "size"); !reflect.DeepEqual(got, want) {
+		t.Errorf("res = %#v, want %#v", got, want)
+	}
+}
+
+func TestWriteContentOfScalars(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "port")
+	ret := run(t, map[string]any{"path": path, "op": "write", "content": 8080})
+	if got := pick(ret["res"], "content"); got["content"] != "8080" {
+		t.Errorf("res.content = %v, want 8080", got["content"])
 	}
 }

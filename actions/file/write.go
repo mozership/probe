@@ -40,6 +40,16 @@ func parse(with map[string]any) (*Req, error) {
 		}
 	}
 
+	// content is written as text, so a map or a list, as a template of a
+	// whole JSON body gives, is an error rather than Go's form of it.
+	if c, ok := with["content"]; ok {
+		switch c.(type) {
+		case string, bool, int, int64, float64:
+		default:
+			return nil, fmt.Errorf("content must be text, not %T; encode a map or a list as text, as JSON, first", c)
+		}
+	}
+
 	req := &Req{}
 	if err := mapping.MapToStructByTags(with, req); err != nil {
 		return nil, fmt.Errorf("failed to parse request: %w", err)
@@ -65,6 +75,9 @@ func parse(with map[string]any) (*Req, error) {
 	}
 	if _, ok := with["recursive"]; ok && req.Op != opDelete {
 		return nil, fmt.Errorf("recursive is taken only by op delete, not %s", req.Op)
+	}
+	if writes && (strings.HasSuffix(req.Path, "/") || strings.HasSuffix(req.Path, string(filepath.Separator))) {
+		return nil, fmt.Errorf("path %s ends with a separator, and names no file to write", req.Path)
 	}
 	if req.Mode != "" {
 		if _, err := parseMode(req.Mode); err != nil {
@@ -135,16 +148,24 @@ func write(req *Req, flag int) error {
 	return err
 }
 
-// remove deletes what is at path. A symbolic link is deleted, not what it
+// remove deletes what is at path, taken as its absolute path, cleaned, so
+// that what is checked is what is deleted: .. is the directory that holds
+// the one named before it, as it is written, and a trailing separator
+// does not make a symbolic link stand for what it points to. A symbolic link is deleted, not what it
 // points to. A directory is deleted only when it is empty, or with
 // recursive along with all it holds. Nothing at the path is not an error,
 // as rm -f does, so that a step can remove what may not be there. The
 // working directory, or one that holds it, such as /, is never deleted,
 // so that a path made of a variable that is empty does not remove it.
 func remove(path string, recursive bool) error {
-	if err := checkRemovable(path); err != nil {
+	abs, err := filepath.Abs(path)
+	if err != nil {
 		return err
 	}
+	if err := checkRemovable(path, abs); err != nil {
+		return err
+	}
+	path = abs
 	info, err := os.Lstat(path)
 	if isMissing(err) {
 		return nil
@@ -156,52 +177,62 @@ func remove(path string, recursive bool) error {
 		return os.RemoveAll(path)
 	}
 	err = os.Remove(path)
-	if info.IsDir() && (errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST)) {
+	// A directory that is not empty is fs.ErrExist on Unix and on Windows.
+	if info.IsDir() && errors.Is(err, fs.ErrExist) {
 		return fmt.Errorf("%s is a directory that is not empty; set recursive to delete what it holds", path)
 	}
 	return err
 }
 
-// checkRemovable returns an error when path is the working directory, or
-// one that holds it.
-func checkRemovable(path string) error {
-	target, err := resolve(path)
-	if err != nil {
-		return err
+// checkRemovable returns an error when abs, the absolute path of path, is
+// the working directory, or one that holds it. Each is taken as it is
+// written and with its symbolic links followed, so that a working directory
+// reached through a link, as /tmp is on macOS, is kept whichever way a path
+// names it.
+func checkRemovable(path, abs string) error {
+	targets := []string{abs, resolveDir(abs)}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		targets = append(targets, resolved)
 	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+	wds := []string{wd}
 	if resolved, err := filepath.EvalSymlinks(wd); err == nil {
-		wd = resolved
+		wds = append(wds, resolved)
 	}
-	rel, err := filepath.Rel(target, wd)
-	if err != nil {
-		return nil
-	}
-	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("%s holds the working directory, and is not deleted", path)
+	for _, target := range targets {
+		for _, wd := range wds {
+			if holds(target, wd) {
+				return fmt.Errorf("%s holds the working directory, and is not deleted", path)
+			}
+		}
 	}
 	return nil
 }
 
-// resolve returns the absolute path of path, with the symbolic links of the
-// directories that hold it followed, but not one at path itself, which
-// delete removes rather than what it points to.
-func resolve(path string) (string, error) {
-	abs, err := filepath.Abs(path)
+// holds says whether dir is path, or a directory that holds it.
+func holds(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
 	if err != nil {
-		return "", err
+		return false
 	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolveDir returns abs with the symbolic links of the directories that
+// hold it followed, but not one at abs itself, which delete removes rather
+// than what it points to.
+func resolveDir(abs string) string {
 	dir, base := filepath.Dir(abs), filepath.Base(abs)
 	if dir == abs {
-		return abs, nil
+		return abs
 	}
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	return filepath.Join(dir, base), nil
+	return filepath.Join(dir, base)
 }
 
 // parseMode reads mode, octal digits as chmod takes them, such as "0600"
