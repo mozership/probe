@@ -35,13 +35,24 @@ type StepContext struct {
 	// Notes are those the steps whose results are final left for people;
 	// see noteBook.snapshot.
 	Notes []any `expr:"notes"`
+	// Job is what the step reads of the run of its job so far.
+	Job JobState `expr:"job"`
+}
+
+// JobState is what a step reads, as job, of the run of its job before it.
+type JobState struct {
+	// Failed is whether a step before it in the run failed, so that a step
+	// that shows what helps to find why, such as a log, can be skipped when
+	// none did. The skipif of a job reads it as false, as no step has run.
+	Failed bool `expr:"failed"`
 }
 
 // testEnv is what a verbose run shows of the context of a step whose test
 // it evaluated in, by the names the test reads it by. The request and the
 // response are left out, as the step has just shown them, under Request
-// and Response, and so are the notes when there are none, so that a run
-// whose actions leave none shows what it did before there were notes.
+// and Response, and so are the notes when there are none, and job when no
+// step before failed, so that a run whose actions leave none, and whose
+// steps pass, shows what it did before there were either.
 func (c StepContext) testEnv() map[string]any {
 	env := map[string]any{
 		"vars":         c.Vars,
@@ -53,6 +64,9 @@ func (c StepContext) testEnv() map[string]any {
 	}
 	if len(c.Notes) > 0 {
 		env["notes"] = c.Notes
+	}
+	if c.Job.Failed {
+		env["job"] = map[string]any{"failed": true}
 	}
 	return env
 }

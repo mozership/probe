@@ -578,7 +578,7 @@ probe workflow.yml  # Starts the built-in actions its steps use
 
 # No separate installation needed for built-in actions:
 # http, db, shell, ssh, grpc, smtp, imap,
-# dns, embedded, hello
+# dns, file, embedded, hello
 ```
 
 ## Action Best Practices

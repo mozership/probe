@@ -190,6 +190,23 @@ with:
 test: match_json(res.body, parse_json(file('expected/user.json')))
 ```
 
+### `lines`
+
+Splits a string into its lines, without their endings, `\n` or `\r\n`. The end of the last line makes no line of its own, so the lines of a file are those an editor shows, and an empty string has none.
+
+**Syntax:** `lines(string)`
+**Returns:** Array of strings
+
+With `count` or `filter`, it reads a log as `grep` does. Quote the test, as YAML reads the rest of a line from ` #` as a comment:
+
+```yaml fragment
+- name: Two symlinks are created
+  uses: file
+  with:
+    path: "{{ vars.log }}"
+  test: 'count(lines(res.content), # contains "Create symlink") == 2'
+```
+
 ### `template`
 
 Expands the `{{ }}` templates in a string, against the same fields as the expression that calls it, such as `vars` and `outputs`, and returns the string. It is what makes a file read by `file` a template:

@@ -153,6 +153,26 @@ with:
 test: match_json(res.body, parse_json(file('expected/user.json')))
 ```
 
+## `lines`
+
+文字列を行に分け、行末の`\n`や`\r\n`を除いて返します。
+最後の行末は新しい行を作りません。
+そのため、ファイルの行はエディタで見える行と同じになり、空の文字列には行がありません。
+
+**構文:** `lines(string)`
+**戻り値:** 文字列の配列
+
+`count`や`filter`と組み合わせると、`grep`のようにログを読めます。
+YAMLは` #`から行末までをコメントとして読むので、`test`は引用符で囲みます。
+
+```yaml fragment
+- name: Two symlinks are created
+  uses: file
+  with:
+    path: "{{ vars.log }}"
+  test: 'count(lines(res.content), # contains "Create symlink") == 2'
+```
+
 ## `template`
 
 文字列の中の`{{ }}`テンプレートを展開して、その文字列を返します。

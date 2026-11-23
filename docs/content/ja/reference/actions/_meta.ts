@@ -11,6 +11,7 @@ export default {
   ssh: 'SSH',
   grpc: 'GRPC',
   dns: 'DNS',
+  file: 'FILE',
   hello: 'HELLO',
   embedded: 'EMBEDDED',
   '-- external': { type: 'separator', title: '外部' },

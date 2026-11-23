@@ -5,9 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand/v2"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +15,7 @@ import (
 	ex "github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"github.com/mozership/probe/internal/jsonutil"
+	"github.com/mozership/probe/internal/textfile"
 	"github.com/mozership/probe/internal/truncate"
 )
 
@@ -298,6 +297,19 @@ func (e *Expr) Options(env any) []ex.Option {
 			},
 		),
 		ex.Function(
+			"lines",
+			func(params ...any) (any, error) {
+				if len(params) != 1 {
+					return nil, fmt.Errorf("lines requires exactly 1 parameter")
+				}
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("lines parameter must be a string")
+				}
+				return textfile.Lines(s), nil
+			},
+		),
+		ex.Function(
 			"template",
 			func(params ...any) (any, error) {
 				if len(params) != 1 {
@@ -345,59 +357,11 @@ func (e *Expr) Options(env any) []ex.Option {
 // on after the evaluation has timed out. A larger file is an error rather
 // than cut short.
 func readFile(path string) (string, error) {
-	// The path is looked at before it is opened: opening a FIFO to read
-	// waits for a writer.
-	info, err := os.Stat(path)
+	s, err := textfile.Read(path, maxStringLength)
 	if err != nil {
 		return "", fmt.Errorf("file: %w", err)
 	}
-	if err := checkRegular(path, info); err != nil {
-		return "", err
-	}
-	return readOpened(path, info)
-}
-
-// readOpened opens the file at path and reads it, as readFile does, once
-// info, what was found at path before it was opened, is known to be of a
-// regular file. The file opened must be the one info is of.
-func readOpened(path string, info os.FileInfo) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-
-	// It is looked at again once it is open, in case it was replaced.
-	opened, err := f.Stat()
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	if err := checkRegular(path, opened); err != nil {
-		return "", err
-	}
-	if !os.SameFile(info, opened) {
-		return "", fmt.Errorf("file: %s changed while it was opened", path)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(f, int64(maxStringLength)+1))
-	if err != nil {
-		return "", fmt.Errorf("file: %w", err)
-	}
-	if len(data) > maxStringLength {
-		return "", fmt.Errorf("file: %s exceeds maximum length (%d bytes)", path, maxStringLength)
-	}
-	return string(data), nil
-}
-
-// checkRegular returns an error unless info is of a regular file.
-func checkRegular(path string, info os.FileInfo) error {
-	if info.IsDir() {
-		return fmt.Errorf("file: %s is a directory", path)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("file: %s is not a regular file", path)
-	}
-	return nil
+	return s, nil
 }
 
 // checkLength returns an error when input, an expression or a template, is

@@ -79,6 +79,12 @@ jobs:
       cmd: ./probe examples/shell.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: file.yml
+    uses: shell
+    with:
+      cmd: ./probe examples/file.yml; code=$?; test ! -e /tmp/probe-file-example || exit 99; exit $code
+    test: res.code == 0
+    echo: "{{res.stdout}}"
   - name: always-literal.yml (expected to fail, with the cleanup run)
     uses: shell
     with:

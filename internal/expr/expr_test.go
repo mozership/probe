@@ -1005,6 +1005,38 @@ func TestFileFunction(t *testing.T) {
 	}
 }
 
+// lines splits a text into its lines, without their endings, and the end
+// of the last line makes no line of its own.
+func TestLinesFunction(t *testing.T) {
+	e := &Expr{}
+	for _, tt := range []struct {
+		s    string
+		want []any
+	}{
+		{"", []any{}},
+		{"\n", []any{""}},
+		{"a", []any{"a"}},
+		{"a\n", []any{"a"}},
+		{"a\nb", []any{"a", "b"}},
+		{"a\r\nb\r\n", []any{"a", "b"}},
+		{"a\n\nb\n", []any{"a", "", "b"}},
+	} {
+		got, err := e.Eval("lines(s)", map[string]any{"s": tt.s})
+		if err != nil || !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("lines(%q) = %#v, %v; want %#v", tt.s, got, err, tt.want)
+		}
+	}
+
+	// It counts the lines that hold a text, as grep -c does.
+	got, err := e.Eval("count(lines(s), # contains 'Create symlink')", map[string]any{"s": "Create symlink a\nother\nCreate symlink b\n"})
+	if err != nil || got != 2 {
+		t.Errorf("count(lines()) = %v, %v; want 2", got, err)
+	}
+	if _, err := e.Eval("lines(1)", nil); err == nil || !strings.Contains(err.Error(), "lines parameter must be a string") {
+		t.Errorf("lines(1) error = %v", err)
+	}
+}
+
 func TestFileFunctionReadsUpToTheLimit(t *testing.T) {
 	full := filepath.Join(t.TempDir(), "full.txt")
 	if err := os.WriteFile(full, make([]byte, maxStringLength), 0o600); err != nil {
@@ -1013,40 +1045,6 @@ func TestFileFunctionReadsUpToTheLimit(t *testing.T) {
 	got, err := readFile(full)
 	if err != nil || len(got) != maxStringLength {
 		t.Errorf("readFile = %d bytes, %v, want %d bytes", len(got), err, maxStringLength)
-	}
-}
-
-// TestReadOpened gives readOpened what readFile found at a path before it
-// opened it, as if the path had come to hold something else in between.
-func TestReadOpened(t *testing.T) {
-	dir := t.TempDir()
-	first := filepath.Join(dir, "first.txt")
-	second := filepath.Join(dir, "second.txt")
-	for _, p := range []string{first, second} {
-		if err := os.WriteFile(p, []byte(p), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	info, err := os.Stat(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, err := readOpened(first, info); err != nil || got != first {
-		t.Errorf("readOpened of the file found = %q, %v", got, err)
-	}
-	for _, tt := range []struct {
-		name, path, wantErr string
-	}{
-		{"another file", second, "file: " + second + " changed while it was opened"},
-		{"a directory", dir, "file: " + dir + " is a directory"},
-		{"nothing", filepath.Join(dir, "gone.txt"), "no such file or directory"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := readOpened(tt.path, info); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("readOpened(%q) error = %v, want %q", tt.path, err, tt.wantErr)
-			}
-		})
 	}
 }
 

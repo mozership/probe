@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"net"
 	hp "net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -1046,6 +1049,96 @@ func TestRequestStepUnderAGuard(t *testing.T) {
 			}
 			if n := hits.Load(); n != tt.wantHits {
 				t.Errorf("the server was sent %d requests, want %d", n, tt.wantHits)
+			}
+		})
+	}
+}
+
+// unixServer serves h on a Unix domain socket and returns its path. The
+// directory is a short one of its own, as the path of a socket is limited to
+// about a hundred bytes, which t.TempDir can exceed.
+func unixServer(t *testing.T, h hp.Handler) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "probe-http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s.sock")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &httptest.Server{Listener: ln, Config: &hp.Server{Handler: h}}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return path
+}
+
+// A request with unix_socket is sent over the socket, whatever the host of
+// its URL, which is sent only as the Host header; a path alone is sent with
+// localhost for it. A run that allows only some hosts refuses it, as the
+// socket names none.
+func TestRequestStepOverAUnixSocket(t *testing.T) {
+	var hits atomic.Int32
+	socket := unixServer(t, hp.HandlerFunc(func(w hp.ResponseWriter, r *hp.Request) {
+		hits.Add(1)
+		if r.URL.Path == "/away" {
+			hp.Redirect(w, r, "http://elsewhere.example/final", hp.StatusFound)
+			return
+		}
+		_, _ = io.WriteString(w, r.Method+" "+r.Host+" "+r.URL.Path)
+	}))
+
+	tests := []struct {
+		name     string
+		with     map[string]any
+		guard    actionrpc.Guard
+		wantBody string
+		refused  string // a part of the reason; empty when the request is sent
+		wantErr  bool
+	}{
+		{name: "a path alone", with: map[string]any{"get": "/version"}, wantBody: "GET localhost /version"},
+		{name: "a url, sent as the Host header", with: map[string]any{"url": "http://app.internal:8080", "get": "/version"}, wantBody: "GET app.internal:8080 /version"},
+		{name: "a full url", with: map[string]any{"url": "http://app.internal/health", "method": "HEAD"}, wantBody: ""},
+		{name: "under read-only", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET localhost /version"},
+		{name: "a redirect, followed over the socket", with: map[string]any{"get": "/away"}, wantBody: "GET elsewhere.example /final"},
+		{name: "a redirect under read-only", with: map[string]any{"get": "/away"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET elsewhere.example /final"},
+		// Without a shorthand, the url is needed, as probe check says.
+		{name: "a method without a url", with: map[string]any{"method": "GET"}, wantErr: true},
+		{name: "a run that allows only some hosts", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{AllowHosts: []string{"localhost"}}, refused: "names no host the run can allow (localhost)"},
+		{name: "a socket that is not there", with: map[string]any{"get": "/version", "unix_socket": socket + ".missing"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hits.Store(0)
+			with := map[string]any{"unix_socket": socket}
+			maps.Copy(with, tt.with)
+			ret, _, err := RequestStep(actionrpc.Call{With: with, Guard: tt.guard})
+			switch {
+			case tt.refused != "":
+				if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+					t.Fatalf("err = %v, want a refusal saying %q", err, tt.refused)
+				}
+				if n := hits.Load(); n != 0 {
+					t.Errorf("the server was sent %d requests, want none", n)
+				}
+				return
+			case tt.wantErr:
+				if err == nil {
+					t.Fatal("want an error")
+				}
+				return
+			case err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			}
+			res := ret["res"].(map[string]any)
+			if res["code"] != 200 || res["body"] != tt.wantBody {
+				t.Errorf("res = %d %q, want 200 %q", res["code"], res["body"], tt.wantBody)
+			}
+			req := ret["req"].(map[string]any)
+			if req["unix_socket"] != with["unix_socket"] {
+				t.Errorf("req.unix_socket = %v, want %v", req["unix_socket"], with["unix_socket"])
 			}
 		})
 	}
