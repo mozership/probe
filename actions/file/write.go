@@ -1,0 +1,225 @@
+package file
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/mozership/probe/internal/mapping"
+)
+
+// The ops of a file step, as op takes them.
+const (
+	opRead   = "read"
+	opWrite  = "write"
+	opAppend = "append"
+	opDelete = "delete"
+)
+
+// newFileMode is the mode a file that write or append makes is given when
+// mode does not say, before the umask of the run, as a shell gives one.
+const newFileMode = 0o644
+
+// newDirMode is the mode of a directory that write or append makes to hold
+// a file, before the umask of the run, as mkdir -p gives one.
+const newDirMode = 0o755
+
+// parse reads the request from with, and checks that it asks for an op that
+// is there, with only the parameters that op takes.
+func parse(with map[string]any) (*Req, error) {
+	// A mode written as a number in YAML, as 0600, is read as decimal or as
+	// octal depending on the parser, so it is taken only as a string.
+	if m, ok := with["mode"]; ok {
+		if _, isString := m.(string); !isString {
+			return nil, fmt.Errorf("mode must be a string of octal digits in quotes, as \"0600\", not %v", m)
+		}
+	}
+
+	req := &Req{}
+	if err := mapping.MapToStructByTags(with, req); err != nil {
+		return nil, fmt.Errorf("failed to parse request: %w", err)
+	}
+	if req.Path == "" {
+		return nil, errors.New("path parameter is required")
+	}
+	if req.Op == "" {
+		req.Op = opRead
+	}
+
+	writes := req.Op == opWrite || req.Op == opAppend
+	switch req.Op {
+	case opRead, opWrite, opAppend, opDelete:
+	default:
+		return nil, fmt.Errorf("op %q is not one of read, write, append and delete", req.Op)
+	}
+	if _, ok := with["content"]; ok && !writes {
+		return nil, fmt.Errorf("content is written only by op write or append, not %s", req.Op)
+	}
+	if _, ok := with["mode"]; ok && !writes {
+		return nil, fmt.Errorf("mode is set only by op write or append, not %s", req.Op)
+	}
+	if _, ok := with["recursive"]; ok && req.Op != opDelete {
+		return nil, fmt.Errorf("recursive is taken only by op delete, not %s", req.Op)
+	}
+	if req.Mode != "" {
+		if _, err := parseMode(req.Mode); err != nil {
+			return nil, err
+		}
+	}
+	return req, nil
+}
+
+// echo returns the req of the step's result.
+func (r *Req) echo() map[string]any {
+	return map[string]any{
+		"path":      r.Path,
+		"op":        r.Op,
+		"content":   r.Content,
+		"mode":      r.Mode,
+		"recursive": r.Recursive,
+	}
+}
+
+// change does what the op of req asks for at its path, and nothing for
+// read.
+func change(req *Req) error {
+	switch req.Op {
+	case opWrite:
+		return write(req, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	case opAppend:
+		return write(req, os.O_WRONLY|os.O_CREATE|os.O_APPEND)
+	case opDelete:
+		return remove(req.Path, req.Recursive)
+	default:
+		return nil
+	}
+}
+
+// write writes the content of req to its path, opened with flag, making the
+// directories that are to hold it, and sets its mode when req gives one. A
+// symbolic link is followed, as a shell's > does. What is not a regular
+// file is not written: a pipe would wait for a reader, and a directory
+// cannot be.
+func write(req *Req, flag int) error {
+	if info, err := os.Stat(req.Path); err == nil && !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is a %s, not a file, and is not written", req.Path, typeOf(info.Mode()))
+	}
+	if err := os.MkdirAll(filepath.Dir(req.Path), newDirMode); err != nil {
+		return err
+	}
+	// O_NONBLOCK keeps a pipe put at the path since it was looked at from
+	// blocking the open; a regular file is written as it is without it.
+	f, err := os.OpenFile(req.Path, flag|syscall.O_NONBLOCK, newFileMode)
+	if err != nil {
+		return err
+	}
+	info, err := f.Stat()
+	if err == nil && !info.Mode().IsRegular() {
+		err = fmt.Errorf("%s is a %s, not a file, and is not written", req.Path, typeOf(info.Mode()))
+	}
+	if err == nil {
+		_, err = f.WriteString(req.Content)
+	}
+	if err == nil && req.Mode != "" {
+		mode, _ := parseMode(req.Mode)
+		err = f.Chmod(mode)
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+// remove deletes what is at path. A symbolic link is deleted, not what it
+// points to. A directory is deleted only when it is empty, or with
+// recursive along with all it holds. Nothing at the path is not an error,
+// as rm -f does, so that a step can remove what may not be there. The
+// working directory, or one that holds it, such as /, is never deleted,
+// so that a path made of a variable that is empty does not remove it.
+func remove(path string, recursive bool) error {
+	if err := checkRemovable(path); err != nil {
+		return err
+	}
+	info, err := os.Lstat(path)
+	if isMissing(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() && recursive {
+		return os.RemoveAll(path)
+	}
+	err = os.Remove(path)
+	if info.IsDir() && (errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST)) {
+		return fmt.Errorf("%s is a directory that is not empty; set recursive to delete what it holds", path)
+	}
+	return err
+}
+
+// checkRemovable returns an error when path is the working directory, or
+// one that holds it.
+func checkRemovable(path string) error {
+	target, err := resolve(path)
+	if err != nil {
+		return err
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if resolved, err := filepath.EvalSymlinks(wd); err == nil {
+		wd = resolved
+	}
+	rel, err := filepath.Rel(target, wd)
+	if err != nil {
+		return nil
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%s holds the working directory, and is not deleted", path)
+	}
+	return nil
+}
+
+// resolve returns the absolute path of path, with the symbolic links of the
+// directories that hold it followed, but not one at path itself, which
+// delete removes rather than what it points to.
+func resolve(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	dir, base := filepath.Dir(abs), filepath.Base(abs)
+	if dir == abs {
+		return abs, nil
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	return filepath.Join(dir, base), nil
+}
+
+// parseMode reads mode, octal digits as chmod takes them, such as "0600"
+// or "4755", into a file mode with the setuid, setgid and sticky bits.
+func parseMode(mode string) (fs.FileMode, error) {
+	m, err := strconv.ParseUint(mode, 8, 32)
+	if err != nil || m > 0o7777 {
+		return 0, fmt.Errorf("mode %q is not octal digits as chmod takes them, as \"0644\" or \"4755\"", mode)
+	}
+	fm := fs.FileMode(m & 0o777)
+	if m&0o4000 != 0 {
+		fm |= fs.ModeSetuid
+	}
+	if m&0o2000 != 0 {
+		fm |= fs.ModeSetgid
+	}
+	if m&0o1000 != 0 {
+		fm |= fs.ModeSticky
+	}
+	return fm, nil
+}

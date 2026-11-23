@@ -1,6 +1,6 @@
 # File Action
 
-The `file` action looks at what is at a path, and reads it when it is a regular file. Use it to check what a server wrote to its log, the content of a file that what is tested produced, its permissions and owner, or, with `retry`, to wait for a file or a socket to come or to go.
+The `file` action looks at what is at a path, and reads it when it is a regular file. Use it to check what a server wrote to its log, the content of a file that what is tested produced, its permissions and owner, or, with `retry`, to wait for a file or a socket to come or to go. With `op`, it writes, appends to or deletes a file, so that a workflow makes the files it tests with, and removes them, without `shell`.
 
 ## Basic Syntax
 
@@ -19,7 +19,11 @@ steps:
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `path` | Yes | | The path to look at, relative to the working directory, as the paths of other actions are. A symbolic link is followed |
+| `path` | Yes | | The path to look at, relative to the working directory, as the paths of other actions are. A symbolic link is followed, except by `delete` |
+| `op` | No | `read` | What to do at the path: `read`, `write`, `append` or `delete`. See [Write, Append and Delete](#write-append-and-delete) |
+| `content` | No | `""` | What `write` writes, or `append` adds to the end |
+| `mode` | No | | The permissions `write` and `append` set, as `chmod` takes them in octal, in quotes: `"0600"` |
+| `recursive` | No | `false` | With `delete`, deletes a directory with all it holds |
 
 ## Response
 
@@ -34,7 +38,13 @@ steps:
 | `res.size` | Integer | The size in bytes, as the system gives it; that of a directory depends on the file system |
 | `res.modified` | String | When it was last modified, as RFC 3339 with the time zone of the machine, such as `2026-11-01T09:30:00.5+09:00`. `date` reads it as a time |
 | `req.path` | String | The path given |
+| `req.op` | String | The op done, `read` when none is given |
+| `req.content` | String | The content given, `""` when none is |
+| `req.mode` | String | The mode given, `""` when none is |
+| `req.recursive` | Boolean | Whether `recursive` was given true |
 | `status` | Integer | `0` when there is something at the path, and `1` otherwise |
+
+Whatever the op, `res` is what is at the path once it is done, as `read` gives it: after `write`, the file as it was written, and after `delete`, nothing.
 
 Only a regular file is read. A directory, a socket, a pipe or a device is told to be there, and its `res.content` is empty: a pipe is not opened, which would wait for a writer.
 
@@ -124,10 +134,73 @@ Nothing at the path is a result the test can check, not a failed step, so a step
   test: '!res.exists'
 ```
 
+## Write, Append and Delete
+
+`op` changes what is at the path before the step looks at it.
+
+| `op` | What it does |
+|---|---|
+| `read` | Nothing: it only looks |
+| `write` | Writes `content` to the file, in place of what it held, and makes the file, and the directories to hold it, when they are not there |
+| `append` | Adds `content` to the end of the file, and makes it, and the directories to hold it, when they are not there |
+| `delete` | Deletes what is at the path. A directory is deleted only when it is empty, or with `recursive: true` along with all it holds |
+
+A file that `write` or `append` makes has the mode `0644`, and a directory `0755`, less the umask of the run, as a shell gives them. `mode` sets the permissions of the file, whether it was made or was there; without `mode`, a file that was there keeps its own. Write `mode` in quotes: a number such as `0600` is read as decimal by some YAML parsers and as octal by others, and is an error. `write` and `append` follow a symbolic link, as a shell's `>` does, and write only to a regular file: a directory, a pipe or anything else at the path is an error.
+
+`delete` deletes a symbolic link, not what it points to. Nothing at the path is not an error, as with `rm -f`, so a step can remove what may not be there. The working directory, and a directory that holds it, such as `/`, are never deleted, so that a path made of a variable that turns out empty does not remove them.
+
+`content`, `mode` and `recursive` are taken only by the ops that use them: `content` to `read` is an error, not ignored.
+
+### Make a File, and Remove It
+
+```yaml
+jobs:
+- name: Start with a config
+  id: config
+  steps:
+  - name: Write the config
+    uses: file
+    with:
+      path: ./tmp/app.yml
+      op: write
+      content: |
+        port: 8080
+        log: ./tmp/app.log
+      mode: "0600"
+    test: res.exists && res.mode == "0600"
+
+- name: Clean up
+  needs: [config]
+  always: true
+  steps:
+  - name: Remove what the run made
+    uses: file
+    with:
+      path: ./tmp
+      op: delete
+      recursive: true
+    test: '!res.exists'
+```
+
+### A Log a Server Is Watching
+
+```yaml
+- name: A line comes into the log
+  uses: file
+  with:
+    path: ./watched.log
+    op: append
+    content: |
+      level=ERROR msg="disk full"
+  test: res.exists
+```
+
 ## Under a Guard
 
-The action reads and connects to nothing, so it runs under `--read-only` and `--allow-host` as it is. See [Guard](/guide/concepts/guard).
+The action connects to nothing, so it runs under `--allow-host` as it is. Under `--read-only`, it only reads: a step with `write`, `append` or `delete` is refused, with the kind `refused`, before it changes anything. See [Guard](/guide/concepts/guard).
 
 ## Error Handling
 
-Nothing at the path, or a path under a regular file, gives a result with `res.exists` false and `status` `1`. A file replaced while it is read, as a rotated log is, is looked at again, up to three times. A step fails with an action error when `path` is not given, when what is at the path cannot be looked at or read, such as a file the run has no permission to read, and when a regular file is larger than 1,000,000 bytes, as much as the `file` function of expressions reads. A larger file is not cut short.
+Nothing at the path, or a path under a regular file, gives a result with `res.exists` false and `status` `1`. A file replaced while it is read, as a rotated log is, is looked at again, up to three times. A step fails with an action error when `path` is not given, when what is at the path cannot be looked at or read, such as a file the run has no permission to read, and when a regular file is larger than 1,000,000 bytes, as much as the `file` function of expressions reads. A larger file is not cut short, and a file that `write` or `append` makes larger is written, and then fails the step as it is read.
+
+It fails as well when `op` is not one of the four, when `content`, `mode` or `recursive` is given to an op that does not take it, when `mode` is not octal digits in quotes, when `write` or `append` meets what is not a regular file, or cannot write, when `delete` meets a directory that is not empty without `recursive`, or names the working directory or one that holds it.

@@ -13,12 +13,19 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	actionrpc.LogParams(a.log, "received file request parameters", with)
-
-	ret, err := Read(with)
-	actionrpc.LogOutcome(a.log, "file read", ret, err)
-
+	ret, _, err := a.RunStep(actionrpc.Call{With: with})
 	return ret, err
+}
+
+// RunStep runs a step under the guard of the run, which refuses an op that
+// writes under read-only. It keeps no state in the job.
+func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+	actionrpc.LogParams(a.log, "received file request parameters", call.With)
+
+	ret, err := RunGuarded(call.With, call.Guard)
+	actionrpc.LogOutcome(a.log, "file", ret, err)
+
+	return ret, nil, err
 }
 
 func serve() {
@@ -27,8 +34,9 @@ func serve() {
 	})
 }
 
-// Spec declares the file action. It keeps to every kind of guard, as it
-// reads a file and connects to nothing, and cannot run without path.
+// Spec declares the file action. It keeps to every kind of guard: it only
+// reads under read-only, refusing write, append and delete, and connects to
+// nothing. It cannot run without path.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,

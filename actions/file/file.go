@@ -1,6 +1,8 @@
 // Package file is the file action: it looks at what is at a path, and reads
 // it when it is a regular file, so that a step can check a log, a file
-// written by what is tested, or that a file has come or gone.
+// written by what is tested, or that a file has come or gone. It writes,
+// appends to or deletes a file as well, so that a workflow can make what it
+// tests with and remove it, which it refuses under a read-only guard.
 package file
 
 import (
@@ -11,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/textfile"
 )
 
@@ -34,25 +36,41 @@ const (
 )
 
 type Req struct {
-	Path string `map:"path"`
+	Path      string `map:"path"`
+	Op        string `map:"op"`
+	Content   string `map:"content"`
+	Mode      string `map:"mode"`
+	Recursive bool   `map:"recursive"`
 }
 
-// Read looks at what is at the path with gives, and returns the step's
-// result. Nothing at the path is a result for the step's test to check, with
+// Run does what with asks for at a path, under no guard. See RunGuarded.
+func Run(with map[string]any) (map[string]any, error) {
+	return RunGuarded(with, actionrpc.Guard{})
+}
+
+// RunGuarded does what op of with asks for at the path with gives, and
+// returns the step's result: what is at the path afterwards, as read gives
+// it. read, the default, only looks; write, append and delete change what
+// is at the path, and are refused under a read-only guard before they do.
+//
+// Nothing at the path is a result for the step's test to check, with
 // res.exists false and status 1, so that a step can wait with retry for a
 // file to come or to go. What is there is read only when it is a regular
 // file; a path that cannot be looked at or read is an error.
-func Read(with map[string]any) (map[string]any, error) {
+func RunGuarded(with map[string]any, guard actionrpc.Guard) (map[string]any, error) {
 	start := time.Now()
 
-	req := &Req{}
-	if err := mapping.MapToStructByTags(with, req); err != nil {
-		return map[string]any{}, fmt.Errorf("failed to parse request: %w", err)
+	req, err := parse(with)
+	if err != nil {
+		return map[string]any{}, err
 	}
-	if req.Path == "" {
-		return map[string]any{}, errors.New("path parameter is required")
+	if req.Op != opRead && guard.ReadOnly {
+		return map[string]any{}, actionrpc.Refuse("op %s changes what is at %s, and the run is read-only; only read is done", req.Op, req.Path)
 	}
 
+	if err := change(req); err != nil {
+		return map[string]any{}, err
+	}
 	res, err := look(req.Path)
 	if err != nil {
 		return map[string]any{}, err
@@ -62,7 +80,7 @@ func Read(with map[string]any) (map[string]any, error) {
 		status = statusFound
 	}
 	return map[string]any{
-		"req":    map[string]any{"path": req.Path},
+		"req":    req.echo(),
 		"res":    res,
 		"rt":     time.Since(start).String(),
 		"status": status,

@@ -126,7 +126,7 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 | [`shell`](https://probe.linyo.ws/ja/reference/actions/shell) | Probeを実行しているマシンでのコマンド実行 |
 | [`grpc`](https://probe.linyo.ws/ja/reference/actions/grpc) | gRPCとConnectの呼び出し（ストリーミングを含む） |
 | [`dns`](https://probe.linyo.ws/ja/reference/actions/dns) | 名前に対してDNSサーバーが返すレコード |
-| [`file`](https://probe.linyo.ws/ja/reference/actions/file) | Probeを動かすマシン上のログなどのファイル |
+| [`file`](https://probe.linyo.ws/ja/reference/actions/file) | Probeを動かすマシン上のログなどのファイル。ワークフローが作って片付けるファイルも |
 | [`embedded`](https://probe.linyo.ws/ja/reference/actions/embedded) | ステップから別のジョブファイルを実行 |
 | [`hello`](https://probe.linyo.ws/ja/reference/actions/hello) | レポートへの出力 |
 
