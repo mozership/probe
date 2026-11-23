@@ -153,29 +153,11 @@ with:
 test: match_json(res.body, parse_json(file('expected/user.json')))
 ```
 
-## `exists`
-
-パスに何かがあるかどうかを返します。
-ファイル、ディレクトリ、ソケットなど種類は問わず、`test -e`と同じくシンボリックリンクはたどります。
-パスは、`file`と同じくカレントディレクトリからの相対パスです。
-読めないディレクトリのように、あるかどうかを確かめられないときは、`false`ではなくエラーになります。
-
-**構文:** `exists(path)`
-**戻り値:** Boolean
-
-```yaml fragment
-- name: The socket is removed on shutdown
-  test: '!exists(vars.socket)'
-  retry:
-    max_attempts: 15
-    interval: 2s
-```
-
 ## `lines`
 
 文字列を行に分け、行末の`\n`や`\r\n`を除いて返します。
 最後の行末は新しい行を作りません。
-そのため、`file`で読んだファイルの行はエディタで見える行と同じになり、空の文字列には行がありません。
+そのため、ファイルの行はエディタで見える行と同じになり、空の文字列には行がありません。
 
 **構文:** `lines(string)`
 **戻り値:** 文字列の配列
@@ -185,7 +167,10 @@ YAMLは` #`から行末までをコメントとして読むので、`test`は引
 
 ```yaml fragment
 - name: Two symlinks are created
-  test: 'count(lines(file(vars.log)), # contains "Create symlink") == 2'
+  uses: file
+  with:
+    path: "{{ vars.log }}"
+  test: 'count(lines(res.content), # contains "Create symlink") == 2'
 ```
 
 ## `template`

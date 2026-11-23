@@ -13,7 +13,6 @@ func TestWorkflow_Graph(t *testing.T) {
 			{Name: "Build", ID: "build", Steps: []*Step{
 				{Name: "Compile", Uses: "shell"},
 				{Uses: "http"},
-				{Wait: "1s"},
 			}},
 			{Name: "Test", Needs: []string{"build"}, Steps: []*Step{
 				{Name: "Without path", Uses: "embedded"},
@@ -25,7 +24,6 @@ func TestWorkflow_Graph(t *testing.T) {
 		{ID: "build", Name: "Build", Steps: []dag.Step{
 			{Name: "Compile"},
 			{Name: "http"},
-			{Name: "Unknown Step"},
 		}},
 		{ID: "job_1", Name: "Test", Needs: []string{"build"}, Steps: []dag.Step{
 			{Name: "Without path", Embedded: true},

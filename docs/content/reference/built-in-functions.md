@@ -190,24 +190,9 @@ with:
 test: match_json(res.body, parse_json(file('expected/user.json')))
 ```
 
-### `exists`
-
-Returns whether anything is at a path: a file, a directory, a socket or anything else, following a symbolic link, as `test -e` does. The path is relative to the working directory, as that of `file` is. What keeps it from being told, such as a directory that cannot be read, is an error rather than `false`.
-
-**Syntax:** `exists(path)`
-**Returns:** Boolean
-
-```yaml fragment
-- name: The socket is removed on shutdown
-  test: '!exists(vars.socket)'
-  retry:
-    max_attempts: 15
-    interval: 2s
-```
-
 ### `lines`
 
-Splits a string into its lines, without their endings, `\n` or `\r\n`. The end of the last line makes no line of its own, so the lines of a file read by `file` are those an editor shows, and an empty string has none.
+Splits a string into its lines, without their endings, `\n` or `\r\n`. The end of the last line makes no line of its own, so the lines of a file are those an editor shows, and an empty string has none.
 
 **Syntax:** `lines(string)`
 **Returns:** Array of strings
@@ -216,7 +201,10 @@ With `count` or `filter`, it reads a log as `grep` does. Quote the test, as YAML
 
 ```yaml fragment
 - name: Two symlinks are created
-  test: 'count(lines(file(vars.log)), # contains "Create symlink") == 2'
+  uses: file
+  with:
+    path: "{{ vars.log }}"
+  test: 'count(lines(res.content), # contains "Create symlink") == 2'
 ```
 
 ### `template`

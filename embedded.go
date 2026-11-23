@@ -130,8 +130,7 @@ func checkEmbeddedJobs(jobs []Job, named map[string]string, builtin []string, va
 				if ref, ok := named[uses]; ok {
 					uses = ref
 				}
-				// A step without uses runs no action.
-				if found != nil || uses == "" || actionref.IsExternal(uses) || slices.Contains(builtin, uses) {
+				if found != nil || actionref.IsExternal(uses) || slices.Contains(builtin, uses) {
 					return
 				}
 				found = NewConfigurationError("resolve_action", "failed to resolve an action of an embedded job", fmt.Errorf("%s, step %d: %w", file, i, unknownAction(uses, builtin)))
