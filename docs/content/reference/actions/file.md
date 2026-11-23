@@ -29,8 +29,8 @@ steps:
 | `res.type` | String | What is at the path: `file`, `dir`, `socket`, `pipe`, `device` or `other`, and `""` when there is nothing |
 | `res.content` | String | The content of a regular file, as text, and `""` for anything else |
 | `res.mode` | String | The permissions in octal, as `chmod` takes them, with the setuid, setgid and sticky bits: `0644`, `0600`, `4755` |
-| `res.owner` | String | The name of the user that owns it, or the user's number when the system has no name for it |
-| `res.group` | String | The name of the group that owns it, or the group's number when the system has no name for it |
+| `res.owner` | String | The name of the user that owns it, or the user's number when it has no name; see below |
+| `res.group` | String | The name of the group that owns it, or the group's number when it has no name; see below |
 | `res.size` | Integer | The size in bytes, as the system gives it; that of a directory depends on the file system |
 | `res.modified` | String | When it was last modified, as RFC 3339 with the time zone of the machine, such as `2026-11-01T09:30:00.5+09:00`. `date` reads it as a time |
 | `req.path` | String | The path given |
@@ -39,6 +39,8 @@ steps:
 Only a regular file is read. A directory, a socket, a pipe or a device is told to be there, and its `res.content` is empty: a pipe is not opened, which would wait for a writer.
 
 With nothing at the path, `res.mode`, `res.owner`, `res.group` and `res.modified` are `""`, and `res.size` is `0`. A symbolic link is followed, so they are those of what it points to.
+
+On Linux, Probe reads the names of users and groups from `/etc/passwd` and `/etc/group` only. One that a directory service such as LDAP gives a name, through NSS, is given by its number, though `ls -l` shows the name: compare with the number on such a host. On macOS, Probe asks the system, and gets the names of a directory service too.
 
 `res.content` is the text of the file as it is, even when it looks like JSON, unlike the `body` of an HTTP response: a log of JSON lines is text to search. Read a file of JSON with `parse_json`.
 

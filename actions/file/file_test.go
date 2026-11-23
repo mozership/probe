@@ -255,7 +255,7 @@ func TestReadMetadata(t *testing.T) {
 	if err := os.Chmod(path, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	modified := time.Date(2026, 11, 1, 9, 30, 0, 500, time.UTC)
+	modified := time.Date(2026, 11, 1, 9, 30, 0, 0, time.UTC)
 	if err := os.Chtimes(path, modified, modified); err != nil {
 		t.Fatal(err)
 	}

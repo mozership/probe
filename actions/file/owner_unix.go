@@ -10,8 +10,9 @@ import (
 )
 
 // ownerOf returns the names of the user and the group that own what info is
-// of, or their numbers where the system cannot tell a name, as for a user
-// that has none, such as the owner of a file in a container.
+// of, or their numbers where no name is found. Probe is built without cgo,
+// so on Linux a name is looked for only in /etc/passwd and /etc/group, not
+// in a directory service such as LDAP; on macOS the system is asked.
 func ownerOf(info fs.FileInfo) (string, string) {
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
