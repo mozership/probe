@@ -123,6 +123,13 @@ func (c *checker) readParams(uses string, line int, where string) {
 	if m.Res != nil {
 		c.resFields[uses] = m.Res
 	}
+	if len(m.Choices) > 0 {
+		choices := make(map[string]Choices, len(m.Choices))
+		for key, choice := range m.Choices {
+			choices[key] = Choices{Values: choice.Values, IgnoreCase: choice.IgnoreCase}
+		}
+		c.choices[uses] = choices
+	}
 }
 
 // checkWith checks the keys of each step's with, and of the defaults of
@@ -197,17 +204,16 @@ func (c *checker) checkDefaults(v any, jp, where string) {
 // withKeys checks the keys of with, at path, against those action takes,
 // for each key own says belongs there.
 func (c *checker) withKeys(action string, with map[string]any, path, where, field string, own func(string) bool) {
-	params, ok := c.params[action]
-	if !ok {
-		return
-	}
+	// An action whose keys are not known, as an external one whose
+	// action.yml lists no params, may still declare the values of some.
+	params, known := c.params[action]
 	for _, key := range slices.Sorted(maps.Keys(with)) {
 		// A key that holds a template names its key only when it runs. One
 		// that holds an opener left unclosed is text, which is sent as it is.
 		if expr.HasTemplate(key) || !own(key) {
 			continue
 		}
-		if slices.Contains(params, key) {
+		if !known || slices.Contains(params, key) {
 			c.withValue(action, key, with[key], path, where, field)
 			continue
 		}
@@ -222,7 +228,7 @@ func (c *checker) withKeys(action string, with map[string]any, path, where, fiel
 // is known only when it runs, and an empty one leaves the key to its
 // default, so neither is checked.
 func (c *checker) withValue(action, key string, v any, path, where, field string) {
-	choices, ok := c.opts.Choices[action][key]
+	choices, ok := c.choices[action][key]
 	if !ok || v == nil {
 		return
 	}

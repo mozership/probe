@@ -217,6 +217,10 @@ type checker struct {
 	// files are the files read, given and included, with the line of the
 	// source that each one starts on.
 	files fileLines
+	// choices are the values that the keys of with which take only some
+	// take, by the action's name and then the key's: those of opts, and
+	// those the action.yml of an external action declares.
+	choices map[string]map[string]Choices
 	// readManifests are the external actions whose action.yml was read.
 	readManifests map[string]bool
 	// reported are the findings addOnce added, by their path and message.
@@ -230,6 +234,7 @@ func newChecker(opts CheckOptions) *checker {
 		opts:      opts,
 		params:    maps.Clone(opts.Params),
 		resFields: maps.Clone(opts.ResFields),
+		choices:   maps.Clone(opts.Choices),
 		lines:     map[string]int{},
 		reported:  map[string]bool{},
 	}
@@ -238,6 +243,9 @@ func newChecker(opts CheckOptions) *checker {
 	}
 	if c.resFields == nil {
 		c.resFields = map[string][]string{}
+	}
+	if c.choices == nil {
+		c.choices = map[string]map[string]Choices{}
 	}
 	return c
 }

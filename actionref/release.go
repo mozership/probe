@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path"
 	"reflect"
 	"regexp"
@@ -168,6 +169,17 @@ func (m *Manifest) encode() []byte {
 	if m.Res != nil {
 		fmt.Fprintf(&b, "res: %s\n", flowList(m.Res))
 	}
+	if len(m.Choices) > 0 {
+		b.WriteString("choices:\n")
+		for _, key := range slices.Sorted(maps.Keys(m.Choices)) {
+			c := m.Choices[key]
+			if c.IgnoreCase {
+				fmt.Fprintf(&b, "  %s: {values: %s, ignore_case: true}\n", scalar(key, false), flowList(c.Values))
+				continue
+			}
+			fmt.Fprintf(&b, "  %s: %s\n", scalar(key, false), flowList(c.Values))
+		}
+	}
 	if m.Cleanup {
 		b.WriteString("cleanup: true\n")
 	}
@@ -252,6 +264,10 @@ description: ""
 # The fields of res the action returns, for probe check to report a step
 # that reads another. Without res, what a step reads of res is not checked.
 # res: [code, body]
+# The values of the keys of with that take only some, for probe check to
+# report any other. Without choices, every key takes any value.
+# choices:
+#   level: [info, warn]
 # Whether Probe calls the action once a run is over, for it to remove what
 # its steps left behind, such as a server they started.
 # cleanup: true

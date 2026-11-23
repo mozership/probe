@@ -20,12 +20,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -128,6 +130,10 @@ type Manifest struct {
 	// check to report a step that reads another. Nil, when action.yml does
 	// not say, leaves what a step reads of res unchecked.
 	Res []string `yaml:"res"`
+	// Choices are the values that the keys of with which take only some
+	// take, by the key, for probe check to report a value written that is
+	// not one of them. A key left out takes any value.
+	Choices map[string]Choice `yaml:"choices"`
 	// Cleanup says that the action is to be told once a run is over, for it
 	// to remove what its steps left behind in it.
 	Cleanup bool `yaml:"cleanup"`
@@ -148,6 +154,69 @@ type Runs struct {
 	Checksums map[string]string `yaml:"checksums"`
 }
 
+// Choice is the values a key of with takes. In action.yml it is a list of
+// the values, or a map of values and ignore_case for a key that takes them
+// in any case.
+type Choice struct {
+	Values     []string
+	IgnoreCase bool
+}
+
+// UnmarshalYAML reads a list as the values, and a map as values and
+// ignore_case.
+func (c *Choice) UnmarshalYAML(unmarshal func(any) error) error {
+	var raw any
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	switch v := raw.(type) {
+	case []any:
+		values, err := choiceValues(v)
+		if err != nil {
+			return err
+		}
+		*c = Choice{Values: values}
+		return nil
+	case map[string]any:
+		for key := range v {
+			if key != "values" && key != "ignore_case" {
+				return fmt.Errorf("unknown key %q: a choice takes values and ignore_case", key)
+			}
+		}
+		list, ok := v["values"].([]any)
+		if !ok {
+			return errors.New("values must be a list of strings")
+		}
+		values, err := choiceValues(list)
+		if err != nil {
+			return err
+		}
+		ignoreCase, ok := v["ignore_case"].(bool)
+		if _, given := v["ignore_case"]; given && !ok {
+			return errors.New("ignore_case must be true or false")
+		}
+		*c = Choice{Values: values, IgnoreCase: ignoreCase}
+		return nil
+	default:
+		return errors.New("a choice must be a list of strings, or a map of values and ignore_case")
+	}
+}
+
+// choiceValues returns the values of a choice, each of which must be a
+// string, as a value of with is compared as one: a number is written in
+// quotes.
+func choiceValues(list []any) ([]string, error) {
+	values := make([]string, len(list))
+	for i, v := range list {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("value %v must be a string; quote it", v)
+		}
+		values[i] = s
+	}
+	return values, nil
+}
+
 // ParseManifest parses the content of an action.yml.
 func ParseManifest(data []byte) (*Manifest, error) {
 	var m Manifest
@@ -163,6 +232,14 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	for platform, sum := range m.Runs.Checksums {
 		if !sha256Hex.MatchString(sum) {
 			return nil, fmt.Errorf("runs.checksums.%s must be a SHA-256 digest in lowercase hex", platform)
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(m.Choices)) {
+		if len(m.Choices[key].Values) == 0 {
+			return nil, fmt.Errorf("choices.%s must list a value", key)
+		}
+		if m.Params != nil && !slices.Contains(m.Params, key) {
+			return nil, fmt.Errorf("choices.%s is not a key params lists", key)
 		}
 	}
 	return &m, nil
