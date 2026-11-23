@@ -126,7 +126,7 @@ These actions are built in. Each has a page in the [reference](/reference/action
 | [`smtp`](/reference/actions/smtp) | Delivering mail |
 | [`imap`](/reference/actions/imap) | Reading a mailbox |
 | [`dns`](/reference/actions/dns) | The records a DNS server answers for a name |
-| [`file`](/reference/actions/file) | A log or another file on the machine running Probe |
+| [`file`](/reference/actions/file) | A log or another file on the machine running Probe, and files a workflow makes and removes |
 | [`ssh`](/reference/actions/ssh) | Commands on a remote host |
 | [`shell`](/reference/actions/shell) | Commands on the machine running Probe |
 | [`embedded`](/reference/actions/embedded) | Running another job file from a step |

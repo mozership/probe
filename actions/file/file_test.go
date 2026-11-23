@@ -56,9 +56,9 @@ func TestRead(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ret, err := Read(map[string]any{"path": tt.path})
+			ret, err := Run(map[string]any{"path": tt.path})
 			if err != nil {
-				t.Fatalf("Read() error = %v", err)
+				t.Fatalf("Run() error = %v", err)
 			}
 			if got := pick(ret["res"], "exists", "type", "content"); !reflect.DeepEqual(got, tt.wantRes) {
 				t.Errorf("res = %#v, want %#v", got, tt.wantRes)
@@ -90,13 +90,13 @@ func TestReadASocket(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = l.Close() })
 
-	ret, err := Read(map[string]any{"path": path})
+	ret, err := Run(map[string]any{"path": path})
 	if err != nil {
-		t.Fatalf("Read() error = %v", err)
+		t.Fatalf("Run() error = %v", err)
 	}
 	want := map[string]any{"exists": true, "type": "socket", "content": ""}
 	if got := pick(ret["res"], "exists", "type", "content"); !reflect.DeepEqual(got, want) || ret["status"] != 0 {
-		t.Errorf("Read() = %#v, want res %#v and status 0", ret, want)
+		t.Errorf("Run() = %#v, want res %#v and status 0", ret, want)
 	}
 }
 
@@ -110,9 +110,9 @@ func TestReadAPipe(t *testing.T) {
 		t.Fatalf("mkfifo: %v: %s", err, out)
 	}
 	// A pipe is not opened, which would wait for a writer.
-	ret, err := Read(map[string]any{"path": fifo})
+	ret, err := Run(map[string]any{"path": fifo})
 	if err != nil {
-		t.Fatalf("Read() error = %v", err)
+		t.Fatalf("Run() error = %v", err)
 	}
 	if res := ret["res"].(map[string]any); res["type"] != "pipe" || res["content"] != "" {
 		t.Errorf("res = %#v, want a pipe left unread", res)
@@ -129,7 +129,7 @@ func TestReadErrors(t *testing.T) {
 	if err := os.WriteFile(full, make([]byte, maxContent), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Read(map[string]any{"path": full}); err != nil {
+	if _, err := Run(map[string]any{"path": full}); err != nil {
 		t.Errorf("a file of the largest size should be read, got %v", err)
 	}
 
@@ -155,8 +155,8 @@ func TestReadErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Read(tt.with); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("Read() error = %v, want %q", err, tt.wantErr)
+			if _, err := Run(tt.with); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Run() error = %v, want %q", err, tt.wantErr)
 			}
 		})
 	}
@@ -260,7 +260,7 @@ func TestReadMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ret, err := Read(map[string]any{"path": path})
+	ret, err := Run(map[string]any{"path": path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestReadMetadata(t *testing.T) {
 		t.Error("res.group is empty, want the group of the file")
 	}
 
-	missing, err := Read(map[string]any{"path": filepath.Join(dir, "gone")})
+	missing, err := Run(map[string]any{"path": filepath.Join(dir, "gone")})
 	if err != nil {
 		t.Fatal(err)
 	}

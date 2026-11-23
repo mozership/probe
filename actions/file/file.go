@@ -1,6 +1,8 @@
 // Package file is the file action: it looks at what is at a path, and reads
 // it when it is a regular file, so that a step can check a log, a file
-// written by what is tested, or that a file has come or gone.
+// written by what is tested, or that a file has come or gone. It writes,
+// appends to or deletes a file as well, so that a workflow can make what it
+// tests with and remove it, which it refuses under a read-only guard.
 package file
 
 import (
@@ -11,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/textfile"
 )
 
@@ -34,26 +36,48 @@ const (
 )
 
 type Req struct {
-	Path string `map:"path"`
+	Path      string `map:"path"`
+	Op        string `map:"op"`
+	Content   string `map:"content"`
+	Mode      string `map:"mode"`
+	Recursive bool   `map:"recursive"`
 }
 
-// Read looks at what is at the path with gives, and returns the step's
-// result. Nothing at the path is a result for the step's test to check, with
+// Run does what with asks for at a path, under no guard. See RunGuarded.
+func Run(with map[string]any) (map[string]any, error) {
+	return RunGuarded(with, actionrpc.Guard{})
+}
+
+// RunGuarded does what op of with asks for at the path with gives, and
+// returns the step's result: what is at the path afterwards, as read gives
+// it. read, the default, only looks; write, append and delete change what
+// is at the path, and are refused under a read-only guard before they do.
+//
+// Nothing at the path is a result for the step's test to check, with
 // res.exists false and status 1, so that a step can wait with retry for a
 // file to come or to go. What is there is read only when it is a regular
 // file; a path that cannot be looked at or read is an error.
-func Read(with map[string]any) (map[string]any, error) {
+func RunGuarded(with map[string]any, guard actionrpc.Guard) (map[string]any, error) {
 	start := time.Now()
 
-	req := &Req{}
-	if err := mapping.MapToStructByTags(with, req); err != nil {
-		return map[string]any{}, fmt.Errorf("failed to parse request: %w", err)
+	req, err := parse(with)
+	if err != nil {
+		return map[string]any{}, err
 	}
-	if req.Path == "" {
-		return map[string]any{}, errors.New("path parameter is required")
+	if req.Op != opRead && guard.ReadOnly {
+		return map[string]any{}, actionrpc.Refuse("op %s changes what is at %s, and the run is read-only; only read is done", req.Op, req.Path)
 	}
 
+	if err := change(req); err != nil {
+		return map[string]any{}, err
+	}
 	res, err := look(req.Path)
+	// A file that write or append gave a mode the run cannot read, as
+	// "0200", is told as it is without its content: the step did what it
+	// was asked, and failing it would have a retry write it again.
+	if errors.Is(err, fs.ErrPermission) && req.Op != opRead {
+		res, _, err = stat(req.Path)
+	}
 	if err != nil {
 		return map[string]any{}, err
 	}
@@ -62,7 +86,7 @@ func Read(with map[string]any) (map[string]any, error) {
 		status = statusFound
 	}
 	return map[string]any{
-		"req":    map[string]any{"path": req.Path},
+		"req":    req.echo(),
 		"res":    res,
 		"rt":     time.Since(start).String(),
 		"status": status,
@@ -91,40 +115,48 @@ func look(path string) (map[string]any, error) {
 // lookAt looks at path once, as look does. The tests replace it.
 var lookAt = lookOnce
 
-// lookOnce looks at path once, as look does.
-func lookOnce(path string) (map[string]any, error) {
-	missing := map[string]any{
+// missing returns the res of nothing at a path.
+func missing() map[string]any {
+	return map[string]any{
 		"exists": false, "type": "", "content": "",
 		"mode": "", "owner": "", "group": "", "size": int64(0), "modified": "",
 	}
+}
 
-	// A symbolic link is followed, as test -e does, so that a link to
-	// nothing is nothing.
+// stat returns the res of what is at path without its content, and what
+// it is, nil when nothing is there. A symbolic link is followed, as test -e
+// does, so that a link to nothing is nothing.
+func stat(path string) (map[string]any, fs.FileInfo, error) {
 	info, err := os.Stat(path)
 	if isMissing(err) {
-		return missing, nil
+		return missing(), nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	owner, group := ownerOf(info)
-	res := map[string]any{
+	return map[string]any{
 		"exists": true, "type": typeOf(info.Mode()), "content": "",
 		"mode":     modeOf(info.Mode()),
 		"owner":    owner,
 		"group":    group,
 		"size":     info.Size(),
 		"modified": info.ModTime().Format(time.RFC3339Nano),
-	}
-	if !info.Mode().IsRegular() {
-		return res, nil
+	}, info, nil
+}
+
+// lookOnce looks at path once, as look does.
+func lookOnce(path string) (map[string]any, error) {
+	res, info, err := stat(path)
+	if err != nil || info == nil || !info.Mode().IsRegular() {
+		return res, err
 	}
 	content, err := textfile.ReadOpened(path, info, maxContent)
 	// A file removed after it was looked at is gone by the time it would
 	// be read, as if it had never been there.
 	if isMissing(err) {
-		return missing, nil
+		return missing(), nil
 	}
 	if err != nil {
 		return nil, err

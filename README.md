@@ -126,7 +126,7 @@ Built-in Actions
 | [`shell`](https://probe.linyo.ws/reference/actions/shell) | Commands on the machine running Probe |
 | [`grpc`](https://probe.linyo.ws/reference/actions/grpc) | gRPC and Connect calls, streaming included |
 | [`dns`](https://probe.linyo.ws/reference/actions/dns) | The records a DNS server answers for a name |
-| [`file`](https://probe.linyo.ws/reference/actions/file) | A log or another file on the machine running Probe |
+| [`file`](https://probe.linyo.ws/reference/actions/file) | A log or another file on the machine running Probe, and files a workflow makes and removes |
 | [`embedded`](https://probe.linyo.ws/reference/actions/embedded) | Running another job file from a step |
 | [`hello`](https://probe.linyo.ws/reference/actions/hello) | Printing a report line |
 

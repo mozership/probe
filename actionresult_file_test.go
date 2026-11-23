@@ -23,7 +23,7 @@ func TestFileContentIsNotReadAsJSON(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		ret, err := file.Read(map[string]any{"path": path})
+		ret, err := file.Run(map[string]any{"path": path})
 		if err != nil {
 			t.Fatal(err)
 		}
