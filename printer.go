@@ -197,8 +197,9 @@ func (p *Printer) logTestError(testExpr string, err error) {
 	}
 }
 
-// PrintTestResult prints test result in verbose mode
-func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
+// PrintTestResult prints, in verbose mode, what the test testExpr came to,
+// with env, the names it was evaluated with, when it is not nil.
+func (p *Printer) PrintTestResult(success bool, testExpr string, env map[string]any) {
 	var resultStr string
 	if success {
 		resultStr = colorSuccess().Sprintf("Success")
@@ -207,25 +208,11 @@ func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
 	}
 	var b debugBlock
 	b.line("Test: %s (input: %s)", resultStr, testExpr)
-	if env := testEnvOf(context); env != nil {
+	if env != nil {
 		b.line("Env:")
 		b.mapData(p.masker.Map(env))
 	}
 	p.logDebugBlock(&b)
-}
-
-// testEnvOf is what PrintTestResult shows of the context a test was
-// evaluated in: that of a step as StepContext.testEnv tells it, and a map as
-// it is.
-func testEnvOf(context any) map[string]any {
-	switch c := context.(type) {
-	case StepContext:
-		return c.testEnv()
-	case map[string]any:
-		return c
-	default:
-		return nil
-	}
 }
 
 // debugBlock collects the lines of a block of verbose output, such as the
