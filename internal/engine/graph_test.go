@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mozership/probe/dag"
+	"github.com/mozership/probe/internal/dag"
 )
 
 func TestWorkflow_Graph(t *testing.T) {

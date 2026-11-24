@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // TestWorkflow_StartWritesReports runs a workflow end to end and checks the

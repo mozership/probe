@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/mozership/probe/dag"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/dag"
+	"github.com/mozership/probe/internal/report"
 )
 
 type Probe struct {

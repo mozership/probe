@@ -10,7 +10,7 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // contractOf is the check of an action that checked the step against a

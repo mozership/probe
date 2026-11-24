@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/display"

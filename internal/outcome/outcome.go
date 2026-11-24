@@ -13,9 +13,9 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // Status is how a step or a job ended.

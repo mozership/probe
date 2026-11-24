@@ -10,7 +10,7 @@ import (
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
 	"github.com/mozership/probe/internal/oas"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // New counts the steps of r that called each method the .proto file at

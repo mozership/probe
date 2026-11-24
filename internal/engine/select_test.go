@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // selectionJobs is a workflow in which tests need setup, which needs db,

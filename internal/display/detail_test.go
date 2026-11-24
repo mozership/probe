@@ -7,8 +7,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 func TestExchangeDetail(t *testing.T) {
