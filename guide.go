@@ -80,8 +80,8 @@ func OfficialActions() []OfficialAction {
 	return guide.OfficialActions()
 }
 
-// DocReader reads the description of an external action, as
-// actionref.ReadDoc does.
+// DocReader reads the description of an external action, as probe guide
+// does for an action that is not one of Probe's.
 type DocReader = guide.DocReader
 
 // GuideAction returns the page probe guide prints for arg, a topic or an
