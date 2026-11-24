@@ -213,8 +213,8 @@ func templateErrorOutput(t *testing.T, w *Workflow, runner ActionRunner) (string
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	out := w.printer.outWriter.(*bytes.Buffer).String() +
-		w.printer.errWriter.(*bytes.Buffer).String() +
+	out := w.printer.Out().(*bytes.Buffer).String() +
+		w.printer.Err().(*bytes.Buffer).String() +
 		string(data)
 	return out, r
 }

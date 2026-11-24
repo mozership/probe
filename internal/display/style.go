@@ -1,4 +1,4 @@
-package probe
+package display
 
 import (
 	"github.com/fatih/color"
@@ -28,13 +28,13 @@ func colorInfo() *color.Color {
 	return style.Skipped.Color()
 }
 
-// colorDim returns a *color.Color for subdued text
-func colorDim() *color.Color {
+// ColorDim returns a *color.Color for subdued text
+func ColorDim() *color.Color {
 	return color.New(color.FgHiBlack)
 }
 
-// colorWarning returns a *color.Color for warnings (yellow)
-func colorWarning() *color.Color {
+// ColorWarning returns a *color.Color for warnings (yellow)
+func ColorWarning() *color.Color {
 	return style.Warning.Color()
 }
 
@@ -77,7 +77,7 @@ func statusIcon(status outcome.Status) (string, *color.Color) {
 	case outcome.StatusSkipped:
 		m = style.Skipped
 	default:
-		return "?", colorWarning()
+		return "?", ColorWarning()
 	}
 	return m.Icon() + " ", m.Color()
 }

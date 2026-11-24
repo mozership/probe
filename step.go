@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/fielderr"
@@ -780,7 +781,7 @@ func (st *stepRun) runTest(printer *Printer) bool {
 	passed, failure := evaluateTest(st.expr, st.Test, st.ctx, printer, isBool && !dump)
 	st.failure = failure
 	// A verbose run shows what a test came to when it came to a boolean.
-	if printer.verbose && (failure == nil || failure.Kind == outcome.FailureAssertion) {
+	if printer.Verbose() && (failure == nil || failure.Kind == outcome.FailureAssertion) {
 		printer.PrintTestResult(passed, st.Test, st.ctx.testEnv())
 	}
 	if passed {
@@ -805,13 +806,13 @@ func (st *stepRun) runTest(printer *Printer) bool {
 func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOperands bool) (passed bool, failure *outcome.Failure) {
 	out, err := ev.Eval(test, env)
 	if err != nil {
-		printer.logTestError(test, err)
+		printer.LogTestError(test, err)
 		return false, &outcome.Failure{Kind: outcome.FailureTestError, Message: err.Error()}
 	}
 
 	held, ok := out.(bool)
 	if !ok {
-		printer.LogDebug("%s", typeMismatchText(test, out))
+		printer.LogDebug("%s", display.TypeMismatchText(test, out))
 		failure := &outcome.Failure{
 			Kind:    outcome.FailureTestType,
 			Message: fmt.Sprintf("test evaluated to %v (%T), not a boolean", out, out),
@@ -958,7 +959,7 @@ func (st *stepRun) handleWait(jCtx *JobContext) {
 // waitMessage is what the spinner shows while the step waits for duration:
 // the wait and the name of the step, evaluated as prepare evaluated it.
 func (st *stepRun) waitMessage(duration time.Duration) string {
-	msg := colorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
+	msg := display.ColorWarning().Sprintf("(%s wait)", st.formatWaitTime(duration))
 	return fmt.Sprintf("%s %s", msg, st.expandedName)
 }
 
@@ -1138,7 +1139,7 @@ func (st *stepRun) handleSkip(name, reason string, notRun bool, jCtx *JobContext
 	// The step is logged and then recorded: a verbose run reports the
 	// steps it skipped as any other run does.
 	if jCtx.Verbose {
-		jCtx.Printer.LogDebug("%s", colorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.idx, name))
+		jCtx.Printer.LogDebug("%s", display.ColorWarning().Sprintf("--- Step %d: %s (SKIPPED)", st.idx, name))
 		jCtx.Printer.LogDebug("%s", reason)
 		jCtx.Printer.PrintSeparator()
 	}

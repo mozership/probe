@@ -165,7 +165,7 @@ func TestWorkflow_GitHubSummaryOutsideActions(t *testing.T) {
 	if _, err := os.Stat(md); err != nil {
 		t.Errorf("the markdown report should still be written: %v", err)
 	}
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	stderr := w.printer.Err().(*bytes.Buffer).String()
 	if !strings.Contains(stderr, "[WARN] GITHUB_STEP_SUMMARY is not set") {
 		t.Errorf("expected a warning, got:\n%s", stderr)
 	}
@@ -186,7 +186,7 @@ func TestWorkflow_GitHubSummaryFull(t *testing.T) {
 	if err := w.Start(Config{Reports: []report.Target{{Format: report.GitHubSummary, Path: path}}}); err != nil {
 		t.Fatalf("a full summary should not fail the run: %v", err)
 	}
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	stderr := w.printer.Err().(*bytes.Buffer).String()
 	if !strings.Contains(stderr, "[WARN] the job summary has no room left") {
 		t.Errorf("expected a warning, got:\n%s", stderr)
 	}
@@ -239,7 +239,7 @@ func TestWorkflow_RepeatReportsLatency(t *testing.T) {
 		t.Errorf("repeat = %+v, want 2 successes and 2 failures", st.Repeat)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	if !strings.Contains(out, "min 10.0ms, p50 20.0ms, p90 300ms, p95 300ms, p99 300ms, max 300ms") {
 		t.Errorf("terminal should show the latency, got:\n%s", out)
 	}
@@ -489,7 +489,7 @@ func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	lines := strings.Split(out, "\n")
 	told := false
 	for i, line := range lines[:len(lines)-1] {
@@ -503,7 +503,7 @@ func TestWorkflow_RepeatTellsWhyItsActionFailed(t *testing.T) {
 	if n := strings.Count(out, "connection refused"); n != 1 {
 		t.Errorf("terminal tells the error %d times, want once:\n%s", n, out)
 	}
-	if errOut := workflow.printer.errWriter.(*bytes.Buffer).String(); strings.Contains(errOut, "connection refused") {
+	if errOut := workflow.printer.Err().(*bytes.Buffer).String(); strings.Contains(errOut, "connection refused") {
 		t.Errorf("the error should not be told as it happens outside a verbose run, got:\n%s", errOut)
 	}
 }

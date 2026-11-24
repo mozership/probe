@@ -59,7 +59,7 @@ func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 		if err != nil {
 			return err
 		}
-		log := actionlog.New(c.nameOf(uses), os.Stderr, printer.Masker(), actionlog.Level(printer.verbose, trace), printer.verbose)
+		log := actionlog.New(c.nameOf(uses), os.Stderr, printer.Masker(), actionlog.Level(printer.Verbose(), trace), printer.Verbose())
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		return actionrpc.CleanupExecutable(ctx, exe.Path, exe.SHA256, actionrpc.CleanupCall{RunID: runID}, log)

@@ -18,6 +18,7 @@ import (
 	"github.com/mozership/probe/report"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/textwidth"
 )
 
@@ -667,14 +668,13 @@ func startCapturingWith(t *testing.T, w *Workflow, c Config) string {
 	t.Helper()
 
 	if w.printer == nil {
-		p := NewPrinter(false)
-		p.spinner = nil
-		p.errWriter = new(bytes.Buffer)
+		p := display.NewPrinterTo(false, os.Stdout, os.Stderr)
+		p.SetErr(new(bytes.Buffer))
 		w.printer = p
 	}
 
 	out := new(bytes.Buffer)
-	w.printer.outWriter = out
+	w.printer.SetOut(out)
 
 	if err := w.Start(c); err != nil {
 		t.Fatalf("Start() error: %v", err)
@@ -714,10 +714,9 @@ func TestWorkflow_Start_StreamLabelsJobsByName(t *testing.T) {
 	w := newOrderTestWorkflow(false)
 	w.Vars = map[string]any{"env": "staging"}
 	w.Jobs[1].Name = "Bravo {{ vars.env }}"
-	p := NewPrinter(false)
-	p.spinner = nil
+	p := display.NewPrinterTo(false, os.Stdout, os.Stderr)
 	errOut := new(bytes.Buffer)
-	p.errWriter = errOut
+	p.SetErr(errOut)
 	w.printer = p
 
 	startCapturing(t, w, OutputModeStream, newMockRunner())
@@ -747,10 +746,9 @@ func TestWorkflow_Start_StreamLabelMasksSecrets(t *testing.T) {
 	w.Vars = map[string]any{"tok": "{{TOKEN}}"}
 	w.Jobs = w.Jobs[:2]
 	w.Jobs[0].Name = "Deploy {{ vars.tok }}"
-	p := NewPrinter(false)
-	p.spinner = nil
+	p := display.NewPrinterTo(false, os.Stdout, os.Stderr)
 	errOut := new(bytes.Buffer)
-	p.errWriter = errOut
+	p.SetErr(errOut)
 	w.printer = p
 
 	startCapturing(t, w, OutputModeStream, newMockRunner())
@@ -959,7 +957,7 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 		}},
 		printer: newBufferPrinter(),
 	}
-	w.printer.verbose = true
+	w.printer.SetVerbose(true)
 
 	path := filepath.Join(t.TempDir(), "report.json")
 	if err := w.Start(Config{ActionRunner: runner, Verbose: true, Reports: []report.Target{{Format: report.JSON, Path: path}}}); err != nil {
@@ -977,8 +975,8 @@ func TestWorkflow_MasksSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := w.printer.outWriter.(*bytes.Buffer).String() +
-		w.printer.errWriter.(*bytes.Buffer).String() +
+	out := w.printer.Out().(*bytes.Buffer).String() +
+		w.printer.Err().(*bytes.Buffer).String() +
 		string(report)
 
 	for _, leak := range []string{"sekret-key", "runtime-tok"} {
@@ -1099,10 +1097,9 @@ func TestWorkflow_Start_GivenVars(t *testing.T) {
 		Vars: map[string]any{"url": "http://localhost"},
 		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{Name: "S", Uses: "hello", With: map[string]any{"url": "{{vars.url}}/{{vars.path}}"}}}}},
 	}
-	p := NewPrinter(false)
-	p.spinner = nil
-	p.outWriter = new(bytes.Buffer)
-	p.errWriter = new(bytes.Buffer)
+	p := display.NewPrinterTo(false, os.Stdout, os.Stderr)
+	p.SetOut(new(bytes.Buffer))
+	p.SetErr(new(bytes.Buffer))
 	w.printer = p
 	if err := w.Start(Config{ActionRunner: runner, Output: OutputModeSpinner, Vars: map[string]string{"url": "http://given", "path": "health"}}); err != nil {
 		t.Fatal(err)
@@ -1363,8 +1360,8 @@ func TestWorkflow_WarnsOfShortSecret(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	stdout := w.printer.outWriter.(*bytes.Buffer).String()
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	stdout := w.printer.Out().(*bytes.Buffer).String()
+	stderr := w.printer.Err().(*bytes.Buffer).String()
 	if !strings.Contains(stdout, "probe.StepContext") {
 		t.Errorf("a short secret should not be cut out of words:\n%s", stdout)
 	}

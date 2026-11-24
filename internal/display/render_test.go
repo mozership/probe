@@ -1,4 +1,4 @@
-package probe
+package display
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestReportRenderer_headerText(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -61,7 +61,7 @@ func TestReportRenderer_writeJobStatus(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name     string
@@ -119,7 +119,7 @@ func TestReportRenderer_writeJobStatus_ColorMapping(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = false
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name              string
@@ -144,7 +144,7 @@ func TestReportRenderer_writeJobStatus_ColorMapping(t *testing.T) {
 		{
 			name:              "warning uses yellow color",
 			status:            outcome.StatusWarning,
-			expectedColorCode: "\x1b[33m", // Yellow from colorWarning
+			expectedColorCode: "\x1b[33m", // Yellow from ColorWarning
 		},
 	}
 
@@ -174,7 +174,7 @@ func TestReportRenderer_writeJobStatus_SuccessNotBlue(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = false
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	var output strings.Builder
 	r.writeJobStatus(&output, "Success Job", outcome.StatusSuccess, 1.5)
@@ -202,7 +202,7 @@ func TestReportRenderer_writeJobStatus_SkippedFormatting(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	// Test skipped job formatting
 	var output strings.Builder
@@ -228,7 +228,7 @@ func TestReportRenderer_writeJobStatus_SkippedFormatting(t *testing.T) {
 }
 
 func TestReportRenderer_writeUnderJob(t *testing.T) {
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name  string
@@ -276,7 +276,7 @@ func TestReportRenderer_writeUnderJob(t *testing.T) {
 }
 
 func TestReportRenderer_writeFooter(t *testing.T) {
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name         string
@@ -326,7 +326,7 @@ func TestReportRenderer_writeFooter(t *testing.T) {
 }
 
 func TestReportRenderer_reportText(t *testing.T) {
-	r := newReportRenderer([]string{"job1", "job2"}, nil, nil)
+	r := NewRenderer([]string{"job1", "job2"}, nil, nil)
 
 	// Create test WorkflowBuffer
 	rs := outcome.New()
@@ -388,7 +388,7 @@ func TestReportRenderer_reportText(t *testing.T) {
 }
 
 func TestReportRenderer_reportText_EmptyBuffer(t *testing.T) {
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	rs := outcome.New()
 	result := r.reportText(rs)
@@ -400,7 +400,7 @@ func TestReportRenderer_reportText_EmptyBuffer(t *testing.T) {
 }
 
 func TestReportRenderer_reportText_WithRepeatStep(t *testing.T) {
-	r := newReportRenderer([]string{"job1"}, nil, nil)
+	r := NewRenderer([]string{"job1"}, nil, nil)
 
 	rs := outcome.New()
 
@@ -452,7 +452,7 @@ func TestReportRenderer_stepResultsText_ReportNewlineFormatting(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name         string
@@ -587,7 +587,7 @@ func TestReportRenderer_stepResultsText_Baseline(t *testing.T) {
 		}},
 	}}
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 	if got := r.stepResultsText("api", steps); strings.Contains(got, "baseline") {
 		t.Errorf("without a baseline nothing should be shown against one, got:\n%s", got)
 	}
@@ -611,7 +611,7 @@ func TestReportRenderer_stepResultsText_RepeatEchoOutputs(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	stepResult := outcome.Step{
 		Index:   1,
@@ -654,7 +654,7 @@ func TestReportRenderer_stepResultsText_RepeatEchoOutputs(t *testing.T) {
 // The report is shown as it is rendered, so it hides the secrets its masker
 // knows, as the printer does in what it writes.
 func TestReportRenderer_MasksTheReport(t *testing.T) {
-	r := newReportRenderer([]string{"job"}, nil, mask.New([]string{"S"}, map[string]string{"S": "hunter2"}))
+	r := NewRenderer([]string{"job"}, nil, mask.New([]string{"S"}, map[string]string{"S": "hunter2"}))
 	rs := outcome.New()
 	rs.Jobs["job"] = &outcome.Job{
 		JobID:   "job",
@@ -664,7 +664,7 @@ func TestReportRenderer_MasksTheReport(t *testing.T) {
 		},
 	}
 
-	for name, got := range map[string]string{"reportText": r.reportText(rs), "stepsText": r.stepsText(rs)} {
+	for name, got := range map[string]string{"reportText": r.reportText(rs), "stepsText": r.StepsText(rs)} {
 		if strings.Contains(got, "hunter2") {
 			t.Errorf("%s() shows the secret:\n%s", name, got)
 		}
@@ -679,7 +679,7 @@ func TestReportRenderer_writeStepRepeatResult_Skipped(t *testing.T) {
 	noColor := color.NoColor
 	color.NoColor = true
 	defer func() { color.NoColor = noColor }()
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name    string
@@ -708,7 +708,7 @@ func TestReportRenderer_writeStepRepeatResult_Skipped(t *testing.T) {
 func TestReportRenderer_writeStepRepeatResult_Icons(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name    string
@@ -736,7 +736,7 @@ func TestReportRenderer_writeStepRepeatResult_Icons(t *testing.T) {
 func TestReportRenderer_repeatTestText(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name string
@@ -763,7 +763,7 @@ func TestReportRenderer_repeatTestText(t *testing.T) {
 func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 	started := time.Unix(1700000000, 0)
 
 	tests := []struct {
@@ -799,14 +799,14 @@ func TestReportRenderer_stepResultsText_StepLine(t *testing.T) {
 func TestReportRenderer_stepResultsText_RetryColor(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = false
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
-	if colorDim().Sprint("x") == colorWarning().Sprint("x") {
+	if ColorDim().Sprint("x") == ColorWarning().Sprint("x") {
 		t.Fatal("the dim and the warning colors should differ")
 	}
 	for attempt, want := range map[int]string{
-		1: colorDim().Sprintf(" %s %d/%d", IconRetry, 1, 3),
-		2: colorWarning().Sprintf(" %s %d/%d", IconRetry, 2, 3),
+		1: ColorDim().Sprintf(" %s %d/%d", IconRetry, 1, 3),
+		2: ColorWarning().Sprintf(" %s %d/%d", IconRetry, 2, 3),
 	} {
 		got := r.stepResultsText("", []outcome.Step{{Index: 1, Name: "get", Status: outcome.StatusSuccess, RetryAttempt: attempt, RetryMax: 3}})
 		if !strings.Contains(got, want) {
@@ -820,7 +820,7 @@ func TestReportRenderer_stepResultsText_RetryColor(t *testing.T) {
 func TestReportRenderer_stepResultsText_RepeatEchoSkipsBlank(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	got := r.stepResultsText("", []outcome.Step{{
 		Index: 1, Name: "echo", Status: outcome.StatusWarning,
@@ -835,7 +835,7 @@ func TestReportRenderer_stepResultsText_RepeatEchoSkipsBlank(t *testing.T) {
 // tell: the error of its action, a template or the guard. A failed test is
 // told by the count.
 func TestReportRenderer_writeStepRepeatError(t *testing.T) {
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 
 	tests := []struct {
 		name    string
@@ -862,11 +862,11 @@ func TestReportRenderer_writeStepRepeatError(t *testing.T) {
 
 // There is nothing to render of no result.
 func TestReportRenderer_NilResult(t *testing.T) {
-	r := newReportRenderer([]string{"job"}, nil, nil)
+	r := NewRenderer([]string{"job"}, nil, nil)
 	if got := r.reportText(nil); got != "" {
 		t.Errorf("reportText(nil) = %q, want nothing", got)
 	}
-	if got := r.stepsText(nil); got != "" {
+	if got := r.StepsText(nil); got != "" {
 		t.Errorf("stepsText(nil) = %q, want nothing", got)
 	}
 }
@@ -924,8 +924,14 @@ func TestWriteEcho(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// An echo whose template fails comes to the error, as the
+			// step tells it.
+			text := tt.content
+			if tt.err != nil {
+				text = fmt.Sprintf("error: %v", tt.err)
+			}
 			var b strings.Builder
-			writeEcho(&b, echoText(tt.content, tt.err))
+			writeEcho(&b, text)
 			if got := b.String(); got != tt.expected {
 				t.Errorf("writeEcho() = %q, want %q", got, tt.expected)
 			}
@@ -936,7 +942,7 @@ func TestWriteEcho(t *testing.T) {
 // failureTextOf returns why f failed, as the report shows it under its step,
 // for a renderer without a masker.
 func failureTextOf(f *outcome.Failure, test string) string {
-	return newReportRenderer(nil, nil, nil).failureText(f, test)
+	return NewRenderer(nil, nil, nil).FailureText(f, test)
 }
 
 // Why a step failed is shown under it by the kind of its failure, from
@@ -985,14 +991,14 @@ func TestReportRenderer_failureText_MasksTheClause(t *testing.T) {
 
 	const secret = "s3cr3t-value-of-the-run"
 	m := mask.New([]string{"S"}, map[string]string{"S": secret})
-	r := newReportRenderer(nil, nil, m)
+	r := NewRenderer(nil, nil, m)
 	value := strings.Repeat("x", 190) + secret
 	f := &outcome.Failure{Kind: outcome.FailureAssertion, Clause: &expr.Clause{
 		Expr:     `res.body == ""`,
 		Operands: []expr.Operand{{Expr: "res.body", Value: value}},
 	}}
 
-	got := r.failureText(f, `res.body == ""`)
+	got := r.FailureText(f, `res.body == ""`)
 	if strings.Contains(got, secret[:6]) || !strings.Contains(got, "<") {
 		t.Errorf("failureText() = %q, want the secret hidden before the value is cut", got)
 	}
@@ -1008,7 +1014,7 @@ func TestReportRenderer_progressText(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	r := newReportRenderer(nil, nil, nil)
+	r := NewRenderer(nil, nil, nil)
 	at := time.Date(2026, 11, 16, 9, 5, 3, 7_000_000, time.UTC)
 	tests := []struct {
 		name string

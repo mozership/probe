@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
@@ -83,8 +84,8 @@ func TestEvaluateTest(t *testing.T) {
 		wantDetail   string
 	}{
 		{name: "a test that holds", test: "res.code == 500", wantPassed: true},
-		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: outcome.FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr.Error())},
-		{name: "a test that is not a boolean", test: "res.code", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: typeMismatchDetail("res.code", 500)},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: outcome.FailureTestError, wantMessage: evalErr.Error(), wantDetail: display.TestErrorDetail(evalErr.Error())},
+		{name: "a test that is not a boolean", test: "res.code", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: display.TypeMismatchDetail("res.code", 500)},
 		{name: "a test that is false", test: "res.code == 200", wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: res.code == 200 (res.code = 500)", wantDetail: "       failed: res.code == 200\n         res.code = 500\n"},
 		{name: "a test that is false, its operands hidden", test: "res.code == 200", hideOperands: true, wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: res.code == 200", wantDetail: "       failed: res.code == 200\n"},
 	}

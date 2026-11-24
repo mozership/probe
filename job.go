@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
@@ -326,10 +327,10 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 // handleSkip handles the skipped job logic
 func (j *Job) handleSkip(ctx JobContext) {
 	if ctx.Verbose {
-		var b debugBlock
-		b.line("Job '%s' (SKIPPED)", ctx.jobName)
-		b.line("Skip condition: %s", j.SkipIf)
-		ctx.Printer.logDebugBlock(&b)
+		var b display.DebugBlock
+		b.Line("Job '%s' (SKIPPED)", ctx.jobName)
+		b.Line("Skip condition: %s", j.SkipIf)
+		ctx.Printer.LogDebugBlock(&b)
 		ctx.Printer.PrintSeparator()
 	}
 
@@ -492,7 +493,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config: Config{
-				Verbose:      printer.verbose,
+				Verbose:      printer.Verbose(),
 				Guard:        cfg.guard,
 				NeedsNoCheck: cfg.needsNoCheck,
 				ActionRunner: cfg.runner,
@@ -551,7 +552,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	run.Duration = time.Since(start)
 	jr.EndTime = jr.StartTime.Add(run.Duration)
 	run.Outputs = ctx.Outputs.GetAll()
-	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).stepsText(result)
+	run.Report = display.NewRenderer([]string{jobID}, nil, ctx.Printer.Masker()).StepsText(result)
 
 	return run
 }
