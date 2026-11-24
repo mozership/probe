@@ -211,8 +211,14 @@ func TestStep_createStepResult_ChangesNothing(t *testing.T) {
 	if jCtx.Failed {
 		t.Error("Failed = true, want the job left as it was")
 	}
-	if jCtx.Result.HasFailure(outcome.FailureAssertion) {
-		t.Error("an assertion failure is recorded, want none")
+	for _, kind := range []string{
+		outcome.FailureAssertion, outcome.FailureTestError, outcome.FailureTestType,
+		outcome.FailureAction, outcome.FailureTemplate, outcome.FailureContractResponse,
+		outcome.FailureContractRequest, outcome.FailureRefused, failureConfig,
+	} {
+		if jCtx.Result.HasFailure(kind) {
+			t.Errorf("a failure of kind %q is recorded, want none", kind)
+		}
 	}
 
 	passed := st.createStepResult("Check", jCtx, outcome.StatusSuccess)

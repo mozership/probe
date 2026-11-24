@@ -285,9 +285,9 @@ func TestClauseSummary(t *testing.T) {
 		{Expr: "vars.name", Value: "bob"},
 	}})
 	if want := `res.body.name == vars.name (res.body.name = "alice", vars.name = "bob")`; got != want {
-		t.Errorf("clauseSummary() = %q, want %q", got, want)
+		t.Errorf("outcome.ClauseSummary() = %q, want %q", got, want)
 	}
 	if got := outcome.ClauseSummary(expr.Clause{Expr: "1 == 2"}); got != "1 == 2" {
-		t.Errorf("clauseSummary() = %q, want the condition alone", got)
+		t.Errorf("outcome.ClauseSummary() = %q, want the condition alone", got)
 	}
 }

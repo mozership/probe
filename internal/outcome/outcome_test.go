@@ -9,7 +9,7 @@ import (
 )
 
 // Test Status constants have expected values
-func TestStatusTypeConstants(t *testing.T) {
+func TestStatusConstants(t *testing.T) {
 	// Test that status constants are assigned in expected order
 	if StatusSuccess != 0 {
 		t.Errorf("StatusSuccess should be 0, got %d", StatusSuccess)
@@ -29,13 +29,13 @@ func TestStatusTypeConstants(t *testing.T) {
 	for i, status1 := range statuses {
 		for j, status2 := range statuses {
 			if i != j && status1 == status2 {
-				t.Errorf("StatusType constants should be unique, but %d and %d are both %d", i, j, status1)
+				t.Errorf("Status constants should be unique, but %d and %d are both %d", i, j, status1)
 			}
 		}
 	}
 }
 
-func TestResult_AddStepResult(t *testing.T) {
+func TestRun_AddStepResult(t *testing.T) {
 	wb := New()
 	jobID := "test-job"
 
@@ -92,7 +92,7 @@ func TestResult_AddStepResult(t *testing.T) {
 	}
 }
 
-func TestResult_AddStepResult_NonExistentJob(t *testing.T) {
+func TestRun_AddStepResult_NonExistentJob(t *testing.T) {
 	wb := New()
 
 	stepResult := Step{
@@ -110,7 +110,7 @@ func TestResult_AddStepResult_NonExistentJob(t *testing.T) {
 	}
 }
 
-func TestResult_AddStepResult_Concurrent(t *testing.T) {
+func TestRun_AddStepResult_Concurrent(t *testing.T) {
 	wb := New()
 	jobID := "test-job"
 

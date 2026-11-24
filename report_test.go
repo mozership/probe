@@ -73,7 +73,7 @@ func newReportResult() (*outcome.Run, []string) {
 func TestBuildReport(t *testing.T) {
 	rs, order := newReportResult()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
-	r := BuildReport("Demo", "A demo run", rs, order, start, start.Add(3*time.Second))
+	r := buildReport("Demo", "A demo run", rs, order, start, start.Add(3*time.Second), nil)
 
 	if r.Status != report.Failed {
 		t.Errorf("Status = %q, want %q", r.Status, report.Failed)
@@ -265,7 +265,7 @@ func TestBuildReport_StepCarriesContract(t *testing.T) {
 }
 
 func TestBuildReport_NilResult(t *testing.T) {
-	r := BuildReport("Empty", "", nil, []string{"a"}, time.Time{}, time.Time{})
+	r := buildReport("Empty", "", nil, []string{"a"}, time.Time{}, time.Time{}, nil)
 	if r.Status != report.Passed || len(r.Jobs) != 0 {
 		t.Errorf("got status %q with %d jobs, want an empty passing report", r.Status, len(r.Jobs))
 	}

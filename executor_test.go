@@ -599,7 +599,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 		t.Fatalf("statuses = %+v, want skipped then success", steps)
 	}
 
-	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
+	r := buildReport("w", "", result, []string{job.ID}, time.Now(), time.Now(), nil)
 	got := r.Jobs[0].Steps
 	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
 		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)

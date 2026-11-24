@@ -11,16 +11,12 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-// BuildReport assembles a Report from the results of a run. Jobs are listed in
-// the given order, which is the order they are declared in the workflow.
-func BuildReport(name, description string, rs *outcome.Run, order []string, startedAt, finishedAt time.Time) *report.Report {
-	return buildReport(name, description, rs, order, startedAt, finishedAt, nil)
-}
-
-// buildReport is BuildReport with the message of each failure told as
-// outcome.Failure.ReportMessage tells it with m, which hides the secrets m knows
-// in what a false condition compared before the values are cut; m may be
-// nil. The report is still to be masked with m as a whole.
+// buildReport assembles a Report from the results of a run. Jobs are listed
+// in the given order, which is the order they are declared in the workflow.
+// The message of each failure is told as outcome.Failure.ReportMessage
+// tells it with m, which hides the secrets m knows in what a false condition
+// compared before the values are cut; m may be nil. The report is still to
+// be masked with m as a whole.
 func buildReport(name, description string, rs *outcome.Run, order []string, startedAt, finishedAt time.Time, m *mask.Masker) *report.Report {
 	r := report.New(name, description, startedAt, finishedAt)
 	if rs == nil {

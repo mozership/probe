@@ -70,9 +70,9 @@ type RepeatCounter struct {
 	// Contract is what the first iteration's response was matched to in
 	// its contract.
 	Contract *report.Contract
-	// notes are those of the first run that failed, or of the last run
-	// while none has, and notesRun is that run, counted from 1 without the
-	// warmup runs. notesWarned is whether a run's notes were warned of, so
+	// Notes are those of the first run that failed, or of the last run
+	// while none has, and NotesRun is that run, counted from 1 without the
+	// warmup runs. NotesWarned is whether a run's notes were warned of, so
 	// that a repeated job warns of them once.
 	Notes       []notes.Note
 	NotesRun    int
@@ -95,7 +95,7 @@ func (c *RepeatCounter) KeepNotes(n []notes.Note, run int, failed bool) {
 type Step struct {
 	Index int
 	// ID is the id of the step, or step_ and where it is written in the job
-	// when it has none; see Step.repeatID.
+	// when it has none, as the step that ran tells it.
 	ID        string
 	Name      string
 	Status    Status
@@ -121,7 +121,7 @@ type Step struct {
 	// Contract is what the response was matched to in the contract the
 	// action checked it against; nil when it checked none.
 	Contract *report.Contract
-	// notes are what the action left for people in res.notes; for a
+	// Notes are what the action left for people in res.notes; for a
 	// repeated step, those of its counter.
 	Notes []notes.Note
 }
@@ -151,24 +151,24 @@ type Failure struct {
 	Response map[string]any
 	// Violations are what broke the contract, when Kind is a contract's.
 	Violations []report.Violation
-	// refused is what the guard of the run refused, when Kind is
+	// Refused is what the guard of the run refused, when Kind is
 	// FailureRefused, so that why is read from it rather than the message.
 	Refused *actionrpc.Refused
-	// clause is the condition of the test that is false, when Kind is
+	// Clause is the condition of the test that is false, when Kind is
 	// FailureAssertion and it could be told, as it is: the report hides the
-	// secrets in it as it shows it, as it does in Request and Response; got
+	// secrets in it as it shows it, as it does in Request and Response; Got
 	// is what the test came to, when Kind is FailureTestType. The report
 	// shows them under the step.
 	Clause *expr.Clause
 	Got    any
-	// head is what Message has before the condition, when there is one, so
+	// Head is what Message has before the condition, when there is one, so
 	// that the report files can tell the condition anew with the secrets
 	// known by then; see ReportMessage.
 	Head string
 }
 
 // ReportMessage is the message of f as the report files have it. With a
-// condition of a test that is false, it is head and the condition told anew
+// condition of a test that is false, it is Head and the condition told anew
 // from the condition as it is, masked by m before its values are cut: a
 // secret a later step taught m would otherwise be left in the message as
 // the part of it the cut kept, which no masker finds. Without a condition,
@@ -248,7 +248,7 @@ func (rs *Run) SetReporter(r Reporter) {
 
 // NotifyStepStart tells the reporter that a step of the job of jobID
 // began. The buffered reporter shows it by the spinner, the stream reporter
-// by a line of progress. A nil Result, which some contexts run without,
+// by a line of progress. A nil Run, which some contexts run without,
 // tells nothing.
 func (rs *Run) NotifyStepStart(jobID, stepName string) {
 	if rs == nil || rs.reporter == nil {
@@ -293,7 +293,7 @@ func (rs *Run) AddStepResult(jobID string, sr Step) {
 }
 
 // Reporter decides when the parts of a workflow report reach the user, and
-// on which of stdout and stderr; a reportRenderer renders them.
+// on which of stdout and stderr.
 // Jobs run concurrently, so implementations are called from several
 // goroutines and must serialize their own writes.
 type Reporter interface {

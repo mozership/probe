@@ -9,7 +9,7 @@ import (
 	"github.com/mozership/probe/internal/outcome"
 )
 
-func TestResult_exitCode(t *testing.T) {
+func TestRunExitCode(t *testing.T) {
 	tests := []struct {
 		name   string
 		failed bool
@@ -39,21 +39,21 @@ func TestResult_exitCode(t *testing.T) {
 				rs.RecordFailure(k)
 			}
 			if got := runExitCode(rs, tt.failed); got != tt.want {
-				t.Errorf("exitCode(%v) = %d, want %d", tt.failed, got, tt.want)
+				t.Errorf("runExitCode(%v) = %d, want %d", tt.failed, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestResult_recordFailure(t *testing.T) {
-	// A nil Result belongs to contexts built without one; recording must not panic.
+func TestRun_RecordFailure(t *testing.T) {
+	// A nil Run belongs to contexts built without one; recording must not panic.
 	var nilResult *outcome.Run
 	nilResult.RecordFailure(outcome.FailureAction)
 
 	rs := outcome.New()
 	rs.RecordFailure("")
 	if got := runExitCode(rs, true); got != ExitTestFailed {
-		t.Errorf("an empty kind should be ignored, exitCode = %d", got)
+		t.Errorf("an empty kind should be ignored, runExitCode = %d", got)
 	}
 
 	// Jobs record concurrently; run under -race.
@@ -71,7 +71,7 @@ func TestResult_recordFailure(t *testing.T) {
 	}
 	wg.Wait()
 	if got := runExitCode(rs, true); got != ExitActionError {
-		t.Errorf("exitCode = %d, want %d", got, ExitActionError)
+		t.Errorf("runExitCode = %d, want %d", got, ExitActionError)
 	}
 }
 
