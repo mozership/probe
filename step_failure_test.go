@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/report"
 )
 
 // runStepForTemplateError runs st in a job context of its own and returns
 // how many times the action ran, the step's result and whether the job failed.
-func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int, StepResult, bool) {
+func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int, outcome.Step, bool) {
 	t.Helper()
 
 	calls := 0
@@ -26,8 +27,8 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 	}
 	st := newStepRun(step, nil)
 
-	rs := NewResult()
-	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
+	rs := outcome.New()
+	rs.Jobs["j"] = &outcome.Job{JobName: "j", JobID: "j"}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Config:  Config{ActionRunner: runner},
@@ -126,11 +127,11 @@ func TestStep_TemplateErrorFailsStep(t *testing.T) {
 			if !failed {
 				t.Error("the job is not marked failed")
 			}
-			if result.Status != StatusError {
-				t.Errorf("status = %v, want %v", result.Status, StatusError)
+			if result.Status != outcome.StatusError {
+				t.Errorf("status = %v, want %v", result.Status, outcome.StatusError)
 			}
-			if result.Failure == nil || result.Failure.Kind != FailureTemplate {
-				t.Fatalf("failure = %+v, want kind %q", result.Failure, FailureTemplate)
+			if result.Failure == nil || result.Failure.Kind != outcome.FailureTemplate {
+				t.Fatalf("failure = %+v, want kind %q", result.Failure, outcome.FailureTemplate)
 			}
 			for _, m := range tt.message {
 				if !strings.Contains(result.Failure.Message, m) {
@@ -152,8 +153,8 @@ func TestStep_TemplateErrorInSkippedStep(t *testing.T) {
 	if calls != 0 || failed {
 		t.Errorf("calls = %d, failed = %v, want a skipped step", calls, failed)
 	}
-	if result.Status != StatusSkipped {
-		t.Errorf("status = %v, want %v", result.Status, StatusSkipped)
+	if result.Status != outcome.StatusSkipped {
+		t.Errorf("status = %v, want %v", result.Status, outcome.StatusSkipped)
 	}
 }
 
@@ -355,8 +356,8 @@ func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
 		result:    map[string]any{"req": map[string]any{}, "res": map[string]any{"code": 200}, "rt": "10ms"},
 		callCount: &calls,
 	}
-	rs := NewResult()
-	rs.Jobs["j"] = &JobResult{JobName: "j", JobID: "j"}
+	rs := outcome.New()
+	rs.Jobs["j"] = &outcome.Job{JobName: "j", JobID: "j"}
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config:  Config{ActionRunner: runner},
@@ -406,7 +407,7 @@ func TestWorkflow_RepeatKeepsFailureKind(t *testing.T) {
 			}
 			_, r := templateErrorOutput(t, w, runner)
 
-			want := []string{FailureTemplate, FailureAction, FailureAssertion}
+			want := []string{outcome.FailureTemplate, outcome.FailureAction, outcome.FailureAssertion}
 			for i, st := range r.Jobs[0].Steps {
 				if st.Failure == nil {
 					t.Errorf("step %d: no failure recorded", i)

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/internal/outcome"
 )
 
 func TestResult_exitCode(t *testing.T) {
@@ -15,28 +17,28 @@ func TestResult_exitCode(t *testing.T) {
 		want   int
 	}{
 		{"success", false, nil, ExitOK},
-		{"success ignores stray kinds", false, []string{FailureAction}, ExitOK},
+		{"success ignores stray kinds", false, []string{outcome.FailureAction}, ExitOK},
 		{"failed with nothing recorded", true, nil, ExitTestFailed},
-		{"assertion", true, []string{FailureAssertion}, ExitTestFailed},
-		{"test error", true, []string{FailureTestError}, ExitTestFailed},
-		{"test type", true, []string{FailureTestType}, ExitTestFailed},
-		{"contract response", true, []string{FailureContractResponse}, ExitTestFailed},
-		{"contract request", true, []string{FailureContractRequest}, ExitTestFailed},
-		{"action", true, []string{FailureAction}, ExitActionError},
-		{"action wins over assertion", true, []string{FailureAssertion, FailureAction}, ExitActionError},
+		{"assertion", true, []string{outcome.FailureAssertion}, ExitTestFailed},
+		{"test error", true, []string{outcome.FailureTestError}, ExitTestFailed},
+		{"test type", true, []string{outcome.FailureTestType}, ExitTestFailed},
+		{"contract response", true, []string{outcome.FailureContractResponse}, ExitTestFailed},
+		{"contract request", true, []string{outcome.FailureContractRequest}, ExitTestFailed},
+		{"action", true, []string{outcome.FailureAction}, ExitActionError},
+		{"action wins over assertion", true, []string{outcome.FailureAssertion, outcome.FailureAction}, ExitActionError},
 		{"config", true, []string{failureConfig}, ExitConfigError},
-		{"config wins over everything", true, []string{FailureAction, failureConfig, FailureAssertion}, ExitConfigError},
-		{"refused", true, []string{FailureRefused}, ExitConfigError},
-		{"refused wins over an action error", true, []string{FailureAction, FailureRefused}, ExitConfigError},
+		{"config wins over everything", true, []string{outcome.FailureAction, failureConfig, outcome.FailureAssertion}, ExitConfigError},
+		{"refused", true, []string{outcome.FailureRefused}, ExitConfigError},
+		{"refused wins over an action error", true, []string{outcome.FailureAction, outcome.FailureRefused}, ExitConfigError},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rs := NewResult()
+			rs := outcome.New()
 			for _, k := range tt.kinds {
-				rs.recordFailure(k)
+				rs.RecordFailure(k)
 			}
-			if got := rs.exitCode(tt.failed); got != tt.want {
+			if got := runExitCode(rs, tt.failed); got != tt.want {
 				t.Errorf("exitCode(%v) = %d, want %d", tt.failed, got, tt.want)
 			}
 		})
@@ -45,12 +47,12 @@ func TestResult_exitCode(t *testing.T) {
 
 func TestResult_recordFailure(t *testing.T) {
 	// A nil Result belongs to contexts built without one; recording must not panic.
-	var nilResult *Result
-	nilResult.recordFailure(FailureAction)
+	var nilResult *outcome.Run
+	nilResult.RecordFailure(outcome.FailureAction)
 
-	rs := NewResult()
-	rs.recordFailure("")
-	if got := rs.exitCode(true); got != ExitTestFailed {
+	rs := outcome.New()
+	rs.RecordFailure("")
+	if got := runExitCode(rs, true); got != ExitTestFailed {
 		t.Errorf("an empty kind should be ignored, exitCode = %d", got)
 	}
 
@@ -61,14 +63,14 @@ func TestResult_recordFailure(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				rs.recordFailure(FailureAssertion)
+				rs.RecordFailure(outcome.FailureAssertion)
 			} else {
-				rs.recordFailure(FailureAction)
+				rs.RecordFailure(outcome.FailureAction)
 			}
 		}(i)
 	}
 	wg.Wait()
-	if got := rs.exitCode(true); got != ExitActionError {
+	if got := runExitCode(rs, true); got != ExitActionError {
 		t.Errorf("exitCode = %d, want %d", got, ExitActionError)
 	}
 }

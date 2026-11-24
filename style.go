@@ -3,6 +3,7 @@ package probe
 import (
 	"github.com/fatih/color"
 
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/style"
 )
 
@@ -64,16 +65,16 @@ const (
 // progress of a run show it, and its color. The icon ends with the space
 // that sets it apart in the report; the progress trims it. A status the
 // report does not know is shown by a question mark.
-func statusIcon(status StatusType) (string, *color.Color) {
+func statusIcon(status outcome.Status) (string, *color.Color) {
 	var m style.Mark
 	switch status {
-	case StatusSuccess:
+	case outcome.StatusSuccess:
 		m = style.Success
-	case StatusError:
+	case outcome.StatusError:
 		m = style.Failure
-	case StatusWarning:
+	case outcome.StatusWarning:
 		m = style.NoTest
-	case StatusSkipped:
+	case outcome.StatusSkipped:
 		m = style.Skipped
 	default:
 		return "?", colorWarning()

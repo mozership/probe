@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -82,10 +83,10 @@ func TestEvaluateTest(t *testing.T) {
 		wantDetail   string
 	}{
 		{name: "a test that holds", test: "res.code == 500", wantPassed: true},
-		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr.Error())},
-		{name: "a test that is not a boolean", test: "res.code", wantKind: FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: typeMismatchDetail("res.code", 500)},
-		{name: "a test that is false", test: "res.code == 200", wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200 (res.code = 500)", wantDetail: "       failed: res.code == 200\n         res.code = 500\n"},
-		{name: "a test that is false, its operands hidden", test: "res.code == 200", hideOperands: true, wantKind: FailureAssertion, wantMessage: "test evaluated to false: res.code == 200", wantDetail: "       failed: res.code == 200\n"},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: outcome.FailureTestError, wantMessage: evalErr.Error(), wantDetail: testErrorDetail(evalErr.Error())},
+		{name: "a test that is not a boolean", test: "res.code", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 500 (int), not a boolean", wantDetail: typeMismatchDetail("res.code", 500)},
+		{name: "a test that is false", test: "res.code == 200", wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: res.code == 200 (res.code = 500)", wantDetail: "       failed: res.code == 200\n         res.code = 500\n"},
+		{name: "a test that is false, its operands hidden", test: "res.code == 200", hideOperands: true, wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: res.code == 200", wantDetail: "       failed: res.code == 200\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,8 +124,8 @@ func TestStep_runTest_ErrorAndType(t *testing.T) {
 		test     string
 		wantKind string
 	}{
-		{name: "an error", test: "nosuch(1)", wantKind: FailureTestError},
-		{name: "not a boolean", test: "res.code", wantKind: FailureTestType},
+		{name: "an error", test: "nosuch(1)", wantKind: outcome.FailureTestError},
+		{name: "not a boolean", test: "res.code", wantKind: outcome.FailureTestType},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,9 +155,9 @@ func TestStep_runTestRecordsFailure(t *testing.T) {
 		wantMsg  string
 	}{
 		{"passes", "res.code == 200", "", ""},
-		{"false", "res.code == 201", FailureAssertion, "test evaluated to false: res.code == 201 (res.code = 200)"},
-		{"not a boolean", "res.code", FailureTestType, "test evaluated to 200 (int), not a boolean"},
-		{"cannot evaluate", "res.code ==", FailureTestError, ""},
+		{"false", "res.code == 201", outcome.FailureAssertion, "test evaluated to false: res.code == 201 (res.code = 200)"},
+		{"not a boolean", "res.code", outcome.FailureTestType, "test evaluated to 200 (int), not a boolean"},
+		{"cannot evaluate", "res.code ==", outcome.FailureTestError, ""},
 	}
 
 	for _, tt := range tests {
@@ -171,7 +172,7 @@ func TestStep_runTestRecordsFailure(t *testing.T) {
 					Res: map[string]any{"code": 200},
 				},
 				// A failure left over from an earlier evaluation must not leak.
-				failure: &StepFailure{Kind: "stale"},
+				failure: &outcome.Failure{Kind: "stale"},
 			}
 
 			st.runTest(newBufferPrinter())

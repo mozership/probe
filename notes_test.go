@@ -12,6 +12,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/notes"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -62,17 +63,17 @@ func TestNoteBook(t *testing.T) {
 	}
 
 	// Job b ends first; its notes still come after those of a.
-	book.record("b", "Job B", StepResult{Index: 0, Name: "b0", Status: StatusError,
-		notes: []notes.Note{{Level: notes.Warning, Body: "paid with 4111111111111111"}}})
-	book.record("a", "Job A", StepResult{Index: 1, Name: "a1", Status: StatusSuccess, HasTest: true,
-		notes: []notes.Note{{Level: notes.Critical, Title: "t1", Body: "b1"}, {Level: notes.Info, Body: "b2"}}})
+	book.record("b", "Job B", outcome.Step{Index: 0, Name: "b0", Status: outcome.StatusError,
+		Notes: []notes.Note{{Level: notes.Warning, Body: "paid with 4111111111111111"}}})
+	book.record("a", "Job A", outcome.Step{Index: 1, Name: "a1", Status: outcome.StatusSuccess, HasTest: true,
+		Notes: []notes.Note{{Level: notes.Critical, Title: "t1", Body: "b1"}, {Level: notes.Info, Body: "b2"}}})
 	// A step with no notes, and a skipped one, leave none.
-	book.record("a", "Job A", StepResult{Index: 2, Name: "a2", Status: StatusSuccess})
-	book.record("a", "Job A", StepResult{Index: 3, Name: "a3", Status: StatusSkipped})
+	book.record("a", "Job A", outcome.Step{Index: 2, Name: "a2", Status: outcome.StatusSuccess})
+	book.record("a", "Job A", outcome.Step{Index: 3, Name: "a3", Status: outcome.StatusSkipped})
 	// A repeated step's notes tell the run they are of.
-	book.record("a", "Job A", StepResult{Index: 4, Name: "a4", Status: StatusWarning,
-		RepeatCounter: &StepRepeatCounter{SuccessCount: 1, FailureCount: 1, notesRun: 2},
-		notes:         []notes.Note{{Level: notes.Info, Body: "b4"}}})
+	book.record("a", "Job A", outcome.Step{Index: 4, Name: "a4", Status: outcome.StatusWarning,
+		RepeatCounter: &outcome.RepeatCounter{SuccessCount: 1, FailureCount: 1, NotesRun: 2},
+		Notes:         []notes.Note{{Level: notes.Info, Body: "b4"}}})
 
 	want := []any{
 		map[string]any{"job": "Job A", "job_id": "a", "step": "a1", "index": 1, "status": "passed", "level": "critical", "title": "t1", "body": "b1"},
@@ -98,8 +99,8 @@ func TestNoteBook(t *testing.T) {
 func TestNoteBookMasksWhatIsLearnedLater(t *testing.T) {
 	m := mask.New(nil, nil)
 	book := newNoteBook([]string{"a"}, func() *mask.Masker { return m })
-	book.record("a", "A", StepResult{Name: "s", Status: StatusSuccess,
-		notes: []notes.Note{{Level: notes.Info, Title: "sent Bearer a-token-learned-at-run-time", Body: "Bearer a-token-learned-at-run-time"}}})
+	book.record("a", "A", outcome.Step{Name: "s", Status: outcome.StatusSuccess,
+		Notes: []notes.Note{{Level: notes.Info, Title: "sent Bearer a-token-learned-at-run-time", Body: "Bearer a-token-learned-at-run-time"}}})
 
 	if body := book.snapshot()[0].(map[string]any)["body"]; body != "Bearer a-token-learned-at-run-time" {
 		t.Fatalf("body before the token is learned = %v", body)
@@ -116,7 +117,7 @@ func TestNoteBookMasksWhatIsLearnedLater(t *testing.T) {
 
 func TestNoteBookNil(t *testing.T) {
 	var book *noteBook
-	book.record("a", "A", StepResult{notes: []notes.Note{{Level: notes.Info, Body: "b"}}})
+	book.record("a", "A", outcome.Step{Notes: []notes.Note{{Level: notes.Info, Body: "b"}}})
 	if got := book.snapshot(); got == nil || len(got) != 0 {
 		t.Errorf("nil snapshot() = %#v, want an empty list", got)
 	}
@@ -309,22 +310,22 @@ func reportStep(t *testing.T, r report.Report, jobID, name string) report.Step {
 // those of the last run by number, whatever order the runs end in.
 func TestStepRepeatCounterKeepNotes(t *testing.T) {
 	n := func(body string) []notes.Note { return []notes.Note{{Level: notes.Info, Body: body}} }
-	var c StepRepeatCounter
+	var c outcome.RepeatCounter
 	for _, r := range []struct {
 		run    int
 		failed bool
 	}{{3, false}, {1, false}, {2, false}} {
-		c.keepNotes(n("run"), r.run, r.failed)
+		c.KeepNotes(n("run"), r.run, r.failed)
 	}
-	if c.notesRun != 3 {
-		t.Errorf("notesRun after runs 3, 1, 2 passed = %d, want 3", c.notesRun)
+	if c.NotesRun != 3 {
+		t.Errorf("notesRun after runs 3, 1, 2 passed = %d, want 3", c.NotesRun)
 	}
 
 	// The first failure is kept whatever its number: the step's failure is
 	// of the run that failed first.
-	c.keepNotes(n("failed"), 2, true)
-	if c.notesRun != 2 || c.notes[0].Body != "failed" {
-		t.Errorf("notes after run 2 failed = run %d %v, want those of run 2", c.notesRun, c.notes)
+	c.KeepNotes(n("failed"), 2, true)
+	if c.NotesRun != 2 || c.Notes[0].Body != "failed" {
+		t.Errorf("notes after run 2 failed = run %d %v, want those of run 2", c.NotesRun, c.Notes)
 	}
 }
 
@@ -426,7 +427,7 @@ func TestNotesOfAStepWhoseActionFailed(t *testing.T) {
 	runner := &flakyRunner{}
 	r := startWithReport(t, w, runner)
 
-	if st := reportStep(t, r, "retried", "Retried"); st.Failure == nil || st.Failure.Kind != FailureAction {
+	if st := reportStep(t, r, "retried", "Retried"); st.Failure == nil || st.Failure.Kind != outcome.FailureAction {
 		t.Fatalf("Retried = %+v, want it to fail with an action error", st)
 	}
 	read := runner.calls("Read")
@@ -446,8 +447,8 @@ func TestNotesOfAStepWhoseActionFailed(t *testing.T) {
 func TestNoteBookMasksShortSecretsAsWholeValues(t *testing.T) {
 	m := mask.New([]string{"PIN"}, map[string]string{"PIN": "123"})
 	book := newNoteBook([]string{"a"}, func() *mask.Masker { return m })
-	book.record("a", "A", StepResult{Name: "s", Status: StatusSuccess,
-		notes: []notes.Note{{Level: notes.Info, Title: "123", Body: "123"}, {Level: notes.Info, Body: "PIN 123 was taken"}}})
+	book.record("a", "A", outcome.Step{Name: "s", Status: outcome.StatusSuccess,
+		Notes: []notes.Note{{Level: notes.Info, Title: "123", Body: "123"}, {Level: notes.Info, Body: "PIN 123 was taken"}}})
 
 	got := book.snapshot()
 	if e := got[0].(map[string]any); e["title"] != "<secret:PIN>" || e["body"] != "<secret:PIN>" {
@@ -467,11 +468,11 @@ func TestNoteBookMasksShortSecretsAsWholeValues(t *testing.T) {
 func TestNotesAreWhatActionsParse(t *testing.T) {
 	m := mask.New([]string{"CARD"}, map[string]string{"CARD": "4111111111111111"})
 	book := newNoteBook([]string{"a"}, func() *mask.Masker { return m })
-	book.record("a", "Job A", StepResult{Index: 1, Name: "a1", Status: StatusSuccess, HasTest: true,
-		notes: []notes.Note{{Level: notes.Critical, Title: "t1", Body: "paid with 4111111111111111"}}})
-	book.record("a", "Job A", StepResult{Index: 4, Name: "a4", Status: StatusWarning,
-		RepeatCounter: &StepRepeatCounter{SuccessCount: 1, FailureCount: 1, notesRun: 2},
-		notes:         []notes.Note{{Level: notes.Info, Body: "b4"}}})
+	book.record("a", "Job A", outcome.Step{Index: 1, Name: "a1", Status: outcome.StatusSuccess, HasTest: true,
+		Notes: []notes.Note{{Level: notes.Critical, Title: "t1", Body: "paid with 4111111111111111"}}})
+	book.record("a", "Job A", outcome.Step{Index: 4, Name: "a4", Status: outcome.StatusWarning,
+		RepeatCounter: &outcome.RepeatCounter{SuccessCount: 1, FailureCount: 1, NotesRun: 2},
+		Notes:         []notes.Note{{Level: notes.Info, Body: "b4"}}})
 
 	wire, err := structpb.NewList(book.snapshot())
 	if err != nil {
