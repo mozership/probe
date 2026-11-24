@@ -1,14 +1,11 @@
-package probe
+package guide
 
 import (
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/internal/workflowfile"
 )
 
 // officialRepoPrefix is where an official action is published: the action
@@ -56,37 +53,38 @@ func OfficialActions() []OfficialAction {
 // actionref.ReadDoc does.
 type DocReader func(uses, baseDir string) (*actionref.Doc, error)
 
-// GuideAction returns the page probe guide prints for arg, a topic or an
-// external action, with workflow, when it is not empty, the files of a
-// workflow whose names under actions arg may be. It is looked for in this
-// order:
+// Workflow is what a workflow names under actions: the uses of each name,
+// and the directory a local path among them is taken from, that of the
+// workflow.
+type Workflow struct {
+	Uses map[string]string
+	Dir  string
+}
+
+// Action returns the page probe guide prints for arg, a topic or an
+// external action, with w the names of the workflow given, if one is. It
+// is looked for in this order:
 //
 //  1. A name the workflow gives under actions, so that the page is that of
 //     the action the workflow runs. A path there is taken from the
 //     directory of the workflow, as a run takes it.
 //  2. A local path, starting with ./ or ../ or absolute, taken from the
 //     working directory, or github.com/<owner>/<repo>[/<dir>][@<commit>].
-//  3. A topic of the pages built into Probe.
+//  3. A topic of the pages of the book.
 //  4. An official action, read from github.com/mozership/probe-<name>.
 //
 // An external action is described by what read returns, with the lines
 // that tell where it comes from before it.
-func GuideAction(arg, workflow string, read DocReader) (string, error) {
+func (b *Book) Action(arg string, w Workflow, read DocReader) (string, error) {
 	arg = strings.TrimSpace(arg)
-	if workflow != "" && !isActionPath(arg) {
-		names, baseDir, err := workflowActions(workflow)
-		if err != nil {
-			return "", err
-		}
-		if uses, ok := names[arg]; ok {
-			return docPage(read(uses, baseDir))
-		}
-	}
-	if isActionPath(arg) {
+	if IsActionPath(arg) {
 		return docPage(read(arg, ""))
 	}
+	if uses, ok := w.Uses[arg]; ok {
+		return docPage(read(uses, w.Dir))
+	}
 
-	page, err := Guide(arg)
+	page, err := b.Page(arg)
 	if err == nil {
 		return page, nil
 	}
@@ -96,62 +94,23 @@ func GuideAction(arg, workflow string, read DocReader) (string, error) {
 			return docPage(read(a.Repository(), ""))
 		}
 	}
-	return "", unknownGuide(arg)
-}
 
-// isActionPath reports whether arg names an external action by where it
-// is, rather than by a name.
-func isActionPath(arg string) bool {
-	return strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || filepath.IsAbs(arg) ||
-		strings.HasPrefix(arg, "github.com/")
-}
-
-func unknownGuide(arg string) error {
-	topic := strings.TrimPrefix(strings.ToLower(arg), "actions/")
 	var names []string
-	for _, t := range GuideTopics() {
+	for _, t := range b.Topics() {
 		names = append(names, t.Name)
 	}
 	for _, a := range officialActions {
 		names = append(names, a.Name)
 	}
-	if s := suggest.Closest(topic, names); s != "" {
-		return fmt.Errorf("unknown guide topic: %s; did you mean %q?", topic, s)
-	}
-	return fmt.Errorf("unknown guide topic: %s (run probe guide to list the topics)", topic)
+	return "", unknown(name, names)
 }
 
-// workflowActions returns the names the workflow gives under actions, and
-// the directory a local path among them is taken from.
-func workflowActions(workflow string) (map[string]string, string, error) {
-	files, err := workflowfile.Paths(workflow)
-	if err != nil {
-		return nil, "", fmt.Errorf("workflow file %w", err)
-	}
-	if len(files) == 0 {
-		return nil, "", fmt.Errorf("%s: no YAML file", workflow)
-	}
-	text, contents, err := workflowfile.Read(files, readFile)
-	if err != nil {
-		return nil, "", fmt.Errorf("workflow file %w", err)
-	}
-	src, err := newSource(files, contents, text)
-	if err != nil {
-		return nil, "", fmt.Errorf("%s: %w", workflow, err)
-	}
-	var w struct {
-		Actions map[string]string `yaml:"actions"`
-	}
-	// The files override one another as a run reads them, a key written
-	// again taking the place of the first.
-	if err := src.decode(&w, yaml.AllowDuplicateMapKey()); err != nil {
-		return nil, "", fmt.Errorf("%s: %w", workflow, err)
-	}
-	abs, err := filepath.Abs(files[0])
-	if err != nil {
-		return nil, "", err
-	}
-	return w.Actions, filepath.Dir(abs), nil
+// IsActionPath reports whether arg names an external action by where it
+// is, rather than by a name, so that it is not looked for among the names
+// of a workflow.
+func IsActionPath(arg string) bool {
+	return strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || filepath.IsAbs(arg) ||
+		strings.HasPrefix(arg, "github.com/")
 }
 
 // docPage writes d with the lines that tell where it comes from: that it is
