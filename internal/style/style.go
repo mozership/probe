@@ -1,14 +1,12 @@
 // Package style is how Probe shows a status in a terminal: its icon and its
-// color. Probe prints a run with it, and an action can write what it
-// reports under its step with it, so that a status looks the same there as
-// in the rest of the run.
+// color. Probe prints a run with it, and an action writes what it reports
+// under its step with it through the sdk package, so that a status looks
+// the same there as in the rest of the run.
 //
 // An action runs in a process of its own, whose standard output is not the
 // terminal, so it would print no color by itself. Probe sets PROBE_TTY to 1
 // in the environment of the action when it prints to a terminal, and a mark
 // is colored then, as it is when FORCE_COLOR is 1.
-//
-//	fmt.Fprintf(&b, "%s %s\n", style.Success, "the page shows the name")
 package style
 
 import (
@@ -59,7 +57,8 @@ func (m Mark) Icon() string {
 
 // Color is the color of m, yellow for a Mark that is none of the above. It
 // colors what it prints by color.NoColor, as Probe's own printer, which
-// sets it, does; Paint and String color by Colored.
+// sets it, does; Paint and String color when FORCE_COLOR or PROBE_TTY is 1,
+// or when color.NoColor is false.
 func (m Mark) Color() *color.Color {
 	if s, ok := marks[m]; ok {
 		return s.color()
