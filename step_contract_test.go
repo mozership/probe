@@ -159,7 +159,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			jCtx := &JobContext{
 				runEnv: &runEnv{
 					Printer: newBufferPrinter(),
-					Result:  outcome.New(),
+					Outcome: outcome.New(),
 				},
 			}
 
@@ -179,7 +179,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			if out := failureTextOf(result.Failure, result.Test); !strings.Contains(out, "GET Path '/v1/teams' not found") {
 				t.Errorf("failure text = %q, want the violation", out)
 			}
-			if got := runExitCode(jCtx.Result, true); got != ExitTestFailed {
+			if got := runExitCode(jCtx.Outcome, true); got != ExitTestFailed {
 				t.Errorf("exit code = %d, want %d", got, ExitTestFailed)
 			}
 		})
@@ -232,7 +232,7 @@ func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  outcome.New(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
 			counters: make(map[int]outcome.RepeatCounter),
@@ -341,7 +341,7 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  outcome.New(),
+			Outcome: outcome.New(),
 		},
 	}
 
@@ -357,7 +357,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  outcome.New(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
 			counters: make(map[int]outcome.RepeatCounter),
@@ -365,7 +365,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 		},
 		CurrentJobID: "job-1",
 	}
-	jCtx.Result.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
+	jCtx.Outcome.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
 
 	for _, response := range []string{"200", "2XX"} {
 		step.contract = &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /items", Response: response}}
@@ -381,7 +381,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	// The step's result, made from the counter, carries it.
 	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{step.Step}}}
 	e.appendRepeatStepResults(jCtx)
-	results := jCtx.Result.Jobs["job-1"].StepResults
+	results := jCtx.Outcome.Jobs["job-1"].StepResults
 	if len(results) != 1 || !reflect.DeepEqual(results[0].Contract, want) {
 		t.Errorf("StepResults = %+v, want one carrying %+v", results, want)
 	}

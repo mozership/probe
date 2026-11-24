@@ -76,7 +76,7 @@ func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *outcome.Job) {
 	ctx := r.newJobContext(nil, nil)
 	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
-	return passed, ctx.Result.Jobs[job.ID]
+	return passed, ctx.Outcome.Jobs[job.ID]
 }
 
 // A job that fails reports so to its caller, which fails the workflow for
@@ -351,7 +351,7 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 		runEnv: &runEnv{
 			Config:  Config{Verbose: false},
 			Printer: NewPrinter(false),
-			Result:  result,
+			Outcome: result,
 		},
 		repeat: &jobRepeat{
 			counters: map[int]outcome.RepeatCounter{
@@ -582,7 +582,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 	ctx := &JobContext{
 		runEnv: &runEnv{
-			Result: result,
+			Outcome: result,
 		},
 		repeat: &jobRepeat{
 			total: 3,
@@ -611,7 +611,7 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	// among the runs, as the count of the report does.
 	failed := outcome.New()
 	failed.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
-	ctx.Result = failed
+	ctx.Outcome = failed
 	ctx.repeat.counters = map[int]outcome.RepeatCounter{
 		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &outcome.Failure{Kind: outcome.FailureAssertion, Message: "test evaluated to false"}},
 	}

@@ -221,7 +221,7 @@ func repeatTimes(secs []float64) map[string]any {
 // skipped reports whether the job was skipped by its skipif, which leaves
 // its test over its runs unchecked.
 func (e *Executor) skipped(ctx JobContext) bool {
-	jr := ctx.Result.Jobs[e.job.ID]
+	jr := ctx.Outcome.Jobs[e.job.ID]
 	jr.Mu.Lock()
 	defer jr.Mu.Unlock()
 	return jr.Status == outcome.StatusSkipped
@@ -230,7 +230,7 @@ func (e *Executor) skipped(ctx JobContext) bool {
 // unskip takes back the skipped status that a run skipped by the job's
 // skipif left, when other runs ran and the test over them decides.
 func (e *Executor) unskip(ctx JobContext) {
-	jr := ctx.Result.Jobs[e.job.ID]
+	jr := ctx.Outcome.Jobs[e.job.ID]
 	jr.Mu.Lock()
 	defer jr.Mu.Unlock()
 	if jr.Status == outcome.StatusSkipped {
@@ -274,9 +274,9 @@ func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *outcome.Rep
 // set on the job's result, and its failure for the exit code of the run.
 func (e *Executor) recordRepeatTest(ctx JobContext, res *outcome.RepeatTest, set func(*outcome.Job)) {
 	if res.Failure != nil {
-		ctx.Result.RecordFailure(res.Failure.Kind)
+		ctx.Outcome.RecordFailure(res.Failure.Kind)
 	}
-	if jr, ok := ctx.Result.Jobs[e.job.ID]; ok {
+	if jr, ok := ctx.Outcome.Jobs[e.job.ID]; ok {
 		jr.Mu.Lock()
 		set(jr)
 		jr.Mu.Unlock()

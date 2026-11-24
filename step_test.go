@@ -32,7 +32,7 @@ func TestStep_shouldSkip_errorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
 			st := newStepRun(&Step{Name: "step", SkipIf: tt.skipIf}, nil)
-			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: outcome.New()}}
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Outcome: outcome.New()}}
 
 			if st.shouldSkip(jCtx) {
 				t.Error("shouldSkip() = true, want the step to run")
@@ -877,7 +877,7 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		jCtx := &JobContext{
 			runEnv: &runEnv{
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 				Config:  Config{Verbose: true},
 			},
 			CurrentJobID: "job",

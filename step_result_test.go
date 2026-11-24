@@ -168,7 +168,7 @@ func TestStep_verdict(t *testing.T) {
 				runEnv: &runEnv{
 					Config:  Config{NeedsNoCheck: tt.needsNoCheck},
 					Printer: newBufferPrinter(),
-					Result:  outcome.New(),
+					Outcome: outcome.New(),
 				},
 			}
 
@@ -182,7 +182,7 @@ func TestStep_verdict(t *testing.T) {
 			if jCtx.Failed != tt.wantFailed {
 				t.Errorf("Failed = %v, want %v", jCtx.Failed, tt.wantFailed)
 			}
-			if got := jCtx.Result.HasFailure(outcome.FailureAssertion); got != tt.wantFailed {
+			if got := jCtx.Outcome.HasFailure(outcome.FailureAssertion); got != tt.wantFailed {
 				t.Errorf("assertion failure recorded = %v, want %v", got, tt.wantFailed)
 			}
 			if (st.failure != nil) != tt.wantFailed {
@@ -200,7 +200,7 @@ func TestStep_createStepResult_ChangesNothing(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  outcome.New(),
+			Outcome: outcome.New(),
 		},
 	}
 
@@ -216,7 +216,7 @@ func TestStep_createStepResult_ChangesNothing(t *testing.T) {
 		outcome.FailureAction, outcome.FailureTemplate, outcome.FailureContractResponse,
 		outcome.FailureContractRequest, outcome.FailureRefused, failureConfig,
 	} {
-		if jCtx.Result.HasFailure(kind) {
+		if jCtx.Outcome.HasFailure(kind) {
 			t.Errorf("a failure of kind %q is recorded, want none", kind)
 		}
 	}
@@ -289,7 +289,7 @@ func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  outcome.New(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
 			counters: make(map[int]outcome.RepeatCounter),
@@ -297,7 +297,7 @@ func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 		},
 		CurrentJobID: "job-1",
 	}
-	jCtx.Result.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
+	jCtx.Outcome.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
 
 	// Runs are counted from 0, as the executor counts them.
 	for i := range 3 {
@@ -323,13 +323,13 @@ func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 
 	// The runs themselves add no result; the executor makes one from the
 	// counter once they are done.
-	if got := len(jCtx.Result.Jobs["job-1"].StepResults); got != 0 {
+	if got := len(jCtx.Outcome.Jobs["job-1"].StepResults); got != 0 {
 		t.Fatalf("StepResults length = %d after the runs, want 0", got)
 	}
 	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{{Name: "first"}, step.Step}}}
 	e.appendRepeatStepResults(jCtx)
 
-	stepResults := jCtx.Result.Jobs["job-1"].StepResults
+	stepResults := jCtx.Outcome.Jobs["job-1"].StepResults
 	if len(stepResults) != 1 {
 		t.Fatalf("StepResults length = %d, want 1", len(stepResults))
 	}

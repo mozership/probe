@@ -33,7 +33,7 @@ func runStepForTemplateError(t *testing.T, step *Step, vars map[string]any) (int
 		runEnv: &runEnv{
 			Config:  Config{ActionRunner: runner},
 			Printer: newBufferPrinter(),
-			Result:  rs,
+			Outcome: rs,
 		},
 		Vars:         vars,
 		CurrentJobID: "j",
@@ -362,7 +362,7 @@ func TestStep_TemplateErrorDoesNotReportTheLastRun(t *testing.T) {
 		runEnv: &runEnv{
 			Config:  Config{ActionRunner: runner},
 			Printer: newBufferPrinter(),
-			Result:  rs,
+			Outcome: rs,
 		},
 		CurrentJobID: "j",
 		Outputs:      NewOutputs(),
