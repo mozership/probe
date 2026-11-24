@@ -80,7 +80,7 @@ func ReadActionResult(m map[string]any) ActionResult {
 }
 
 // AddedResFields returns res, the fields of res an action declares it
-// returns, with those readActionResult adds to them: rawbody to one with a
+// returns, with those ReadActionResult adds to them: rawbody to one with a
 // body, which a JSON body is kept as, and json to one with stdout, which
 // stdout of JSON is read as. A field is added only to a res that has the
 // field it comes from, so these are all a res can have.
@@ -97,7 +97,7 @@ func AddedResFields(res []string) []string {
 }
 
 // ReadResTypes returns types, the kinds of the fields of res an action
-// declares, as the fields are read once readActionResult has read them: a
+// declares, as the fields are read once ReadActionResult has read them: a
 // body, which is read as the value it holds when it holds JSON, is of any
 // kind, and rawbody, which keeps such a body as text, is a string, as the
 // body is. json, which stdout of JSON is read as, is of any kind.

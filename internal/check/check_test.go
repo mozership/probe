@@ -809,7 +809,7 @@ func TestCheck_FilesReadTogether(t *testing.T) {
 
 // TestCheck_ReadsEachFileOnce reads each file of the workflow once, so that
 // the text whose lines are told as lines of the files is the text loaded.
-// It replaces readFile, and so does not run in parallel.
+// It replaces engine.ReadFile, and so does not run in parallel.
 func TestCheck_ReadsEachFileOnce(t *testing.T) {
 	dir := t.TempDir()
 	base := writeWorkflow(t, dir, "base.yml", "name: once\n")

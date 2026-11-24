@@ -18,17 +18,17 @@ var aliasName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 // AliasProblem is what is wrong with a name the workflow's actions give,
 // or with a use of one.
 type AliasProblem struct {
-	// name is the name under actions, or empty when job is set.
+	// Name is the name under actions, or empty when Job is set.
 	Name string
-	// job is the index of the job whose defaults are wrong, with action the
-	// key of them that is, or workflowDefaults for the defaults of the
+	// Job is the index of the job whose defaults are wrong, with Action the
+	// key of them that is, or WorkflowDefaults for the defaults of the
 	// workflow.
 	Job    int
 	Action string
 	Msg    string
 }
 
-// WorkflowDefaults is the job of an aliasProblem in the defaults of the
+// WorkflowDefaults is the Job of an AliasProblem in the defaults of the
 // workflow, which belong to no job.
 const WorkflowDefaults = -1
 

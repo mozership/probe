@@ -14,10 +14,10 @@ import (
 // the workflow is loaded, so that the run is refused before any job starts,
 // rather than when the job or the step it is in is reached.
 type Problem struct {
-	// path is the key the problem is at, such as jobs[0].steps[1].test, by
+	// Path is the key the problem is at, such as jobs[0].steps[1].test, by
 	// which probe check finds its line.
 	Path string
-	// where names the job and the step it is in, such as job 0 "Login",
+	// Where names the job and the step it is in, such as job 0 "Login",
 	// step 1; empty when it is in neither.
 	Where string
 	Err   error

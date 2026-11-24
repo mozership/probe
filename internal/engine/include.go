@@ -38,7 +38,7 @@ type Source struct {
 	included int
 	// next is the line the next included file starts on.
 	next int
-	// problems are what kept an entry from including a file, by the line it
+	// Problems are what kept an entry from including a file, by the line it
 	// is found on. Such an entry is left out.
 	Problems []IncludeProblem
 }
@@ -370,7 +370,7 @@ func StepsOf(body, job ast.Node) *ast.MappingValueNode {
 	return mergedSteps(body, job, map[ast.Node]bool{})
 }
 
-// mergedSteps is stepsOf for job, a mapping reached through the mappings
+// mergedSteps is StepsOf for job, a mapping reached through the mappings
 // on, which it does not go back to: a merge key may name the mapping it is
 // in, which would be followed round for ever.
 func mergedSteps(body, job ast.Node, on map[ast.Node]bool) *ast.MappingValueNode {
@@ -455,6 +455,7 @@ func sequence(n ast.Node) *ast.SequenceNode {
 	return nil
 }
 
+// FirstLine returns the first line of s, trimmed.
 func FirstLine(s string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
 	return line

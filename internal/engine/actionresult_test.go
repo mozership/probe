@@ -55,7 +55,7 @@ func TestReadActionResult(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ReadActionResult(tt.m); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("readActionResult() = %#v, want %#v", got, tt.want)
+				t.Errorf("ReadActionResult() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
@@ -78,7 +78,7 @@ func TestStep_processActionResult_ReplacesTheContext(t *testing.T) {
 	}
 }
 
-// What readActionResult adds to res is among the fields addedResFields
+// What ReadActionResult adds to res is among the fields AddedResFields
 // tells check of, for each field it comes from.
 func TestAddedResFields(t *testing.T) {
 	for _, res := range []map[string]any{
@@ -92,12 +92,12 @@ func TestAddedResFields(t *testing.T) {
 		fields := AddedResFields(declared)
 		for key := range r.Res {
 			if !slices.Contains(fields, key) {
-				t.Errorf("res of %v gained %s, which addedResFields(%v) = %v leaves out", res, key, declared, fields)
+				t.Errorf("res of %v gained %s, which AddedResFields(%v) = %v leaves out", res, key, declared, fields)
 			}
 		}
 	}
 	if got := AddedResFields([]string{"code"}); !slices.Equal(got, []string{"code"}) {
-		t.Errorf("addedResFields([code]) = %v, want nothing added to a res without body or stdout", got)
+		t.Errorf("AddedResFields([code]) = %v, want nothing added to a res without body or stdout", got)
 	}
 }
 

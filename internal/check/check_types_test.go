@@ -152,17 +152,17 @@ jobs:
 	}
 }
 
-// What readActionResult reads of res is of the kinds readResTypes tells
-// check of.
+// What engine.ReadActionResult reads of res is of the kinds
+// engine.ReadResTypes tells check of.
 func TestReadResTypes(t *testing.T) {
 	declared := map[string]string{"body": kind.String, "code": kind.Number, "stdout": kind.String}
 	got := engine.ReadResTypes(declared)
 	want := map[string]string{"rawbody": kind.String, "code": kind.Number, "stdout": kind.String}
 	if !maps.Equal(got, want) {
-		t.Errorf("readResTypes(%v) = %v, want %v", declared, got, want)
+		t.Errorf("engine.ReadResTypes(%v) = %v, want %v", declared, got, want)
 	}
 	if _, ok := declared["rawbody"]; ok {
-		t.Error("readResTypes changed the kinds it was given")
+		t.Error("engine.ReadResTypes changed the kinds it was given")
 	}
 	for _, res := range []map[string]any{
 		{"body": `{"id": 1}`, "code": int64(200), "stdout": `{"ok": true}`},
