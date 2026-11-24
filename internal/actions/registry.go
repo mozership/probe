@@ -12,17 +12,17 @@ import (
 
 	"github.com/mozership/probe"
 
-	"github.com/mozership/probe/actions/db"
-	"github.com/mozership/probe/actions/dns"
-	"github.com/mozership/probe/actions/embedded"
-	"github.com/mozership/probe/actions/file"
-	"github.com/mozership/probe/actions/grpc"
-	"github.com/mozership/probe/actions/hello"
-	"github.com/mozership/probe/actions/http"
-	"github.com/mozership/probe/actions/imap"
-	"github.com/mozership/probe/actions/shell"
-	"github.com/mozership/probe/actions/smtp"
-	"github.com/mozership/probe/actions/ssh"
+	"github.com/mozership/probe/internal/actions/db"
+	"github.com/mozership/probe/internal/actions/dns"
+	"github.com/mozership/probe/internal/actions/embedded"
+	"github.com/mozership/probe/internal/actions/file"
+	"github.com/mozership/probe/internal/actions/grpc"
+	"github.com/mozership/probe/internal/actions/hello"
+	"github.com/mozership/probe/internal/actions/http"
+	"github.com/mozership/probe/internal/actions/imap"
+	"github.com/mozership/probe/internal/actions/shell"
+	"github.com/mozership/probe/internal/actions/smtp"
+	"github.com/mozership/probe/internal/actions/ssh"
 	"github.com/mozership/probe/internal/actionspec"
 )
 

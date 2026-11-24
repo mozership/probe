@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/actions"
+	"github.com/mozership/probe/internal/actions"
 )
 
 // topName and topJobs match the keys at the top level of a block that make
