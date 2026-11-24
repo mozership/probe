@@ -257,6 +257,33 @@ Probeはワークフローを読み込む時点で名前をアクションに置
 
 ジョブに`if`、`continue_on_error`、`timeout`はありません。失敗の後にも実行したいジョブには[`always`](#always)を付けます。
 
+ジョブの`name`のテンプレートが読めるのは`vars`と`outputs`だけです。名前はジョブの開始時に評価されるので、`outputs`には、`needs`のジョブなど、それより前に終わったジョブが公開したものが入っています。`{{res.code}}`のように読めない名前を使うと、ジョブは実行されません。
+
+```yaml
+vars:
+  env: staging
+
+jobs:
+  - name: Sign up
+    id: signup
+    steps:
+      - uses: http
+        id: user
+        with:
+          post: /users
+        test: res.code == 201
+        outputs:
+          name: res.body.name
+
+  - name: "Orders of {{outputs.user.name}} on {{vars.env}}"
+    needs: [signup]
+    steps:
+      - uses: http
+        with:
+          get: /orders
+        test: res.code == 200
+```
+
 #### `needs`
 
 依存のないジョブは並列に開始します。`needs`が参照するのはジョブの**ID**なので、依存される側には明示的な`id`が必要です。

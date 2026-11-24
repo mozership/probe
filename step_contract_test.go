@@ -9,6 +9,7 @@ import (
 
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/report"
 )
 
@@ -68,10 +69,10 @@ func TestStep_check_Contract(t *testing.T) {
 		{name: "no contract and no test"},
 		{name: "a contract kept, without a test", contract: contractOf(), wantChecked: true, wantOK: true},
 		{name: "a contract kept, with a test that holds", test: "res.code == 200", contract: contractOf(), wantChecked: true, wantOK: true},
-		{name: "a contract kept, with a test that fails", test: "res.code == 201", contract: contractOf(), wantChecked: true, wantKind: FailureAssertion},
-		{name: "a contract broken, without a test", contract: contractOf(broken), wantChecked: true, wantKind: FailureContractResponse},
-		{name: "a contract broken, with a test that holds", test: "res.code == 200", contract: contractOf(broken), wantChecked: true, wantKind: FailureContractResponse},
-		{name: "a request that breaks the contract", test: "res.code == 200", contract: contractOf(map[string]any{"in": "request", "message": "body failed"}), wantChecked: true, wantKind: FailureContractRequest},
+		{name: "a contract kept, with a test that fails", test: "res.code == 201", contract: contractOf(), wantChecked: true, wantKind: outcome.FailureAssertion},
+		{name: "a contract broken, without a test", contract: contractOf(broken), wantChecked: true, wantKind: outcome.FailureContractResponse},
+		{name: "a contract broken, with a test that holds", test: "res.code == 200", contract: contractOf(broken), wantChecked: true, wantKind: outcome.FailureContractResponse},
+		{name: "a request that breaks the contract", test: "res.code == 200", contract: contractOf(map[string]any{"in": "request", "message": "body failed"}), wantChecked: true, wantKind: outcome.FailureContractRequest},
 		// What res holds is the step's to read; the runner hears of a
 		// contract only from the action.
 		{name: "violations in res alone", test: "res.code == 200", wantChecked: true, wantOK: true},
@@ -123,8 +124,8 @@ func TestStep_contractFailure(t *testing.T) {
 	if f == nil {
 		t.Fatal("contractFailure() = nil, want a failure")
 	}
-	if f.Kind != FailureContractResponse {
-		t.Errorf("Kind = %q, want %q", f.Kind, FailureContractResponse)
+	if f.Kind != outcome.FailureContractResponse {
+		t.Errorf("Kind = %q, want %q", f.Kind, outcome.FailureContractResponse)
 	}
 	if f.Message != "the response breaks its contract in 2 places" {
 		t.Errorf("Message = %q", f.Message)
@@ -147,10 +148,10 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 	tests := []struct {
 		name       string
 		contract   *actionrpc.ContractCheck
-		wantStatus StatusType
+		wantStatus outcome.Status
 	}{
-		{name: "a response that keeps to its contract passes without a test", contract: contractOf(), wantStatus: StatusSuccess},
-		{name: "a response that breaks its contract fails", contract: contractOf(broken), wantStatus: StatusError},
+		{name: "a response that keeps to its contract passes without a test", contract: contractOf(), wantStatus: outcome.StatusSuccess},
+		{name: "a response that breaks its contract fails", contract: contractOf(broken), wantStatus: outcome.StatusError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,7 +159,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			jCtx := &JobContext{
 				runEnv: &runEnv{
 					Printer: newBufferPrinter(),
-					Result:  NewResult(),
+					Outcome: outcome.New(),
 				},
 			}
 
@@ -169,7 +170,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			if !result.HasTest {
 				t.Error("HasTest = false, want true: the contract checks the step")
 			}
-			if tt.wantStatus != StatusError {
+			if tt.wantStatus != outcome.StatusError {
 				return
 			}
 			if result.Failure == nil || len(result.Failure.Violations) != 1 {
@@ -178,7 +179,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 			if out := failureTextOf(result.Failure, result.Test); !strings.Contains(out, "GET Path '/v1/teams' not found") {
 				t.Errorf("failure text = %q, want the violation", out)
 			}
-			if got := jCtx.Result.exitCode(true); got != ExitTestFailed {
+			if got := runExitCode(jCtx.Outcome, true); got != ExitTestFailed {
 				t.Errorf("exit code = %d, want %d", got, ExitTestFailed)
 			}
 		})
@@ -231,10 +232,10 @@ func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  NewResult(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
-			counters: make(map[int]StepRepeatCounter),
+			counters: make(map[int]outcome.RepeatCounter),
 			total:    2,
 		},
 	}
@@ -251,7 +252,7 @@ func TestStep_handleRepeatExecution_Contract(t *testing.T) {
 	if !counter.Checked {
 		t.Error("Checked = false, want true")
 	}
-	if counter.Failure == nil || counter.Failure.Kind != FailureContractResponse {
+	if counter.Failure == nil || counter.Failure.Kind != outcome.FailureContractResponse {
 		t.Errorf("Failure = %+v, want a contract failure", counter.Failure)
 	}
 }
@@ -269,19 +270,19 @@ func TestStep_contractFailure_Kind(t *testing.T) {
 		{
 			name:        "in the response",
 			violations:  []map[string]any{response},
-			wantKind:    FailureContractResponse,
+			wantKind:    outcome.FailureContractResponse,
 			wantMessage: "the response breaks its contract in 1 place",
 		},
 		{
 			name:        "in the request",
 			violations:  []map[string]any{request, request},
-			wantKind:    FailureContractRequest,
+			wantKind:    outcome.FailureContractRequest,
 			wantMessage: "the request breaks its contract in 2 places",
 		},
 		{
 			name:        "in both, where the request decides the kind",
 			violations:  []map[string]any{request, response, response},
-			wantKind:    FailureContractRequest,
+			wantKind:    outcome.FailureContractRequest,
 			wantMessage: "the request breaks its contract in 1 place, and the response in 2 places",
 		},
 	}
@@ -340,11 +341,11 @@ func TestStep_createStepResult_ContractMatched(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  NewResult(),
+			Outcome: outcome.New(),
 		},
 	}
 
-	result := st.createStepResult("Get a user", jCtx, StatusSuccess)
+	result := st.createStepResult("Get a user", jCtx, outcome.StatusSuccess)
 	want := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
 	if !reflect.DeepEqual(result.Contract, want) {
 		t.Errorf("Contract = %+v, want %+v", result.Contract, want)
@@ -356,15 +357,15 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  NewResult(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
-			counters: make(map[int]StepRepeatCounter),
+			counters: make(map[int]outcome.RepeatCounter),
 			total:    2,
 		},
 		CurrentJobID: "job-1",
 	}
-	jCtx.Result.Jobs["job-1"] = &JobResult{JobID: "job-1"}
+	jCtx.Outcome.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
 
 	for _, response := range []string{"200", "2XX"} {
 		step.contract = &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /items", Response: response}}
@@ -380,7 +381,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	// The step's result, made from the counter, carries it.
 	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{step.Step}}}
 	e.appendRepeatStepResults(jCtx)
-	results := jCtx.Result.Jobs["job-1"].StepResults
+	results := jCtx.Outcome.Jobs["job-1"].StepResults
 	if len(results) != 1 || !reflect.DeepEqual(results[0].Contract, want) {
 		t.Errorf("StepResults = %+v, want one carrying %+v", results, want)
 	}

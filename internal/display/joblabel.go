@@ -1,4 +1,4 @@
-package probe
+package display
 
 import "github.com/mozership/probe/internal/textwidth"
 

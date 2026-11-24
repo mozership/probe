@@ -13,7 +13,12 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/lexer"
 	"github.com/goccy/go-yaml/parser"
+	"github.com/mozership/probe/internal/workflowfile"
 )
+
+// readFile reads a file of the workflow, one given or one it includes. It is
+// os.ReadFile but in the tests that count what is read.
+var readFile = os.ReadFile
 
 // includeKey is the key of an entry of steps that stands for the steps of
 // a file, which holds a list of them.
@@ -299,7 +304,7 @@ func includeFile(dir, path string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("%s: is a directory; include takes a file, as the order of the steps is written", path)
 	}
-	if !isYamlFile(p) {
+	if !workflowfile.IsYAML(p) {
 		return "", fmt.Errorf("%s: not a YAML file (.yml or .yaml)", path)
 	}
 	return p, nil

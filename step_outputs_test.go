@@ -13,7 +13,7 @@ func TestSaveOutputsWarnsAboutTakenName(t *testing.T) {
 	// warning, not an error-labelled message, as its value cannot be read.
 	errOut := new(bytes.Buffer)
 	printer := NewPrinter(false)
-	printer.errWriter = errOut
+	printer.SetErr(errOut)
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: printer,
@@ -51,7 +51,7 @@ func TestSaveOutputs_SkipsOneThatCannotBeEvaluated(t *testing.T) {
 
 	st.saveOutputs(jCtx)
 
-	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "output 'bad' evaluation error: ") {
+	if out := printer.Err().(*bytes.Buffer).String(); !strings.Contains(out, "output 'bad' evaluation error: ") {
 		t.Errorf("output = %q, want the error of the output", out)
 	}
 	got, ok := jCtx.Outputs.GetAll()["login"].(map[string]any)

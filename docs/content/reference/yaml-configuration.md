@@ -257,6 +257,33 @@ A job definition takes the properties below.
 
 There is no `if`, `continue_on_error` or `timeout` at the job level. A job that has to run after a failure is one with [`always`](#always).
 
+The templates of a job's `name` read `vars` and `outputs`, and nothing else. The name is evaluated as the job starts, so `outputs` holds what the jobs that finished before it published, such as those in its `needs`. A name it does not read, as `{{res.code}}`, keeps the job from running.
+
+```yaml
+vars:
+  env: staging
+
+jobs:
+  - name: Sign up
+    id: signup
+    steps:
+      - uses: http
+        id: user
+        with:
+          post: /users
+        test: res.code == 201
+        outputs:
+          name: res.body.name
+
+  - name: "Orders of {{outputs.user.name}} on {{vars.env}}"
+    needs: [signup]
+    steps:
+      - uses: http
+        with:
+          get: /orders
+        test: res.code == 200
+```
+
 #### `needs`
 
 Jobs without dependencies start in parallel. `needs` refers to job **ids**, so a job that others depend on needs an explicit `id`.

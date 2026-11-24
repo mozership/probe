@@ -6,21 +6,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
-// BuildReport assembles a Report from the results of a run. Jobs are listed in
-// the given order, which is the order they are declared in the workflow.
-func BuildReport(name, description string, rs *Result, order []string, startedAt, finishedAt time.Time) *report.Report {
-	return buildReport(name, description, rs, order, startedAt, finishedAt, nil)
-}
-
-// buildReport is BuildReport with the message of each failure told as
-// StepFailure.reportMessage tells it with m, which hides the secrets m knows
-// in what a false condition compared before the values are cut; m may be
-// nil. The report is still to be masked with m as a whole.
-func buildReport(name, description string, rs *Result, order []string, startedAt, finishedAt time.Time, m *mask.Masker) *report.Report {
+// buildReport assembles a Report from the results of a run. Jobs are listed
+// in the given order, which is the order they are declared in the workflow.
+// The message of each failure is told as outcome.Failure.ReportMessage
+// tells it with m, which hides the secrets m knows in what a false condition
+// compared before the values are cut; m may be nil. The report is still to
+// be masked with m as a whole.
+func buildReport(name, description string, rs *outcome.Run, order []string, startedAt, finishedAt time.Time, m *mask.Masker) *report.Report {
 	r := report.New(name, description, startedAt, finishedAt)
 	if rs == nil {
 		return r
@@ -37,15 +34,15 @@ func buildReport(name, description string, rs *Result, order []string, startedAt
 	return r
 }
 
-func buildJobReport(jr *JobResult, m *mask.Masker) report.Job {
-	jr.mutex.Lock()
-	defer jr.mutex.Unlock()
+func buildJobReport(jr *outcome.Job, m *mask.Masker) report.Job {
+	jr.Mu.Lock()
+	defer jr.Mu.Unlock()
 
 	status := report.Passed
 	switch jr.Status {
-	case StatusSkipped:
+	case outcome.StatusSkipped:
 		status = report.Skipped
-	case StatusError:
+	case outcome.StatusError:
 		status = report.Failed
 	}
 
@@ -66,7 +63,7 @@ func buildJobReport(jr *JobResult, m *mask.Masker) report.Job {
 	return job
 }
 
-func buildRepeatTestReport(rt *RepeatTestResult, m *mask.Masker) *report.RepeatTest {
+func buildRepeatTestReport(rt *outcome.RepeatTest, m *mask.Masker) *report.RepeatTest {
 	if rt == nil {
 		return nil
 	}
@@ -74,7 +71,7 @@ func buildRepeatTestReport(rt *RepeatTestResult, m *mask.Masker) *report.RepeatT
 	switch {
 	case rt.Failure != nil:
 		out.Status = report.Failed
-		out.Failure = &report.Failure{Kind: rt.Failure.Kind, Message: rt.Failure.reportMessage(m)}
+		out.Failure = &report.Failure{Kind: rt.Failure.Kind, Message: rt.Failure.ReportMessage(m)}
 	case rt.Skipped != "":
 		out.Status = report.Skipped
 		out.Reason = rt.Skipped
@@ -82,7 +79,7 @@ func buildRepeatTestReport(rt *RepeatTestResult, m *mask.Masker) *report.RepeatT
 	return out
 }
 
-func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
+func buildStepReport(sr outcome.Step, m *mask.Masker) report.Step {
 	step := report.Step{
 		Index:      sr.Index,
 		ID:         sr.ID,
@@ -117,7 +114,7 @@ func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 	if f := sr.Failure; f != nil && step.Status == report.Failed {
 		step.Failure = &report.Failure{
 			Kind:       f.Kind,
-			Message:    f.reportMessage(m),
+			Message:    f.ReportMessage(m),
 			Request:    jsonSafeMap(f.Request),
 			Response:   jsonSafeMap(f.Response),
 			Violations: f.Violations,
@@ -129,7 +126,7 @@ func buildStepReport(sr StepResult, m *mask.Masker) report.Step {
 
 // reportStatus is the status of the step sr is the result of, as the
 // report files and the notes tell it: passed, failed, skipped or untested.
-func reportStatus(sr StepResult) string {
+func reportStatus(sr outcome.Step) string {
 	if c := sr.RepeatCounter; c != nil {
 		// The terminal report marks a mix of passing and failing iterations
 		// as a warning. Any failing iteration fails the job, so it fails the
@@ -147,11 +144,11 @@ func reportStatus(sr StepResult) string {
 		}
 	}
 	switch sr.Status {
-	case StatusSuccess:
+	case outcome.StatusSuccess:
 		return report.Passed
-	case StatusError:
+	case outcome.StatusError:
 		return report.Failed
-	case StatusSkipped:
+	case outcome.StatusSkipped:
 		return report.Skipped
 	default:
 		return report.Untested

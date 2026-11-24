@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
 )
@@ -104,8 +105,8 @@ type runEnv struct {
 	Config
 	// Print writer
 	Printer *Printer
-	// Result for managing job-level output
-	Result *Result
+	// Outcome is what the run comes to, which every job records its steps in
+	Outcome *outcome.Run
 	// scheduler tells which jobs can start, and is told when each is over
 	scheduler *schedule.Scheduler
 	// Processes that steps left running in the background, stopped once the
@@ -157,13 +158,13 @@ type jobRepeat struct {
 
 	mu sync.Mutex
 	// counters are the counts of each step, by Step.counterKey.
-	counters map[int]StepRepeatCounter
+	counters map[int]outcome.RepeatCounter
 }
 
 // newJobRepeat returns the counts for total runs of a job, warmup runs
 // among them.
 func newJobRepeat(total, warmup int) *jobRepeat {
-	return &jobRepeat{total: total - warmup, warmup: warmup, counters: make(map[int]StepRepeatCounter)}
+	return &jobRepeat{total: total - warmup, warmup: warmup, counters: make(map[int]outcome.RepeatCounter)}
 }
 
 // SetFailed marks the job context as failed
@@ -204,22 +205,22 @@ func (j *JobContext) recordFailure(kind string) {
 	if j.countedOnly() {
 		return
 	}
-	j.Result.recordFailure(kind)
+	j.Outcome.RecordFailure(kind)
 }
 
 // addStepResult records sr, the final result of a step of the job, in the
 // result of the run, and keeps its notes for the steps after it.
-func (j *JobContext) addStepResult(sr StepResult) {
+func (j *JobContext) addStepResult(sr outcome.Step) {
 	name := j.jobName
-	if j.Result != nil {
-		j.Result.AddStepResult(j.CurrentJobID, sr)
+	if j.Outcome != nil {
+		j.Outcome.AddStepResult(j.CurrentJobID, sr)
 		// The name of the job is that of its result, which a repeated job,
 		// whose steps' results are added after its runs, has as each run
 		// left it.
-		if jr, ok := j.Result.Jobs[j.CurrentJobID]; ok {
-			jr.mutex.Lock()
+		if jr, ok := j.Outcome.Jobs[j.CurrentJobID]; ok {
+			jr.Mu.Lock()
 			name = jr.JobName
-			jr.mutex.Unlock()
+			jr.Mu.Unlock()
 		}
 	}
 	if j.runEnv != nil {

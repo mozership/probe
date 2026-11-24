@@ -4,16 +4,19 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"path"
-	"sort"
+	"path/filepath"
 	"strings"
 
-	"github.com/mozership/probe/internal/suggest"
+	"github.com/goccy/go-yaml"
+	"github.com/mozership/probe/internal/guide"
+	"github.com/mozership/probe/internal/workflowfile"
 )
 
 // The reference and concept pages of the documentation site are built into
 // the binary, so that probe guide works offline and always matches the
 // version that runs. A coding agent reads them before writing a workflow.
+// They are embedded here, as go:embed reads only the directory of the
+// package and those under it, and printed by internal/guide.
 //
 // Of the pages of actions, only those of the built-in actions are: an
 // external action is described by its own repository, at the commit a
@@ -29,154 +32,116 @@ import (
 //go:embed docs/content/reference/actions/smtp.md docs/content/reference/actions/ssh.md
 var guideFS embed.FS
 
+// guideRoot is the directory of guideFS that the book is laid out in.
+const guideRoot = "docs/content"
+
+// guideBook is the book of the pages built into the binary.
+var guideBook = guide.New(mustSub(guideFS, guideRoot))
+
+func mustSub(fsys fs.FS, dir string) fs.FS {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}
+
 // GuideTopic is one page probe guide can print.
 type GuideTopic struct {
 	Name  string // what to pass to probe guide
 	Group string // the heading it is listed under
 	Title string // the page's first heading
-	file  string
-}
-
-const (
-	guideGroupReference = "Reference"
-	guideGroupActions   = "Actions"
-	guideGroupConcepts  = "Concepts"
-	guideGroupExternal  = "External actions, read from GitHub"
-)
-
-// guideReferences names the reference pages that are not about one action.
-var guideReferences = []struct{ name, file string }{
-	{"yaml", "docs/content/reference/yaml-configuration.md"},
-	{"cli", "docs/content/reference/cli-reference.md"},
-	{"functions", "docs/content/reference/built-in-functions.md"},
-	{"env", "docs/content/reference/environment-variables.md"},
-	{"actions", "docs/content/reference/actions-reference.md"},
-}
-
-// conceptAliases gives the concept pages whose file names are long a
-// shorter topic name.
-var conceptAliases = map[string]string{
-	"expressions-and-templates": "expressions",
-	"testing-and-assertions":    "testing",
 }
 
 // GuideTopics lists every topic, references first, then one per action, then
 // the concepts.
 func GuideTopics() []GuideTopic {
-	var topics []GuideTopic
-	for _, r := range guideReferences {
-		topics = append(topics, newGuideTopic(r.name, guideGroupReference, r.file))
+	topics := guideBook.Topics()
+	out := make([]GuideTopic, len(topics))
+	for i, t := range topics {
+		out[i] = GuideTopic{Name: t.Name, Group: t.Group, Title: t.Title}
 	}
-
-	for _, file := range guideFiles("docs/content/reference/actions") {
-		name := strings.TrimSuffix(path.Base(file), ".md")
-		topics = append(topics, newGuideTopic(name, guideGroupActions, file))
-	}
-
-	for _, file := range guideFiles("docs/content/guide/concepts") {
-		stem := strings.TrimSuffix(path.Base(file), ".md")
-		if alias, ok := conceptAliases[stem]; ok {
-			stem = alias
-		}
-		topics = append(topics, newGuideTopic("concepts/"+stem, guideGroupConcepts, file))
-	}
-	return topics
-}
-
-func guideFiles(dir string) []string {
-	entries, err := fs.ReadDir(guideFS, dir)
-	if err != nil {
-		return nil
-	}
-	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, path.Join(dir, e.Name()))
-		}
-	}
-	sort.Strings(files)
-	return files
-}
-
-func newGuideTopic(name, group, file string) GuideTopic {
-	return GuideTopic{Name: name, Group: group, Title: guideTitle(file), file: file}
-}
-
-// guideTitle returns the page's first level-one heading.
-func guideTitle(file string) string {
-	data, err := guideFS.ReadFile(file)
-	if err != nil {
-		return ""
-	}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if title, ok := strings.CutPrefix(line, "# "); ok {
-			return strings.TrimSpace(title)
-		}
-	}
-	return ""
+	return out
 }
 
 // Guide returns the Markdown page for a topic. An action's page can also be
 // asked for as actions/<name>.
 func Guide(topic string) (string, error) {
-	topic = strings.TrimSpace(strings.ToLower(topic))
-	if name, ok := strings.CutPrefix(topic, "actions/"); ok {
-		topic = name
-	}
-	topics := GuideTopics()
-	names := make([]string, 0, len(topics))
-	for _, t := range topics {
-		if t.Name == topic {
-			data, err := guideFS.ReadFile(t.file)
-			if err != nil {
-				return "", err
-			}
-			return string(data), nil
-		}
-		names = append(names, t.Name)
-	}
-	if s := suggest.Closest(topic, names); s != "" {
-		return "", fmt.Errorf("unknown guide topic: %s; did you mean %q?", topic, s)
-	}
-	return "", fmt.Errorf("unknown guide topic: %s (run probe guide to list the topics)", topic)
+	return guideBook.Page(topic)
 }
 
 // GuideIndex renders the list of topics probe guide prints without one.
 func GuideIndex() string {
-	var b strings.Builder
-	b.WriteString("Usage: probe guide <topic>\n")
-	b.WriteString("       probe guide <action> [workflow-file]\n\n")
-	b.WriteString("Prints a page of the Probe documentation as Markdown, for the version\n")
-	b.WriteString("of Probe that is running, or the description of an external action:\n")
-	b.WriteString("a local one by its directory, as ./my-action, or one on GitHub as\n")
-	b.WriteString("github.com/<owner>/<repo>, at its latest release, or @<commit SHA>.\n")
-	b.WriteString("With a workflow file, an action can be named as its actions names it.\n\n")
-	b.WriteString("Topics:\n")
+	return guideBook.Index()
+}
 
-	// The official actions are listed after the built-in ones, under a
-	// heading of their own, with the line of description the list keeps,
-	// as their pages are not in the binary.
-	var lines []GuideTopic
-	for _, t := range GuideTopics() {
-		if t.Group == guideGroupConcepts && len(lines) > 0 && lines[len(lines)-1].Group == guideGroupActions {
-			for _, a := range officialActions {
-				lines = append(lines, GuideTopic{Name: a.Name, Group: guideGroupExternal, Title: a.Description})
-			}
-		}
-		lines = append(lines, t)
-	}
-	width := 0
-	for _, t := range lines {
-		width = max(width, len(t.Name))
-	}
+// OfficialAction is an external action published alongside Probe.
+type OfficialAction = guide.OfficialAction
 
-	group := ""
-	for _, t := range lines {
-		if t.Group != group {
-			group = t.Group
-			fmt.Fprintf(&b, "\n%s:\n", group)
+// OfficialActions lists the external actions published alongside Probe.
+func OfficialActions() []OfficialAction {
+	return guide.OfficialActions()
+}
+
+// DocReader reads the description of an external action, as
+// actionref.ReadDoc does.
+type DocReader = guide.DocReader
+
+// GuideAction returns the page probe guide prints for arg, a topic or an
+// external action, with workflow, when it is not empty, the files of a
+// workflow whose names under actions arg may be. It is looked for in this
+// order:
+//
+//  1. A name the workflow gives under actions, so that the page is that of
+//     the action the workflow runs. A path there is taken from the
+//     directory of the workflow, as a run takes it.
+//  2. A local path, starting with ./ or ../ or absolute, taken from the
+//     working directory, or github.com/<owner>/<repo>[/<dir>][@<commit>].
+//  3. A topic of the pages built into Probe.
+//  4. An official action, read from github.com/mozership/probe-<name>.
+//
+// An external action is described by what read returns, with the lines
+// that tell where it comes from before it.
+func GuideAction(arg, workflow string, read DocReader) (string, error) {
+	var w guide.Workflow
+	if workflow != "" && !guide.IsActionPath(strings.TrimSpace(arg)) {
+		var err error
+		if w, err = workflowActions(workflow); err != nil {
+			return "", err
 		}
-		fmt.Fprintf(&b, "  %-*s  %s\n", width, t.Name, t.Title)
 	}
-	return b.String()
+	return guideBook.Action(arg, w, read)
+}
+
+// workflowActions returns the names the workflow gives under actions, and
+// the directory a local path among them is taken from.
+func workflowActions(workflow string) (guide.Workflow, error) {
+	files, err := workflowfile.Paths(workflow)
+	if err != nil {
+		return guide.Workflow{}, fmt.Errorf("workflow file %w", err)
+	}
+	if len(files) == 0 {
+		return guide.Workflow{}, fmt.Errorf("%s: no YAML file", workflow)
+	}
+	text, contents, err := workflowfile.Read(files, readFile)
+	if err != nil {
+		return guide.Workflow{}, fmt.Errorf("workflow file %w", err)
+	}
+	src, err := newSource(files, contents, text)
+	if err != nil {
+		return guide.Workflow{}, fmt.Errorf("%s: %w", workflow, err)
+	}
+	var w struct {
+		Actions map[string]string `yaml:"actions"`
+	}
+	// The files override one another as a run reads them, a key written
+	// again taking the place of the first.
+	if err := src.decode(&w, yaml.AllowDuplicateMapKey()); err != nil {
+		return guide.Workflow{}, fmt.Errorf("%s: %w", workflow, err)
+	}
+	abs, err := filepath.Abs(files[0])
+	if err != nil {
+		return guide.Workflow{}, err
+	}
+	return guide.Workflow{Uses: w.Actions, Dir: filepath.Dir(abs)}, nil
 }

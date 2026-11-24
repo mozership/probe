@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -332,17 +334,17 @@ func TestJob_handleSkip(t *testing.T) {
 	}
 
 	// Create a result with the job entry
-	result := NewResult()
-	jobResult := &JobResult{
+	result := outcome.New()
+	jobResult := &outcome.Job{
 		JobID:   "test-job",
 		JobName: "Test Job",
-		Status:  StatusSuccess,
+		Status:  outcome.StatusSuccess,
 	}
 	result.Jobs["test-job"] = jobResult
 
 	ctx := JobContext{
 		runEnv: &runEnv{
-			Result:  result,
+			Outcome: result,
 			Printer: newBufferPrinter(),
 			Config:  Config{Verbose: false},
 		},
@@ -352,7 +354,7 @@ func TestJob_handleSkip(t *testing.T) {
 	job.handleSkip(ctx)
 
 	// Verify the job was marked as skipped
-	if jobResult.Status != StatusSkipped {
+	if jobResult.Status != outcome.StatusSkipped {
 		t.Errorf("Expected job status to be StatusSkipped, got %v", jobResult.Status)
 	}
 
@@ -436,12 +438,12 @@ func TestJob_RunStandalone_Failure(t *testing.T) {
 	}
 
 	// Outside a verbose run the error is not also told as it happens.
-	if errBuffer, ok := printer.errWriter.(*bytes.Buffer); ok {
+	if errBuffer, ok := printer.Err().(*bytes.Buffer); ok {
 		if errBuffer.Len() != 0 {
 			t.Errorf("Expected no error output while the job ran, but got: %s", errBuffer.String())
 		}
 	} else {
-		t.Errorf("Expected printer.errWriter to be *bytes.Buffer, but got %T", printer.errWriter)
+		t.Errorf("Expected printer.Err() to be *bytes.Buffer, but got %T", printer.Err())
 	}
 }
 
@@ -481,7 +483,7 @@ func TestJob_RunStandalone_Parameters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
-			printer.verbose = tt.verbose
+			printer.SetVerbose(tt.verbose)
 			run := job.RunStandalone(tt.vars, printer, tt.jobID, "")
 
 			// Empty job should succeed regardless of parameters
@@ -764,9 +766,9 @@ func TestRunStandaloneNeedsNoCheck(t *testing.T) {
 		opts []StandaloneOption
 		want string
 	}{
-		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: IconSuccess},
-		{name: "told nothing", want: IconTriangle},
-		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: IconTriangle},
+		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: display.IconSuccess},
+		{name: "told nothing", want: display.IconTriangle},
+		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: display.IconTriangle},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			job := &Job{Name: "embedded", Steps: []*Step{{Name: "Greets", Uses: "hello"}}}
@@ -807,13 +809,13 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 	for _, n := range []int{1, 2} {
 		printer := newBufferPrinter()
 		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		result := outcome.New()
+		result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 		failed, err := job.run(JobContext{
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: runner},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Vars:    map[string]any{"n": n},
 			Outputs: NewOutputs(),
@@ -846,23 +848,23 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 // The refusal is read from the failure the step was refused with, not from
 // a message that looks like one, and is found when it is wrapped.
 func TestFirstRefusal(t *testing.T) {
-	failure := func(err error) *StepFailure {
+	failure := func(err error) *outcome.Failure {
 		return (&stepRun{Step: &Step{}, err: err}).errorFailure()
 	}
 	tests := []struct {
 		name string
-		jr   *JobResult
+		jr   *outcome.Job
 		want string
 	}{
 		{
 			// The kind and the message of a refusal, without the refusal
 			// itself, which reading the message would have taken for one.
 			name: "none refused",
-			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: &StepFailure{Kind: FailureRefused, Message: "refused: x"}}}},
+			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", Failure: &outcome.Failure{Kind: outcome.FailureRefused, Message: "refused: x"}}}},
 		},
 		{
 			name: "the first of those refused",
-			jr: &JobResult{StepResults: []StepResult{
+			jr: &outcome.Job{StepResults: []outcome.Step{
 				{Index: 0, Name: "a"},
 				{Index: 1, Name: "b", Failure: failure(actionrpc.Refuse("the action ssh does not keep to --read-only"))},
 				{Index: 2, Name: "c", Failure: failure(actionrpc.Refuse("the second"))},
@@ -871,12 +873,12 @@ func TestFirstRefusal(t *testing.T) {
 		},
 		{
 			name: "a refusal wrapped in another error",
-			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", actionrpc.Refuse("no network")))}}},
+			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", actionrpc.Refuse("no network")))}}},
 			want: `step 0 "a" of the embedded job: no network`,
 		},
 		{
 			name: "a repeated step",
-			jr:   &JobResult{StepResults: []StepResult{{Index: 0, Name: "a", RepeatCounter: &StepRepeatCounter{Failure: failure(actionrpc.Refuse("no network"))}}}},
+			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", RepeatCounter: &outcome.RepeatCounter{Failure: failure(actionrpc.Refuse("no network"))}}}},
 			want: `step 0 "a" of the embedded job: no network`,
 		},
 	}
@@ -911,13 +913,13 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 	for i := range 2 {
 		printer := newBufferPrinter()
 		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		result := outcome.New()
+		result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 		failed, err := job.run(JobContext{
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: runner},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Outputs:       NewOutputs(),
 			RepeatCurrent: i,
@@ -941,10 +943,10 @@ func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
 	tests := []struct {
 		name     string
 		test     string
-		wantShow StatusType
+		wantShow outcome.Status
 	}{
-		{name: "none failed", test: "true", wantShow: StatusSkipped},
-		{name: "one failed", test: "!job.failed && false", wantShow: StatusSuccess},
+		{name: "none failed", test: "true", wantShow: outcome.StatusSkipped},
+		{name: "one failed", test: "!job.failed && false", wantShow: outcome.StatusSuccess},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -955,13 +957,13 @@ func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
 			}}
 			printer := newBufferPrinter()
 			printer.SetMasker(mask.New(nil, nil))
-			result := NewResult()
-			result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+			result := outcome.New()
+			result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 			if _, err := job.run(JobContext{
 				runEnv: &runEnv{
 					Config:  Config{ActionRunner: runner},
 					Printer: printer,
-					Result:  result,
+					Outcome: result,
 				},
 				Outputs: NewOutputs(),
 			}); err != nil {
@@ -987,20 +989,20 @@ func TestJob_JobFailedAcrossEntriesAndRuns(t *testing.T) {
 			Iteration: Iteration{Entries: []map[string]any{{"n": 0}, {"n": 1}, {"n": 2}}}},
 		{Name: "Show log", Uses: "hello", Vars: map[string]any{"seen": "{{ job.failed }}"}, SkipIf: "!job.failed", Test: `vars.seen == "true"`},
 	}}
-	for run, want := range [][]StatusType{
+	for run, want := range [][]outcome.Status{
 		// Entry 1 fails in the first run: entry 2 reads it, and fails.
-		{StatusSuccess, StatusError, StatusError, StatusSuccess},
-		{StatusSuccess, StatusSuccess, StatusSuccess, StatusSkipped},
+		{outcome.StatusSuccess, outcome.StatusError, outcome.StatusError, outcome.StatusSuccess},
+		{outcome.StatusSuccess, outcome.StatusSuccess, outcome.StatusSuccess, outcome.StatusSkipped},
 	} {
 		printer := newBufferPrinter()
 		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+		result := outcome.New()
+		result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 		if _, err := job.run(JobContext{
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: newMockRunner()},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Outputs:       NewOutputs(),
 			RepeatCurrent: run,
@@ -1078,6 +1080,60 @@ func TestMergeDefaults(t *testing.T) {
 			mergeDefaults(tt.data, tt.defaults)
 			if !reflect.DeepEqual(tt.data, tt.expected) {
 				t.Errorf("mergeDefaults() = %v, want %v", tt.data, tt.expected)
+			}
+		})
+	}
+}
+
+// TestJob_expandJobName_env checks that a job's name reads vars and the
+// outputs published so far, and nothing else of the run.
+func TestJob_expandJobName_env(t *testing.T) {
+	outputs := NewOutputs()
+	if err := outputs.Set("login", map[string]any{"user": "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	newCtx := func() *JobContext {
+		return &JobContext{
+			runEnv:       &runEnv{Printer: newBufferPrinter(), Outcome: outcome.New()},
+			Vars:         map[string]any{"env": "staging"},
+			Outputs:      outputs,
+			CurrentJobID: "job_0",
+		}
+	}
+
+	tests := []struct {
+		name    string
+		tmpl    string
+		want    string
+		wantErr string
+	}{
+		{name: "vars", tmpl: "Setup {{vars.env}}", want: "Setup staging"},
+		{name: "outputs by step", tmpl: "As {{outputs.login.user}}", want: "As alice"},
+		{name: "outputs by name", tmpl: "As {{outputs.user}}", want: "As alice"},
+		{name: "a field of the context", tmpl: "{{CurrentJobID}}", wantErr: "CurrentJobID"},
+		{name: "the result of the run", tmpl: "{{Outcome}}", wantErr: "Outcome"},
+		{name: "the config", tmpl: "{{Verbose}}", wantErr: "Verbose"},
+		{name: "a method of the context", tmpl: "{{SetFailed()}}", wantErr: "SetFailed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := newCtx()
+			j := &Job{ID: "job_0", Name: tt.tmpl}
+			err := j.expandJobName(&expr.Expr{}, ctx)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expandJobName(%q) error = %v, want one naming %s", tt.tmpl, err, tt.wantErr)
+				}
+				if ctx.Failed {
+					t.Errorf("expandJobName(%q) marked the job failed", tt.tmpl)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expandJobName(%q): %v", tt.tmpl, err)
+			}
+			if ctx.jobName != tt.want {
+				t.Errorf("expandJobName(%q) = %q, want %q", tt.tmpl, ctx.jobName, tt.want)
 			}
 		})
 	}

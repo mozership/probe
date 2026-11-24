@@ -11,57 +11,59 @@ import (
 	"github.com/mozership/probe/report"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
-// newReportResult builds a Result covering every status a report has to map.
-func newReportResult() (*Result, []string) {
+// newReportResult builds the outcome of a run covering every status a report
+// has to map.
+func newReportResult() (*outcome.Run, []string) {
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
-	rs := NewResult()
+	rs := outcome.New()
 
-	rs.Jobs["api"] = &JobResult{
+	rs.Jobs["api"] = &outcome.Job{
 		JobID:     "api",
 		JobName:   "API",
-		Status:    StatusError,
+		Status:    outcome.StatusError,
 		StartTime: start,
 		EndTime:   start.Add(1500 * time.Millisecond),
-		StepResults: []StepResult{
-			{Index: 0, Name: "Health", Status: StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, Echo: "line 1\nline 2\n", HasEcho: true},
-			{Index: 1, Name: "Create", Status: StatusError, Test: "res.code == 201", Elapsed: 80 * time.Millisecond,
+		StepResults: []outcome.Step{
+			{Index: 0, Name: "Health", Status: outcome.StatusSuccess, Test: "res.code == 200", Elapsed: 120 * time.Millisecond, Echo: "line 1\nline 2\n", HasEcho: true},
+			{Index: 1, Name: "Create", Status: outcome.StatusError, Test: "res.code == 201", Elapsed: 80 * time.Millisecond,
 				RetryAttempt: 3, RetryMax: 3,
-				Failure: &StepFailure{
-					Kind:     FailureAssertion,
+				Failure: &outcome.Failure{
+					Kind:     outcome.FailureAssertion,
 					Message:  "test evaluated to false",
 					Request:  map[string]any{"url": "http://example.test/items"},
 					Response: map[string]any{"code": 500, "body": "boom ``` ]]>"},
 				}},
-			{Index: 2, Name: "Connect", Status: StatusError, Failure: &StepFailure{Kind: FailureAction, Message: "connection refused"}},
-			{Index: 3, Name: "Cleanup", Status: StatusSkipped},
-			{Index: 4, Name: "Note", Status: StatusWarning},
+			{Index: 2, Name: "Connect", Status: outcome.StatusError, Failure: &outcome.Failure{Kind: outcome.FailureAction, Message: "connection refused"}},
+			{Index: 3, Name: "Cleanup", Status: outcome.StatusSkipped},
+			{Index: 4, Name: "Note", Status: outcome.StatusWarning},
 		},
 	}
-	rs.Jobs["after"] = &JobResult{
+	rs.Jobs["after"] = &outcome.Job{
 		JobID:     "after",
 		JobName:   "After | API",
-		Status:    StatusSkipped,
+		Status:    outcome.StatusSkipped,
 		StartTime: start,
 		EndTime:   start,
 	}
-	rs.Jobs["poll"] = &JobResult{
+	rs.Jobs["poll"] = &outcome.Job{
 		JobID:     "poll",
 		JobName:   "Poll",
-		Status:    StatusError,
+		Status:    outcome.StatusError,
 		StartTime: start,
 		EndTime:   start.Add(3 * time.Second),
-		StepResults: []StepResult{
-			{Index: 0, Name: "Tick", Status: StatusWarning, HasTest: true, Test: "res.code == 0",
-				RepeatCounter: &StepRepeatCounter{Name: "Tick", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3}},
+		StepResults: []outcome.Step{
+			{Index: 0, Name: "Tick", Status: outcome.StatusWarning, HasTest: true, Test: "res.code == 0",
+				RepeatCounter: &outcome.RepeatCounter{Name: "Tick", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3}},
 		},
 	}
-	rs.Jobs["setup"] = &JobResult{
+	rs.Jobs["setup"] = &outcome.Job{
 		JobID:     "setup",
 		JobName:   "Setup",
-		Status:    StatusError,
+		Status:    outcome.StatusError,
 		StartTime: start,
 		EndTime:   start.Add(10 * time.Millisecond),
 	}
@@ -72,7 +74,7 @@ func newReportResult() (*Result, []string) {
 func TestBuildReport(t *testing.T) {
 	rs, order := newReportResult()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
-	r := BuildReport("Demo", "A demo run", rs, order, start, start.Add(3*time.Second))
+	r := buildReport("Demo", "A demo run", rs, order, start, start.Add(3*time.Second), nil)
 
 	if r.Status != report.Failed {
 		t.Errorf("Status = %q, want %q", r.Status, report.Failed)
@@ -130,16 +132,16 @@ func TestBuildReport(t *testing.T) {
 func TestBuildReport_StatusMapping(t *testing.T) {
 	tests := []struct {
 		name string
-		sr   StepResult
+		sr   outcome.Step
 		want string
 	}{
-		{"success", StepResult{Status: StatusSuccess}, report.Passed},
-		{"error", StepResult{Status: StatusError}, report.Failed},
-		{"skipped", StepResult{Status: StatusSkipped}, report.Skipped},
-		{"no test", StepResult{Status: StatusWarning}, report.Untested},
-		{"repeat all passed", StepResult{Status: StatusSuccess, HasTest: true, RepeatCounter: &StepRepeatCounter{SuccessCount: 3}}, report.Passed},
-		{"repeat without a test", StepResult{Status: StatusSuccess, RepeatCounter: &StepRepeatCounter{SuccessCount: 3}}, report.Untested},
-		{"repeat all failed", StepResult{Status: StatusError, HasTest: true, RepeatCounter: &StepRepeatCounter{FailureCount: 3}}, report.Failed},
+		{"success", outcome.Step{Status: outcome.StatusSuccess}, report.Passed},
+		{"error", outcome.Step{Status: outcome.StatusError}, report.Failed},
+		{"skipped", outcome.Step{Status: outcome.StatusSkipped}, report.Skipped},
+		{"no test", outcome.Step{Status: outcome.StatusWarning}, report.Untested},
+		{"repeat all passed", outcome.Step{Status: outcome.StatusSuccess, HasTest: true, RepeatCounter: &outcome.RepeatCounter{SuccessCount: 3}}, report.Passed},
+		{"repeat without a test", outcome.Step{Status: outcome.StatusSuccess, RepeatCounter: &outcome.RepeatCounter{SuccessCount: 3}}, report.Untested},
+		{"repeat all failed", outcome.Step{Status: outcome.StatusError, HasTest: true, RepeatCounter: &outcome.RepeatCounter{FailureCount: 3}}, report.Failed},
 	}
 
 	for _, tt := range tests {
@@ -152,7 +154,7 @@ func TestBuildReport_StatusMapping(t *testing.T) {
 }
 
 func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
-	sr := StepResult{Status: StatusSuccess, Failure: &StepFailure{Kind: FailureAssertion}}
+	sr := outcome.Step{Status: outcome.StatusSuccess, Failure: &outcome.Failure{Kind: outcome.FailureAssertion}}
 	if got := buildStepReport(sr, nil).Failure; got != nil {
 		t.Errorf("Failure = %+v, want nil for a passing step", got)
 	}
@@ -160,7 +162,7 @@ func TestBuildReport_FailureOnlyOnFailedSteps(t *testing.T) {
 
 func TestBuildReport_FailureCarriesViolations(t *testing.T) {
 	vs := []report.Violation{{In: "response", Field: "$.id", Message: "body failed"}}
-	sr := StepResult{Status: StatusError, Failure: &StepFailure{Kind: FailureContractResponse, Violations: vs}}
+	sr := outcome.Step{Status: outcome.StatusError, Failure: &outcome.Failure{Kind: outcome.FailureContractResponse, Violations: vs}}
 	got := buildStepReport(sr, nil).Failure
 	if got == nil || !reflect.DeepEqual(got.Violations, vs) {
 		t.Errorf("Failure = %+v, want the violations carried over", got)
@@ -182,7 +184,7 @@ func TestBuildReport_KeepsTheMessageOfAFailure(t *testing.T) {
 	printer.SetMasker(m)
 	env := StepContext{Res: map[string]any{"code": 500, "body": strings.Repeat("x", 180) + token}}
 
-	failed := func(test string, hideOperands bool) *StepFailure {
+	failed := func(test string, hideOperands bool) *outcome.Failure {
 		t.Helper()
 		passed, f := evaluateTest(&expr.Expr{}, test, env, printer, hideOperands)
 		if passed {
@@ -192,7 +194,7 @@ func TestBuildReport_KeepsTheMessageOfAFailure(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		failure *StepFailure
+		failure *outcome.Failure
 		want    string
 	}{
 		{name: "a test that is false", failure: failed("res.code == 200", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
@@ -201,21 +203,21 @@ func TestBuildReport_KeepsTheMessageOfAFailure(t *testing.T) {
 		{name: "a test that is false of two values", failure: failed("res.code == 200 && res.body != ''", false), want: "test evaluated to false: res.code == 200 (res.code = 500)"},
 		{name: "a test that cannot be evaluated", failure: failed("nosuch(1)", false)},
 		{name: "a test that is not a boolean", failure: failed("res.code", false), want: "test evaluated to 500 (int), not a boolean"},
-		{name: "an action's error", failure: &StepFailure{Kind: FailureAction, Message: "dial tcp 127.0.0.1:1: connect: connection refused"}, want: "dial tcp 127.0.0.1:1: connect: connection refused"},
-		{name: "a broken contract", failure: &StepFailure{Kind: FailureContractResponse, Message: "the response breaks its contract in 1 place"}, want: "the response breaks its contract in 1 place"},
+		{name: "an action's error", failure: &outcome.Failure{Kind: outcome.FailureAction, Message: "dial tcp 127.0.0.1:1: connect: connection refused"}, want: "dial tcp 127.0.0.1:1: connect: connection refused"},
+		{name: "a broken contract", failure: &outcome.Failure{Kind: outcome.FailureContractResponse, Message: "the response breaks its contract in 1 place"}, want: "the response breaks its contract in 1 place"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.want != "" && tt.failure.Message != tt.want {
 				t.Fatalf("Message = %q, want %q", tt.failure.Message, tt.want)
 			}
-			if got := buildStepReport(StepResult{Status: StatusError, Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+			if got := buildStepReport(outcome.Step{Status: outcome.StatusError, Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
 				t.Errorf("step: message = %q, want %q", got, tt.failure.Message)
 			}
-			if got := buildRepeatTestReport(&RepeatTestResult{Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
+			if got := buildRepeatTestReport(&outcome.RepeatTest{Failure: tt.failure}, m).Failure.Message; got != tt.failure.Message {
 				t.Errorf("test of a repeated job: message = %q, want %q", got, tt.failure.Message)
 			}
-			repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: tt.failure}, false)
+			repeated := repeatStepResult(0, outcome.RepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: tt.failure}, false)
 			if got := buildStepReport(repeated, m).Failure.Message; got != repeated.Failure.Message {
 				t.Errorf("repeated step: message = %q, want %q", got, repeated.Failure.Message)
 			}
@@ -239,12 +241,12 @@ func TestBuildReport_MasksTheMessageWithWhatTheMaskerLearnedSince(t *testing.T) 
 
 	m.Learn(map[string]any{"headers": map[string]any{"authorization": token}})
 	want := `test evaluated to false: res.body == "" (res.body = "` + strings.Repeat("x", 180) + `<redacted>")`
-	if got := buildStepReport(StepResult{Status: StatusError, Failure: f}, m).Failure.Message; got != want {
+	if got := buildStepReport(outcome.Step{Status: outcome.StatusError, Failure: f}, m).Failure.Message; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 	// A repeated step keeps the count of the runs it failed in before the
 	// message of the first of them.
-	repeated := repeatStepResult(0, StepRepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: f}, false)
+	repeated := repeatStepResult(0, outcome.RepeatCounter{FailureCount: 2, SuccessCount: 1, Failure: f}, false)
 	if got, want := buildStepReport(repeated, m).Failure.Message, "2 of 3 iterations failed; the first: "+want; got != want {
 		t.Errorf("repeated step: message = %q, want %q", got, want)
 	}
@@ -252,10 +254,10 @@ func TestBuildReport_MasksTheMessageWithWhatTheMaskerLearnedSince(t *testing.T) 
 
 func TestBuildReport_StepCarriesContract(t *testing.T) {
 	c := &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}
-	for _, sr := range []StepResult{
-		{Status: StatusSuccess, Contract: c},
-		{Status: StatusError, Contract: c},
-		{Status: StatusSuccess, Contract: c, RepeatCounter: &StepRepeatCounter{SuccessCount: 1, Checked: true}},
+	for _, sr := range []outcome.Step{
+		{Status: outcome.StatusSuccess, Contract: c},
+		{Status: outcome.StatusError, Contract: c},
+		{Status: outcome.StatusSuccess, Contract: c, RepeatCounter: &outcome.RepeatCounter{SuccessCount: 1, Checked: true}},
 	} {
 		if got := buildStepReport(sr, nil).Contract; got != c {
 			t.Errorf("Contract = %+v, want %+v", got, c)
@@ -264,7 +266,7 @@ func TestBuildReport_StepCarriesContract(t *testing.T) {
 }
 
 func TestBuildReport_NilResult(t *testing.T) {
-	r := BuildReport("Empty", "", nil, []string{"a"}, time.Time{}, time.Time{})
+	r := buildReport("Empty", "", nil, []string{"a"}, time.Time{}, time.Time{}, nil)
 	if r.Status != report.Passed || len(r.Jobs) != 0 {
 		t.Errorf("got status %q with %d jobs, want an empty passing report", r.Status, len(r.Jobs))
 	}

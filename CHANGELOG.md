@@ -4,6 +4,45 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## Unreleased
+
+### Breaking Changes
+
+This release breaks the Go API of the root package, for code that imports
+probe as a library. Workflow files are not affected, except as told under
+Behaviour Changes below, and neither are the functions an action calls
+actions with (`ActionCaller`, `NewActionCaller`, `CallResult`,
+`WithCallerLogOutput`, `ExecutableEnv`) or the embedded action's way of
+running a job (`ReadJobFile`, `Job.RunStandalone`, `NewPrinter` and the
+standalone options).
+
+The results of a run and what prints it moved under `internal/`, where
+code outside probe cannot import them.
+
+#### Removed from the root package
+
+| Before | After |
+|---|---|
+| `Result`, `NewResult`, `JobResult`, `StepResult`, `StepFailure`, `StepRepeatCounter`, `RepeatTestResult` | not for use outside probe |
+| `StatusType`, `StatusSuccess`, `StatusError`, `StatusWarning`, `StatusSkipped` | not for use outside probe |
+| `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | the same constants of `report` |
+| `Reporter`, `BufferedReporter`, `StreamReporter` | not for use outside probe |
+| `BuildReport` | not for use outside probe; `--report` of the `probe` command |
+| `IconSuccess`, `IconError` and the other icons | `style.Mark.Icon` for the marks it has; not for use outside probe otherwise |
+
+#### Changed in the root package
+
+| Before | After |
+|---|---|
+| `Printer.PrintTestResult(success bool, testExpr string, context any)` | `Printer.PrintTestResult(success bool, testExpr string, env map[string]any)`, with the names the test was evaluated with |
+| `Printer`, `OutputMode`, its constants and `OutputModeAuto` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
+| `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
+| `GuideTopic` | unchanged |
+
+### Behaviour Changes
+
+- The template of a job's `name` reads `vars` and the `outputs` published before the job starts, and nothing else. It read the fields of the run Probe keeps, such as `CurrentJobID` or `Verbose`, which were never documented, and a name that reads one now keeps the job from running; `outputs` failed on any key (#549)
+
 ## v1.30.0 (2026-10-26)
 
 ### Breaking Changes

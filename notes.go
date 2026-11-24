@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/mozership/probe/internal/notes"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -53,19 +54,19 @@ func newNoteBook(order []string, masker func() *mask.Masker) *noteBook {
 
 // record keeps the notes of sr, the final result of a step of the job of
 // jobID, called job. A skipped step has none.
-func (b *noteBook) record(jobID, job string, sr StepResult) {
-	if b == nil || len(sr.notes) == 0 {
+func (b *noteBook) record(jobID, job string, sr outcome.Step) {
+	if b == nil || len(sr.Notes) == 0 {
 		return
 	}
 	status := reportStatus(sr)
 	run := 0
 	if sr.RepeatCounter != nil {
-		run = sr.RepeatCounter.notesRun
+		run = sr.RepeatCounter.NotesRun
 	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for _, n := range sr.notes {
+	for _, n := range sr.Notes {
 		b.byJob[jobID] = append(b.byJob[jobID], noteEntry{
 			jobID: jobID, job: job, step: sr.Name, index: sr.Index,
 			status: status, run: run, note: n,
