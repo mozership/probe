@@ -14,7 +14,7 @@ import (
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/actions"
+	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"
 	"github.com/mozership/probe/internal/protocoverage"

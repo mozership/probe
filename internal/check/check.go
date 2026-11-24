@@ -54,7 +54,7 @@ func (f Finding) String() string {
 	return b.String()
 }
 
-// CheckOptions tunes Check. actions.CheckOptions gives what it is to know of
+// CheckOptions tunes Check. The probe command gives it what it is to know of
 // the built-in actions.
 type CheckOptions struct {
 	// Actions are the names of the actions a step may use, besides the
