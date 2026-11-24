@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/yamlnode"
 )
 
 // writeWorkflow writes content to a file named name in dir and returns its
@@ -1367,7 +1368,7 @@ func TestNewChecker(t *testing.T) {
 func TestCheckerAddOnce(t *testing.T) {
 	c := newChecker(CheckOptions{})
 	c.lines = map[string]int{"jobs[0].steps[0]": 4, "jobs[0].steps[1]": 7}
-	c.files = []fileStart{{name: "w.yml", line: 1}}
+	c.files = []yamlnode.FileStart{{Name: "w.yml", Line: 1}}
 	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
 	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "a")
 	c.addOnce(SeverityError, "jobs[0].steps[0].test", "s", "%s: %s", "test", "b")

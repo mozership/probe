@@ -191,7 +191,7 @@ func (p *Probe) load(src *source) ([]aliasProblem, []problem, error) {
 	files := src.files
 	// Set base path for resolving relative paths in embedded actions
 	if len(files) > 0 {
-		absPath, err := filepath.Abs(files[0].name)
+		absPath, err := filepath.Abs(files[0].Name)
 		if err == nil {
 			p.workflow.basePath = filepath.Dir(absPath)
 		}

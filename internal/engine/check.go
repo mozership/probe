@@ -9,6 +9,7 @@ import (
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/internal/workflowfile"
+	"github.com/mozership/probe/internal/yamlnode"
 )
 
 // Severities of a Finding.
@@ -145,7 +146,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	}
 
 	c := newChecker(opts)
-	c.files = mapFiles(files, contents)
+	c.files = yamlnode.MapFiles(files, contents)
 	for _, r := range workflowfile.RedefinedJobs(files, contents) {
 		c.findings = append(c.findings, Finding{
 			Severity: SeverityWarning,
@@ -217,7 +218,7 @@ type checker struct {
 	lines map[string]int
 	// files are the files read, given and included, with the line of the
 	// source that each one starts on.
-	files fileLines
+	files yamlnode.Files
 	// choices are the values that the keys of with which take only some
 	// take, by the action's name and then the key's: those of opts, and
 	// those the action.yml of an external action declares.
