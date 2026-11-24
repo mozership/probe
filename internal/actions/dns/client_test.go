@@ -31,20 +31,35 @@ var zone = map[string][]string{
 	"www.example.test. A": {"www.example.test. 300 IN CNAME example.test.", "example.test. 300 IN A 192.0.2.1"},
 }
 
+// listenUDPAndTCP listens on one port of the loopback over both. The port the
+// system gives for UDP may be taken for TCP, so another is tried then.
+func listenUDPAndTCP(t *testing.T) (net.PacketConn, net.Listener) {
+	t.Helper()
+	var err error
+	for range 20 {
+		var pc net.PacketConn
+		pc, err = net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ln net.Listener
+		ln, err = net.Listen("tcp", pc.LocalAddr().String())
+		if err == nil {
+			return pc, ln
+		}
+		_ = pc.Close()
+	}
+	t.Fatal(err)
+	return nil, nil
+}
+
 // startServer serves zone over UDP and TCP on one port of the loopback, and
 // returns its address and the number of queries it took over each.
 func startServer(t *testing.T, big bool) (string, *atomic.Int32, *atomic.Int32) {
 	t.Helper()
 
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	pc, ln := listenUDPAndTCP(t)
 	addr := pc.LocalAddr().String()
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	var udp, tcp atomic.Int32
 	handler := func(network string) dns.HandlerFunc {
