@@ -1067,7 +1067,6 @@ import (
     "github.com/hashicorp/go-hclog"
     "github.com/mozership/probe"
     "github.com/mozership/probe/actionrpc"
-    "github.com/mozership/probe/actions"
 )
 
 // Greet is a custom action, used as `uses: greet`.
@@ -1099,7 +1098,7 @@ func main() {
             })
             return
         }
-        if serve, ok := actions.Lookup(name); ok {
+        if serve, ok := probe.BuiltinAction(name); ok {
             serve()
             return
         }

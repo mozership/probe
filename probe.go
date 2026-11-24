@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/check"
 	"github.com/mozership/probe/internal/engine"
 )
@@ -67,4 +68,11 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 // WithCallerLogOutput writes the log records of the actions called to w.
 func WithCallerLogOutput(w io.Writer) CallerOption {
 	return engine.WithCallerLogOutput(w)
+}
+
+// BuiltinAction returns the function that serves the built-in action name,
+// for a build of Probe that adds actions of its own and hands the other names
+// of builtin-actions to these.
+func BuiltinAction(name string) (serve func(), ok bool) {
+	return actions.Lookup(name)
 }

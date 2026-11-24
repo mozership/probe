@@ -58,8 +58,9 @@ What external actions import stays: the root package, `actionrpc`,
 
 | Before | After |
 |---|---|
-| `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe; `actions.Lookup` stays, for a build of Probe that adds actions of its own |
-| `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `actions.Lookup` serves each built-in action |
+| `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe |
+| `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `probe.BuiltinAction` serves each built-in action |
+| `actions.Lookup` | `probe.BuiltinAction`, for a build of Probe that adds actions of its own |
 | `dag` | not for use outside probe; `probe dag` draws the jobs of a workflow |
 | `mask` | not for use outside probe; `mask/markdown` stays |
 | `report` | not for use outside probe; `--report` of the `probe` command. `Config.Reports`, `Config.Baseline` and `RunOptions.Masker` keep their types, which code outside probe can leave nil but cannot make |
