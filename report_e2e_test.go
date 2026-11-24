@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/report"
 )
 
@@ -92,7 +93,7 @@ func TestWorkflow_StartWritesReports(t *testing.T) {
 	}
 
 	fails := steps[1].Failure
-	if fails == nil || fails.Kind != FailureAssertion || fails.Request["path"] != "/ok" {
+	if fails == nil || fails.Kind != outcome.FailureAssertion || fails.Request["path"] != "/ok" {
 		t.Errorf("step 1 failure = %+v, want an assertion with the request", fails)
 	}
 
@@ -105,7 +106,7 @@ func TestWorkflow_StartWritesReports(t *testing.T) {
 	}
 
 	errored := steps[3].Failure
-	if errored == nil || errored.Kind != FailureAction || !strings.Contains(errored.Message, "connection refused") {
+	if errored == nil || errored.Kind != outcome.FailureAction || !strings.Contains(errored.Message, "connection refused") {
 		t.Errorf("step 3 failure = %+v, want the action error", errored)
 	}
 

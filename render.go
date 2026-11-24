@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/textwidth"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
@@ -53,7 +54,7 @@ func (r *reportRenderer) writeStepRepeatStart(b *strings.Builder, stepIdx int, s
 
 // writeStepRepeatResult writes how the runs of a repeated step went, and
 // the summary of their times when it took any.
-func (r *reportRenderer) writeStepRepeatResult(b *strings.Builder, counter *StepRepeatCounter, hasTest bool) {
+func (r *reportRenderer) writeStepRepeatResult(b *strings.Builder, counter *outcome.RepeatCounter, hasTest bool) {
 	totalCount := counter.RepeatTotal
 
 	// The runs in which the step was not run, after one that failed, are
@@ -110,13 +111,13 @@ func (r *reportRenderer) writeStepRepeatResult(b *strings.Builder, counter *Step
 // error of its action, a template that could not be evaluated, or the
 // guard's refusal. The count alone would not tell it, and the error is told
 // nowhere else unless the run is verbose.
-func (r *reportRenderer) writeStepRepeatError(b *strings.Builder, counter *StepRepeatCounter) {
+func (r *reportRenderer) writeStepRepeatError(b *strings.Builder, counter *outcome.RepeatCounter) {
 	f := counter.Failure
 	if f == nil || f.Message == "" {
 		return
 	}
 	switch f.Kind {
-	case FailureAction, FailureTemplate, FailureRefused:
+	case outcome.FailureAction, outcome.FailureTemplate, outcome.FailureRefused:
 		b.WriteString(r.failureText(f, ""))
 	}
 }
@@ -124,7 +125,7 @@ func (r *reportRenderer) writeStepRepeatError(b *strings.Builder, counter *StepR
 // writeStepBaseline writes under the times of a repeated step those of the
 // step in the baseline, bl, and how much they changed; nothing when there
 // is no baseline to show them against, or the step took no times.
-func (r *reportRenderer) writeStepBaseline(b *strings.Builder, counter *StepRepeatCounter, bl *report.RepeatBaseline) {
+func (r *reportRenderer) writeStepBaseline(b *strings.Builder, counter *outcome.RepeatCounter, bl *report.RepeatBaseline) {
 	if r.baseline == nil {
 		return
 	}
@@ -138,7 +139,7 @@ func (r *reportRenderer) writeStepBaseline(b *strings.Builder, counter *StepRepe
 // under its steps, and why it failed or was skipped under it. It is laid out
 // as a step is without its number, so that its icon and text line up with
 // theirs, and why it failed with the text.
-func (r *reportRenderer) repeatTestText(label string, rt *RepeatTestResult) string {
+func (r *reportRenderer) repeatTestText(label string, rt *outcome.RepeatTest) string {
 	switch {
 	case rt == nil:
 		return ""
@@ -157,23 +158,23 @@ func (r *reportRenderer) repeatTestText(label string, rt *RepeatTestResult) stri
 // evaluated, or did not come to a boolean, by that; a contract that is
 // broken by where, then the request and the response; and an error by its
 // message. It is empty when f is nil.
-func (r *reportRenderer) failureText(f *StepFailure, test string) string {
+func (r *reportRenderer) failureText(f *outcome.Failure, test string) string {
 	if f == nil {
 		return ""
 	}
 	switch f.Kind {
-	case FailureAssertion:
+	case outcome.FailureAssertion:
 		var b strings.Builder
-		if f.clause != nil {
-			b.WriteString(falseClauseDetail(maskClause(r.masker, *f.clause)))
+		if f.Clause != nil {
+			b.WriteString(falseClauseDetail(outcome.MaskClause(r.masker, *f.Clause)))
 		}
 		b.WriteString(exchangeDetail(r.masker, f.Request, f.Response))
 		return b.String()
-	case FailureTestError:
+	case outcome.FailureTestError:
 		return testErrorDetail(f.Message)
-	case FailureTestType:
-		return typeMismatchDetail(test, f.got)
-	case FailureContractResponse, FailureContractRequest:
+	case outcome.FailureTestType:
+		return typeMismatchDetail(test, f.Got)
+	case outcome.FailureContractResponse, outcome.FailureContractRequest:
 		return contractDetail(r.masker, f)
 	default:
 		return indentDetail(f.Message)
@@ -213,8 +214,8 @@ type reportTotals struct {
 	start, end time.Time
 }
 
-// add counts jr in the totals. Callers hold jr.mutex.
-func (t *reportTotals) add(jr *JobResult) {
+// add counts jr in the totals. Callers hold jr.Mu.
+func (t *reportTotals) add(jr *outcome.Job) {
 	if jr.Succeeded() {
 		t.succeeded++
 	}
@@ -251,21 +252,21 @@ func (r *reportRenderer) writeFooter(b *strings.Builder, t reportTotals, totalJo
 
 // writeJobStatus writes the status line of a job, in the color of its
 // status.
-func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, status StatusType, duration float64) {
+func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, status outcome.Status, duration float64) {
 	var icon string
 	var statusText string
 	var colorFunc func() *color.Color
 
 	switch status {
-	case StatusSuccess:
+	case outcome.StatusSuccess:
 		icon = IconCircle
 		statusText = fmt.Sprintf("Completed in %.2fs", duration)
 		colorFunc = colorSuccess
-	case StatusError:
+	case outcome.StatusError:
 		icon = IconCircle
 		statusText = fmt.Sprintf("Failed in %.2fs", duration)
 		colorFunc = colorError
-	case StatusSkipped:
+	case outcome.StatusSkipped:
 		icon = IconCircle
 		statusText = "(SKIPPED)"
 		colorFunc = colorSkipped
@@ -276,7 +277,7 @@ func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, stat
 	}
 
 	// For skipped jobs, make the entire line gray
-	if status == StatusSkipped {
+	if status == outcome.StatusSkipped {
 		r.fprintf(b, "%s %s %s\n",
 			colorFunc().Sprint(icon),
 			colorFunc().Sprint(jobName),
@@ -292,9 +293,9 @@ func (r *reportRenderer) writeJobStatus(b *strings.Builder, jobName string, stat
 // jobText returns the block of a job: the status line followed by its step
 // results. It adds the job to totals, as it was when its block was
 // rendered, for the footer.
-func (r *reportRenderer) jobText(jr *JobResult, totals *reportTotals) string {
-	jr.mutex.Lock()
-	defer jr.mutex.Unlock()
+func (r *reportRenderer) jobText(jr *outcome.Job, totals *reportTotals) string {
+	jr.Mu.Lock()
+	defer jr.Mu.Unlock()
 
 	var output strings.Builder
 
@@ -308,7 +309,7 @@ func (r *reportRenderer) jobText(jr *JobResult, totals *reportTotals) string {
 
 // reportText returns the report of rs: the block of each job, in order,
 // and the footer.
-func (r *reportRenderer) reportText(rs *Result) string {
+func (r *reportRenderer) reportText(rs *outcome.Run) string {
 	if rs == nil {
 		return ""
 	}
@@ -327,7 +328,7 @@ func (r *reportRenderer) reportText(rs *Result) string {
 
 // stepsText returns the steps of the jobs of rs, in order, without their
 // status lines or the footer: what a job run on its own reports.
-func (r *reportRenderer) stepsText(rs *Result) string {
+func (r *reportRenderer) stepsText(rs *outcome.Run) string {
 	if rs == nil {
 		return ""
 	}
@@ -336,10 +337,10 @@ func (r *reportRenderer) stepsText(rs *Result) string {
 
 	for _, jobID := range r.order {
 		if jr, exists := rs.Jobs[jobID]; exists {
-			jr.mutex.Lock()
+			jr.Mu.Lock()
 			stepOutput := r.stepResultsText(jr.JobID, jr.StepResults)
 			r.writeUnderJob(&output, stepOutput)
-			jr.mutex.Unlock()
+			jr.Mu.Unlock()
 		}
 	}
 
@@ -348,7 +349,7 @@ func (r *reportRenderer) stepsText(rs *Result) string {
 
 // stepResultsText returns the lines of stepResults, the steps of the job
 // of jobID, by which they are found in the baseline.
-func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult) string {
+func (r *reportRenderer) stepResultsText(jobID string, stepResults []outcome.Step) string {
 	if len(stepResults) == 0 {
 		return ""
 	}
@@ -406,15 +407,15 @@ func (r *reportRenderer) stepResultsText(jobID string, stepResults []StepResult)
 			icon, c := statusIcon(stepResult.Status)
 			mark := c.Sprint(icon)
 			switch stepResult.Status {
-			case StatusSuccess, StatusWarning:
+			case outcome.StatusSuccess, outcome.StatusWarning:
 				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
-			case StatusError:
+			case outcome.StatusError:
 				if why := r.failureText(stepResult.Failure, stepResult.Test); why != "" {
 					r.fprintf(&output, "%s %s %s%s%s\n%s\n", num, mark, waitPrefix, stepResult.Name, ps, why)
 				} else {
 					r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, stepResult.Name, ps)
 				}
-			case StatusSkipped:
+			case outcome.StatusSkipped:
 				r.fprintf(&output, "%s %s %s%s%s\n", num, mark, waitPrefix, colorDim().Sprintf("%s", stepTitle(stepResult)), ps)
 			}
 
@@ -447,8 +448,8 @@ func writeEcho(b *strings.Builder, echo string) {
 // stepTitle returns how a step is named in the report and in the progress
 // of a run: by its name, marked as skipped when it was. A repeated step is
 // not marked, as its counts tell how many of its runs were skipped.
-func stepTitle(sr StepResult) string {
-	if sr.Status == StatusSkipped && sr.RepeatCounter == nil {
+func stepTitle(sr outcome.Step) string {
+	if sr.Status == outcome.StatusSkipped && sr.RepeatCounter == nil {
 		return sr.Name + " (SKIPPED)"
 	}
 	return sr.Name
@@ -489,7 +490,7 @@ func (r *reportRenderer) stepStartText(p progressLine, stepName string) string {
 // stepDoneText returns the line of the progress of a run that tells sr
 // is done: its status, and how many of its runs succeeded when it was
 // repeated, or the time it took.
-func (r *reportRenderer) stepDoneText(p progressLine, sr StepResult) string {
+func (r *reportRenderer) stepDoneText(p progressLine, sr outcome.Step) string {
 	icon, c := statusIcon(sr.Status)
 	suffix := ""
 	if sr.RepeatCounter != nil {

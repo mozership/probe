@@ -9,6 +9,7 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/style"
 )
 
@@ -29,37 +30,37 @@ func newTestStreamPrinter(bufferIDs []string) (*Printer, *bytes.Buffer, *bytes.B
 
 // newTestResult builds a Result with three jobs in a fixed order: one
 // successful, one failed and one skipped.
-func newTestResult(base time.Time) *Result {
-	rs := NewResult()
+func newTestResult(base time.Time) *outcome.Run {
+	rs := outcome.New()
 
-	rs.Jobs["first"] = &JobResult{
+	rs.Jobs["first"] = &outcome.Job{
 		JobID:     "first",
 		JobName:   "First Job",
 		StartTime: base,
 		EndTime:   base.Add(1 * time.Second),
-		Status:    StatusSuccess,
-		StepResults: []StepResult{
-			{Index: 0, Name: "First Step", Status: StatusSuccess, RT: "100ms"},
+		Status:    outcome.StatusSuccess,
+		StepResults: []outcome.Step{
+			{Index: 0, Name: "First Step", Status: outcome.StatusSuccess, RT: "100ms"},
 		},
 	}
 
-	rs.Jobs["second"] = &JobResult{
+	rs.Jobs["second"] = &outcome.Job{
 		JobID:     "second",
 		JobName:   "Second Job",
 		StartTime: base.Add(1 * time.Second),
 		EndTime:   base.Add(3 * time.Second),
-		Status:    StatusError,
-		StepResults: []StepResult{
-			{Index: 0, Name: "Second Step", Status: StatusError},
+		Status:    outcome.StatusError,
+		StepResults: []outcome.Step{
+			{Index: 0, Name: "Second Step", Status: outcome.StatusError},
 		},
 	}
 
-	rs.Jobs["third"] = &JobResult{
+	rs.Jobs["third"] = &outcome.Job{
 		JobID:     "third",
 		JobName:   "Third Job",
 		StartTime: base.Add(3 * time.Second),
 		EndTime:   base.Add(3 * time.Second),
-		Status:    StatusSkipped,
+		Status:    outcome.StatusSkipped,
 	}
 
 	return rs
@@ -154,7 +155,7 @@ func TestStreamReporter_MatchesBufferedReport(t *testing.T) {
 
 	r.Start("", "")
 	for _, id := range []string{"third", "second", "first"} {
-		rs.notifyJobDone(id)
+		rs.NotifyJobDone(id)
 	}
 	r.Finish(rs)
 
@@ -176,13 +177,13 @@ func TestStreamReporter_FlushesInDeclaredOrder(t *testing.T) {
 	rs.SetReporter(r)
 
 	// "second" finishes first but must not appear yet.
-	rs.notifyJobDone("second")
+	rs.NotifyJobDone("second")
 	if out.Len() != 0 {
 		t.Fatalf("job out of order should be held back, got: %q", out.String())
 	}
 
 	// "first" unblocks both itself and the queued "second".
-	rs.notifyJobDone("first")
+	rs.NotifyJobDone("first")
 	flushed := out.String()
 	if !strings.Contains(flushed, "First Job") || !strings.Contains(flushed, "Second Job") {
 		t.Fatalf("flushing the head job should emit both blocks, got: %q", flushed)
@@ -194,7 +195,7 @@ func TestStreamReporter_FlushesInDeclaredOrder(t *testing.T) {
 		t.Error("Third Job should not be printed before it is done")
 	}
 
-	rs.notifyJobDone("third")
+	rs.NotifyJobDone("third")
 	if !strings.Contains(out.String(), "Third Job") {
 		t.Error("Third Job should be printed once it is done")
 	}
@@ -208,7 +209,7 @@ func TestStreamReporter_FinishFlushesMissingJobs(t *testing.T) {
 	rs := newTestResult(time.Now())
 	rs.SetReporter(r)
 
-	rs.notifyJobDone("first")
+	rs.NotifyJobDone("first")
 	r.Finish(rs)
 
 	report := out.String()
@@ -230,8 +231,8 @@ func TestStreamReporter_JobDoneIsIdempotent(t *testing.T) {
 	rs := newTestResult(time.Now())
 	rs.SetReporter(r)
 
-	rs.notifyJobDone("first")
-	rs.notifyJobDone("first")
+	rs.NotifyJobDone("first")
+	rs.NotifyJobDone("first")
 
 	if got := strings.Count(out.String(), "First Job"); got != 1 {
 		t.Errorf("First Job printed %d times, want 1", got)
@@ -245,7 +246,7 @@ func TestStreamReporter_UnknownJobIsPrinted(t *testing.T) {
 	rs := newTestResult(time.Now())
 	rs.SetReporter(r)
 
-	rs.notifyJobDone("second")
+	rs.NotifyJobDone("second")
 
 	if !strings.Contains(out.String(), "Second Job") {
 		t.Errorf("a job outside the declared order should still be printed, got: %q", out.String())
@@ -256,13 +257,13 @@ func TestStreamReporter_ProgressGoesToStderr(t *testing.T) {
 	_, out, errOut, r := newTestStreamPrinter([]string{"first"})
 
 	r.StepStart("first", "Calling API")
-	r.StepDone("first", StepResult{Name: "Calling API", Status: StatusSuccess, RT: "120ms"})
-	r.StepDone("first", StepResult{Name: "Checking", Status: StatusError})
-	r.StepDone("first", StepResult{Name: "Skipped one", Status: StatusSkipped})
-	r.StepDone("first", StepResult{
+	r.StepDone("first", outcome.Step{Name: "Calling API", Status: outcome.StatusSuccess, RT: "120ms"})
+	r.StepDone("first", outcome.Step{Name: "Checking", Status: outcome.StatusError})
+	r.StepDone("first", outcome.Step{Name: "Skipped one", Status: outcome.StatusSkipped})
+	r.StepDone("first", outcome.Step{
 		Name:          "Polling",
-		Status:        StatusWarning,
-		RepeatCounter: &StepRepeatCounter{SuccessCount: 2, RepeatTotal: 3},
+		Status:        outcome.StatusWarning,
+		RepeatCounter: &outcome.RepeatCounter{SuccessCount: 2, RepeatTotal: 3},
 	})
 
 	if out.Len() != 0 {
@@ -287,12 +288,12 @@ func TestStreamReporter_StepDoneLines(t *testing.T) {
 	color.NoColor = true
 
 	_, _, errOut, r := newTestStreamPrinter([]string{"first"})
-	r.StepDone("first", StepResult{Name: "get", Status: StatusSuccess, RT: "12ms"})
-	r.StepDone("first", StepResult{Name: "post", Status: StatusError})
-	r.StepDone("first", StepResult{Name: "sleep", Status: StatusWarning})
-	r.StepDone("first", StepResult{Name: "later", Status: StatusSkipped})
-	r.StepDone("first", StepResult{Name: "poll", Status: StatusSkipped, RepeatCounter: &StepRepeatCounter{Name: "poll", SkippedCount: 3, RepeatTotal: 3}})
-	r.StepDone("first", StepResult{Name: "odd", Status: StatusType(99)})
+	r.StepDone("first", outcome.Step{Name: "get", Status: outcome.StatusSuccess, RT: "12ms"})
+	r.StepDone("first", outcome.Step{Name: "post", Status: outcome.StatusError})
+	r.StepDone("first", outcome.Step{Name: "sleep", Status: outcome.StatusWarning})
+	r.StepDone("first", outcome.Step{Name: "later", Status: outcome.StatusSkipped})
+	r.StepDone("first", outcome.Step{Name: "poll", Status: outcome.StatusSkipped, RepeatCounter: &outcome.RepeatCounter{Name: "poll", SkippedCount: 3, RepeatTotal: 3}})
+	r.StepDone("first", outcome.Step{Name: "odd", Status: outcome.Status(99)})
 
 	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
 	want := []string{
@@ -372,9 +373,9 @@ func TestStreamReporter_ConcurrentNotifications(t *testing.T) {
 		go func(jobID string) {
 			defer wg.Done()
 			for i := range 10 {
-				rs.AddStepResult(jobID, StepResult{Index: i, Name: "step", Status: StatusSuccess})
+				rs.AddStepResult(jobID, outcome.Step{Index: i, Name: "step", Status: outcome.StatusSuccess})
 			}
-			rs.notifyJobDone(jobID)
+			rs.NotifyJobDone(jobID)
 		}(id)
 	}
 	wg.Wait()
@@ -405,7 +406,7 @@ func TestBufferedReporter_PrintsOnFinish(t *testing.T) {
 
 	r.Start("My Workflow", "does things")
 	r.StepStart("first", "Calling API")
-	rs.notifyJobDone("first")
+	rs.NotifyJobDone("first")
 
 	if out.Len() != 0 {
 		t.Errorf("buffered reporter must print nothing before Finish, got: %q", out.String())
@@ -429,38 +430,38 @@ func TestResult_notifyStepStart(t *testing.T) {
 	color.NoColor = true
 
 	_, _, errOut, r := newTestStreamPrinter([]string{"first"})
-	rs := NewResult()
+	rs := outcome.New()
 	rs.SetReporter(r)
-	rs.notifyStepStart("first", "Calling API")
+	rs.NotifyStepStart("first", "Calling API")
 	if _, rest, _ := strings.Cut(errOut.String(), " "); rest != "[first] ▸ Calling API\n" {
 		t.Errorf("progress = %q, want the step that started", errOut.String())
 	}
 
 	// Must not panic without a reporter, or without a result.
-	NewResult().notifyStepStart("first", "step")
-	var none *Result
-	none.notifyStepStart("first", "step")
+	outcome.New().NotifyStepStart("first", "step")
+	var none *outcome.Run
+	none.NotifyStepStart("first", "step")
 }
 
 // newRichTestResult builds a Result whose jobs show what the report puts
 // under a step: an echo, a failure, a skipped step and a repeated one, with
 // jobs that ran at once and so overlap in time.
-func newRichTestResult(base time.Time) *Result {
+func newRichTestResult(base time.Time) *outcome.Run {
 	rs := newTestResult(base)
 	rs.Jobs["first"].StepResults = append(rs.Jobs["first"].StepResults,
-		StepResult{Index: 1, Name: "Echoes", Status: StatusSuccess, Echo: "line 1\n  line 2", HasEcho: true},
-		StepResult{Index: 2, Name: "Later", Status: StatusSkipped},
-		StepResult{Index: 3, Name: "Untested", Status: StatusWarning},
+		outcome.Step{Index: 1, Name: "Echoes", Status: outcome.StatusSuccess, Echo: "line 1\n  line 2", HasEcho: true},
+		outcome.Step{Index: 2, Name: "Later", Status: outcome.StatusSkipped},
+		outcome.Step{Index: 3, Name: "Untested", Status: outcome.StatusWarning},
 	)
 	rs.Jobs["second"].StartTime = base.Add(-time.Second)
-	rs.Jobs["second"].StepResults = []StepResult{
-		{Index: 0, Name: "Second Step", Status: StatusError, Test: "res.code == 200", Failure: &StepFailure{
-			Kind:     FailureAssertion,
+	rs.Jobs["second"].StepResults = []outcome.Step{
+		{Index: 0, Name: "Second Step", Status: outcome.StatusError, Test: "res.code == 200", Failure: &outcome.Failure{
+			Kind:     outcome.FailureAssertion,
 			Message:  "test evaluated to false",
 			Request:  map[string]any{"url": "/"},
 			Response: map[string]any{"code": 500},
 		}},
-		{Index: 1, Name: "Polled", Status: StatusWarning, RepeatCounter: &StepRepeatCounter{Name: "Polled", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3, Echoes: []string{"a", "", "c"}}},
+		{Index: 1, Name: "Polled", Status: outcome.StatusWarning, RepeatCounter: &outcome.RepeatCounter{Name: "Polled", SuccessCount: 2, FailureCount: 1, RepeatTotal: 3, Echoes: []string{"a", "", "c"}}},
 	}
 	return rs
 }
@@ -482,7 +483,7 @@ func TestBufferedAndStreamedReportsAreIdentical(t *testing.T) {
 		brs.SetReporter(br)
 		br.Start("Workflow", "does things")
 		for _, id := range order {
-			brs.notifyJobDone(id)
+			brs.NotifyJobDone(id)
 		}
 		br.Finish(brs)
 
@@ -492,7 +493,7 @@ func TestBufferedAndStreamedReportsAreIdentical(t *testing.T) {
 		srs.SetReporter(sr)
 		sr.Start("Workflow", "does things")
 		for _, id := range []string{"second", "third", "first"} {
-			srs.notifyJobDone(id)
+			srs.NotifyJobDone(id)
 		}
 		sr.Finish(srs)
 
@@ -513,15 +514,15 @@ func TestBufferedAndStreamedReportsAreIdentical(t *testing.T) {
 // progress of a run both show it by.
 func TestStatusIcon(t *testing.T) {
 	tests := []struct {
-		status StatusType
+		status outcome.Status
 		icon   string
 		color  *color.Color
 	}{
-		{StatusSuccess, IconSuccess, colorSuccess()},
-		{StatusError, IconError, colorError()},
-		{StatusWarning, IconTriangle, colorNoTest()},
-		{StatusSkipped, IconSkip, colorInfo()},
-		{StatusType(99), "?", colorWarning()},
+		{outcome.StatusSuccess, IconSuccess, colorSuccess()},
+		{outcome.StatusError, IconError, colorError()},
+		{outcome.StatusWarning, IconTriangle, colorNoTest()},
+		{outcome.StatusSkipped, IconSkip, colorInfo()},
+		{outcome.Status(99), "?", colorWarning()},
 	}
 	for _, tt := range tests {
 		icon, c := statusIcon(tt.status)

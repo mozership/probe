@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/textwidth"
 )
 
@@ -63,18 +64,6 @@ func (m OutputMode) resolve() OutputMode {
 	return OutputModeSpinner
 }
 
-// Reporter decides when the parts of a workflow report reach the user, and
-// on which of stdout and stderr; a reportRenderer renders them.
-// Jobs run concurrently, so implementations are called from several
-// goroutines and must serialize their own writes.
-type Reporter interface {
-	Start(name, description string)
-	StepStart(jobID, stepName string)
-	StepDone(jobID string, sr StepResult)
-	JobDone(jobID string, jr *JobResult)
-	Finish(rs *Result)
-}
-
 // jobLabeler is a Reporter that labels what it prints by job, and is told
 // the names of the jobs once the vars they are evaluated with are known.
 type jobLabeler interface {
@@ -82,7 +71,7 @@ type jobLabeler interface {
 }
 
 // newReporter builds the reporter for the given mode.
-func newReporter(mode OutputMode, p *Printer, render *reportRenderer) Reporter {
+func newReporter(mode OutputMode, p *Printer, render *reportRenderer) outcome.Reporter {
 	if mode.resolve() == OutputModeStream {
 		return newStreamReporter(p, render)
 	}
@@ -114,11 +103,11 @@ func (r *BufferedReporter) StepStart(jobID, stepName string) {
 	r.printer.AddSpinnerSuffix(stepName)
 }
 
-func (r *BufferedReporter) StepDone(jobID string, sr StepResult) {}
+func (r *BufferedReporter) StepDone(jobID string, sr outcome.Step) {}
 
-func (r *BufferedReporter) JobDone(jobID string, jr *JobResult) {}
+func (r *BufferedReporter) JobDone(jobID string, jr *outcome.Job) {}
 
-func (r *BufferedReporter) Finish(rs *Result) {
+func (r *BufferedReporter) Finish(rs *outcome.Run) {
 	r.printer.StopSpinner()
 	r.printer.Fprint(r.printer.outWriter, r.render.headerText(r.name, r.description)+r.render.reportText(rs))
 }
@@ -140,7 +129,7 @@ type StreamReporter struct {
 	labels     map[string]string
 	labelWidth int
 	cursor     int
-	ready      map[string]*JobResult
+	ready      map[string]*outcome.Job
 	// totals are those of the jobs printed so far, for the footer.
 	totals reportTotals
 }
@@ -158,7 +147,7 @@ func newStreamReporter(p *Printer, render *reportRenderer) *StreamReporter {
 		render:  render,
 		order:   render.order,
 		index:   index,
-		ready:   make(map[string]*JobResult),
+		ready:   make(map[string]*outcome.Job),
 	}
 }
 
@@ -193,13 +182,13 @@ func (r *StreamReporter) StepStart(jobID, stepName string) {
 	r.printer.Fprint(r.printer.errWriter, r.render.stepStartText(r.progressLineLocked(jobID), stepName))
 }
 
-func (r *StreamReporter) StepDone(jobID string, sr StepResult) {
+func (r *StreamReporter) StepDone(jobID string, sr outcome.Step) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.printer.Fprint(r.printer.errWriter, r.render.stepDoneText(r.progressLineLocked(jobID), sr))
 }
 
-func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
+func (r *StreamReporter) JobDone(jobID string, jr *outcome.Job) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -219,7 +208,7 @@ func (r *StreamReporter) JobDone(jobID string, jr *JobResult) {
 	r.flushLocked()
 }
 
-func (r *StreamReporter) Finish(rs *Result) {
+func (r *StreamReporter) Finish(rs *outcome.Run) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -258,7 +247,7 @@ func (r *StreamReporter) flushLocked() {
 
 // writeJobLocked renders one job block and folds it into the footer totals.
 // Callers must hold r.mu.
-func (r *StreamReporter) writeJobLocked(jr *JobResult) {
+func (r *StreamReporter) writeJobLocked(jr *outcome.Job) {
 	r.printer.Fprint(r.printer.outWriter, r.render.jobText(jr, &r.totals))
 }
 

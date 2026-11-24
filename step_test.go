@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -31,7 +32,7 @@ func TestStep_shouldSkip_errorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
 			st := newStepRun(&Step{Name: "step", SkipIf: tt.skipIf}, nil)
-			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: NewResult()}}
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: outcome.New()}}
 
 			if st.shouldSkip(jCtx) {
 				t.Error("shouldSkip() = true, want the step to run")
@@ -859,8 +860,8 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 }
 
 func TestFailureKindOf_Refused(t *testing.T) {
-	if got := failureKindOf(fmt.Errorf("step: %w", actionrpc.Refuse("no"))); got != FailureRefused {
-		t.Errorf("failureKindOf = %q, want %q", got, FailureRefused)
+	if got := failureKindOf(fmt.Errorf("step: %w", actionrpc.Refuse("no"))); got != outcome.FailureRefused {
+		t.Errorf("failureKindOf = %q, want %q", got, outcome.FailureRefused)
 	}
 }
 
@@ -871,8 +872,8 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		printer := newBufferPrinter()
 		printer.verbose = true
 		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs["job"] = &JobResult{JobID: "job"}
+		result := outcome.New()
+		result.Jobs["job"] = &outcome.Job{JobID: "job"}
 		jCtx := &JobContext{
 			runEnv: &runEnv{
 				Printer: printer,
@@ -886,7 +887,7 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
 
 		steps := result.Jobs["job"].StepResults
-		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped" {
+		if len(steps) != 1 || steps[0].Status != outcome.StatusSkipped || steps[0].Name != "Skipped" {
 			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
 		}
 	}

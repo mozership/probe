@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/report"
 )
 
@@ -70,7 +71,7 @@ type repeatTestEnv struct {
 // success_rate, the share of the runs it passed in; and rt, the distribution
 // of the times its action took in seconds, with min, mean, p50, p90, p95,
 // p99 and max, or nil when it returned none.
-func repeatRuns(counters []StepRepeatCounter) map[string]any {
+func repeatRuns(counters []outcome.RepeatCounter) map[string]any {
 	type runs struct {
 		success, failure, skipped int
 		rts                       []float64
@@ -221,29 +222,29 @@ func repeatTimes(secs []float64) map[string]any {
 // its test over its runs unchecked.
 func (e *Executor) skipped(ctx JobContext) bool {
 	jr := ctx.Result.Jobs[e.job.ID]
-	jr.mutex.Lock()
-	defer jr.mutex.Unlock()
-	return jr.Status == StatusSkipped
+	jr.Mu.Lock()
+	defer jr.Mu.Unlock()
+	return jr.Status == outcome.StatusSkipped
 }
 
 // unskip takes back the skipped status that a run skipped by the job's
 // skipif left, when other runs ran and the test over them decides.
 func (e *Executor) unskip(ctx JobContext) {
 	jr := ctx.Result.Jobs[e.job.ID]
-	jr.mutex.Lock()
-	defer jr.mutex.Unlock()
-	if jr.Status == StatusSkipped {
-		jr.Status = StatusSuccess
+	jr.Mu.Lock()
+	defer jr.Mu.Unlock()
+	if jr.Status == outcome.StatusSkipped {
+		jr.Status = outcome.StatusSuccess
 	}
 }
 
 // checkRepeatTest checks the test of a repeated job against the runs of its
 // steps once every run is over, records the outcome on the job's result, and
 // reports whether the test held, which is whether the job passed.
-func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter) bool {
+func (e *Executor) checkRepeatTest(ctx JobContext, counters []outcome.RepeatCounter) bool {
 	env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters)}
 	res := evalRepeatTest(ctx, e.job.Repeat.Test, env)
-	e.recordRepeatTest(ctx, res, func(jr *JobResult) { jr.RepeatTest = res })
+	e.recordRepeatTest(ctx, res, func(jr *outcome.Job) { jr.RepeatTest = res })
 	return res.Passed
 }
 
@@ -252,32 +253,32 @@ func (e *Executor) checkRepeatTest(ctx JobContext, counters []StepRepeatCounter)
 // result. It reports whether the job passes by it: when the test held, or
 // was skipped, as it is when no run was compared to, or that run has none of
 // a step the test reads.
-func (e *Executor) checkBaselineTest(ctx JobContext, counters []StepRepeatCounter) bool {
+func (e *Executor) checkBaselineTest(ctx JobContext, counters []outcome.RepeatCounter) bool {
 	test := e.job.Repeat.BaselineTest
-	res := &RepeatTestResult{Test: test, Passed: true, Skipped: ctx.repeat.baselineSkipped}
+	res := &outcome.RepeatTest{Test: test, Passed: true, Skipped: ctx.repeat.baselineSkipped}
 	if res.Skipped == "" {
 		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Baseline, e.job.ID)}}
 		res = evalRepeatTest(ctx, test, env)
 	}
-	e.recordRepeatTest(ctx, res, func(jr *JobResult) { jr.BaselineTest = res })
+	e.recordRepeatTest(ctx, res, func(jr *outcome.Job) { jr.BaselineTest = res })
 	return res.Passed
 }
 
 // evalRepeatTest evaluates test, a test of a repeated job, against env.
-func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *RepeatTestResult {
+func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *outcome.RepeatTest {
 	passed, failure := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
-	return &RepeatTestResult{Test: test, Passed: passed, Failure: failure}
+	return &outcome.RepeatTest{Test: test, Passed: passed, Failure: failure}
 }
 
 // recordRepeatTest records res, the outcome of a test of a repeated job, by
 // set on the job's result, and its failure for the exit code of the run.
-func (e *Executor) recordRepeatTest(ctx JobContext, res *RepeatTestResult, set func(*JobResult)) {
+func (e *Executor) recordRepeatTest(ctx JobContext, res *outcome.RepeatTest, set func(*outcome.Job)) {
 	if res.Failure != nil {
-		ctx.Result.recordFailure(res.Failure.Kind)
+		ctx.Result.RecordFailure(res.Failure.Kind)
 	}
 	if jr, ok := ctx.Result.Jobs[e.job.ID]; ok {
-		jr.mutex.Lock()
+		jr.Mu.Lock()
 		set(jr)
-		jr.mutex.Unlock()
+		jr.Mu.Unlock()
 	}
 }
