@@ -1,7 +1,10 @@
-name: Verify All Examples
+name: End-to-End Tests
 description: |
-  This workflow validates the workflows under examples/*.
-  The following software is required: go, docker, mysqladmin, pg_isready
+  Builds probe and runs it end to end: it checks and runs the workflows
+  under examples/, runs the workflows under e2e/ that check reports, secret
+  masking, guards and contracts, and tests the command line itself.
+  The following software is required: go, docker, protoc, openssl,
+  ssh-keygen, python3, mysqladmin, pg_isready
 
 vars:
   ci: "{{ CI ?? '' }}"
