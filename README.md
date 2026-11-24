@@ -161,7 +161,7 @@ Runnable workflows live in [`examples/`](./examples/).
 Contributing
 ------------
 
-Issues, feature requests and pull requests are all welcome.
+Issues, feature requests and pull requests are all welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md), and [SECURITY.md](./SECURITY.md) to report a vulnerability.
 
 License
 -------
