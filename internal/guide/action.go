@@ -95,7 +95,7 @@ func (b *Book) Action(arg string, w Workflow, read DocReader) (string, error) {
 		}
 	}
 
-	names := make([]string, 0, len(officialActions))
+	var names []string
 	for _, t := range b.Topics() {
 		names = append(names, t.Name)
 	}

@@ -122,6 +122,11 @@ func TestGuideAction_Errors(t *testing.T) {
 	if _, err := GuideAction("my", filepath.Join(t.TempDir(), "none.yml"), fakeDocs(&calls)); err == nil {
 		t.Error("a workflow that is not there should fail")
 	}
+	// A path, with spaces around it, is not looked for among the names of
+	// the workflow, which is then not read.
+	if _, err := GuideAction(" ./x ", filepath.Join(t.TempDir(), "none.yml"), fakeDocs(new([]docCall))); err != nil {
+		t.Errorf("a path should not read the workflow: %v", err)
+	}
 	failing := func(string, string) (*actionref.Doc, error) { return nil, errors.New("boom") }
 	if _, err := GuideAction("github.com/o/r", "", failing); err == nil || err.Error() != "boom" {
 		t.Errorf("error = %v, want that of the reader", err)
