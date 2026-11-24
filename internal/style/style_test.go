@@ -5,8 +5,8 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/mozership/probe/internal/style"
 	"github.com/mozership/probe/sdk"
-	"github.com/mozership/probe/style"
 )
 
 // noColor runs the test with color.NoColor set to v and FORCE_COLOR and
