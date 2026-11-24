@@ -354,7 +354,7 @@ func TestCaller_PassesOnProcessesAndContract(t *testing.T) {
 func TestCaller_MissingAction(t *testing.T) {
 	c := newTestCaller(Call{}, t.TempDir(), &fakeRun{})
 	_, err := c.Call(context.Background(), "./nowhere", nil)
-	if err == nil || !strings.Contains(err.Error(), "failed to resolve the external action") {
+	if err == nil || !strings.Contains(err.Error(), "failed to resolve an external action") {
 		t.Fatalf("err = %v, want one that tells the action cannot be resolved", err)
 	}
 }

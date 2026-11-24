@@ -16,17 +16,18 @@ as a library. An external action builds again once it imports
 `github.com/mozership/probe/actionrpc`. Workflow files are not affected,
 except as told under Behaviour Changes below.
 
-The root package now holds only what is used from outside probe: running
-a workflow (`Probe`, `New`, `Config` and the types its fields take, the
+The root package now holds only what is used from outside probe: running a
+workflow (`Probe`, `New`, `Config` and the types its fields take, the
 `Exit*` codes), checking one (`Check`, `CheckOptions`, `Choices`,
 `Finding`, `Severity*`), serving the built-in actions in a build of Probe
 that adds actions of its own (`BuiltinAction`), and the pages of `probe
-guide` and the skill. Calling actions as a step does moved to the `action`
-package, which external actions import. The model of a workflow, its
-loader and the engine that runs it moved to `internal/engine`, `probe
-check` to `internal/check`, and the results of a run and what prints it to
-`internal/outcome` and `internal/display`, where code outside probe cannot
-import them. What stays is unchanged, as aliases of what moved.
+guide` and the skill. `ActionCaller` and what goes with it, with which an
+action calls other actions, moved to the `action` package. The model of a
+workflow, its loader and the engine that runs it moved to
+`internal/engine`, `probe check` to `internal/check`, and the results of a
+run and what prints it to `internal/outcome` and `internal/display`, where
+code outside probe cannot import them. What stays is unchanged, as aliases
+of what moved.
 
 #### Removed from the root package
 
@@ -63,8 +64,8 @@ import them. What stays is unchanged, as aliases of what moved.
 
 #### Moved under `internal/`
 
-What external actions import stays, `actionrpc` under its new name: the
-root package, `action`, `actionref`, `style` and `mask/markdown`.
+What external actions import stays, `actionrpc` under its new name:
+`action`, `actionref`, `style` and `mask/markdown`.
 
 | Before | After |
 |---|---|

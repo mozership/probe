@@ -257,7 +257,7 @@ func (c *Caller) readManifest(full string) error {
 	}
 	m, err := c.manifest(full)
 	if err != nil {
-		return fmt.Errorf("failed to resolve the external action %s: %w", full, err)
+		return fmt.Errorf("failed to resolve an external action: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
