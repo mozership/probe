@@ -81,6 +81,7 @@ func TestFiles_At(t *testing.T) {
 		{"a line past the start of the last file", two, 10, "b.yml", 7},
 		{"no line of the only file", Files{{"a.yml", 1}}, 0, "a.yml", 0},
 		{"no line of several files", two, 0, "", 0},
+		{"the file after an empty one", Files{{"a.yml", 1}, {"b.yml", 2}, {"c.yml", 2}}, 2, "c.yml", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,7 +100,6 @@ func TestPairs(t *testing.T) {
 		want []string
 	}{
 		{"a mapping", "a: 1\nb: 2\n", []string{"a", "b"}},
-		{"a mapping of one key", "a: 1\n", []string{"a"}},
 		{"an anchored mapping", "&x\na: 1\nb: 2\n", []string{"a", "b"}},
 		{"a tagged mapping", "!!map\na: 1\nb: 2\n", []string{"a", "b"}},
 		{"a sequence", "- a\n- b\n", nil},
@@ -112,6 +112,12 @@ func TestPairs(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a pair on its own", func(t *testing.T) {
+		pair := Pairs(body(t, "a: 1\nb: 2\n"))[1]
+		if got := keys(Pairs(pair)); !slices.Equal(got, []string{"b"}) {
+			t.Errorf("Pairs = %v, want [b]", got)
+		}
+	})
 }
 
 func TestItems(t *testing.T) {
@@ -165,6 +171,15 @@ func TestHoldsAnchor(t *testing.T) {
 			}
 		})
 	}
+	t.Run("the anchored value itself", func(t *testing.T) {
+		value := Pairs(body(t, "a: &x\n  b: 1\n"))[0].Value
+		if _, ok := value.(*ast.AnchorNode); !ok {
+			t.Fatalf("the value is a %T, not an anchor", value)
+		}
+		if !HoldsAnchor(value) {
+			t.Error("HoldsAnchor = false, want true")
+		}
+	})
 }
 
 func TestVisitorFunc_StopsWhereItReturnsFalse(t *testing.T) {
