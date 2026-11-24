@@ -9,7 +9,7 @@ import (
 
 	"github.com/mozership/probe/action"
 
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/schedule"

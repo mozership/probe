@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/mask"
 )

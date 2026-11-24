@@ -9,12 +9,15 @@ importing probe as a library.
 ### Breaking Changes
 
 This release breaks the Go API of the root package, renames `actionrpc`,
-which every external action imports, to `action`, and moves the packages
+which every external action imports, to `action`, gathers in `action` what
+external actions use of `actionref`, and moves `actionref` and the packages
 no external action imports under `internal/`, for code that imports probe
 as a library. An external action builds again once it imports
 `github.com/mozership/probe/action` in place of
-`github.com/mozership/probe/actionrpc`. Workflow files are not affected,
-except as told under Behaviour Changes below.
+`github.com/mozership/probe/actionrpc` and `actionref`, and calls
+`action.ParseManifest` and `action.ParseRef` in place of
+`actionref.ParseManifest` and `actionref.Parse`. Workflow files are not
+affected, except as told under Behaviour Changes below.
 
 The root package now holds only what is used from outside probe: running a
 workflow (`Probe`, `New`, `Config` and the types its fields take, the
@@ -64,11 +67,13 @@ of what moved.
 
 #### Moved under `internal/`
 
-What external actions import stays, `actionrpc` under its new name:
-`action`, `actionref`, `style` and `mask/markdown`.
+What external actions import stays: `action`, the new name of
+`actionrpc`, which now also holds what they read of `actionref`; `style`;
+and `mask/markdown`.
 
 | Before | After |
 |---|---|
+| `actionref` | not for use outside probe; `action.ParseManifest`, `action.ParseRef` and the types they return, `action.Manifest`, `action.Runs`, `action.Choice` and `action.Ref`, stand for what external actions read of it |
 | `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe |
 | `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `probe.BuiltinAction` serves each built-in action |
 | `actions.Lookup` | `probe.BuiltinAction`, for a build of Probe that adds actions of its own |

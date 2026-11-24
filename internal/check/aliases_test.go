@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 )
 
 const aliasSHA = "0123456789abcdef0123456789abcdef01234567"
