@@ -18,7 +18,9 @@ actions as a step does (`ActionCaller`, `NewActionCaller`, `CallResult`,
 `CallerOption`, `WithCallerLogOutput`, `ExecutableEnv`), running a workflow
 (`Probe`, `New`, `Config` and the types its fields take, the `Exit*`
 codes), checking one (`Check`, `CheckOptions`, `Choices`, `Finding`,
-`Severity*`), and the pages of `probe guide` and the skill. The model of a
+`Severity*`), serving the built-in actions in a build of Probe that adds
+actions of its own (`BuiltinAction`), and the pages of `probe guide` and
+the skill. The model of a
 workflow, its loader and the engine that runs it moved to
 `internal/engine`, `probe check` to `internal/check`, and the results of a
 run and what prints it to `internal/outcome` and `internal/display`, where
