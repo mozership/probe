@@ -50,7 +50,3 @@ func TestSkill_ExampleLoads(t *testing.T) {
 		t.Errorf("jobs = %d, want 2", n)
 	}
 }
-
-// TestSkill_GuideTopicsExist checks every probe guide command in SKILL.md
-// names a topic that exists, so a renamed page cannot leave the skill
-// pointing at nothing.

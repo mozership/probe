@@ -24,6 +24,9 @@ func TestSkill_Frontmatter(t *testing.T) {
 	}
 }
 
+// TestSkill_GuideTopicsExist checks every probe guide command in SKILL.md
+// names a topic that exists, so a renamed page cannot leave the skill
+// pointing at nothing.
 func TestSkill_GuideTopicsExist(t *testing.T) {
 	matches := regexp.MustCompile(`probe guide ([a-z][a-z/-]*)`).FindAllStringSubmatch(Skill(), -1)
 	if len(matches) == 0 {
