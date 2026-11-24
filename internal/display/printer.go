@@ -11,7 +11,7 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/dump"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/style"
 )
 

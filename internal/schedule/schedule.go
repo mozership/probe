@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mozership/probe/dag"
+	"github.com/mozership/probe/internal/dag"
 )
 
 // Job is what the scheduler knows of a job.

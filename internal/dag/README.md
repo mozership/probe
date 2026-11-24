@@ -3,12 +3,6 @@
 Generic graph algorithms that work with any data structure, and the
 renderers that draw a workflow's jobs as a graph.
 
-## Installation
-
-```go
-import "github.com/mozership/probe/dag"
-```
-
 ## Algorithms
 
 ### Cycle Detection

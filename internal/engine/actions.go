@@ -10,7 +10,7 @@ import (
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actionlog"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // RunOptions controls how a single action invocation is run and logged.

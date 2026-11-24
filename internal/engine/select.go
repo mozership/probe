@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/report"
 )
 
 // Why a job runs in a run narrowed to some of the jobs of a workflow.

@@ -15,11 +15,11 @@ import (
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/fielderr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/vareval"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
 )
 
 const (

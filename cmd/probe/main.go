@@ -18,8 +18,8 @@ import (
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"
 	"github.com/mozership/probe/internal/protocoverage"
+	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/suggest"
-	"github.com/mozership/probe/report"
 )
 
 var (

@@ -8,9 +8,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 func TestReportRenderer_headerText(t *testing.T) {

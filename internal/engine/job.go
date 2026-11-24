@@ -7,8 +7,8 @@ import (
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 type Job struct {

@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // ExecutableEnv is the environment variable in which the CLI names its own
