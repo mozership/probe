@@ -10,19 +10,32 @@ importing probe as a library.
 
 This release breaks the Go API of the root package, for code that imports
 probe as a library. Workflow files are not affected, except as told under
-Behaviour Changes below, and neither are the functions an action calls
-actions with (`ActionCaller`, `NewActionCaller`, `CallResult`,
-`WithCallerLogOutput`, `ExecutableEnv`) or the embedded action's way of
-running a job (`ReadJobFile`, `Job.RunStandalone`, `NewPrinter` and the
-standalone options).
+Behaviour Changes below.
 
-The results of a run and what prints it moved under `internal/`, where
-code outside probe cannot import them.
+The root package now holds only what is used from outside probe: calling
+actions as a step does (`ActionCaller`, `NewActionCaller`, `CallResult`,
+`CallerOption`, `WithCallerLogOutput`, `ExecutableEnv`), running a workflow
+(`Probe`, `New`, `Config` and the types its fields take, the `Exit*`
+codes), checking one (`Check`, `CheckOptions`, `Choices`, `Finding`,
+`Severity*`), and the pages of `probe guide` and the skill. The model of a
+workflow, its loader and the engine that runs it moved to
+`internal/engine`, `probe check` to `internal/check`, and the results of a
+run and what prints it to `internal/outcome` and `internal/display`, where
+code outside probe cannot import them. What stays is unchanged, as aliases
+of what moved.
 
 #### Removed from the root package
 
 | Before | After |
 |---|---|
+| `Workflow`, `Job`, `Step`, `StepRetry`, `Repeat`, `Iteration`, `Interval`, `StepContext`, `JobContext`, `JobState`, `JobRun`, `Outputs`, `NewOutputs`, `ResponseTime` | not for use outside probe; `Probe` loads and runs a workflow |
+| `ReadJobFile`, `StandaloneOption`, `WithActionRunner`, `WithActions`, `WithBuiltinActions`, `WithCleanups`, `WithGuard`, `WithNeedsNoCheck`, `WithRunID` | not for use outside probe; the `embedded` action runs a job of a file |
+| `Executor`, `NewExecutor` | not for use outside probe |
+| `Printer`, `NewPrinter` | not for use outside probe; `Config.Output` chooses how a run is printed |
+| `ProbeError`, `ErrorType`, `ErrorTypeConfiguration`, `ErrorTypeExecution`, `ErrorTypeFile`, `NewProbeError`, `NewConfigurationError`, `NewExecutionError`, `NewFileError`, `NameTakenError` | not for use outside probe; `Probe.ExitStatus` and the `Exit*` codes tell how a run ended |
+| `ExitStatus`, `ExitStatusSuccess`, `ExitStatusFailure` | not for use outside probe; the status of an action, not of a run |
+| `DefaultMaxAttempts`, `DefaultMaxRepeatCount`, `DefaultStepTimeout`, `EnvMaxAttempts`, `EnvMaxRepeatCount` | not for use outside probe; the variables themselves still apply, as the reference of environment variables tells |
+| `WithProbeExecutable` | `ExecutableEnv`, which `NewActionCaller` reads |
 | `Result`, `NewResult`, `JobResult`, `StepResult`, `StepFailure`, `StepRepeatCounter`, `RepeatTestResult` | not for use outside probe |
 | `StatusType`, `StatusSuccess`, `StatusError`, `StatusWarning`, `StatusSkipped` | not for use outside probe |
 | `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | the same constants of `report` |
@@ -34,10 +47,8 @@ code outside probe cannot import them.
 
 | Before | After |
 |---|---|
-| `Printer.PrintTestResult(success bool, testExpr string, context any)` | `Printer.PrintTestResult(success bool, testExpr string, env map[string]any)`, with the names the test was evaluated with |
-| `Printer`, `OutputMode`, its constants and `OutputModeAuto` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
+| `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `ActionCaller`, `CallerOption`, `CallResult`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
-| `GuideTopic` | unchanged |
 
 ### Behaviour Changes
 
