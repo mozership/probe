@@ -1,4 +1,4 @@
-package action
+package sdk
 
 import (
 	"time"
@@ -28,7 +28,7 @@ import (
 //	}
 //
 //	req := Req{Headers: map[string]string{}}
-//	if err := action.DecodeParams(with, &req); err != nil {
+//	if err := sdk.DecodeParams(with, &req); err != nil {
 //	    return nil, err
 //	}
 func DecodeParams(with map[string]any, dest any) error {
@@ -47,7 +47,7 @@ func DecodeParams(with map[string]any, dest any) error {
 //	    Body string `map:"body"`
 //	}
 //
-//	res, err := action.EncodeResult(Res{Code: 200, Body: "ok"})
+//	res, err := sdk.EncodeResult(Res{Code: 200, Body: "ok"})
 //	// res: map[string]any{"code": 200, "body": "ok"}
 func EncodeResult(v any) (map[string]any, error) {
 	return mapping.StructToMapByTags(v)

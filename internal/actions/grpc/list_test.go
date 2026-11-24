@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestListServicesByReflection(t *testing.T) {
@@ -214,18 +214,18 @@ func TestListRefused(t *testing.T) {
 func TestListUnderAGuard(t *testing.T) {
 	addr := startUserServer(t)
 	a := &Action{log: hclog.NewNullLogger()}
-	ret, _, err := a.RunStep(action.Call{
+	ret, _, err := a.RunStep(sdk.Call{
 		With:  map[string]any{"addr": addr, "list": true, "service": "UserService"},
-		Guard: action.Guard{ReadOnly: true, AllowHosts: []string{"127.0.0.1"}},
+		Guard: sdk.Guard{ReadOnly: true, AllowHosts: []string{"127.0.0.1"}},
 	})
 	if err != nil || len(ret["res"].(map[string]any)["methods"].([]any)) != 7 {
 		t.Errorf("read-only: %v, %v", ret, err)
 	}
-	_, _, err = a.RunStep(action.Call{
+	_, _, err = a.RunStep(sdk.Call{
 		With:  map[string]any{"addr": addr, "list": true},
-		Guard: action.Guard{AllowHosts: []string{"other.test"}},
+		Guard: sdk.Guard{AllowHosts: []string{"other.test"}},
 	})
-	if !action.IsRefused(err) {
+	if !sdk.IsRefused(err) {
 		t.Errorf("err = %v, want it refused", err)
 	}
 }

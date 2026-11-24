@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionlog"
 	"github.com/mozership/probe/internal/actionref"
+	"github.com/mozership/probe/sdk"
 )
 
 // cleanupTimeout is how long an action is given to clean up after a run.
@@ -41,7 +41,7 @@ type cleanups struct {
 	// passedOn is where the actions were passed on to, once they were:
 	// the run this one is part of, which calls them when it is over. One
 	// that comes to be owed after that is passed on as well.
-	passedOn *action.Cleanups
+	passedOn *sdk.Cleanups
 	// written are the actions as a step's uses writes them, by their names
 	// in full, for their log records to be named as the step's are.
 	written map[string]string
@@ -62,7 +62,7 @@ func newCleanups(runID string, printer *Printer, trace bool) *cleanups {
 		log := actionlog.New(c.nameOf(uses), os.Stderr, printer.Masker(), actionlog.Level(printer.Verbose(), trace), printer.Verbose())
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
-		return action.CleanupExecutable(ctx, exe.Path, exe.SHA256, action.CleanupCall{RunID: runID}, log)
+		return sdk.CleanupExecutable(ctx, exe.Path, exe.SHA256, sdk.CleanupCall{RunID: runID}, log)
 	}
 	return c
 }
@@ -124,7 +124,7 @@ func (c *cleanups) owe(uses ...string) {
 // passOn hands the actions to to, the cleanups of the run this one is part
 // of, which calls them once it is over; run then calls none. It does
 // nothing after run, as when a signal ended this run first.
-func (c *cleanups) passOn(to *action.Cleanups) {
+func (c *cleanups) passOn(to *sdk.Cleanups) {
 	if c == nil || to == nil {
 		return
 	}
@@ -147,7 +147,7 @@ func (c *cleanups) run() {
 	}
 	// An action whose step timed out is still being stopped, and returns
 	// within ExitWait.
-	deadline := time.Now().Add(action.ExitWait)
+	deadline := time.Now().Add(sdk.ExitWait)
 	for c.runningCount() > 0 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}

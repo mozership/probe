@@ -9,13 +9,13 @@ importing probe as a library.
 ### Breaking Changes
 
 This release breaks the Go API of the root package, renames `actionrpc`,
-which every external action imports, to `action`, gathers in `action` what
+which every external action imports, to `sdk`, gathers in `sdk` what
 external actions use of `actionref`, and moves `actionref` and the packages
 no external action imports under `internal/`, for code that imports probe
 as a library. An external action builds again once it imports
-`github.com/mozership/probe/action` in place of
+`github.com/mozership/probe/sdk` in place of
 `github.com/mozership/probe/actionrpc` and `actionref`, and calls
-`action.ParseManifest` and `action.ParseRef` in place of
+`sdk.ParseManifest` and `sdk.ParseRef` in place of
 `actionref.ParseManifest` and `actionref.Parse`. Workflow files are not
 affected, except as told under Behaviour Changes below.
 
@@ -25,7 +25,7 @@ workflow (`Probe`, `New`, `Config` and the types its fields take, the
 `Finding`, `Severity*`), serving the built-in actions in a build of Probe
 that adds actions of its own (`BuiltinAction`), and the pages of `probe
 guide` and the skill. `ActionCaller` and what goes with it, with which an
-action calls other actions, moved to the `action` package. The model of a
+action calls other actions, moved to the `sdk` package. The model of a
 workflow, its loader and the engine that runs it moved to
 `internal/engine`, `probe check` to `internal/check`, and the results of a
 run and what prints it to `internal/outcome` and `internal/display`, where
@@ -43,8 +43,8 @@ of what moved.
 | `ProbeError`, `ErrorType`, `ErrorTypeConfiguration`, `ErrorTypeExecution`, `ErrorTypeFile`, `NewProbeError`, `NewConfigurationError`, `NewExecutionError`, `NewFileError`, `NameTakenError` | not for use outside probe; `Probe.ExitStatus` and the `Exit*` codes tell how a run ended |
 | `ExitStatus`, `ExitStatusSuccess`, `ExitStatusFailure` | not for use outside probe; the status of an action, not of a run |
 | `DefaultMaxAttempts`, `DefaultMaxRepeatCount`, `DefaultStepTimeout`, `EnvMaxAttempts`, `EnvMaxRepeatCount` | not for use outside probe; the variables themselves still apply, as the reference of environment variables tells |
-| `WithProbeExecutable` | `action.ExecutableEnv`, which `action.NewCaller` reads |
-| `ActionCaller`, `NewActionCaller`, `CallerOption`, `CallResult`, `WithCallerLogOutput`, `ExecutableEnv` | `action.Caller`, `action.NewCaller`, `action.CallerOption`, `action.CallResult`, `action.WithCallerLogOutput`, `action.ExecutableEnv` |
+| `WithProbeExecutable` | `sdk.ExecutableEnv`, which `sdk.NewCaller` reads |
+| `ActionCaller`, `NewActionCaller`, `CallerOption`, `CallResult`, `WithCallerLogOutput`, `ExecutableEnv` | `sdk.Caller`, `sdk.NewCaller`, `sdk.CallerOption`, `sdk.CallResult`, `sdk.WithCallerLogOutput`, `sdk.ExecutableEnv` |
 | `Result`, `NewResult`, `JobResult`, `StepResult`, `StepFailure`, `StepRepeatCounter`, `RepeatTestResult` | not for use outside probe |
 | `StatusType`, `StatusSuccess`, `StatusError`, `StatusWarning`, `StatusSkipped` | not for use outside probe |
 | `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | not for use outside probe; the `kind` of a failure in the files `--report` writes |
@@ -63,17 +63,17 @@ of what moved.
 
 | Before | After |
 |---|---|
-| `actionrpc` | `action`, with the same names in it |
+| `actionrpc` | `sdk`, with the same names in it |
 
 #### Moved under `internal/`
 
-What external actions import stays: `action`, the new name of
+What external actions import stays: `sdk`, the new name of
 `actionrpc`, which now also holds what they read of `actionref`; `style`;
 and `mask/markdown`.
 
 | Before | After |
 |---|---|
-| `actionref` | not for use outside probe; `action.ParseManifest`, `action.ParseRef` and the types they return, `action.Manifest`, `action.Runs`, `action.Choice` and `action.Ref`, stand for what external actions read of it |
+| `actionref` | not for use outside probe; `sdk.ParseManifest`, `sdk.ParseRef` and the types they return, `sdk.Manifest`, `sdk.Runs`, `sdk.Choice` and `sdk.Ref`, stand for what external actions read of it |
 | `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe |
 | `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `probe.BuiltinAction` serves each built-in action |
 | `actions.Lookup` | `probe.BuiltinAction`, for a build of Probe that adds actions of its own |

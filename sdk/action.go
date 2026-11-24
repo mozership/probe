@@ -1,7 +1,9 @@
-// Package action is the protocol between the workflow runner and its
-// actions. Each action runs in a process of its own, started from the probe
-// binary, and is called over go-plugin's gRPC transport.
-package action
+// Package sdk is what an action of Probe is written with, and all that an
+// external action imports of Probe: the protocol between the workflow
+// runner and its actions, what reads action.yml, and the caller with which
+// an action calls other actions. Each action runs in a process of its own
+// and is called over go-plugin's gRPC transport.
+package sdk
 
 import (
 	"context"

@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 type testAction struct{ log hclog.Logger }
@@ -28,5 +28,5 @@ func (a testAction) Run(with map[string]any) (map[string]any, error) {
 }
 
 func main() {
-	action.Serve(func(log hclog.Logger) action.Action { return testAction{log: log} })
+	sdk.Serve(func(log hclog.Logger) sdk.Action { return testAction{log: log} })
 }

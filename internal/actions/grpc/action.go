@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -16,21 +16,21 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(action.Call{With: with})
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
 // RunStep makes the call for a step, under the guard of the run, which
 // refuses a host it does not allow and, under --read-only, a method its
 // definitions do not declare free of side effects.
-func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	with := call.With
 	// Validate that required parameters are provided
 	if len(with) == 0 {
 		return map[string]any{}, nil, errors.New("grpc action requires parameters in 'with' section. Please specify request details like addr, service, method")
 	}
 
-	action.LogParams(a.log, "received grpc request parameters", with)
+	sdk.LogParams(a.log, "received grpc request parameters", with)
 
 	before := WithBefore(func(ctx context.Context, service, method string) {
 		a.log.Trace("grpc request prepared", "service", service, "method", method)
@@ -40,13 +40,13 @@ func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, erro
 	})
 	ret, err := RequestStep(call, before, after)
 
-	action.LogOutcome(a.log, "grpc request", ret, err)
+	sdk.LogOutcome(a.log, "grpc request", ret, err)
 
 	return ret, nil, err
 }
 
 func serve() {
-	action.Serve(func(log hclog.Logger) action.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log}
 	})
 }
@@ -63,7 +63,7 @@ func serve() {
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
-		Keeps:     []string{action.KindReadOnly, action.KindAllowHost},
+		Keeps:     []string{sdk.KindReadOnly, sdk.KindAllowHost},
 		Params:    append(mapping.FieldTags(Req{}), "proto"),
 		Contracts: []string{"proto"},
 		ReqFields: mapping.FieldTags(Req{}),

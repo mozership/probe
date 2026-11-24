@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/sdk"
 )
 
 type Job struct {
@@ -34,7 +34,7 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 	ctx.CurrentJobID = j.ID
 	// Each run of the job starts with no state, as a repeated run is a run
 	// of its own and an embedded job a job of its own.
-	ctx.states = actionstate.New(action.Sendable)
+	ctx.states = actionstate.New(sdk.Sendable)
 
 	// Use local pointer instead of j.ctx to avoid race conditions in async mode
 	ctxPtr := &ctx
@@ -375,7 +375,7 @@ type JobRun struct {
 	// Refused is set when the guard the job ran under refused a step, the
 	// first one, so that the step that embeds the job is refused as well
 	// rather than failing as a job whose test was false.
-	Refused *action.Refused
+	Refused *sdk.Refused
 	// Duration is how long the job took.
 	Duration time.Duration
 }
@@ -385,11 +385,11 @@ type StandaloneOption func(*standaloneConfig)
 
 type standaloneConfig struct {
 	runID   string
-	guard   action.Guard
+	guard   sdk.Guard
 	actions map[string]string
 	builtin []string
 	// cleanups are those of the run the job is part of.
-	cleanups *action.Cleanups
+	cleanups *sdk.Cleanups
 	// needsNoCheck are the actions whose steps pass without a test.
 	needsNoCheck []string
 	// runner runs the actions of the job's steps; nil for the default.
@@ -418,7 +418,7 @@ func WithActionRunner(r ActionRunner) StandaloneOption {
 // had clean up when it ended are named in c instead, and what its steps left
 // behind stays for the rest of that run. Without it, or with a nil c, the
 // job cleans up after itself.
-func WithCleanups(c *action.Cleanups) StandaloneOption {
+func WithCleanups(c *sdk.Cleanups) StandaloneOption {
 	return func(cfg *standaloneConfig) {
 		cfg.cleanups = c
 	}
@@ -436,7 +436,7 @@ func WithRunID(id string) StandaloneOption {
 // WithGuard runs the job under guard, such as the guard of the run of the
 // step that embeds it, so that a workflow cannot get round its guard by
 // embedding a job.
-func WithGuard(guard action.Guard) StandaloneOption {
+func WithGuard(guard sdk.Guard) StandaloneOption {
 	return func(c *standaloneConfig) {
 		c.guard = guard
 	}
@@ -463,14 +463,14 @@ func WithBuiltinActions(names []string) StandaloneOption {
 
 // firstRefusal returns why the guard refused the first step of jr it
 // refused, or nil when it refused none.
-func firstRefusal(jr *outcome.Job) *action.Refused {
+func firstRefusal(jr *outcome.Job) *sdk.Refused {
 	for _, sr := range jr.StepResults {
 		f := sr.Failure
 		if sr.RepeatCounter != nil {
 			f = sr.RepeatCounter.Failure
 		}
 		if f != nil && f.Refused != nil {
-			return &action.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.Refused.Reason)}
+			return &sdk.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.Refused.Reason)}
 		}
 	}
 	return nil

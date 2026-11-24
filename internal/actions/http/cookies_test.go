@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 // newLoginServer serves /login, which sets a session cookie and redirects to
@@ -366,5 +366,5 @@ func mustParseURL(t *testing.T, s string) *url.URL {
 
 // requestWithState makes the request of a step with the state kept in the job.
 func requestWithState(data, state map[string]any) (map[string]any, map[string]any, error) {
-	return RequestStep(action.Call{With: data, State: state})
+	return RequestStep(sdk.Call{With: data, State: state})
 }

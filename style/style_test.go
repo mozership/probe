@@ -5,7 +5,7 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 	"github.com/mozership/probe/style"
 )
 
@@ -108,10 +108,10 @@ func TestColored(t *testing.T) {
 
 func TestNoteLevel(t *testing.T) {
 	tests := map[string]style.Mark{
-		action.NoteCritical: style.Failure,
-		action.NoteWarning:  style.Warning,
-		action.NoteInfo:     style.Info,
-		"unknown":           style.Warning,
+		sdk.NoteCritical: style.Failure,
+		sdk.NoteWarning:  style.Warning,
+		sdk.NoteInfo:     style.Info,
+		"unknown":        style.Warning,
 	}
 	for level, want := range tests {
 		if got := style.NoteLevel(level); got != want {

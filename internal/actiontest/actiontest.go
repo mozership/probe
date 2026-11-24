@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/kind"
+	"github.com/mozership/probe/sdk"
 )
 
 // CheckFields fails t when ret, what an action returned for a step, has a
@@ -86,7 +86,7 @@ func NewKinds(t testing.TB, req, res map[string]string) *Kinds {
 // step, is of another kind than the one declared for it.
 func (k *Kinds) Check(ret map[string]any) {
 	k.t.Helper()
-	sent, err := action.Sendable(ret)
+	sent, err := sdk.Sendable(ret)
 	if err != nil {
 		k.t.Fatalf("the result cannot be sent: %v", err)
 	}

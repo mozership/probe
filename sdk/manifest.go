@@ -1,4 +1,4 @@
-package action
+package sdk
 
 import "github.com/mozership/probe/internal/actionref"
 

@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 var (
@@ -31,7 +31,7 @@ func (testAction) Run(with map[string]any) (map[string]any, error) {
 	return nil, nil
 }
 
-func (testAction) Cleanup(call action.CleanupCall) error {
+func (testAction) Cleanup(call sdk.CleanupCall) error {
 	return hang(call.RunID)
 }
 
@@ -61,5 +61,5 @@ func main() {
 		os.Exit(1)
 	}()
 
-	action.Serve(func(hclog.Logger) action.Action { return testAction{} })
+	sdk.Serve(func(hclog.Logger) sdk.Action { return testAction{} })
 }

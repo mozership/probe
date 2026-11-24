@@ -11,10 +11,10 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/sdk"
 )
 
 // A skipif that cannot be evaluated, or is not a boolean, is told of, and
@@ -366,8 +366,8 @@ func TestStep_handleActionError(t *testing.T) {
 	}{
 		{name: "an action error", err: fmt.Errorf("test error")},
 		{name: "an action error in a verbose run", verbose: true, err: fmt.Errorf("test error"), wantOut: "Error: Action execution failed: test error\n"},
-		{name: "a refusal", err: action.Refuse("POST may write")},
-		{name: "a refusal in a verbose run", verbose: true, err: action.Refuse("POST may write"), wantOut: "Error: refused: POST may write\n"},
+		{name: "a refusal", err: sdk.Refuse("POST may write")},
+		{name: "a refusal in a verbose run", verbose: true, err: sdk.Refuse("POST may write"), wantOut: "Error: refused: POST may write\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -763,12 +763,12 @@ func TestStepTellsTheActionAboutTheStep(t *testing.T) {
 	if len(run) != 16 {
 		t.Fatalf("RunID() = %q, want 16 hex digits", run)
 	}
-	var got []action.Step
+	var got []sdk.Step
 	for _, c := range runner.Calls["hello"] {
 		got = append(got, c.Step)
 	}
-	first := func(repeat int) []action.Step {
-		return []action.Step{
+	first := func(repeat int) []sdk.Step {
+		return []sdk.Step{
 			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 0, ID: "auth", Name: "Post as alice", Repeat: repeat, Attempt: 1},
 			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, ID: "step_1", Name: "Retried", Repeat: repeat, Attempt: 1},
 			{RunID: run, JobID: "login", JobName: "Log in alice", Index: 1, ID: "step_1", Name: "Retried", Repeat: repeat, Attempt: 2},
@@ -781,12 +781,12 @@ func TestStepTellsTheActionAboutTheStep(t *testing.T) {
 }
 
 func TestStep_executeAction_Guard(t *testing.T) {
-	guard := action.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {action.KindReadOnly, action.KindAllowHost}}, AllowActions: []string{"shell"}}
+	guard := sdk.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {sdk.KindReadOnly, sdk.KindAllowHost}}, AllowActions: []string{"shell"}}
 
 	tests := []struct {
 		name    string
 		uses    string
-		guard   action.Guard
+		guard   sdk.Guard
 		refused bool
 	}{
 		{name: "an action that keeps to the guard", uses: "http", guard: guard},
@@ -808,7 +808,7 @@ func TestStep_executeAction_Guard(t *testing.T) {
 
 			_, err := st.executeAction("Step", jCtx)
 			if tt.refused {
-				if !action.IsRefused(err) || !strings.Contains(err.Error(), "--allow-action "+tt.uses) {
+				if !sdk.IsRefused(err) || !strings.Contains(err.Error(), "--allow-action "+tt.uses) {
 					t.Fatalf("err = %v, want a refusal naming --allow-action %s", err, tt.uses)
 				}
 				if n := len(mock.Calls[tt.uses]); n != 0 {
@@ -832,7 +832,7 @@ func TestStep_executeAction_Guard(t *testing.T) {
 
 func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 	mock := newMockRunner()
-	mock.SetError("http", action.Refuse("POST may write"))
+	mock.SetError("http", sdk.Refuse("POST may write"))
 	st := &stepRun{
 		Step: &Step{
 			Uses:  "http",
@@ -844,13 +844,13 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 	}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
-			Config:  Config{Guard: action.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {action.KindReadOnly}}}, ActionRunner: mock},
+			Config:  Config{Guard: sdk.Guard{ReadOnly: true, Keeps: map[string][]string{"http": {sdk.KindReadOnly}}}, ActionRunner: mock},
 			Printer: newBufferPrinter(),
 		},
 	}
 
 	_, err := st.executeAction("Step", jCtx)
-	if !action.IsRefused(err) {
+	if !sdk.IsRefused(err) {
 		t.Fatalf("err = %v, want a refusal", err)
 	}
 	// What the guard refused is refused again, so it is not retried.
@@ -860,7 +860,7 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 }
 
 func TestFailureKindOf_Refused(t *testing.T) {
-	if got := failureKindOf(fmt.Errorf("step: %w", action.Refuse("no"))); got != outcome.FailureRefused {
+	if got := failureKindOf(fmt.Errorf("step: %w", sdk.Refuse("no"))); got != outcome.FailureRefused {
 		t.Errorf("failureKindOf = %q, want %q", got, outcome.FailureRefused)
 	}
 }

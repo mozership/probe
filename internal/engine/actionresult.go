@@ -118,7 +118,7 @@ func parseExitStatus(status any) int {
 	case int:
 		return v
 	case int64:
-		// Handle integers converted from protobuf float64 by the action package client
+		// Handle integers converted from protobuf float64 by the sdk package client
 		return int(v)
 	case float64:
 		// Handle JSON numbers which are parsed as float64

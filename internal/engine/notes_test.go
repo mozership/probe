@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/report"
+	"github.com/mozership/probe/sdk"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -27,7 +27,7 @@ type notesRunner struct {
 	with map[string][]map[string]any
 }
 
-func (r *notesRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *notesRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	if s, ok := call.With["sleep"].(string); ok {
 		if d, err := time.ParseDuration(s); err == nil {
 			time.Sleep(d)
@@ -379,7 +379,7 @@ type flakyRunner struct {
 	attempts map[string]int
 }
 
-func (r *flakyRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *flakyRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	if _, ok := call.With["flaky"]; ok {
 		r.mu.Lock()
 		if r.attempts == nil {
@@ -462,7 +462,7 @@ func TestNoteBookMasksShortSecretsAsWholeValues(t *testing.T) {
 }
 
 // TestNotesAreWhatActionsParse checks that the entries of the notes context,
-// as an action receives them over the wire, are what action.ParseNotes
+// as an action receives them over the wire, are what sdk.ParseNotes
 // reads: the entries and the parser are written apart, and an action reads
 // the notes with the parser.
 func TestNotesAreWhatActionsParse(t *testing.T) {
@@ -478,13 +478,13 @@ func TestNotesAreWhatActionsParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := action.ParseNotes(wire.AsSlice())
+	got, err := sdk.ParseNotes(wire.AsSlice())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []action.Note{
-		{Job: "Job A", JobID: "a", Step: "a1", Index: 1, Status: "passed", Level: action.NoteCritical, Title: "t1", Body: "paid with <secret:CARD>"},
-		{Job: "Job A", JobID: "a", Step: "a4", Index: 4, Status: "failed", Level: action.NoteInfo, Body: "b4", Run: 2},
+	want := []sdk.Note{
+		{Job: "Job A", JobID: "a", Step: "a1", Index: 1, Status: "passed", Level: sdk.NoteCritical, Title: "t1", Body: "paid with <secret:CARD>"},
+		{Job: "Job A", JobID: "a", Step: "a4", Index: 4, Status: "failed", Level: sdk.NoteInfo, Body: "b4", Run: 2},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ParseNotes() =\n%+v\nwant\n%+v", got, want)

@@ -10,7 +10,7 @@
 //	uses: ./path/to/action
 //
 // Either way the directory holds an action.yml that says which executable
-// serves the action. The executable speaks the protocol in package action.
+// serves the action. The executable speaks the protocol in package sdk.
 package actionref
 
 import (
@@ -39,7 +39,7 @@ import (
 const ManifestFile = "action.yml"
 
 // UsingBinary is the only kind of action an action.yml can describe: an
-// executable that serves the action over the protocol of the action package.
+// executable that serves the action over the protocol of the sdk package.
 const UsingBinary = "binary"
 
 const githubHost = "github.com"

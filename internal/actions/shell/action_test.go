@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 // A command run in the background is told to the runner, which stops it once
@@ -12,8 +12,8 @@ import (
 func TestActionRunStepReportsABackgroundCommand(t *testing.T) {
 	a := &Action{log: hclog.NewNullLogger()}
 
-	procs := &action.Processes{}
-	ret, _, err := a.RunStep(action.Call{With: map[string]any{"cmd": "sleep 60", "background": true}, Processes: procs})
+	procs := &sdk.Processes{}
+	ret, _, err := a.RunStep(sdk.Call{With: map[string]any{"cmd": "sleep 60", "background": true}, Processes: procs})
 	if err != nil {
 		t.Fatalf("RunStep() error = %v", err)
 	}
@@ -24,8 +24,8 @@ func TestActionRunStepReportsABackgroundCommand(t *testing.T) {
 		t.Errorf("reported %v, want the pid and log of %v", got, res)
 	}
 
-	procs = &action.Processes{}
-	if _, _, err := a.RunStep(action.Call{With: map[string]any{"cmd": "true"}, Processes: procs}); err != nil {
+	procs = &sdk.Processes{}
+	if _, _, err := a.RunStep(sdk.Call{With: map[string]any{"cmd": "true"}, Processes: procs}); err != nil {
 		t.Fatalf("RunStep() error = %v", err)
 	}
 	if got := procs.List(); len(got) != 0 {

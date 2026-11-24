@@ -5,10 +5,10 @@ import (
 	"os"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionlog"
 	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/mask"
+	"github.com/mozership/probe/sdk"
 )
 
 // RunOptions controls how a single action invocation is run and logged.
@@ -70,7 +70,7 @@ func (o RunOptions) logLevel() hclog.Level {
 // that only by running the action with PluginActionRunner and opts as it
 // was given them.
 type ActionRunner interface {
-	Run(name string, call action.Call, opts RunOptions) (result, newState map[string]any, err error)
+	Run(name string, call sdk.Call, opts RunOptions) (result, newState map[string]any, err error)
 }
 
 // PluginActionRunner is the ActionRunner a run uses unless it is given
@@ -81,7 +81,7 @@ type PluginActionRunner struct{}
 // Run runs the action for a step in a process of its own, telling it about
 // the step, giving it the state it left in the job and returning the state
 // it leaves.
-func (p *PluginActionRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (p *PluginActionRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
 	log := actionlog.New(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
@@ -89,11 +89,11 @@ func (p *PluginActionRunner) Run(name string, call action.Call, opts RunOptions)
 	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
 	if opts.cleanups != nil {
-		call.Cleanups = &action.Cleanups{}
+		call.Cleanups = &sdk.Cleanups{}
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return action.RunBuiltin(opts.Context(), name, call, log)
+		return sdk.RunBuiltin(opts.Context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -107,7 +107,7 @@ func (p *PluginActionRunner) Run(name string, call action.Call, opts RunOptions)
 		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
-	return action.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
+	return sdk.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks

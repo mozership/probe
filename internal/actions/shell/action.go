@@ -7,10 +7,10 @@ import (
 	"syscall"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -18,20 +18,20 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(action.Call{With: with})
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
 // RunStep runs the command, and tells the runner of one it left running in
 // the background, for the runner to stop once the run is over.
-func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	with := call.With
 	// Validate that required parameters are provided
 	if len(with) == 0 {
 		return map[string]any{}, nil, errors.New("shell action requires parameters in 'with' section. Please specify command details like cmd")
 	}
 
-	action.LogParams(a.log, "received shell request parameters", with)
+	sdk.LogParams(a.log, "received shell request parameters", with)
 
 	before := WithBefore(func(cmd string, shell string, workdir string) {
 		a.log.Trace("shell command prepared", "cmd", cmd, "shell", shell, "workdir", workdir)
@@ -40,12 +40,12 @@ func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, erro
 		a.log.Trace("shell command completed", "result", result)
 		// One run in the foreground has exited by now.
 		if result.Req.Background && result.Res.PID > 0 {
-			call.Processes.Add(action.Process{PID: result.Res.PID, Log: result.Res.Log})
+			call.Processes.Add(sdk.Process{PID: result.Res.PID, Log: result.Res.Log})
 		}
 	})
 	ret, err := Execute(with, before, after)
 
-	action.LogOutcome(a.log, "shell command", ret, err)
+	sdk.LogOutcome(a.log, "shell command", ret, err)
 
 	return ret, nil, err
 }
@@ -53,7 +53,7 @@ func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, erro
 func serve() {
 	stopStartedOnSignal()
 
-	action.Serve(func(log hclog.Logger) action.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log}
 	})
 }

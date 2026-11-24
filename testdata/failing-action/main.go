@@ -17,7 +17,7 @@ import (
 	"syscall"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -46,7 +46,7 @@ func (a testAction) Run(with map[string]any) (map[string]any, error) {
 	return map[string]any{"req": with, "res": map[string]any{}, "status": 0}, nil
 }
 
-func (a testAction) Cleanup(call action.CleanupCall) error {
+func (a testAction) Cleanup(call sdk.CleanupCall) error {
 	switch call.RunID {
 	case "error":
 		return errors.New("the widget would not go")
@@ -57,5 +57,5 @@ func (a testAction) Cleanup(call action.CleanupCall) error {
 }
 
 func main() {
-	action.Serve(func(log hclog.Logger) action.Action { return testAction{log: log} })
+	sdk.Serve(func(log hclog.Logger) sdk.Action { return testAction{log: log} })
 }

@@ -8,7 +8,7 @@ import (
 )
 
 // newCallerEnv is the directory of newCleanupEnv, with the local actions
-// ./caller, which calls another with action.Caller, and ./greet.
+// ./caller, which calls another with sdk.Caller, and ./greet.
 func newCallerEnv(t *testing.T) *cleanupEnv {
 	t.Helper()
 	e := newCleanupEnv(t, cleaningManifest)
