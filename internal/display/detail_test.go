@@ -1,4 +1,4 @@
-package probe
+package display
 
 import (
 	"fmt"
@@ -124,9 +124,9 @@ func TestTestErrorDetail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := testErrorDetail(tt.err.Error())
+			result := TestErrorDetail(tt.err.Error())
 			if result != tt.expected {
-				t.Errorf("testErrorDetail() = %q, want %q", result, tt.expected)
+				t.Errorf("TestErrorDetail() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
@@ -162,9 +162,9 @@ func TestTypeMismatchDetail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := typeMismatchDetail(tt.testExpr, tt.result)
+			result := TypeMismatchDetail(tt.testExpr, tt.result)
 			if result != tt.expected {
-				t.Errorf("typeMismatchDetail() = %q, want %q", result, tt.expected)
+				t.Errorf("TypeMismatchDetail() = %q, want %q", result, tt.expected)
 			}
 		})
 	}

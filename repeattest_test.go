@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
@@ -106,7 +107,7 @@ func TestEvalRepeatTest(t *testing.T) {
 	}{
 		{name: "a test that holds", test: "steps.search.success == 3", wantPassed: true},
 		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: outcome.FailureTestError},
-		{name: "a test that is not a boolean", test: "steps.search.success", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 3 (int), not a boolean", wantOutput: typeMismatchDetail("steps.search.success", 3)},
+		{name: "a test that is not a boolean", test: "steps.search.success", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 3 (int), not a boolean", wantOutput: display.TypeMismatchDetail("steps.search.success", 3)},
 		{name: "a test that is false", test: "steps.search.success == 4", wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: steps.search.success == 4 (steps.search.success = 3)", wantOutput: "       failed: steps.search.success == 4\n         steps.search.success = 3\n"},
 	}
 	for _, tt := range tests {
@@ -130,7 +131,7 @@ func TestEvalRepeatTest(t *testing.T) {
 			}
 			if tt.wantKind == outcome.FailureTestError {
 				_, err := (&expr.Expr{}).Eval(tt.test, env)
-				tt.wantMessage, tt.wantOutput = err.Error(), testErrorDetail(err.Error())
+				tt.wantMessage, tt.wantOutput = err.Error(), display.TestErrorDetail(err.Error())
 			}
 			if res.Failure.Message != tt.wantMessage {
 				t.Errorf("message = %q, want %q", res.Failure.Message, tt.wantMessage)
@@ -175,7 +176,7 @@ func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 		t.Errorf("step = %+v, want it passed with the failed run counted", st)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	if !strings.Contains(out, "✓  repeat test: steps.query.success_rate >= vars.rate") {
 		t.Errorf("terminal should show the test passed, got:\n%s", out)
 	}
@@ -211,7 +212,7 @@ func TestWorkflow_RepeatTestFails(t *testing.T) {
 		t.Errorf("failure = %+v, want the false condition and what it compared", rt.Failure)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	// The test lines up with the steps above it: its icon with theirs, and
 	// why it failed with its text.
 	for _, s := range []string{
@@ -590,7 +591,7 @@ func TestWorkflow_BaselineTest(t *testing.T) {
 				t.Errorf("step status = %q, want %q", st.Status, wantStep)
 			}
 
-			out := workflow.printer.outWriter.(*bytes.Buffer).String()
+			out := workflow.printer.Out().(*bytes.Buffer).String()
 			for _, s := range tt.terminal {
 				if !strings.Contains(out, s) {
 					t.Errorf("terminal should contain %q, got:\n%s", s, out)

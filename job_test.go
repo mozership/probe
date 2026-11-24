@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
@@ -437,12 +438,12 @@ func TestJob_RunStandalone_Failure(t *testing.T) {
 	}
 
 	// Outside a verbose run the error is not also told as it happens.
-	if errBuffer, ok := printer.errWriter.(*bytes.Buffer); ok {
+	if errBuffer, ok := printer.Err().(*bytes.Buffer); ok {
 		if errBuffer.Len() != 0 {
 			t.Errorf("Expected no error output while the job ran, but got: %s", errBuffer.String())
 		}
 	} else {
-		t.Errorf("Expected printer.errWriter to be *bytes.Buffer, but got %T", printer.errWriter)
+		t.Errorf("Expected printer.Err() to be *bytes.Buffer, but got %T", printer.Err())
 	}
 }
 
@@ -482,7 +483,7 @@ func TestJob_RunStandalone_Parameters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
-			printer.verbose = tt.verbose
+			printer.SetVerbose(tt.verbose)
 			run := job.RunStandalone(tt.vars, printer, tt.jobID, "")
 
 			// Empty job should succeed regardless of parameters
@@ -765,9 +766,9 @@ func TestRunStandaloneNeedsNoCheck(t *testing.T) {
 		opts []StandaloneOption
 		want string
 	}{
-		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: IconSuccess},
-		{name: "told nothing", want: IconTriangle},
-		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: IconTriangle},
+		{name: "told hello needs none", opts: []StandaloneOption{WithNeedsNoCheck([]string{"hello"})}, want: display.IconSuccess},
+		{name: "told nothing", want: display.IconTriangle},
+		{name: "told of another action", opts: []StandaloneOption{WithNeedsNoCheck([]string{"http"})}, want: display.IconTriangle},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			job := &Job{Name: "embedded", Steps: []*Step{{Name: "Greets", Uses: "hello"}}}

@@ -254,7 +254,7 @@ func TestStep_prepare_WaitThatIsNoTime(t *testing.T) {
 			if d := time.Since(start); d > 500*time.Millisecond {
 				t.Errorf("prepare() took %v, want no wait", d)
 			}
-			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+			if out := printer.Err().(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
 				t.Errorf("output = %q, want %q", out, tt.want)
 			}
 			if st.templateErr != nil {

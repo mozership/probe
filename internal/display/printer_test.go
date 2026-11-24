@@ -1,4 +1,4 @@
-package probe
+package display
 
 import (
 	"bytes"
@@ -184,7 +184,7 @@ func TestPrinterLogErrorWritesToTheErrorWriter(t *testing.T) {
 	p.SetMasker(m)
 	p.LogError("could not connect with %s", "hunter2-secret")
 	p.verbose = true
-	p.logTestError("res.code == 200", errors.New("no such field"))
+	p.LogTestError("res.code == 200", errors.New("no such field"))
 
 	got := p.errWriter.(*bytes.Buffer).String()
 	for _, want := range []string{"[ERROR] could not connect with", "[ERROR] Test Error: no such field", "[ERROR] Input: res.code == 200"} {
@@ -336,23 +336,6 @@ func TestPrinter_PrintTestResult(t *testing.T) {
 			expected: "[DEBUG] Test: Failure (input: res.status == 200)\n[DEBUG] Env:\n[DEBUG]   status: 404\n",
 		},
 		{
-			name:     "the context of a step, without its request and response",
-			success:  false,
-			testExpr: "res.code == 200",
-			env: StepContext{
-				Vars:   map[string]any{"host": "example.com"},
-				Req:    map[string]any{"url": "http://example.com"},
-				Res:    map[string]any{"code": 404},
-				RT:     ResponseTime{Duration: "1.5ms", Sec: 0.0015},
-				Status: 0,
-			}.testEnv(),
-			verbose: true,
-			expected: "[DEBUG] Test: Failure (input: res.code == 200)\n[DEBUG] Env:\n" +
-				"[DEBUG]   outputs: {}\n[DEBUG]   repeat_index: 0\n[DEBUG]   report: \"\"\n" +
-				"[DEBUG]   rt:\n[DEBUG]     duration: 1.5ms\n[DEBUG]     sec: 0.0015\n" +
-				"[DEBUG]   status: 0\n[DEBUG]   vars:\n[DEBUG]     host: example.com\n",
-		},
-		{
 			name:     "test in non-verbose mode",
 			success:  true,
 			testExpr: "res.status == 200",
@@ -486,10 +469,10 @@ func TestPrinter_MasksOutput(t *testing.T) {
 		map[string]any{"body": strings.Repeat("x", 510) + `pa"ss`}))
 
 	p.verbose = true
-	p.PrintTestResult(false, "t", StepContext{
-		Req: map[string]any{"cookie": "c=1"},
-		Res: map[string]any{"body": `pa"ss`},
-	}.testEnv())
+	p.PrintTestResult(false, "t", map[string]any{
+		"req": map[string]any{"headers": map[string]any{"cookie": "c=1"}},
+		"res": map[string]any{"body": `pa"ss`},
+	})
 
 	out := p.outWriter.(*bytes.Buffer).String() + p.errWriter.(*bytes.Buffer).String()
 	if strings.Contains(out, "pa") {
@@ -568,4 +551,10 @@ func TestPrinter_WritesEachBlockAtOnce(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newBufferPrinter returns a printer that writes to buffers and shows no
+// spinner.
+func newBufferPrinter() *Printer {
+	return NewPrinterTo(false, new(bytes.Buffer), new(bytes.Buffer))
 }

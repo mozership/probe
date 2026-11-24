@@ -228,7 +228,7 @@ func TestWorkflow_Start_SelectedJobs(t *testing.T) {
 	if w.exitStatus != ExitActionError {
 		t.Errorf("exit status = %d, want %d of the failed job selected", w.exitStatus, ExitActionError)
 	}
-	errOut := w.printer.errWriter.(interface{ String() string }).String()
+	errOut := w.printer.Err().(interface{ String() string }).String()
 	// A name is said as the report says it, with the vars.
 	if want := "Running 3 of 4 jobs: Tests, Setup stg (needed), Cleanup (always)"; !strings.Contains(errOut, want) {
 		t.Errorf("error output should contain %q, got: %s", want, errOut)
@@ -277,7 +277,7 @@ func TestWorkflow_Start_NoSelection(t *testing.T) {
 	if strings.Contains(string(data), "selection") {
 		t.Errorf("the report of a run of every job records a selection:\n%s", data)
 	}
-	if errOut := w.printer.errWriter.(interface{ String() string }).String(); strings.Contains(errOut, "Running") {
+	if errOut := w.printer.Err().(interface{ String() string }).String(); strings.Contains(errOut, "Running") {
 		t.Errorf("a run of every job says which run: %s", errOut)
 	}
 }

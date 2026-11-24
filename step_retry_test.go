@@ -360,7 +360,7 @@ func TestStep_executeActionWithRetry_InitialDelay(t *testing.T) {
 		expr: &expr.Expr{},
 	}
 	printer := newBufferPrinter()
-	printer.verbose = true
+	printer.SetVerbose(true)
 	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
 
 	start := time.Now()
@@ -373,7 +373,7 @@ func TestStep_executeActionWithRetry_InitialDelay(t *testing.T) {
 	if callCount != 1 {
 		t.Errorf("calls = %d, want 1", callCount)
 	}
-	if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, "Initial delay before first attempt: 50ms") {
+	if out := printer.Err().(*bytes.Buffer).String(); !strings.Contains(out, "Initial delay before first attempt: 50ms") {
 		t.Errorf("output = %q, want the initial delay told of", out)
 	}
 }

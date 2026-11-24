@@ -205,7 +205,7 @@ func TestNotesReachLaterSteps(t *testing.T) {
 		t.Errorf("Buy = %s, want it to pass", st.Status)
 	}
 
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	stderr := w.printer.Err().(*bytes.Buffer).String()
 	if !strings.Contains(stderr, `step 0 "Shopper": notes[1]: level "high" is not one of info, warning or critical; it is left out of the notes`) {
 		t.Errorf("stderr = %q, want a warning of the note left out", stderr)
 	}
@@ -267,7 +267,7 @@ func TestNotesOfARepeatedJob(t *testing.T) {
 		t.Errorf("notes of the passing step = %v, want those of run 5", second)
 	}
 
-	stderr := w.printer.errWriter.(*bytes.Buffer).String()
+	stderr := w.printer.Err().(*bytes.Buffer).String()
 	if n := strings.Count(stderr, `level "bad"`); n != 1 {
 		t.Errorf("stderr warns of the bad note %d times, want once:\n%s", n, stderr)
 	}

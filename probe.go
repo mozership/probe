@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/workflowfile"
 
 	"github.com/go-playground/validator/v10"
@@ -146,7 +147,7 @@ func (p *Probe) Load() error {
 	}
 	if p.Config.Warn != nil {
 		for _, r := range workflowfile.RedefinedJobs(files, data) {
-			_, _ = io.WriteString(p.Config.Warn, warnLine(r.String()))
+			_, _ = io.WriteString(p.Config.Warn, display.WarnLine(r.String()))
 		}
 	}
 

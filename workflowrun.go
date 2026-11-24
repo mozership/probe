@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/vareval"
@@ -139,14 +140,14 @@ func (r *workflowRun) execute() error {
 	// A job is named with the vars, as the report names it, where the run
 	// says which job is which.
 	namer := jobNamer(r.jobs, vars)
-	if l, ok := reporter.(jobLabeler); ok {
-		l.labelJobs(namer)
+	if l, ok := reporter.(display.JobLabeler); ok {
+		l.LabelJobs(namer)
 	}
 	if r.selection != nil {
 		// Said apart from the report, which is that of the jobs that run,
 		// so that a run of some jobs is not taken for one of them all.
 		p := r.printer()
-		p.Fprintln(p.errWriter, colorDim().Sprint(r.selection.describe(namer)))
+		p.Fprintln(p.Err(), display.ColorDim().Sprint(r.selection.describe(namer)))
 	}
 
 	// The job files the steps embed are read with the vars the run has, so
@@ -206,8 +207,8 @@ func (r *workflowRun) startReport() outcome.Reporter {
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.
-	render := newReportRenderer(r.jobIDs(), r.config.Baseline, p.Masker())
-	reporter := newReporter(r.config.Output, p, render)
+	render := display.NewRenderer(r.jobIDs(), r.config.Baseline, p.Masker())
+	reporter := display.NewReporter(r.config.Output, p, render)
 
 	r.startedAt = time.Now()
 	reporter.Start(r.w.Name, r.w.Description)

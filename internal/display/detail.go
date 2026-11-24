@@ -1,4 +1,4 @@
-package probe
+package display
 
 import (
 	"fmt"
@@ -131,19 +131,19 @@ func contractDetail(m *mask.Masker, f *outcome.Failure) string {
 	return b.String()
 }
 
-// testErrorDetail formats the error a test could not be evaluated for, by
+// TestErrorDetail formats the error a test could not be evaluated for, by
 // its message.
-func testErrorDetail(message string) string {
+func TestErrorDetail(message string) string {
 	return indentDetail("test error: " + message)
 }
 
-// typeMismatchText is what a test that did not evaluate to a boolean is
+// TypeMismatchText is what a test that did not evaluate to a boolean is
 // told by.
-func typeMismatchText(testExpr string, result any) string {
+func TypeMismatchText(testExpr string, result any) string {
 	return fmt.Sprintf("Test: `%s` = %v\n", testExpr, result)
 }
 
-// typeMismatchDetail formats a test that did not evaluate to a boolean.
-func typeMismatchDetail(testExpr string, result any) string {
-	return indentDetail(typeMismatchText(testExpr, result))
+// TypeMismatchDetail formats a test that did not evaluate to a boolean.
+func TypeMismatchDetail(testExpr string, result any) string {
+	return indentDetail(TypeMismatchText(testExpr, result))
 }
