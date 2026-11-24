@@ -947,11 +947,11 @@ Probe shows the records the action logs by their levels:
 
 Each record is shown as `[LEVEL] <action>: <message>`, its fields under it as YAML-like lines, maps and lists laid out.
 
-A string the action returns under `report` in its result is printed under the step, each line indented as the step's. Write in it what the reader of the run should see at a glance, such as a verdict and why. The `style` package of Probe has the marks Probe shows a status by, the icon with its color: `style.Success` is a green `✓`, `style.Failure` a red `✗`, `style.NoTest` a blue `△`, `style.Skipped` a blue `⏭`, `style.Warning` a yellow `⚠︎` and `style.Info` a blue `⏺`, and `style.NoteLevel` is the mark of a level of the notes. A mark is colored when Probe prints to a terminal, which it tells the action by setting `PROBE_TTY` to `1`, or when `FORCE_COLOR` is `1`, and is its icon alone otherwise:
+A string the action returns under `report` in its result is printed under the step, each line indented as the step's. Write in it what the reader of the run should see at a glance, such as a verdict and why. The `sdk` package has the marks Probe shows a status by, the icon with its color: `sdk.MarkSuccess` is a green `✓`, `sdk.MarkFailure` a red `✗`, `sdk.MarkNoTest` a blue `△`, `sdk.MarkSkipped` a blue `⏭`, `sdk.MarkWarning` a yellow `⚠︎` and `sdk.MarkInfo` a blue `⏺`, and `sdk.NoteLevelMark` is the mark of a level of the notes. A mark is colored when Probe prints to a terminal, which it tells the action by setting `PROBE_TTY` to `1`, or when `FORCE_COLOR` is `1`, and is its icon alone otherwise:
 
 ```go
-fmt.Fprintf(&b, "%s %s\n", style.Success, "the page shows the name")
-fmt.Fprintf(&b, "%s %s\n", style.Failure, style.Failure.Paint("the name is not shown"))
+fmt.Fprintf(&b, "%s %s\n", sdk.MarkSuccess, "the page shows the name")
+fmt.Fprintf(&b, "%s %s\n", sdk.MarkFailure, sdk.MarkFailure.Paint("the name is not shown"))
 ```
 
 Build the action against the `sdk` package of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `sdk` package puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.

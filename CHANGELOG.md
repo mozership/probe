@@ -10,14 +10,14 @@ importing probe as a library.
 
 This release breaks the Go API of the root package, renames `actionrpc`,
 which every external action imports, to `sdk`, gathers in `sdk` what
-external actions use of `actionref`, and moves `actionref` and the packages
-no external action imports under `internal/`, for code that imports probe
-as a library. An external action builds again once it imports
-`github.com/mozership/probe/sdk` in place of
-`github.com/mozership/probe/actionrpc` and `actionref`, and calls
-`sdk.ParseManifest` and `sdk.ParseRef` in place of
-`actionref.ParseManifest` and `actionref.Parse`. Workflow files are not
-affected, except as told under Behaviour Changes below.
+external actions use of `actionref` and `style`, and moves `actionref`,
+`style`, `mask/markdown` and the packages no external action imports under
+`internal/`, for code that imports probe as a library. An external action
+imports `github.com/mozership/probe/sdk` in place of `actionrpc`,
+`actionref` and `style`, and `github.com/mozership/probe/sdk/markdown` in
+place of `mask/markdown`, and uses the names the tables below give.
+Workflow files are not affected, except as told under Behaviour Changes
+below.
 
 The root package now holds only what is used from outside probe: running a
 workflow (`Probe`, `New`, `Config` and the types its fields take, the
@@ -50,7 +50,7 @@ of what moved.
 | `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | not for use outside probe; the `kind` of a failure in the files `--report` writes |
 | `Reporter`, `BufferedReporter`, `StreamReporter` | not for use outside probe |
 | `BuildReport` | not for use outside probe; `--report` of the `probe` command |
-| `IconSuccess`, `IconError` and the other icons | `style.Mark.Icon` for the marks it has; not for use outside probe otherwise |
+| `IconSuccess`, `IconError` and the other icons | `sdk.Mark.Icon` for the marks it has; not for use outside probe otherwise |
 
 #### Changed in the root package
 
@@ -67,9 +67,9 @@ of what moved.
 
 #### Moved under `internal/`
 
-What external actions import stays: `sdk`, the new name of
-`actionrpc`, which now also holds what they read of `actionref`; `style`;
-and `mask/markdown`.
+What external actions import stays: `sdk`, the new name of `actionrpc`,
+which now also holds what they use of `actionref` and `style`, and
+`sdk/markdown`, which `mask/markdown` became.
 
 | Before | After |
 |---|---|
@@ -78,7 +78,9 @@ and `mask/markdown`.
 | `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `probe.BuiltinAction` serves each built-in action |
 | `actions.Lookup` | `probe.BuiltinAction`, for a build of Probe that adds actions of its own |
 | `dag` | not for use outside probe; `probe dag` draws the jobs of a workflow |
-| `mask` | not for use outside probe; `mask/markdown` stays |
+| `mask` | not for use outside probe |
+| `style` | not for use outside probe; `sdk.Mark`, `sdk.MarkSuccess`, `MarkFailure`, `MarkNoTest`, `MarkSkipped`, `MarkWarning`, `MarkInfo` and `sdk.NoteLevelMark` stand for `style.Mark`, `Success`, `Failure`, `NoTest`, `Skipped`, `Warning`, `Info` and `NoteLevel` |
+| `mask/markdown` | `sdk/markdown`, with `Escape`, `Style`, `AsEntity` and `AsCode` |
 | `report` | not for use outside probe; `--report` of the `probe` command. `Config.Reports`, `Config.Baseline` and `RunOptions.Masker` keep their types, which code outside probe can leave nil but cannot make |
 
 ### Behaviour Changes
