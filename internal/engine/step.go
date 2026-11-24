@@ -229,7 +229,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
 	opts := RunOptions{Verbose: jCtx.Verbose, Trace: jCtx.Trace, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
-	call := action.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &action.Processes{}, Contract: &action.Contract{}}
+	call := action.Call{With: expW, State: jCtx.states.Get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &action.Processes{}, Contract: &action.Contract{}}
 	go func() {
 		defer done()
 		ret, state, err := runner.Run(st.Uses, call, opts)
@@ -256,7 +256,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 		if res.err != nil {
 			return ActionResult{}, res.err
 		}
-		if err := jCtx.states.set(st.Uses, res.state); err != nil {
+		if err := jCtx.states.Set(st.Uses, res.state); err != nil {
 			return ActionResult{}, err
 		}
 		st.contract = res.contract

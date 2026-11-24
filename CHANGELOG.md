@@ -16,19 +16,17 @@ as a library. An external action builds again once it imports
 `github.com/mozership/probe/actionrpc`. Workflow files are not affected,
 except as told under Behaviour Changes below.
 
-The root package now holds only what is used from outside probe: calling
-actions as a step does (`ActionCaller`, `NewActionCaller`, `CallResult`,
-`CallerOption`, `WithCallerLogOutput`, `ExecutableEnv`), running a workflow
-(`Probe`, `New`, `Config` and the types its fields take, the `Exit*`
-codes), checking one (`Check`, `CheckOptions`, `Choices`, `Finding`,
-`Severity*`), serving the built-in actions in a build of Probe that adds
-actions of its own (`BuiltinAction`), and the pages of `probe guide` and
-the skill. The model of a
-workflow, its loader and the engine that runs it moved to
-`internal/engine`, `probe check` to `internal/check`, and the results of a
-run and what prints it to `internal/outcome` and `internal/display`, where
-code outside probe cannot import them. What stays is unchanged, as aliases
-of what moved.
+The root package now holds only what is used from outside probe: running
+a workflow (`Probe`, `New`, `Config` and the types its fields take, the
+`Exit*` codes), checking one (`Check`, `CheckOptions`, `Choices`,
+`Finding`, `Severity*`), serving the built-in actions in a build of Probe
+that adds actions of its own (`BuiltinAction`), and the pages of `probe
+guide` and the skill. Calling actions as a step does moved to the `action`
+package, which external actions import. The model of a workflow, its
+loader and the engine that runs it moved to `internal/engine`, `probe
+check` to `internal/check`, and the results of a run and what prints it to
+`internal/outcome` and `internal/display`, where code outside probe cannot
+import them. What stays is unchanged, as aliases of what moved.
 
 #### Removed from the root package
 
@@ -41,7 +39,8 @@ of what moved.
 | `ProbeError`, `ErrorType`, `ErrorTypeConfiguration`, `ErrorTypeExecution`, `ErrorTypeFile`, `NewProbeError`, `NewConfigurationError`, `NewExecutionError`, `NewFileError`, `NameTakenError` | not for use outside probe; `Probe.ExitStatus` and the `Exit*` codes tell how a run ended |
 | `ExitStatus`, `ExitStatusSuccess`, `ExitStatusFailure` | not for use outside probe; the status of an action, not of a run |
 | `DefaultMaxAttempts`, `DefaultMaxRepeatCount`, `DefaultStepTimeout`, `EnvMaxAttempts`, `EnvMaxRepeatCount` | not for use outside probe; the variables themselves still apply, as the reference of environment variables tells |
-| `WithProbeExecutable` | `ExecutableEnv`, which `NewActionCaller` reads |
+| `WithProbeExecutable` | `action.ExecutableEnv`, which `action.NewCaller` reads |
+| `ActionCaller`, `NewActionCaller`, `CallerOption`, `CallResult`, `WithCallerLogOutput`, `ExecutableEnv` | `action.Caller`, `action.NewCaller`, `action.CallerOption`, `action.CallResult`, `action.WithCallerLogOutput`, `action.ExecutableEnv` |
 | `Result`, `NewResult`, `JobResult`, `StepResult`, `StepFailure`, `StepRepeatCounter`, `RepeatTestResult` | not for use outside probe |
 | `StatusType`, `StatusSuccess`, `StatusError`, `StatusWarning`, `StatusSkipped` | not for use outside probe |
 | `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | not for use outside probe; the `kind` of a failure in the files `--report` writes |
@@ -53,7 +52,7 @@ of what moved.
 
 | Before | After |
 |---|---|
-| `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `ActionCaller`, `CallerOption`, `CallResult`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
+| `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 
 #### Renamed

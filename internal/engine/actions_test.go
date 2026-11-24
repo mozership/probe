@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/internal/actionstate"
 )
 
 func TestMockRunner(t *testing.T) {
@@ -346,7 +347,7 @@ func TestActionStateThatCannotBeSentFailsTheStep(t *testing.T) {
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
 		},
-		states: newActionStates(),
+		states: actionstate.New(action.Sendable),
 	}
 	st := newStepRun(&Step{Name: "s", Uses: "unsendable"}, nil)
 	_, err := st.executeSingleAction(unsendableStateRunner{}, map[string]any{}, jCtx, false)

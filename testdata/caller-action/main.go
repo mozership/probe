@@ -1,5 +1,5 @@
 // Command caller-action serves an action that calls another with
-// probe.ActionCaller, the way an action that drives a target through the
+// action.Caller, the way an action that drives a target through the
 // action of the target does. It calls with.uses with with.with, as many
 // times as with.times says, and returns the res of the last call as
 // res.called, and how many calls it made as res.calls.
@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe"
 	"github.com/mozership/probe/action"
 )
 
@@ -31,8 +30,8 @@ func (a testAction) RunStep(call action.Call) (map[string]any, map[string]any, e
 	case int:
 		times = n
 	}
-	caller := probe.NewActionCaller(call, "")
-	var last *probe.CallResult
+	caller := action.NewCaller(call, "")
+	var last *action.CallResult
 	calls := 0
 	for range times {
 		res, err := caller.Call(context.Background(), uses, with)

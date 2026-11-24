@@ -1397,14 +1397,14 @@ func TestExportTTY(t *testing.T) {
 }
 
 func TestExportExecutable(t *testing.T) {
-	t.Setenv(probe.ExecutableEnv, "")
+	t.Setenv(action.ExecutableEnv, "")
 	exportExecutable()
 	want, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := os.Getenv(probe.ExecutableEnv); got != want {
-		t.Errorf("%s = %q, want the executable of the process %q", probe.ExecutableEnv, got, want)
+	if got := os.Getenv(action.ExecutableEnv); got != want {
+		t.Errorf("%s = %q, want the executable of the process %q", action.ExecutableEnv, got, want)
 	}
 }
 

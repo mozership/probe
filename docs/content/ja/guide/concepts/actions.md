@@ -1230,11 +1230,11 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 
 #### アクションからアクションを呼ぶ
 
-操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`probe.ActionCaller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
+操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`action.Caller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
 
 ```go
 func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error) {
-    caller := probe.NewActionCaller(call, "")
+    caller := action.NewCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
         return nil, nil, err // Refused のエラーはステップを拒否します
@@ -1244,7 +1244,7 @@ func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error
 }
 ```
 
-- **名前**：`uses`はステップの`uses`と同じく読みます。ワークフローが[`actions`](/ja/reference/yaml-configuration#actions)で付けた名前、外部アクション、Probeのアクションのいずれかです。`actions`が名前を付けていないローカルのアクションは、`NewActionCaller`に渡したディレクトリからの相対パスとして扱います。
+- **名前**：`uses`はステップの`uses`と同じく読みます。ワークフローが[`actions`](/ja/reference/yaml-configuration#actions)で付けた名前、外部アクション、Probeのアクションのいずれかです。`actions`が名前を付けていないローカルのアクションは、`NewCaller`に渡したディレクトリからの相対パスとして扱います。
 - **ガード**：外部アクションを初めて呼ぶときに、その`action.yml`が`guard`で宣言している種類を実行のガードに加えます。ガードを守らないアクションは、`--allow-action`で名前を指定されていない限り、`action.Refused`のエラーで拒否されます。拒否したアクションはダウンロードしません。
 - **実行**：呼ばれたアクションには呼び出し元のステップを伝えるので、`Step.RunID`は実行のIDになります。
 - **状態**：各アクションが残した状態をcallerが保持し、そのアクションの次の呼び出しに渡します。ジョブが状態を受け渡すのと同じです。callerはステップごとにひとつ作り、そのステップの呼び出しはすべてそれを通してください。
