@@ -13,16 +13,6 @@ import (
 	"github.com/mozership/probe/actionrpc"
 )
 
-// A job is given its ID before it is scheduled, so the scheduler does not
-// make one up.
-func TestAddToSchedule_WithoutID(t *testing.T) {
-	w := &Workflow{Jobs: []Job{{Name: "a"}}}
-	const want = `job "a" has no ID`
-	if _, err := newScheduler(w.Jobs); err == nil || err.Error() != want {
-		t.Errorf("newScheduler() error = %v, want %q", err, want)
-	}
-}
-
 // A cycle is told from its first job in the workflow, not in the order of
 // the IDs, by a run and by probe dag alike.
 func TestCycleIsToldInWorkflowOrder(t *testing.T) {

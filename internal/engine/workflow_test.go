@@ -1423,3 +1423,13 @@ func TestWorkflow_Start_MasksWhatALaterStepTeaches(t *testing.T) {
 		}
 	}
 }
+
+// A job is given its ID before it is scheduled, so the scheduler does not
+// make one up.
+func TestAddToSchedule_WithoutID(t *testing.T) {
+	w := &Workflow{Jobs: []Job{{Name: "a"}}}
+	const want = `job "a" has no ID`
+	if _, err := newScheduler(w.Jobs); err == nil || err.Error() != want {
+		t.Errorf("newScheduler() error = %v, want %q", err, want)
+	}
+}
