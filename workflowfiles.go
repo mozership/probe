@@ -97,8 +97,8 @@ func yamlFiles(filePath string) ([]string, error) {
 					return nil, err
 				}
 				for _, rf := range rfiles {
-					if !rf.IsDir() && isYamlFile(rf.Name()) {
-						files = append(files, filepath.Join(path, rf.Name()))
+					if f := filepath.Join(path, rf.Name()); isYamlFile(f) && !isDir(f) {
+						files = append(files, f)
 					}
 				}
 			} else if isYamlFile(path) {
@@ -119,7 +119,7 @@ func yamlFiles(filePath string) ([]string, error) {
 				return nil, fmt.Errorf("%s: no such file or directory", path)
 			}
 			for _, match := range matches {
-				if isYamlFile(match) {
+				if isYamlFile(match) && !isDir(match) {
 					files = append(files, match)
 				}
 			}
@@ -127,6 +127,14 @@ func yamlFiles(filePath string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+// isDir reports whether path is a directory, or a symlink to one. A
+// directory named as a YAML file, which a directory or a glob may find, is
+// left out, as it holds no workflow to read.
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // isYamlFile checks if the filename has a .yml or .yaml extension

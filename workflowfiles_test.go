@@ -71,7 +71,8 @@ func TestYamlFiles(t *testing.T) {
 }
 
 // TestYamlFiles_NotYAML refuses a file named on its own that is not YAML,
-// and leaves out one that a directory or a glob finds.
+// and leaves out one that a directory or a glob finds, and a directory
+// named as a YAML file.
 func TestYamlFiles_NotYAML(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"w.yml", "notes.txt"} {
@@ -80,6 +81,15 @@ func TestYamlFiles_NotYAML(t *testing.T) {
 		}
 	}
 	yml, txt := filepath.Join(dir, "w.yml"), filepath.Join(dir, "notes.txt")
+
+	// A directory, or a symlink to one, named as a YAML file is no workflow
+	// file, and is left out as one that is not YAML is.
+	if err := os.Mkdir(filepath.Join(dir, "sub.yml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "sub.yml"), filepath.Join(dir, "link.yaml")); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := yamlFiles(yml + "," + txt); err == nil || !strings.Contains(err.Error(), "notes.txt: not a YAML file") {
 		t.Errorf("yamlFiles() error = %v, want one naming notes.txt", err)
