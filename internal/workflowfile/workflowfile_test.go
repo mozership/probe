@@ -47,6 +47,14 @@ func TestPaths(t *testing.T) {
 	a := write(t, dir, "a.yml", "name: a\n")
 	b := write(t, dir, "b.yaml", "name: b\n")
 	write(t, dir, "notes.txt", "x\n")
+	// A directory, or a symlink to one, named as a YAML file is no workflow
+	// file, and is left out as one that is not YAML is.
+	if err := os.Mkdir(filepath.Join(dir, "sub.yml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "sub.yml"), filepath.Join(dir, "link.yaml")); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name string

@@ -14,7 +14,8 @@ import (
 // Paths resolves filePath, paths separated by commas, into the YAML (.yml and
 // .yaml) files it names. A path is a file, a directory, whose YAML files are
 // taken, or a glob. A file named on its own that is not YAML is refused, and
-// one a directory or a glob finds is left out.
+// one a directory or a glob finds is left out, as is a directory named as a
+// YAML file.
 func Paths(filePath string) ([]string, error) {
 	var files []string
 
@@ -28,8 +29,8 @@ func Paths(filePath string) ([]string, error) {
 					return nil, err
 				}
 				for _, e := range entries {
-					if !e.IsDir() && IsYAML(e.Name()) {
-						files = append(files, filepath.Join(path, e.Name()))
+					if f := filepath.Join(path, e.Name()); IsYAML(f) && !isDir(f) {
+						files = append(files, f)
 					}
 				}
 			} else if IsYAML(path) {
@@ -50,13 +51,21 @@ func Paths(filePath string) ([]string, error) {
 			return nil, fmt.Errorf("%s: no such file or directory", path)
 		}
 		for _, m := range matches {
-			if IsYAML(m) {
+			if IsYAML(m) && !isDir(m) {
 				files = append(files, m)
 			}
 		}
 	}
 
 	return files, nil
+}
+
+// isDir reports whether path is a directory, or a symlink to one. A
+// directory named as a YAML file, which a directory or a glob may find, is
+// left out, as it holds no workflow to read.
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // IsYAML reports whether name has a .yml or .yaml extension.
