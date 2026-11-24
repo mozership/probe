@@ -4,7 +4,7 @@
 // <redacted> would be taken for something else: an HTML tag on GitHub,
 // which leaves it out, or a link or a mention on Slack.
 //
-// It is a package of its own, apart from mask, which every action links
+// It is a package of its own, apart from the masking every action links
 // through actionrpc, so that only an action that writes Markdown carries
 // the Markdown parser it reads the text with.
 package markdown
