@@ -780,7 +780,7 @@ func (st *stepRun) runTest(printer *Printer) bool {
 	st.failure = failure
 	// A verbose run shows what a test came to when it came to a boolean.
 	if printer.verbose && (failure == nil || failure.Kind == FailureAssertion) {
-		printer.PrintTestResult(passed, st.Test, st.ctx)
+		printer.PrintTestResult(passed, st.Test, st.ctx.testEnv())
 	}
 	if passed {
 		return true
