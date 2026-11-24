@@ -10,17 +10,17 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
-type action struct{}
+type testAction struct{}
 
-func (a action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+func (a testAction) Run(with map[string]any) (map[string]any, error) {
+	ret, _, err := a.RunStep(action.Call{With: with})
 	return ret, err
 }
 
-func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a testAction) RunStep(call action.Call) (map[string]any, map[string]any, error) {
 	uses, _ := call.With["uses"].(string)
 	with, _ := call.With["with"].(map[string]any)
 	// A number of with comes as an int64 over RPC.
@@ -50,5 +50,5 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 }
 
 func main() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action { return action{} })
+	action.Serve(func(log hclog.Logger) action.Action { return testAction{} })
 }

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/internal/expr"
@@ -195,7 +195,7 @@ func (e *maskedError) Unwrap() error {
 // the actions of Probe: an action that does not exist is told here, by its
 // name, rather than by the process that would have served it failing to
 // start. When builtin is empty, that is not checked.
-func resolveExternalActions(jobs []*Job, baseDir string, guard actionrpc.Guard, builtin []string) (actionrpc.Guard, error) {
+func resolveExternalActions(jobs []*Job, baseDir string, guard action.Guard, builtin []string) (action.Guard, error) {
 	for _, job := range jobs {
 		if err := checkBuiltinUses(job, builtin); err != nil {
 			return guard, err

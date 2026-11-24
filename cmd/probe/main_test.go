@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actions"
 )
 
@@ -1254,39 +1254,39 @@ func TestCmd_guard(t *testing.T) {
 		name    string
 		args    []string
 		env     map[string]string
-		want    actionrpc.Guard
+		want    action.Guard
 		wantErr string
 	}{
 		{name: "no guard", args: []string{"w.yml"}},
 		{
 			name: "flags",
 			args: []string{"--read-only", "--allow-host", "api.example.com, *.internal", "--allow-action=shell", "w.yml"},
-			want: actionrpc.Guard{ReadOnly: true, AllowHosts: []string{"api.example.com", "*.internal"}, AllowActions: []string{"shell"}},
+			want: action.Guard{ReadOnly: true, AllowHosts: []string{"api.example.com", "*.internal"}, AllowActions: []string{"shell"}},
 		},
 		{
 			name: "environment variables",
 			args: []string{"w.yml"},
 			env:  map[string]string{"PROBE_READ_ONLY": "true", "PROBE_ALLOW_HOSTS": "localhost:8080", "PROBE_ALLOW_ACTIONS": "shell,ssh"},
-			want: actionrpc.Guard{ReadOnly: true, AllowHosts: []string{"localhost:8080"}, AllowActions: []string{"shell", "ssh"}},
+			want: action.Guard{ReadOnly: true, AllowHosts: []string{"localhost:8080"}, AllowActions: []string{"shell", "ssh"}},
 		},
 		{
 			name: "flags win over environment variables",
 			args: []string{"--allow-host", "a.example.com", "w.yml"},
 			env:  map[string]string{"PROBE_ALLOW_HOSTS": "b.example.com", "PROBE_READ_ONLY": "0"},
-			want: actionrpc.Guard{AllowHosts: []string{"a.example.com"}},
+			want: action.Guard{AllowHosts: []string{"a.example.com"}},
 		},
 		{name: "PROBE_READ_ONLY that is not a boolean", args: []string{"w.yml"}, env: map[string]string{"PROBE_READ_ONLY": "yes"}, wantErr: "PROBE_READ_ONLY must be true or false"},
 		{
 			name: "flags given false or empty win over environment variables",
 			args: []string{"--read-only=false", "--allow-host=", "--allow-action=", "w.yml"},
 			env:  map[string]string{"PROBE_READ_ONLY": "true", "PROBE_ALLOW_HOSTS": "a.example.com", "PROBE_ALLOW_ACTIONS": "shell"},
-			want: actionrpc.Guard{},
+			want: action.Guard{},
 		},
 		{
 			name: "--read-only=true",
 			args: []string{"--read-only=true", "--allow-action=", "w.yml"},
 			env:  map[string]string{"PROBE_ALLOW_ACTIONS": "shell"},
-			want: actionrpc.Guard{ReadOnly: true},
+			want: action.Guard{ReadOnly: true},
 		},
 	}
 	for _, tt := range tests {

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // TestEndToEndLocalExternalAction runs a workflow whose step uses an action
@@ -232,7 +232,7 @@ func TestEndToEndExternalActionChecksumAtStart(t *testing.T) {
 	sum := sha256.Sum256(data)
 	log := hclog.NewNullLogger()
 
-	res, _, err := actionrpc.RunExecutable(context.Background(), bin, sum[:], actionrpc.Call{With: map[string]any{"name": "probe"}}, log)
+	res, _, err := action.RunExecutable(context.Background(), bin, sum[:], action.Call{With: map[string]any{"name": "probe"}}, log)
 	if err != nil {
 		t.Fatalf("RunExecutable() error = %v", err)
 	}
@@ -241,7 +241,7 @@ func TestEndToEndExternalActionChecksumAtStart(t *testing.T) {
 	}
 
 	other := sha256.Sum256([]byte("something else"))
-	if _, _, err := actionrpc.RunExecutable(context.Background(), bin, other[:], actionrpc.Call{}, log); err == nil || !strings.Contains(err.Error(), "checksums did not match") {
+	if _, _, err := action.RunExecutable(context.Background(), bin, other[:], action.Call{}, log); err == nil || !strings.Contains(err.Error(), "checksums did not match") {
 		t.Errorf("RunExecutable() with a wrong digest error = %v, want a checksum mismatch", err)
 	}
 }

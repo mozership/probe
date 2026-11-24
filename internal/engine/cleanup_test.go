@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // recorder stands in for the actions cleanups calls and the warnings it
@@ -107,7 +107,7 @@ func TestCleanupsNil(t *testing.T) {
 	var c *cleanups
 	c.begin("/a")()
 	c.owe("/a")
-	c.passOn(&actionrpc.Cleanups{})
+	c.passOn(&action.Cleanups{})
 	c.run()
 }
 
@@ -180,7 +180,7 @@ func TestCleanupsPassOn(t *testing.T) {
 	c.begin("/a")()
 	c.owe("/b")
 
-	to := &actionrpc.Cleanups{}
+	to := &action.Cleanups{}
 	c.passOn(to)
 	if got, want := to.List(), []string{"/a", "/b"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("passed on %v, want %v", got, want)
@@ -224,7 +224,7 @@ func TestCleanupsPassOnAfterRun(t *testing.T) {
 	c.begin("/a")()
 	c.run()
 
-	to := &actionrpc.Cleanups{}
+	to := &action.Cleanups{}
 	c.passOn(to)
 	if got := to.List(); len(got) != 0 {
 		t.Errorf("passed on %v after run", got)

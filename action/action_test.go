@@ -1,4 +1,4 @@
-package actionrpc
+package action
 
 import (
 	"bytes"
@@ -391,7 +391,7 @@ func TestConvertForProtobufRejectsUnsendableKeys(t *testing.T) {
 		in      any
 		wantErr string
 	}{
-		{name: "struct keys", in: map[point]string{{1, 2}: "a"}, wantErr: "map key of type actionrpc.point"},
+		{name: "struct keys", in: map[point]string{{1, 2}: "a"}, wantErr: "map key of type action.point"},
 		{name: "keys that print alike", in: map[any]any{1: "number", "1": "string"}, wantErr: `map keys collide as "1"`},
 		{name: "deep inside a result", in: map[string]any{"res": []any{map[point]int{{0, 0}: 1}}}, wantErr: "res: [0]: map key"},
 		{name: "in a struct field", in: struct {

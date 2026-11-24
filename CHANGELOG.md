@@ -53,9 +53,15 @@ of what moved.
 | `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `ActionCaller`, `CallerOption`, `CallResult`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 
+#### Renamed
+
+| Before | After |
+|---|---|
+| `actionrpc` | `action`, with the same names in it |
+
 #### Moved under `internal/`
 
-What external actions import stays: the root package, `actionrpc`,
+What external actions import stays: the root package, `action`,
 `actionref`, `style` and `mask/markdown`.
 
 | Before | After |

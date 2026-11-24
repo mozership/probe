@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actiontest"
 )
 
@@ -30,7 +30,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		{"url": srv.URL, "get": "/", "keep_cookies": true, "cookies": map[string]any{"theme": "dark"}, "trace_header": "x-probe-step"},
 		{"url": srv.URL + "/v1", "get": "/users/1", "openapi": map[string]any{"spec": spec}},
 	} {
-		ret, _, err := a.RunStep(actionrpc.Call{With: with, Contract: &actionrpc.Contract{}})
+		ret, _, err := a.RunStep(action.Call{With: with, Contract: &action.Contract{}})
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}
@@ -43,7 +43,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 func TestRequired(t *testing.T) {
 	a := &Action{log: hclog.NewNullLogger()}
 	run := func(with map[string]any) error {
-		_, _, err := a.RunStep(actionrpc.Call{With: with})
+		_, _, err := a.RunStep(action.Call{With: with})
 		return err
 	}
 	actiontest.CheckRequired(t, Spec().Required, map[string]any{"url": "http://127.0.0.1:1", "method": "GET", "timeout": "1s"}, run)

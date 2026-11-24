@@ -71,16 +71,16 @@ probe --read-only --allow-action shell workflow.yml
 
 ## Keeping to the Guard in an External Action
 
-An external action is given the guard of the run in `Call.Guard`, as a built-in one is. It keeps to it by returning `actionrpc.Refuse(...)` for what the guard does not allow, before sending anything:
+An external action is given the guard of the run in `Call.Guard`, as a built-in one is. It keeps to it by returning `action.Refuse(...)` for what the guard does not allow, before sending anything:
 
 ```go
-func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
     req, err := parse(call.With)
     if err != nil {
         return nil, nil, err
     }
     if call.Guard.ReadOnly && req.writes() {
-        return nil, nil, actionrpc.Refuse("%s may write, and the run is read-only", req.Name)
+        return nil, nil, action.Refuse("%s may write, and the run is read-only", req.Name)
     }
     if err := call.Guard.CheckHost(req.Host); err != nil {
         return nil, nil, err // already a refusal

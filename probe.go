@@ -5,7 +5,7 @@ package probe
 import (
 	"io"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/check"
 	"github.com/mozership/probe/internal/engine"
@@ -61,7 +61,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 
 // NewActionCaller returns a caller of actions that a step runs with call,
 // with local actions relative to baseDir.
-func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) *ActionCaller {
+func NewActionCaller(call action.Call, baseDir string, opts ...CallerOption) *ActionCaller {
 	return engine.NewActionCaller(call, baseDir, opts...)
 }
 

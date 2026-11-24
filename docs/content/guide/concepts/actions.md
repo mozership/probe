@@ -705,7 +705,7 @@ While Probe comes with powerful built-in actions, you can extend it with custom 
 
 ### Custom Action Interface
 
-A custom action implements the `actionrpc.Action` interface:
+A custom action implements the `action.Action` interface:
 
 ```go
 type Action interface {
@@ -717,7 +717,7 @@ type Action interface {
 
 #### Knowing the Step and Keeping State
 
-An action that needs to know the step it runs for, or to keep something from one step to the next, as the http action does for its trace header and its cookies, also implements `actionrpc.StepAction`:
+An action that needs to know the step it runs for, or to keep something from one step to the next, as the http action does for its trace header and its cookies, also implements `action.StepAction`:
 
 ```go
 type StepAction interface {
@@ -750,7 +750,7 @@ type Step struct {
 
 Probe tells every such action about the step it runs for; what the action does with it is up to the action. `RunID` is the same for every step of a run, and for a job run by the embedded action.
 
-`Guard` is the guard of the run, set by `--read-only`, `--allow-host` and `--allow-action`. An action keeps to it by returning `actionrpc.Refuse(...)` for what it does not allow, which fails the step with the kind `refused`; `Guard.ReadOnly`, `Guard.AllowsHost` and `Guard.CheckHost` tell what it allows. An external action declares the kinds of guard it keeps to in `guard` in its `action.yml`, and is refused under a kind it does not declare unless `--allow-action` names it. See [Guard](/guide/concepts/guard).
+`Guard` is the guard of the run, set by `--read-only`, `--allow-host` and `--allow-action`. An action keeps to it by returning `action.Refuse(...)` for what it does not allow, which fails the step with the kind `refused`; `Guard.ReadOnly`, `Guard.AllowsHost` and `Guard.CheckHost` tell what it allows. An external action declares the kinds of guard it keeps to in `guard` in its `action.yml`, and is refused under a kind it does not declare unless `--allow-action` names it. See [Guard](/guide/concepts/guard).
 
 `Actions` holds the names the workflow gives its external actions under [`actions`](/reference/yaml-configuration#actions), each with the action it stands for in full, and a local one as an absolute path. Probe has already replaced the names in the workflow itself, so an action needs them only to run steps of its own, as the embedded action does for a job file.
 
@@ -758,7 +758,7 @@ Probe tells every such action about the step it runs for; what the action does w
 
 #### Cleaning Up After a Run
 
-An action runs in a process that is stopped as soon as its step is done, so what a step leaves behind for the steps after it, such as a container it started, outlives the action. An action that leaves something behind sets `cleanup: true` in its `action.yml` and also implements `actionrpc.Cleaner`:
+An action runs in a process that is stopped as soon as its step is done, so what a step leaves behind for the steps after it, such as a container it started, outlives the action. An action that leaves something behind sets `cleanup: true` in its `action.yml` and also implements `action.Cleaner`:
 
 ```go
 type Cleaner interface {
@@ -784,9 +784,9 @@ What the steps of a job run by the embedded action leave behind stays until the 
 
 `Call.Cleanups` is not nil under a Probe that cleans up, which calls `Cleanup` of an action whose `action.yml` sets `cleanup`. It is nil under a Probe from before there was a cleanup; an action that would leave something behind for good can return an error then. An action that runs steps of its own, as the embedded action does, names the external actions those steps ran with `Call.Cleanups.Add`, for Probe to call them.
 
-An action that leaves a process running in the background, as the shell action does for `background: true`, starts it in a session of its own, so that it outlives the action, and tells Probe of it with `Call.Processes.Add(actionrpc.Process{PID: pid, Log: logFile})`, also when the step then fails. Probe stops the process group it leads once the workflow is over, or when Ctrl+C, `SIGTERM` or `SIGHUP` ends it, and removes the log file, if any. A Probe from before there were processes does not hear of them, and leaves them running.
+An action that leaves a process running in the background, as the shell action does for `background: true`, starts it in a session of its own, so that it outlives the action, and tells Probe of it with `Call.Processes.Add(action.Process{PID: pid, Log: logFile})`, also when the step then fails. Probe stops the process group it leads once the workflow is over, or when Ctrl+C, `SIGTERM` or `SIGHUP` ends it, and removes the log file, if any. A Probe from before there were processes does not hear of them, and leaves them running.
 
-An action that checks a step against a contract, as the http action does with `openapi`, tells Probe of the check with `Call.Contract.Report(actionrpc.ContractCheck{Matched: matched, Violations: violations})`, where `Violations` is empty when the contract allows the request and the response. Probe takes the check as the step's test: the step fails as `contract_request` or `contract_response` when there is a violation, even when its `test` holds, and a step without a `test` is checked by the contract alone. `Matched` is what the contract matched the step to, which `probe coverage` counts, or nil when it has nothing that matches. A Probe from before there were contracts to report does not hear of the check, and takes the step as unchecked. `probe check` does not know which keys of an external action ask for a check, and warns of such a step without a `test` that nothing checks it.
+An action that checks a step against a contract, as the http action does with `openapi`, tells Probe of the check with `Call.Contract.Report(action.ContractCheck{Matched: matched, Violations: violations})`, where `Violations` is empty when the contract allows the request and the response. Probe takes the check as the step's test: the step fails as `contract_request` or `contract_response` when there is a violation, even when its `test` holds, and a step without a `test` is checked by the contract alone. `Matched` is what the contract matched the step to, which `probe coverage` counts, or nil when it has nothing that matches. A Probe from before there were contracts to report does not hear of the check, and takes the step as unchecked. `probe check` does not know which keys of an external action ask for a check, and warns of such a step without a `test` that nothing checks it.
 
 A Probe that is killed outright, as by `SIGKILL`, calls nothing. An action can make up for that by removing what earlier runs left when a step of a later run starts.
 
@@ -898,7 +898,7 @@ A local action with `path` needs no checksum. Give one to have the executable ch
 
 #### Writing an External Action
 
-The executable serves the action with `actionrpc.Serve`:
+The executable serves the action with `action.Serve`:
 
 ```go
 package main
@@ -908,7 +908,7 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/mozership/probe/actionrpc"
+    "github.com/mozership/probe/action"
 )
 
 // Greet is served by an executable of its own.
@@ -918,7 +918,7 @@ type Greet struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     start := time.Now()
-    actionrpc.LogParams(g.log, "greet received parameters", with)
+    action.LogParams(g.log, "greet received parameters", with)
 
     name, _ := with["name"].(string)
     return map[string]any{
@@ -930,7 +930,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 }
 
 func main() {
-    actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+    action.Serve(func(log hclog.Logger) action.Action {
         return &Greet{log: log}
     })
 }
@@ -943,7 +943,7 @@ Probe shows the records the action logs by their levels:
 - Warning: in every run. Log at this level what the user must see whatever the step's result says.
 - Error: only with `-v`, since the error the action returns already says what they would.
 - Debug and info: with `-v`, alongside the request and the response of the step, which Probe shows itself. Log at these levels what the action did that its result does not tell, such as a retry.
-- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `actionrpc.LogParams` and `actionrpc.LogOutcome` log the parameters, and the result or the error, at this level.
+- Trace: only with `-vv`, along with how Probe starts, calls and stops the action's process. Log at this level what helps to debug the action itself, such as the parameters it received. `action.LogParams` and `action.LogOutcome` log the parameters, and the result or the error, at this level.
 
 Each record is shown as `[LEVEL] <action>: <message>`, its fields under it as YAML-like lines, maps and lists laid out.
 
@@ -954,7 +954,7 @@ fmt.Fprintf(&b, "%s %s\n", style.Success, "the page shows the name")
 fmt.Fprintf(&b, "%s %s\n", style.Failure, style.Failure.Paint("the name is not shown"))
 ```
 
-Build the action against the `actionrpc` of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `actionrpc` puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.
+Build the action against the `action` package of a current Probe. Probe tells an error the action returns apart from a lost connection by a mark the current `action` package puts on it; an error without the mark whose gRPC code is `Unavailable` makes Probe wait a moment to see whether the process exited.
 
 Build it for every platform it supports, publish the executables, and commit an `action.yml` with their URLs and digests. Users then pin the commit that holds that `action.yml`. [mozership/probe-graphql](https://github.com/mozership/probe-graphql) does this with GoReleaser and a workflow that commits the digests after each release.
 
@@ -993,14 +993,14 @@ runs:
 
 #### Reading Parameters into a Struct
 
-`actionrpc` reads the parameters of a step into a struct as the built-in actions read theirs, by the `map` tags of its fields:
+The `action` package reads the parameters of a step into a struct as the built-in actions read theirs, by the `map` tags of its fields:
 
 | Function | What it does |
 |----------|--------------|
-| `actionrpc.DecodeParams(with, &req)` | Fills `req` from `with`. A field tagged `validate:"required"` must be given. A number field takes a number or a decimal string that fits it, and refuses a fraction or a value out of range; a bool field takes a bool, `0` or `1`, or a string such as `"true"`; a `map[string]string` field takes strings, numbers and bools as their text and `null` as an empty string, and refuses a list or a map. The error names the field |
-| `actionrpc.EncodeResult(res)` | Turns a struct into the map `Run` returns, keyed by the same tags |
-| `actionrpc.ParamNames(Req{})` | Lists the parameters a struct takes, in the order of its fields, such as for `params` in `action.yml` |
-| `actionrpc.ParseTimeout(v)` | Reads a timeout as the built-in actions do: `"30s"`, a number of seconds, or a numeric string, and refuses anything else and zero |
+| `action.DecodeParams(with, &req)` | Fills `req` from `with`. A field tagged `validate:"required"` must be given. A number field takes a number or a decimal string that fits it, and refuses a fraction or a value out of range; a bool field takes a bool, `0` or `1`, or a string such as `"true"`; a `map[string]string` field takes strings, numbers and bools as their text and `null` as an empty string, and refuses a list or a map. The error names the field |
+| `action.EncodeResult(res)` | Turns a struct into the map `Run` returns, keyed by the same tags |
+| `action.ParamNames(Req{})` | Lists the parameters a struct takes, in the order of its fields, such as for `params` in `action.yml` |
+| `action.ParseTimeout(v)` | Reads a timeout as the built-in actions do: `"30s"`, a number of seconds, or a numeric string, and refuses anything else and zero |
 
 ```go
 type Req struct {
@@ -1014,10 +1014,10 @@ type Res struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     req := Req{Repeat: 1}
-    if err := actionrpc.DecodeParams(with, &req); err != nil {
+    if err := action.DecodeParams(with, &req); err != nil {
         return nil, err
     }
-    res, err := actionrpc.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
+    res, err := action.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
     if err != nil {
         return nil, err
     }
@@ -1030,7 +1030,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 An action that drives a target through the action of that target, as an agent drives an app through probe-ios, calls it with `probe.ActionCaller`. Each call is what a step of the workflow would be, for the step the calling action runs for:
 
 ```go
-func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
     caller := probe.NewActionCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
@@ -1042,7 +1042,7 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 ```
 
 - **Names.** `uses` is read as a step's is: a name the workflow gives an action under [`actions`](/reference/yaml-configuration#actions), an external action, or an action of Probe. A local action that `actions` does not name is taken relative to the directory given to `NewActionCaller`.
-- **Guard.** On the first call of an external action, what its `action.yml` declares under `guard` is put in the guard of the run, and an action that does not keep to the guard is refused with an `actionrpc.Refused` error, unless `--allow-action` names it. An action the guard refuses is not fetched.
+- **Guard.** On the first call of an external action, what its `action.yml` declares under `guard` is put in the guard of the run, and an action that does not keep to the guard is refused with an `action.Refused` error, unless `--allow-action` names it. An action the guard refuses is not fetched.
 - **Run.** The action is told the step of the calling action, so that `Step.RunID` is the run's.
 - **State.** The caller keeps the state each action leaves, and gives it to the next call of that action, as a job does. Make one caller for a step, and call through it.
 - **Cleanup.** An action whose `action.yml` sets `cleanup` is cleaned up once the run is over, once however many times it was called, as are the processes it leaves running.
@@ -1066,7 +1066,7 @@ import (
 
     "github.com/hashicorp/go-hclog"
     "github.com/mozership/probe"
-    "github.com/mozership/probe/actionrpc"
+    "github.com/mozership/probe/action"
 )
 
 // Greet is a custom action, used as `uses: greet`.
@@ -1076,7 +1076,7 @@ type Greet struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     start := time.Now()
-    actionrpc.LogParams(g.log, "greet received parameters", with)
+    action.LogParams(g.log, "greet received parameters", with)
 
     name, _ := with["name"].(string)
     return map[string]any{
@@ -1090,10 +1090,10 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 func main() {
     // Probe runs every action by starting this executable again
     // as `<executable> builtin-actions <name>`.
-    if len(os.Args) == 3 && os.Args[1] == actionrpc.BuiltinCmd {
+    if len(os.Args) == 3 && os.Args[1] == action.BuiltinCmd {
         name := os.Args[2]
         if name == "greet" {
-            actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+            action.Serve(func(log hclog.Logger) action.Action {
                 return &Greet{log: log}
             })
             return

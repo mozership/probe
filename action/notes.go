@@ -1,4 +1,4 @@
-package actionrpc
+package action
 
 import (
 	"fmt"

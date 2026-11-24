@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/mask"
 )
 
@@ -28,7 +28,7 @@ const ExecutableEnv = "PROBE_EXECUTABLE"
 //
 // Its methods may be called concurrently.
 type ActionCaller struct {
-	call    actionrpc.Call
+	call    action.Call
 	baseDir string
 	log     hclog.Logger
 	logOut  io.Writer
@@ -41,7 +41,7 @@ type ActionCaller struct {
 	mu sync.Mutex
 	// guard is the guard of the call, with what the action.yml of each
 	// external action called declares under guard.
-	guard actionrpc.Guard
+	guard action.Guard
 	// read are the external actions whose action.yml was read, by their
 	// names in full, with whether it sets cleanup.
 	read   map[string]bool
@@ -50,8 +50,8 @@ type ActionCaller struct {
 	// manifest reads the action.yml of an external action, and
 	// runExternal and runBuiltin run an action once; tests replace them.
 	manifest    func(full string) (*actionref.Manifest, error)
-	runExternal func(ctx context.Context, exe *actionref.Executable, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error)
-	runBuiltin  func(ctx context.Context, probe, name string, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error)
+	runExternal func(ctx context.Context, exe *actionref.Executable, call action.Call, log hclog.Logger) (map[string]any, map[string]any, error)
+	runBuiltin  func(ctx context.Context, probe, name string, call action.Call, log hclog.Logger) (map[string]any, map[string]any, error)
 }
 
 // CallerOption changes how an ActionCaller calls actions.
@@ -60,7 +60,7 @@ type CallerOption func(*ActionCaller)
 // WithCallerLogOutput writes the records of the actions called to w, as
 // JSON at the levels the actions gave them. Without it, they go to stderr,
 // where the records of the calling action go when it is served by
-// actionrpc.Serve, for the runner to filter. Either way, the credentials
+// action.Serve, for the runner to filter. Either way, the credentials
 // of what the actions were given and returned are hidden in them.
 func WithCallerLogOutput(w io.Writer) CallerOption {
 	return func(c *ActionCaller) {
@@ -80,7 +80,7 @@ func WithProbeExecutable(path string) CallerOption {
 // calling action was given. baseDir is the directory a local action that
 // call.Actions does not name is resolved against; the working directory
 // when it is empty.
-func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) *ActionCaller {
+func NewActionCaller(call action.Call, baseDir string, opts ...CallerOption) *ActionCaller {
 	c := &ActionCaller{
 		call:        call,
 		baseDir:     baseDir,
@@ -92,7 +92,7 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 		states:      newActionStates(),
 		manifest:    func(full string) (*actionref.Manifest, error) { return actionref.ReadManifest(full, "") },
 		runExternal: runExternal,
-		runBuiltin:  actionrpc.RunBuiltinFrom,
+		runBuiltin:  action.RunBuiltinFrom,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -105,8 +105,8 @@ func NewActionCaller(call actionrpc.Call, baseDir string, opts ...CallerOption) 
 	return c
 }
 
-func runExternal(ctx context.Context, exe *actionref.Executable, call actionrpc.Call, log hclog.Logger) (map[string]any, map[string]any, error) {
-	return actionrpc.RunExecutable(ctx, exe.Path, exe.SHA256, call, log)
+func runExternal(ctx context.Context, exe *actionref.Executable, call action.Call, log hclog.Logger) (map[string]any, map[string]any, error) {
+	return action.RunExecutable(ctx, exe.Path, exe.SHA256, call, log)
 }
 
 // CallResult is what an action called returned.
@@ -116,7 +116,7 @@ type CallResult struct {
 	Result map[string]any
 	// Contract is the check the action made of the call against a
 	// contract, such as an OpenAPI document; nil when it made none.
-	Contract *actionrpc.ContractCheck
+	Contract *action.ContractCheck
 }
 
 // Call runs the action uses once with with, and returns what it returned.
@@ -126,7 +126,7 @@ type CallResult struct {
 // On the first call of an external action, its action.yml is read: what it
 // declares under guard is put in the guard, and the action is told to
 // clean up once the run is over when it sets cleanup. An action the guard
-// does not let run is refused with an actionrpc.Refused error, which the
+// does not let run is refused with an action.Refused error, which the
 // calling action can return as its own. The state an action leaves is
 // given to its next call. Once ctx is done, the action is stopped, and
 // ctx's error is returned.
@@ -156,17 +156,17 @@ func (c *ActionCaller) Call(ctx context.Context, uses string, with map[string]an
 		for _, kind := range guard.Missing(full) {
 			flags = append(flags, "--"+kind)
 		}
-		return nil, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", uses, strings.Join(flags, " and "), full)
+		return nil, action.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", uses, strings.Join(flags, " and "), full)
 	}
 
-	call := actionrpc.Call{
+	call := action.Call{
 		With:      with,
 		State:     c.states.get(full),
 		Step:      c.call.Step,
 		Guard:     guard,
 		Actions:   c.call.Actions,
-		Processes: &actionrpc.Processes{},
-		Contract:  &actionrpc.Contract{},
+		Processes: &action.Processes{},
+		Contract:  &action.Contract{},
 	}
 	// The runner of the calling action cleans up once the run is over:
 	// the action called is owed its cleanup from before it runs, as it may
@@ -176,7 +176,7 @@ func (c *ActionCaller) Call(ctx context.Context, uses string, with map[string]an
 		if cleansUp {
 			c.call.Cleanups.Add(full)
 		}
-		call.Cleanups = &actionrpc.Cleanups{}
+		call.Cleanups = &action.Cleanups{}
 		defer func() { c.call.Cleanups.Add(call.Cleanups.List()...) }()
 	}
 	// A process the action leaves running is stopped once the run is over,

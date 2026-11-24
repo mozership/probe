@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 const aliasSHA = "0123456789abcdef0123456789abcdef01234567"
@@ -256,7 +256,7 @@ func TestJob_UseActions(t *testing.T) {
 func TestResolveExternalActions_UnknownAction(t *testing.T) {
 	jobs := []*Job{{Name: "J", Steps: []*Step{{Uses: "http"}, {Uses: "htp"}}}}
 
-	_, err := resolveExternalActions(jobs, "", actionrpc.Guard{}, builtinNames)
+	_, err := resolveExternalActions(jobs, "", action.Guard{}, builtinNames)
 	if err == nil || !strings.Contains(err.Error(), `job "J", step 1: unknown action "htp"`) || !strings.Contains(err.Error(), `did you mean "http"?`) {
 		t.Errorf("err = %v, want the unknown action told with its job and step", err)
 	}
@@ -266,7 +266,7 @@ func TestResolveExternalActions_UnknownAction(t *testing.T) {
 	}
 
 	// Without the names of the actions of Probe, nothing can be told unknown.
-	if _, err := resolveExternalActions(jobs, "", actionrpc.Guard{}, nil); err != nil {
+	if _, err := resolveExternalActions(jobs, "", action.Guard{}, nil); err != nil {
 		t.Errorf("err = %v, want none without the names", err)
 	}
 }

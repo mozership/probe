@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/hostport"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -62,7 +62,7 @@ func (r *Req) checkGRPCHost() error {
 	}
 	hosts, ok := grpcHosts(r.Addr)
 	if !ok {
-		return actionrpc.Refuse("the addr %s names no host the run can check against the hosts it allows", r.Addr)
+		return action.Refuse("the addr %s names no host the run can check against the hosts it allows", r.Addr)
 	}
 	for _, host := range hosts {
 		if err := r.guard.CheckHost(host); err != nil {
@@ -95,7 +95,7 @@ func (r *Req) checkReadOnly(server, spec protoreflect.MethodDescriptor) error {
 		return nil
 	}
 	if server == nil && spec == nil {
-		return actionrpc.Refuse("the run is read-only, and no definition of %s/%s tells that it does not write; give proto.files that declare it idempotency_level = NO_SIDE_EFFECTS", r.Service, r.Method)
+		return action.Refuse("the run is read-only, and no definition of %s/%s tells that it does not write; give proto.files that declare it idempotency_level = NO_SIDE_EFFECTS", r.Service, r.Method)
 	}
 	for _, d := range []struct {
 		where string
@@ -112,7 +112,7 @@ func (r *Req) checkReadOnly(server, spec protoreflect.MethodDescriptor) error {
 		if level == descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN {
 			name = "unset"
 		}
-		return actionrpc.Refuse("the run is read-only, and %s may write: its idempotency_level in %s is %s, not NO_SIDE_EFFECTS", d.md.FullName(), d.where, name)
+		return action.Refuse("the run is read-only, and %s may write: its idempotency_level in %s is %s, not NO_SIDE_EFFECTS", d.md.FullName(), d.where, name)
 	}
 	return nil
 }

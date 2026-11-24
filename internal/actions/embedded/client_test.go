@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestNewReq(t *testing.T) {
@@ -251,11 +251,11 @@ func TestExecuteUnderAGuard(t *testing.T) {
 	if err := os.WriteFile(path, []byte(job), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	all := []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost}
-	guard := actionrpc.Guard{ReadOnly: true, Keeps: map[string][]string{"embedded": all, "hello": all, "http": all, "db": all}}
+	all := []string{action.KindReadOnly, action.KindAllowHost}
+	guard := action.Guard{ReadOnly: true, Keeps: map[string][]string{"embedded": all, "hello": all, "http": all, "db": all}}
 
 	_, err := Execute(map[string]any{"path": path}, WithGuard(guard))
-	if !actionrpc.IsRefused(err) {
+	if !action.IsRefused(err) {
 		t.Fatalf("err = %v, want the step refused, so that the step embedding the job is", err)
 	}
 	if !strings.Contains(err.Error(), `step 0 "Write" of the embedded job`) {

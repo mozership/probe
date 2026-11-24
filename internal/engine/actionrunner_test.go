@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // The runners here stand in for the actions of the steps under test, given
@@ -29,7 +29,7 @@ type mockRunner struct {
 	// States is the state each action leaves in the job, keyed by its name.
 	States map[string]map[string]any
 	// Calls records each call of an action, in order, keyed by its name.
-	Calls map[string][]actionrpc.Call
+	Calls map[string][]action.Call
 
 	mu sync.Mutex
 }
@@ -39,7 +39,7 @@ func newMockRunner() *mockRunner {
 		Results: make(map[string]map[string]any),
 		Errors:  make(map[string]error),
 		States:  make(map[string]map[string]any),
-		Calls:   make(map[string][]actionrpc.Call),
+		Calls:   make(map[string][]action.Call),
 	}
 }
 
@@ -60,7 +60,7 @@ func (m *mockRunner) SetError(name string, err error) {
 // Run records the call and returns the error set for the action, or the
 // result and the state set for it. An action without a result set returns
 // one that says what it was called with.
-func (m *mockRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (m *mockRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Calls[name] = append(m.Calls[name], call)
@@ -88,7 +88,7 @@ type stepRunners struct {
 	fallback ActionRunner
 }
 
-func (r stepRunners) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r stepRunners) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	if runner, ok := r.byName[call.Step.Name]; ok {
 		return runner.Run(name, call, opts)
 	}
@@ -103,7 +103,7 @@ type slowRunner struct {
 	delay time.Duration
 }
 
-func (r *slowRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *slowRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	time.Sleep(r.delay)
 	return map[string]any{"status": 0}, nil, nil
 }
@@ -115,7 +115,7 @@ type stoppableRunner struct {
 	err     error
 }
 
-func (r *stoppableRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *stoppableRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	<-opts.Context().Done()
 	close(r.stopped)
 	return nil, nil, r.err
@@ -128,7 +128,7 @@ type contextRecordingRunner struct {
 	during error
 }
 
-func (r *contextRecordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *contextRecordingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.ctx, r.during = opts.ctx, opts.Context().Err()
 	return map[string]any{"status": 0}, nil, nil
 }
@@ -140,12 +140,12 @@ type callCountingRunner struct {
 	resultFunc func(count int) map[string]any
 	// contractFunc is the check of each call against a contract that the
 	// action reports, or nil for none.
-	contractFunc func(count int) *actionrpc.ContractCheck
+	contractFunc func(count int) *action.ContractCheck
 	callCount    *int
 	err          error
 }
 
-func (r *callCountingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *callCountingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	*r.callCount++
 	if r.err != nil {
 		return nil, nil, r.err
@@ -169,7 +169,7 @@ type optionsRecordingRunner struct {
 	failUntil int
 }
 
-func (r *optionsRecordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *optionsRecordingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	r.opts = append(r.opts, opts)
 	attempt := len(r.opts)
@@ -200,10 +200,10 @@ type lateBackgroundRunner struct {
 	pid   chan int
 }
 
-func (r *lateBackgroundRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *lateBackgroundRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	time.Sleep(r.delay)
 	pid := startGroup(r.t, "sleep 60")
-	call.Processes.Add(actionrpc.Process{PID: pid})
+	call.Processes.Add(action.Process{PID: pid})
 	r.pid <- pid
 	if r.err != nil {
 		return nil, nil, r.err
@@ -249,7 +249,7 @@ type timedRunner struct {
 	answers []map[string]any
 }
 
-func (r *timedRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *timedRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	a := r.answers[r.calls]

@@ -3,7 +3,7 @@ package engine
 import (
 	"sync"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
@@ -14,7 +14,7 @@ import (
 // action can take to return, so that a process the action reports late is
 // stopped with the others.
 func newBackground() *procgroup.Tracker {
-	return procgroup.NewTracker(actionrpc.ExitWait)
+	return procgroup.NewTracker(action.ExitWait)
 }
 
 // ResponseTime provides response time information for expressions

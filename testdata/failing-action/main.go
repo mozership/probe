@@ -17,14 +17,14 @@ import (
 	"syscall"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type action struct{ log hclog.Logger }
+type testAction struct{ log hclog.Logger }
 
-func (a action) Run(with map[string]any) (map[string]any, error) {
+func (a testAction) Run(with map[string]any) (map[string]any, error) {
 	switch with["mode"] {
 	case "error":
 		a.log.Warn("the widget is old")
@@ -46,7 +46,7 @@ func (a action) Run(with map[string]any) (map[string]any, error) {
 	return map[string]any{"req": with, "res": map[string]any{}, "status": 0}, nil
 }
 
-func (a action) Cleanup(call actionrpc.CleanupCall) error {
+func (a testAction) Cleanup(call action.CleanupCall) error {
 	switch call.RunID {
 	case "error":
 		return errors.New("the widget would not go")
@@ -57,5 +57,5 @@ func (a action) Cleanup(call actionrpc.CleanupCall) error {
 }
 
 func main() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action { return action{log: log} })
+	action.Serve(func(log hclog.Logger) action.Action { return testAction{log: log} })
 }

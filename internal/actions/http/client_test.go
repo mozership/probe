@@ -18,7 +18,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/jarcoal/httpmock"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestNewReq(t *testing.T) {
@@ -1018,20 +1018,20 @@ func TestRequestStepUnderAGuard(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		guard    actionrpc.Guard
+		guard    action.Guard
 		with     map[string]any
 		refused  string // a part of the reason; empty when the request is sent
 		wantHits int32
 	}{
-		{name: "GET under read-only", guard: actionrpc.Guard{ReadOnly: true}, with: map[string]any{"get": "/ok"}, wantHits: 1},
-		{name: "HEAD under read-only", guard: actionrpc.Guard{ReadOnly: true}, with: map[string]any{"method": "HEAD"}, wantHits: 1},
-		{name: "POST under read-only", guard: actionrpc.Guard{ReadOnly: true}, with: map[string]any{"post": "/items"}, refused: "POST " + srv.URL + "/items may write"},
-		{name: "DELETE under read-only", guard: actionrpc.Guard{ReadOnly: true}, with: map[string]any{"delete": "/items/1"}, refused: "DELETE"},
+		{name: "GET under read-only", guard: action.Guard{ReadOnly: true}, with: map[string]any{"get": "/ok"}, wantHits: 1},
+		{name: "HEAD under read-only", guard: action.Guard{ReadOnly: true}, with: map[string]any{"method": "HEAD"}, wantHits: 1},
+		{name: "POST under read-only", guard: action.Guard{ReadOnly: true}, with: map[string]any{"post": "/items"}, refused: "POST " + srv.URL + "/items may write"},
+		{name: "DELETE under read-only", guard: action.Guard{ReadOnly: true}, with: map[string]any{"delete": "/items/1"}, refused: "DELETE"},
 		{name: "POST without a guard", with: map[string]any{"post": "/items"}, wantHits: 1},
-		{name: "a host allowed", guard: actionrpc.Guard{AllowHosts: []string{"127.0.0.1"}}, with: map[string]any{"get": "/ok"}, wantHits: 1},
-		{name: "a host and port allowed", guard: actionrpc.Guard{AllowHosts: []string{host}}, with: map[string]any{"get": "/ok"}, wantHits: 1},
-		{name: "a host not allowed", guard: actionrpc.Guard{AllowHosts: []string{"api.example.com"}}, with: map[string]any{"get": "/ok"}, refused: "the host " + host + " is not one the run allows"},
-		{name: "a redirect to a host not allowed", guard: actionrpc.Guard{AllowHosts: []string{"127.0.0.1"}}, with: map[string]any{"get": "/away"}, refused: "the host localhost:", wantHits: 1},
+		{name: "a host allowed", guard: action.Guard{AllowHosts: []string{"127.0.0.1"}}, with: map[string]any{"get": "/ok"}, wantHits: 1},
+		{name: "a host and port allowed", guard: action.Guard{AllowHosts: []string{host}}, with: map[string]any{"get": "/ok"}, wantHits: 1},
+		{name: "a host not allowed", guard: action.Guard{AllowHosts: []string{"api.example.com"}}, with: map[string]any{"get": "/ok"}, refused: "the host " + host + " is not one the run allows"},
+		{name: "a redirect to a host not allowed", guard: action.Guard{AllowHosts: []string{"127.0.0.1"}}, with: map[string]any{"get": "/away"}, refused: "the host localhost:", wantHits: 1},
 		{name: "a redirect without a guard", with: map[string]any{"get": "/away"}, wantHits: 2},
 	}
 	for _, tt := range tests {
@@ -1039,12 +1039,12 @@ func TestRequestStepUnderAGuard(t *testing.T) {
 			hits.Store(0)
 			with := map[string]any{"url": srv.URL}
 			maps.Copy(with, tt.with)
-			_, _, err := RequestStep(actionrpc.Call{With: with, Guard: tt.guard})
+			_, _, err := RequestStep(action.Call{With: with, Guard: tt.guard})
 			if tt.refused == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-			} else if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+			} else if !action.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 				t.Fatalf("err = %v, want a refusal saying %q", err, tt.refused)
 			}
 			if n := hits.Load(); n != tt.wantHits {
@@ -1093,7 +1093,7 @@ func TestRequestStepOverAUnixSocket(t *testing.T) {
 	tests := []struct {
 		name     string
 		with     map[string]any
-		guard    actionrpc.Guard
+		guard    action.Guard
 		wantBody string
 		refused  string // a part of the reason; empty when the request is sent
 		wantErr  bool
@@ -1101,12 +1101,12 @@ func TestRequestStepOverAUnixSocket(t *testing.T) {
 		{name: "a path alone", with: map[string]any{"get": "/version"}, wantBody: "GET localhost /version"},
 		{name: "a url, sent as the Host header", with: map[string]any{"url": "http://app.internal:8080", "get": "/version"}, wantBody: "GET app.internal:8080 /version"},
 		{name: "a full url", with: map[string]any{"url": "http://app.internal/health", "method": "HEAD"}, wantBody: ""},
-		{name: "under read-only", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET localhost /version"},
+		{name: "under read-only", with: map[string]any{"get": "/version"}, guard: action.Guard{ReadOnly: true}, wantBody: "GET localhost /version"},
 		{name: "a redirect, followed over the socket", with: map[string]any{"get": "/away"}, wantBody: "GET elsewhere.example /final"},
-		{name: "a redirect under read-only", with: map[string]any{"get": "/away"}, guard: actionrpc.Guard{ReadOnly: true}, wantBody: "GET elsewhere.example /final"},
+		{name: "a redirect under read-only", with: map[string]any{"get": "/away"}, guard: action.Guard{ReadOnly: true}, wantBody: "GET elsewhere.example /final"},
 		// Without a shorthand, the url is needed, as probe check says.
 		{name: "a method without a url", with: map[string]any{"method": "GET"}, wantErr: true},
-		{name: "a run that allows only some hosts", with: map[string]any{"get": "/version"}, guard: actionrpc.Guard{AllowHosts: []string{"localhost"}}, refused: "names no host the run can allow (localhost)"},
+		{name: "a run that allows only some hosts", with: map[string]any{"get": "/version"}, guard: action.Guard{AllowHosts: []string{"localhost"}}, refused: "names no host the run can allow (localhost)"},
 		{name: "a socket that is not there", with: map[string]any{"get": "/version", "unix_socket": socket + ".missing"}, wantErr: true},
 	}
 	for _, tt := range tests {
@@ -1114,10 +1114,10 @@ func TestRequestStepOverAUnixSocket(t *testing.T) {
 			hits.Store(0)
 			with := map[string]any{"unix_socket": socket}
 			maps.Copy(with, tt.with)
-			ret, _, err := RequestStep(actionrpc.Call{With: with, Guard: tt.guard})
+			ret, _, err := RequestStep(action.Call{With: with, Guard: tt.guard})
 			switch {
 			case tt.refused != "":
-				if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+				if !action.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 					t.Fatalf("err = %v, want a refusal saying %q", err, tt.refused)
 				}
 				if n := hits.Load(); n != 0 {
@@ -1160,7 +1160,7 @@ func TestCheckGuardTakesTheSchemePort(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		r := &Req{guard: actionrpc.Guard{AllowHosts: []string{tt.allow}}}
+		r := &Req{guard: action.Guard{AllowHosts: []string{tt.allow}}}
 		if err := r.checkGuard(req); (err == nil) != tt.want {
 			t.Errorf("checkGuard(%s) under %s = %v, want allowed %v", tt.url, tt.allow, err, tt.want)
 		}

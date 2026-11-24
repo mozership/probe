@@ -2,7 +2,7 @@ package file
 
 import (
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
@@ -13,23 +13,23 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+	ret, _, err := a.RunStep(action.Call{With: with})
 	return ret, err
 }
 
 // RunStep runs a step under the guard of the run, which refuses an op that
 // writes under read-only. It keeps no state in the job.
-func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
-	actionrpc.LogParams(a.log, "received file request parameters", call.With)
+func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+	action.LogParams(a.log, "received file request parameters", call.With)
 
 	ret, err := RunGuarded(call.With, call.Guard)
-	actionrpc.LogOutcome(a.log, "file", ret, err)
+	action.LogOutcome(a.log, "file", ret, err)
 
 	return ret, nil, err
 }
 
 func serve() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+	action.Serve(func(log hclog.Logger) action.Action {
 		return &Action{log: log}
 	})
 }
@@ -40,7 +40,7 @@ func serve() {
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
-		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Keeps:     []string{action.KindReadOnly, action.KindAllowHost},
 		Params:    mapping.FieldTags(Req{}),
 		Contracts: actionspec.NoContracts(),
 		ReqFields: mapping.FieldTags(Req{}),

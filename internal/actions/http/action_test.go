@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // TestActionLogsHideCookies checks that the records the action logs while it
@@ -23,7 +23,7 @@ func TestActionLogsHideCookies(t *testing.T) {
 
 	var buf bytes.Buffer
 	a := &Action{log: hclog.New(&hclog.LoggerOptions{Output: &buf, Level: hclog.Trace, JSONFormat: true})}
-	if _, _, err := a.RunStep(actionrpc.Call{With: map[string]any{
+	if _, _, err := a.RunStep(action.Call{With: map[string]any{
 		"url":     srv.URL,
 		"get":     "/path",
 		"headers": map[string]any{"cookie": "theme=header-sent-value", "x-trace": "abc"},
