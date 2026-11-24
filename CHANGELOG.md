@@ -9,11 +9,12 @@ importing probe as a library.
 ### Breaking Changes
 
 This release breaks the Go API of the root package, for code that imports
-probe as a library. Workflow files are not affected, and neither are the
-functions an action calls actions with (`ActionCaller`, `NewActionCaller`,
-`CallResult`, `WithCallerLogOutput`, `ExecutableEnv`) or the embedded
-action's way of running a job (`ReadJobFile`, `Job.RunStandalone`,
-`NewPrinter` and the standalone options).
+probe as a library. Workflow files are not affected, except as told under
+Behaviour Changes below, and neither are the functions an action calls
+actions with (`ActionCaller`, `NewActionCaller`, `CallResult`,
+`WithCallerLogOutput`, `ExecutableEnv`) or the embedded action's way of
+running a job (`ReadJobFile`, `Job.RunStandalone`, `NewPrinter` and the
+standalone options).
 
 The results of a run and what prints it moved under `internal/`, where
 code outside probe cannot import them.
@@ -37,6 +38,10 @@ code outside probe cannot import them.
 | `Printer`, `OutputMode`, its constants and `OutputModeAuto` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `GuideTopic` | unchanged |
+
+### Behaviour Changes
+
+- The template of a job's `name` reads `vars` and the `outputs` published before the job starts, and nothing else. It read the fields of the run Probe keeps, such as `CurrentJobID` or `Verbose`, which were never documented, and a name that reads one now keeps the job from running; `outputs` failed on any key (#549)
 
 ## v1.30.0 (2026-10-26)
 

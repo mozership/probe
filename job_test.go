@@ -1084,3 +1084,57 @@ func TestMergeDefaults(t *testing.T) {
 		})
 	}
 }
+
+// TestJob_expandJobName_env checks that a job's name reads vars and the
+// outputs published so far, and nothing else of the run.
+func TestJob_expandJobName_env(t *testing.T) {
+	outputs := NewOutputs()
+	if err := outputs.Set("login", map[string]any{"user": "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	newCtx := func() *JobContext {
+		return &JobContext{
+			runEnv:       &runEnv{Printer: newBufferPrinter(), Outcome: outcome.New()},
+			Vars:         map[string]any{"env": "staging"},
+			Outputs:      outputs,
+			CurrentJobID: "job_0",
+		}
+	}
+
+	tests := []struct {
+		name    string
+		tmpl    string
+		want    string
+		wantErr string
+	}{
+		{name: "vars", tmpl: "Setup {{vars.env}}", want: "Setup staging"},
+		{name: "outputs by step", tmpl: "As {{outputs.login.user}}", want: "As alice"},
+		{name: "outputs by name", tmpl: "As {{outputs.user}}", want: "As alice"},
+		{name: "a field of the context", tmpl: "{{CurrentJobID}}", wantErr: "CurrentJobID"},
+		{name: "the result of the run", tmpl: "{{Outcome}}", wantErr: "Outcome"},
+		{name: "the config", tmpl: "{{Verbose}}", wantErr: "Verbose"},
+		{name: "a method of the context", tmpl: "{{SetFailed()}}", wantErr: "SetFailed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := newCtx()
+			j := &Job{ID: "job_0", Name: tt.tmpl}
+			err := j.expandJobName(&expr.Expr{}, ctx)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expandJobName(%q) error = %v, want one naming %s", tt.tmpl, err, tt.wantErr)
+				}
+				if ctx.Failed {
+					t.Errorf("expandJobName(%q) marked the job failed", tt.tmpl)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expandJobName(%q): %v", tt.tmpl, err)
+			}
+			if ctx.jobName != tt.want {
+				t.Errorf("expandJobName(%q) = %q, want %q", tt.tmpl, ctx.jobName, tt.want)
+			}
+		})
+	}
+}

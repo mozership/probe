@@ -126,16 +126,29 @@ func cloneValue(v any) any {
 	return v
 }
 
+// jobNameEnv is what the template of a job's name reads. It is a struct, not
+// a map, so that a name it does not have is an error, as it is in a step,
+// rather than nil.
+type jobNameEnv struct {
+	Vars    map[string]any `expr:"vars"`
+	Outputs map[string]any `expr:"outputs"`
+}
+
 // expandJobName evaluates the job name for the run ctx is of, which keeps
 // it, and gives it to the job's result. The job keeps the name as written,
-// so that each run evaluates it anew.
+// so that each run evaluates it anew. The name reads vars and the outputs
+// published so far, and nothing else of the run.
 func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 	if j.Name == "" {
 		ctx.jobName = "Unknown Job"
 		return nil
 	}
 
-	name, err := ev.EvalTemplate(j.Name, *ctx)
+	var outputs map[string]any
+	if ctx.Outputs != nil {
+		outputs = ctx.Outputs.GetAll()
+	}
+	name, err := ev.EvalTemplate(j.Name, jobNameEnv{Vars: ctx.Vars, Outputs: outputs})
 	if err != nil {
 		return err
 	}
