@@ -126,7 +126,7 @@ func TestParamsCoverTheDocs(t *testing.T) {
 	}
 	row := regexp.MustCompile("(?m)^\\| `([a-z_]+)`")
 	for name, keys := range AllParams() {
-		data, err := os.ReadFile(filepath.Join("..", "docs", "content", "reference", "actions", name+".md"))
+		data, err := os.ReadFile(filepath.Join("..", "..", "docs", "content", "reference", "actions", name+".md"))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -257,7 +257,7 @@ func TestTypesMatchTheDocs(t *testing.T) {
 	declared := map[string]map[string]map[string]string{"req": AllReqTypes(), "res": AllResTypes()}
 	rows := 0
 	for _, name := range Names() {
-		data, err := os.ReadFile(filepath.Join("..", "docs", "content", "reference", "actions", name+".md"))
+		data, err := os.ReadFile(filepath.Join("..", "..", "docs", "content", "reference", "actions", name+".md"))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

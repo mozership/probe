@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
-	"github.com/mozership/probe/actions/grpc/testserver/pb"
+	"github.com/mozership/probe/internal/actions/grpc/testserver/pb"
 	"google.golang.org/grpc/status"
 )
 

@@ -23,7 +23,7 @@ jobs:
     - name: Run test
       run: make test
     - name: Run db test without cgo, as releases are built
-      run: go test ./actions/db/...
+      run: go test ./internal/actions/db/...
       env:
         CGO_ENABLED: "0"
     - name: Run octocov

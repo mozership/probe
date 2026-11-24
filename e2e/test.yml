@@ -734,7 +734,7 @@ jobs:
         ./e2e/gen.sh
         go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
         go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-        cd actions/grpc/testserver && \
+        cd internal/actions/grpc/testserver && \
           protoc --go_out=. --go-grpc_out=. ./pb/user_service.proto
     test: res.code == 0
   # go run builds the servers first, which the timeout allows for. The
@@ -743,7 +743,7 @@ jobs:
     uses: shell
     with:
       background: true
-      cmd: go run actions/grpc/testserver/*.go -connect-port=50061
+      cmd: go run internal/actions/grpc/testserver/*.go -connect-port=50061
       ready:
         log: Serving the Connect protocol
       timeout: 2m
@@ -759,7 +759,7 @@ jobs:
     with:
       background: true
       cmd: |
-        go run actions/grpc/testserver/*.go -tls -port=50052 \
+        go run internal/actions/grpc/testserver/*.go -tls -port=50052 \
           -cert="./e2e/certs/server.crt" \
           -key="./e2e/certs/server.key"
       ready:
@@ -786,7 +786,7 @@ jobs:
   - name: coverage of the .proto file grpc.yml checked
     uses: shell
     with:
-      cmd: ./probe coverage ./actions/grpc/testserver/pb/user_service.proto /tmp/probe-e2e-grpc.json
+      cmd: ./probe coverage ./internal/actions/grpc/testserver/pb/user_service.proto /tmp/probe-e2e-grpc.json
     test: |
       res.code == 0 &&
       res.stdout contains "- UserService/DeleteUser" &&
