@@ -18,7 +18,9 @@ actions as a step does (`ActionCaller`, `NewActionCaller`, `CallResult`,
 `CallerOption`, `WithCallerLogOutput`, `ExecutableEnv`), running a workflow
 (`Probe`, `New`, `Config` and the types its fields take, the `Exit*`
 codes), checking one (`Check`, `CheckOptions`, `Choices`, `Finding`,
-`Severity*`), and the pages of `probe guide` and the skill. The model of a
+`Severity*`), serving the built-in actions in a build of Probe that adds
+actions of its own (`BuiltinAction`), and the pages of `probe guide` and
+the skill. The model of a
 workflow, its loader and the engine that runs it moved to
 `internal/engine`, `probe check` to `internal/check`, and the results of a
 run and what prints it to `internal/outcome` and `internal/display`, where
@@ -58,8 +60,9 @@ What external actions import stays: the root package, `actionrpc`,
 
 | Before | After |
 |---|---|
-| `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe; `actions.Lookup` stays, for a build of Probe that adds actions of its own |
-| `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `actions.Lookup` serves each built-in action |
+| `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe |
+| `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `probe.BuiltinAction` serves each built-in action |
+| `actions.Lookup` | `probe.BuiltinAction`, for a build of Probe that adds actions of its own |
 | `dag` | not for use outside probe; `probe dag` draws the jobs of a workflow |
 | `mask` | not for use outside probe; `mask/markdown` stays |
 | `report` | not for use outside probe; `--report` of the `probe` command. `Config.Reports`, `Config.Baseline` and `RunOptions.Masker` keep their types, which code outside probe can leave nil but cannot make |

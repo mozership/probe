@@ -5,14 +5,15 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/mozership/probe"
+	"github.com/mozership/probe/internal/check"
+	"github.com/mozership/probe/internal/engine"
 )
 
 // TestConfigure checks that a run is told the names of the built-in actions
 // and which of them need no test, and that the rest of its configuration is
 // left as it was.
 func TestConfigure(t *testing.T) {
-	c := probe.Config{Verbose: true, Jobs: []string{"j"}}
+	c := engine.Config{Verbose: true, Jobs: []string{"j"}}
 	Configure(&c)
 	if !slices.Equal(c.Actions, Names()) || !slices.Equal(c.NeedsNoCheck, NeedsNoCheck()) {
 		t.Errorf("Actions, NeedsNoCheck = %v, %v, want %v, %v", c.Actions, c.NeedsNoCheck, Names(), NeedsNoCheck())
@@ -29,7 +30,7 @@ func TestCheckOptions(t *testing.T) {
 	if got.Manifest != nil {
 		t.Error("Manifest is set, want nothing read of an external action")
 	}
-	want := probe.CheckOptions{
+	want := check.CheckOptions{
 		Actions:      Names(),
 		Params:       AllParams(),
 		Contracts:    Contracts(),
