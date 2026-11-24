@@ -8,8 +8,9 @@ importing probe as a library.
 
 ### Breaking Changes
 
-This release breaks the Go API of the root package, for code that imports
-probe as a library. Workflow files are not affected, except as told under
+This release breaks the Go API of the root package, and moves the packages
+no external action imports under `internal/`, for code that imports probe
+as a library. Workflow files are not affected, except as told under
 Behaviour Changes below.
 
 The root package now holds only what is used from outside probe: calling
@@ -38,7 +39,7 @@ of what moved.
 | `WithProbeExecutable` | `ExecutableEnv`, which `NewActionCaller` reads |
 | `Result`, `NewResult`, `JobResult`, `StepResult`, `StepFailure`, `StepRepeatCounter`, `RepeatTestResult` | not for use outside probe |
 | `StatusType`, `StatusSuccess`, `StatusError`, `StatusWarning`, `StatusSkipped` | not for use outside probe |
-| `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | the same constants of `report` |
+| `FailureAssertion`, `FailureTestError`, `FailureTestType`, `FailureAction`, `FailureTemplate`, `FailureContractResponse`, `FailureContractRequest`, `FailureRefused` | not for use outside probe; the `kind` of a failure in the files `--report` writes |
 | `Reporter`, `BufferedReporter`, `StreamReporter` | not for use outside probe |
 | `BuildReport` | not for use outside probe; `--report` of the `probe` command |
 | `IconSuccess`, `IconError` and the other icons | `style.Mark.Icon` for the marks it has; not for use outside probe otherwise |
@@ -49,6 +50,19 @@ of what moved.
 |---|---|
 | `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `ActionCaller`, `CallerOption`, `CallResult`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
+
+#### Moved under `internal/`
+
+What external actions import stays: the root package, `actionrpc`,
+`actionref`, `style` and `mask/markdown`.
+
+| Before | After |
+|---|---|
+| `actions.Configure`, `CheckOptions`, `Names`, `Keeps`, `Contracts`, `NeedsNoCheck`, `WithFields`, `AllParams`, `AllReqFields`, `AllResFields`, `AllReqTypes`, `AllResTypes`, `AllRequired`, `AllChoices` | not for use outside probe; `actions.Lookup` stays, for a build of Probe that adds actions of its own |
+| `actions/db`, `actions/dns`, `actions/embedded`, `actions/file`, `actions/grpc`, `actions/hello`, `actions/http`, `actions/imap`, `actions/shell`, `actions/smtp`, `actions/ssh` | not for use outside probe; `actions.Lookup` serves each built-in action |
+| `dag` | not for use outside probe; `probe dag` draws the jobs of a workflow |
+| `mask` | not for use outside probe; `mask/markdown` stays |
+| `report` | not for use outside probe; `--report` of the `probe` command. `Config.Reports`, `Config.Baseline` and `RunOptions.Masker` keep their types, which code outside probe can leave nil but cannot make |
 
 ### Behaviour Changes
 

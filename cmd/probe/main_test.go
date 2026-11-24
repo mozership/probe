@@ -10,7 +10,7 @@ import (
 
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/actionrpc"
-	"github.com/mozership/probe/actions"
+	"github.com/mozership/probe/internal/actions"
 )
 
 func TestCmd_isValid(t *testing.T) {

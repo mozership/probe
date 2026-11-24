@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/mozership/probe/dag"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/dag"
+	"github.com/mozership/probe/internal/report"
 )
 
 type Probe struct {
@@ -66,7 +66,7 @@ type Config struct {
 	// test, as those of an action that does nothing that could fail: such
 	// a step is there for its echo, or to publish what it is given, and is
 	// not counted as untested. A step of any other action that nothing
-	// checks is. The engine knows no action by itself: actions.Configure
+	// checks is. The engine knows no action by itself: the probe command
 	// sets this and Actions for the built-in ones.
 	NeedsNoCheck []string
 	// ActionRunner runs the action of each step. When it is nil, each runs

@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/mozership/probe/internal/display"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/vareval"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
 )
 
 // workflowRun is one run of a workflow: what Start decides for the run

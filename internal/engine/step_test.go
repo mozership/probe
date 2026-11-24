@@ -13,8 +13,8 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 // A skipif that cannot be evaluated, or is not a boolean, is told of, and

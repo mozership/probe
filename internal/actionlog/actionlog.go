@@ -12,7 +12,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/internal/dump"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // Logger is the log the records of an action's process are shown

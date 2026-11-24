@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 	"github.com/pb33f/libopenapi"
 )
 

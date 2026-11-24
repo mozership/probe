@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/internal/oas"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 func TestNew(t *testing.T) {

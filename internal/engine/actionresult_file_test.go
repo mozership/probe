@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mozership/probe/actions/file"
+	"github.com/mozership/probe/internal/actions/file"
 )
 
 // TestFileContentIsNotReadAsJSON checks that what the file action reads

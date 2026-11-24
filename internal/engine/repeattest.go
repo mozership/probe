@@ -6,7 +6,7 @@ import (
 
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // The fields of a step that the tests of a repeated job read under steps, as

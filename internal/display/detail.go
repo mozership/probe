@@ -6,8 +6,8 @@ import (
 
 	"github.com/mozership/probe/internal/dump"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 // The details shown under a step, or under a test of a repeated job, say

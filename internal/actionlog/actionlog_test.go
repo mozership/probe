@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // Outside a verbose run an action's error records are left out of its log,
