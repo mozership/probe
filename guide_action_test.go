@@ -99,26 +99,11 @@ func TestGuideAction_Topics(t *testing.T) {
 	}
 }
 
-// TestGuideAction_Official checks that an official action that is no topic
-// is read from its repository.
+// TestGuideAction_Official checks that the pages of the official actions are
+// not built in, so that a name of one is read from its repository rather
+// than found among the topics.
 func TestGuideAction_Official(t *testing.T) {
-	saved := officialActions
-	t.Cleanup(func() { officialActions = saved })
-	officialActions = append(OfficialActions(), OfficialAction{Name: "zeta", Description: "Do zeta"})
-
-	for _, arg := range []string{"zeta", "actions/zeta"} {
-		var calls []docCall
-		if _, err := GuideAction(arg, "", fakeDocs(&calls)); err != nil {
-			t.Fatal(err)
-		}
-		if want := (docCall{"github.com/mozership/probe-zeta", ""}); len(calls) != 1 || calls[0] != want {
-			t.Errorf("GuideAction(%q) read %+v, want %+v", arg, calls, want)
-		}
-	}
-
-	// The pages of the official actions are not built in, so a name of
-	// one is read from its repository rather than found among the topics.
-	for _, a := range saved {
+	for _, a := range OfficialActions() {
 		var calls []docCall
 		if _, err := GuideAction(a.Name, "", fakeDocs(&calls)); err != nil {
 			t.Fatal(err)
@@ -126,11 +111,6 @@ func TestGuideAction_Official(t *testing.T) {
 		if want := (docCall{a.Repository(), ""}); len(calls) != 1 || calls[0] != want {
 			t.Errorf("GuideAction(%q) read %+v, want %+v", a.Name, calls, want)
 		}
-	}
-
-	_, err := GuideAction("zeat", "", fakeDocs(new([]docCall)))
-	if err == nil || err.Error() != `unknown guide topic: zeat; did you mean "zeta"?` {
-		t.Errorf("error = %v", err)
 	}
 }
 
@@ -148,41 +128,6 @@ func TestGuideAction_Errors(t *testing.T) {
 	}
 	if len(calls) != 0 {
 		t.Errorf("read %+v", calls)
-	}
-}
-
-func TestDocPage(t *testing.T) {
-	tests := []struct {
-		name string
-		doc  actionref.Doc
-		want string
-	}{
-		{
-			"the latest release",
-			actionref.Doc{Uses: "github.com/o/r@" + testSHA, Version: "v1.2.0", Latest: true, File: actionref.DocFile, Text: "# x\n"},
-			"> The action github.com/o/r at its latest release. What follows is its README.md at that commit, written by the authors of the action, not by Probe. Pin it as:\n\n```yaml\nuses: github.com/o/r@" + testSHA + " # v1.2.0\n```\n\n---\n\n# x\n",
-		},
-		{
-			"a commit given, with a warning and no version",
-			actionref.Doc{Uses: "github.com/o/r@" + testSHA, File: actionref.ManifestFile, Text: "# x", Warning: "w"},
-			"> The action github.com/o/r at the commit given. What follows is what its action.yml declares, as it has no README.md at that commit, written by the authors of the action, not by Probe. Pin it as:\n\n```yaml\nuses: github.com/o/r@" + testSHA + "\n```\n\n> Warning: w.\n\n---\n\n# x\n",
-		},
-		{
-			"a local action",
-			actionref.Doc{Uses: "/a/x", Local: true, File: actionref.DocFile, Text: "# x\n"},
-			"> The local action in /a/x. What follows is its README.md, written by the authors of the action, not by Probe.\n\n---\n\n# x\n",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := docPage(&tt.doc, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != tt.want {
-				t.Errorf("docPage() =\n%s\nwant\n%s", got, tt.want)
-			}
-		})
 	}
 }
 

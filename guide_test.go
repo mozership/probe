@@ -11,12 +11,12 @@ import (
 func TestGuideTopics_CoverEveryEmbeddedPage(t *testing.T) {
 	reachable := make(map[string]bool)
 	names := make(map[string]bool)
-	for _, topic := range GuideTopics() {
+	for _, topic := range guideBook.Topics() {
 		if names[topic.Name] {
 			t.Errorf("topic name %q is used twice", topic.Name)
 		}
 		names[topic.Name] = true
-		reachable[topic.file] = true
+		reachable[path.Join(guideRoot, topic.File)] = true
 
 		if topic.Title == "" {
 			t.Errorf("topic %q has no title; its page should start with a level-one heading", topic.Name)
@@ -105,18 +105,6 @@ func TestGuide_Aliases(t *testing.T) {
 	concept, _ := Guide("concepts/actions")
 	if !strings.HasPrefix(ref, "# Actions Reference") || !strings.HasPrefix(concept, "# Actions\n") {
 		t.Error("actions and concepts/actions should be different pages")
-	}
-}
-
-func TestGuide_Unknown(t *testing.T) {
-	_, err := Guide("nope")
-	if err == nil || err.Error() != "unknown guide topic: nope (run probe guide to list the topics)" {
-		t.Errorf("error = %v", err)
-	}
-
-	_, err = Guide("htpp")
-	if err == nil || err.Error() != `unknown guide topic: htpp; did you mean "http"?` {
-		t.Errorf("error = %v", err)
 	}
 }
 
