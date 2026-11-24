@@ -17,7 +17,7 @@ const (
 	runFieldFailure     = "failure"
 	runFieldSkipped     = "skipped"
 	runFieldSuccessRate = "success_rate"
-	runFieldRT          = "rt"
+	RunFieldRT          = "rt"
 )
 
 // The fields of the rt of a step, as repeatTimes and baselineRuns give them.
@@ -36,9 +36,9 @@ const (
 // baseline.steps, and those of their rt, in the order probe check lists
 // them in.
 var (
-	repeatRunFields   = []string{runFieldRuns, runFieldSuccess, runFieldFailure, runFieldSkipped, runFieldSuccessRate, runFieldRT}
-	baselineRunFields = []string{runFieldRuns, runFieldSuccess, runFieldSuccessRate, runFieldRT}
-	repeatRTFields    = []string{rtFieldMin, rtFieldMean, rtFieldP50, rtFieldP90, rtFieldP95, rtFieldP99, rtFieldMax}
+	RepeatRunFields   = []string{runFieldRuns, runFieldSuccess, runFieldFailure, runFieldSkipped, runFieldSuccessRate, RunFieldRT}
+	BaselineRunFields = []string{runFieldRuns, runFieldSuccess, runFieldSuccessRate, RunFieldRT}
+	RepeatRTFields    = []string{rtFieldMin, rtFieldMean, rtFieldP50, rtFieldP90, rtFieldP95, rtFieldP99, rtFieldMax}
 )
 
 // rtFields is the rt of a step, its times in seconds, as a test reads it.
@@ -54,10 +54,10 @@ func rtFields(minimum, mean, p50, p90, p95, p99, maximum float64) map[string]any
 	}
 }
 
-// repeatTestEnv is what the tests of a repeated job read: the vars of the
+// RepeatTestEnv is what the tests of a repeated job read: the vars of the
 // workflow, and under steps the runs of each step by its id. The test
 // against the run compared to reads that run's steps under baseline too.
-type repeatTestEnv struct {
+type RepeatTestEnv struct {
 	Vars     map[string]any `expr:"vars"`
 	Steps    map[string]any `expr:"steps"`
 	Baseline map[string]any `expr:"baseline"`
@@ -105,15 +105,15 @@ func repeatRuns(counters []outcome.RepeatCounter) map[string]any {
 			runFieldFailure:     r.failure,
 			runFieldSkipped:     r.skipped,
 			runFieldSuccessRate: rate,
-			runFieldRT:          repeatTimes(r.rts),
+			RunFieldRT:          repeatTimes(r.rts),
 		}
 	}
 	return steps
 }
 
-// repeatReads returns the ids of the steps that tests, the tests of a
+// RepeatReads returns the ids of the steps that tests, the tests of a
 // repeated job, read under steps; nil when they read none, or do not parse.
-func repeatReads(tests ...string) map[string]bool {
+func RepeatReads(tests ...string) map[string]bool {
 	var ids map[string]bool
 	for _, test := range tests {
 		for _, chain := range expr.Reads(test, "steps") {
@@ -154,7 +154,7 @@ func baselineRuns(base *report.Report, jobID string) map[string]any {
 			runFieldRuns:        total,
 			runFieldSuccess:     success,
 			runFieldSuccessRate: rate,
-			runFieldRT:          rt,
+			RunFieldRT:          rt,
 		}
 	}
 	return steps
@@ -185,7 +185,7 @@ func baselineMissing(test string, steps map[string]any) string {
 		if !ok {
 			return fmt.Sprintf("the baseline has no step %s", id)
 		}
-		if rt, _ := st[runFieldRT].(map[string]any); len(chain) > 2 && chain[2] == runFieldRT && rt == nil {
+		if rt, _ := st[RunFieldRT].(map[string]any); len(chain) > 2 && chain[2] == RunFieldRT && rt == nil {
 			return fmt.Sprintf("the baseline has no times of step %s", id)
 		}
 	}
@@ -242,7 +242,7 @@ func (e *Executor) unskip(ctx JobContext) {
 // steps once every run is over, records the outcome on the job's result, and
 // reports whether the test held, which is whether the job passed.
 func (e *Executor) checkRepeatTest(ctx JobContext, counters []outcome.RepeatCounter) bool {
-	env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters)}
+	env := RepeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters)}
 	res := evalRepeatTest(ctx, e.job.Repeat.Test, env)
 	e.recordRepeatTest(ctx, res, func(jr *outcome.Job) { jr.RepeatTest = res })
 	return res.Passed
@@ -257,7 +257,7 @@ func (e *Executor) checkBaselineTest(ctx JobContext, counters []outcome.RepeatCo
 	test := e.job.Repeat.BaselineTest
 	res := &outcome.RepeatTest{Test: test, Passed: true, Skipped: ctx.repeat.baselineSkipped}
 	if res.Skipped == "" {
-		env := repeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Baseline, e.job.ID)}}
+		env := RepeatTestEnv{Vars: ctx.Vars, Steps: repeatRuns(counters), Baseline: map[string]any{"steps": baselineRuns(ctx.Baseline, e.job.ID)}}
 		res = evalRepeatTest(ctx, test, env)
 	}
 	e.recordRepeatTest(ctx, res, func(jr *outcome.Job) { jr.BaselineTest = res })
@@ -265,7 +265,7 @@ func (e *Executor) checkBaselineTest(ctx JobContext, counters []outcome.RepeatCo
 }
 
 // evalRepeatTest evaluates test, a test of a repeated job, against env.
-func evalRepeatTest(ctx JobContext, test string, env repeatTestEnv) *outcome.RepeatTest {
+func evalRepeatTest(ctx JobContext, test string, env RepeatTestEnv) *outcome.RepeatTest {
 	passed, failure := evaluateTest(&expr.Expr{}, test, env, ctx.Printer, false)
 	return &outcome.RepeatTest{Test: test, Passed: passed, Failure: failure}
 }

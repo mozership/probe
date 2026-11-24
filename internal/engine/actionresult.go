@@ -9,10 +9,10 @@ import (
 	"github.com/mozership/probe/internal/jsonutil"
 )
 
-// actionResult is what an action returned for a step. An action sends it as
+// ActionResult is what an action returned for a step. An action sends it as
 // a map of req, res, rt and status, as the built-in actions return it, and
 // it is read once, as it comes back, into the parts of the step's context.
-type actionResult struct {
+type ActionResult struct {
 	// Req is the request the action made, as it tells it.
 	Req map[string]any
 	// Res is the response, with a JSON body, and a JSON stdout, decoded.
@@ -49,9 +49,9 @@ func (e ExitStatus) String() string {
 	}
 }
 
-// readActionResult reads what an action returned for a step.
-func readActionResult(m map[string]any) actionResult {
-	r := actionResult{Status: parseExitStatus(m["status"])}
+// ReadActionResult reads what an action returned for a step.
+func ReadActionResult(m map[string]any) ActionResult {
+	r := ActionResult{Status: parseExitStatus(m["status"])}
 	r.Req, _ = m["req"].(map[string]any)
 	r.Res, _ = m["res"].(map[string]any)
 	if rt, _ := m["rt"].(string); rt != "" {
@@ -79,12 +79,12 @@ func readActionResult(m map[string]any) actionResult {
 	return r
 }
 
-// addedResFields returns res, the fields of res an action declares it
-// returns, with those readActionResult adds to them: rawbody to one with a
+// AddedResFields returns res, the fields of res an action declares it
+// returns, with those ReadActionResult adds to them: rawbody to one with a
 // body, which a JSON body is kept as, and json to one with stdout, which
 // stdout of JSON is read as. A field is added only to a res that has the
 // field it comes from, so these are all a res can have.
-func addedResFields(res []string) []string {
+func AddedResFields(res []string) []string {
 	out := slices.Clone(res)
 	if slices.Contains(res, "body") {
 		out = append(out, "rawbody")
@@ -96,12 +96,12 @@ func addedResFields(res []string) []string {
 	return slices.Compact(out)
 }
 
-// readResTypes returns types, the kinds of the fields of res an action
-// declares, as the fields are read once readActionResult has read them: a
+// ReadResTypes returns types, the kinds of the fields of res an action
+// declares, as the fields are read once ReadActionResult has read them: a
 // body, which is read as the value it holds when it holds JSON, is of any
 // kind, and rawbody, which keeps such a body as text, is a string, as the
 // body is. json, which stdout of JSON is read as, is of any kind.
-func readResTypes(types map[string]string) map[string]string {
+func ReadResTypes(types map[string]string) map[string]string {
 	out := maps.Clone(types)
 	if k, ok := out["body"]; ok {
 		delete(out, "body")

@@ -79,7 +79,7 @@ func selectJobs(jobs []Job, names []string) ([]Job, *jobSelection, error) {
 	}
 
 	// The jobs the selected ones need, however far down.
-	for k := range neededJobs(jobs, byID, selected...) {
+	for k := range NeededJobs(jobs, byID, selected...) {
 		if why[k] == 0 {
 			why[k] = neededJob
 		}
@@ -129,11 +129,11 @@ func selectJobs(jobs []Job, names []string) ([]Job, *jobSelection, error) {
 	return out, sel, nil
 }
 
-// neededJobs returns the jobs of jobs that those at from need, directly or
+// NeededJobs returns the jobs of jobs that those at from need, directly or
 // through the jobs they need, by their indices, given the index of each job
 // by its id. One of from is among them only when a job it needs needs it in
 // turn. A need that is no job's id is left out.
-func neededJobs(jobs []Job, byID map[string]int, from ...int) map[int]bool {
+func NeededJobs(jobs []Job, byID map[string]int, from ...int) map[int]bool {
 	out := map[int]bool{}
 	stack := slices.Clone(from)
 	for len(stack) > 0 {

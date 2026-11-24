@@ -1,7 +1,6 @@
-package engine
+package check
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
 	"slices"
@@ -9,67 +8,23 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml/ast"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/suggest"
+	"github.com/mozership/probe/internal/yamlnode"
 )
-
-type fileStart struct {
-	name string
-	line int
-}
-
-// fileLines are the files of a workflow, each with the line of the source
-// it starts on, in that order.
-type fileLines []fileStart
-
-// mapFiles returns the line each of files starts on in the text read, the
-// files one after another, so that a line of the text can be told as a line
-// of a file, whose contents are data. workflowfile.Read adds a newline after a
-// file that does not end in one, unless it is the last.
-func mapFiles(files []string, data [][]byte) fileLines {
-	var out fileLines
-	line := 1
-	for k, f := range files {
-		out = append(out, fileStart{name: f, line: line})
-		line += bytes.Count(data[k], []byte("\n"))
-		if k < len(files)-1 && len(data[k]) > 0 && data[k][len(data[k])-1] != '\n' {
-			line++
-		}
-	}
-	return out
-}
-
-// at tells line, a line of the source, as a file and a line of it.
-func (fl fileLines) at(line int) (string, int) {
-	if len(fl) == 0 {
-		return "", 0
-	}
-	f := fl[0]
-	for _, s := range fl {
-		if line >= s.line {
-			f = s
-		}
-	}
-	if line <= 0 {
-		if len(fl) > 1 {
-			return "", 0
-		}
-		return f.name, 0
-	}
-	return f.name, line - f.line + 1
-}
 
 // position tells line, a line of the source, as a file and a line of it.
 func (c *checker) position(line int) (string, int) {
-	return c.files.at(line)
+	return c.files.At(line)
 }
 
 // Keys each part of a workflow takes, from the fields Probe decodes them into.
 var (
-	workflowKeys = yamlKeys(reflect.TypeFor[Workflow]())
-	jobKeys      = yamlKeys(reflect.TypeFor[Job]())
-	stepKeys     = yamlKeys(reflect.TypeFor[Step]())
-	retryKeys    = yamlKeys(reflect.TypeFor[StepRetry]())
-	repeatKeys   = yamlKeys(reflect.TypeFor[Repeat]())
+	workflowKeys = yamlKeys(reflect.TypeFor[engine.Workflow]())
+	jobKeys      = yamlKeys(reflect.TypeFor[engine.Job]())
+	stepKeys     = yamlKeys(reflect.TypeFor[engine.Step]())
+	retryKeys    = yamlKeys(reflect.TypeFor[engine.StepRetry]())
+	repeatKeys   = yamlKeys(reflect.TypeFor[engine.Repeat]())
 )
 
 func yamlKeys(t reflect.Type) []string {
@@ -84,67 +39,10 @@ func yamlKeys(t reflect.Type) []string {
 	return keys
 }
 
-// pairs returns the keys and values of n, a mapping, which a mapping of one
-// key is parsed as on its own; nil when n is not a mapping.
-func pairs(n ast.Node) []*ast.MappingValueNode {
-	switch v := n.(type) {
-	case *ast.MappingNode:
-		return v.Values
-	case *ast.MappingValueNode:
-		return []*ast.MappingValueNode{v}
-	case *ast.AnchorNode:
-		return pairs(v.Value)
-	case *ast.TagNode:
-		return pairs(v.Value)
-	}
-	return nil
-}
-
-func items(n ast.Node) []ast.Node {
-	switch v := n.(type) {
-	case *ast.SequenceNode:
-		return v.Values
-	case *ast.AnchorNode:
-		return items(v.Value)
-	case *ast.TagNode:
-		return items(v.Value)
-	}
-	return nil
-}
-
-func lineOf(n ast.Node) int {
-	if n == nil || n.GetToken() == nil {
-		return 0
-	}
-	return n.GetToken().Position.Line
-}
-
-// holdsAnchor reports whether n defines an anchor at any depth, as a key a
-// workflow does not take may hold one for the files read after it.
-func holdsAnchor(n ast.Node) bool {
-	found := false
-	ast.Walk(visitorFunc(func(n ast.Node) bool {
-		if _, ok := n.(*ast.AnchorNode); ok {
-			found = true
-		}
-		return !found
-	}), n)
-	return found
-}
-
-type visitorFunc func(ast.Node) bool
-
-func (f visitorFunc) Visit(n ast.Node) ast.Visitor {
-	if f(n) {
-		return f
-	}
-	return nil
-}
-
 // keys checks the keys of the mapping n, at path, against those the part of
 // a workflow it is takes, and calls each with each key it takes.
 func (c *checker) keys(n ast.Node, path, where string, allowed []string, each func(key string, value ast.Node)) {
-	for _, kv := range pairs(n) {
+	for _, kv := range yamlnode.Pairs(n) {
 		if kv.Key == nil || kv.Key.GetToken() == nil {
 			continue
 		}
@@ -152,10 +50,10 @@ func (c *checker) keys(n ast.Node, path, where string, allowed []string, each fu
 		if kv.Key.IsMergeKey() {
 			continue
 		}
-		line := lineOf(kv.Key)
+		line := yamlnode.LineOf(kv.Key)
 		c.lines[join(path, key)] = line
 		if !slices.Contains(allowed, key) {
-			if holdsAnchor(kv.Value) {
+			if yamlnode.HoldsAnchor(kv.Value) {
 				continue
 			}
 			msg := fmt.Sprintf("unknown key %q", key)
@@ -186,26 +84,26 @@ func (c *checker) walkWorkflow(body ast.Node) {
 		}
 		i := 0
 		// A list an alias names is checked as the jobs, as it is run.
-		for _, job := range items(resolve(body, value)) {
+		for _, job := range yamlnode.Items(engine.Resolve(body, value)) {
 			// An entry of jobs that includes a file is told of as the
 			// files are read, and left out of the jobs that run. One is
 			// left only in jobs a later file replaces, which are not read,
 			// as is an entry of their steps.
-			if isInclude(job) {
+			if engine.IsInclude(job) {
 				continue
 			}
 			jp := fmt.Sprintf("jobs[%d]", i)
-			c.lines[jp] = lineOf(job)
+			c.lines[jp] = yamlnode.LineOf(job)
 			jobLabel := named(fmt.Sprintf("job %d", i), job)
 			i++
 			walkSteps := func(value ast.Node) {
 				j := 0
-				for _, step := range items(resolve(body, value)) {
-					if isInclude(step) {
+				for _, step := range yamlnode.Items(engine.Resolve(body, value)) {
+					if engine.IsInclude(step) {
 						continue
 					}
 					sp := fmt.Sprintf("%s.steps[%d]", jp, j)
-					c.lines[sp] = lineOf(step)
+					c.lines[sp] = yamlnode.LineOf(step)
 					where := named(fmt.Sprintf("%s, step %d", jobLabel, j), step)
 					j++
 					c.keys(step, sp, where, stepKeys, func(key string, value ast.Node) {
@@ -230,8 +128,8 @@ func (c *checker) walkWorkflow(body ast.Node) {
 			})
 			// The steps a merge key gives a job are checked as its own,
 			// as they are run.
-			if lastKey(job, "steps") == nil {
-				if kv := stepsOf(body, job); kv != nil {
+			if engine.LastKey(job, "steps") == nil {
+				if kv := engine.StepsOf(body, job); kv != nil {
 					walkSteps(kv.Value)
 				}
 			}
@@ -242,7 +140,7 @@ func (c *checker) walkWorkflow(body ast.Node) {
 // named returns where, the part of a workflow n is, with its name when it
 // writes one, as job 0 "Users".
 func named(where string, n ast.Node) string {
-	for _, kv := range pairs(n) {
+	for _, kv := range yamlnode.Pairs(n) {
 		if kv.Key != nil && kv.Key.GetToken() != nil && kv.Key.GetToken().Value == "name" && kv.Value != nil && kv.Value.GetToken() != nil {
 			return fmt.Sprintf("%s %q", where, kv.Value.GetToken().Value)
 		}
@@ -254,17 +152,17 @@ func named(where string, n ast.Node) string {
 // depth, under path, as with.headers.authorization, so that a finding in a
 // value can be told on its line.
 func (c *checker) noteLines(path string, n ast.Node) {
-	for _, kv := range pairs(n) {
+	for _, kv := range yamlnode.Pairs(n) {
 		if kv.Key == nil || kv.Key.GetToken() == nil || kv.Key.IsMergeKey() {
 			continue
 		}
 		kp := path + "." + kv.Key.GetToken().Value
-		c.lines[kp] = lineOf(kv.Key)
+		c.lines[kp] = yamlnode.LineOf(kv.Key)
 		c.noteLines(kp, kv.Value)
 	}
-	for k, item := range items(n) {
+	for k, item := range yamlnode.Items(n) {
 		ip := fmt.Sprintf("%s[%d]", path, k)
-		c.lines[ip] = lineOf(item)
+		c.lines[ip] = yamlnode.LineOf(item)
 		c.noteLines(ip, item)
 	}
 }

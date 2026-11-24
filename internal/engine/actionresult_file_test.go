@@ -27,7 +27,7 @@ func TestFileContentIsNotReadAsJSON(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		r := readActionResult(ret)
+		r := ReadActionResult(ret)
 		if r.Res["content"] != content {
 			t.Errorf("res.content = %#v, want the text %q", r.Res["content"], content)
 		}

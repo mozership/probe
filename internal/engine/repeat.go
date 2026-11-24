@@ -94,15 +94,15 @@ type Repeat struct {
 	BaselineTest string `yaml:"baseline_test,omitempty"`
 }
 
-// repeatTest is a test of a repeated job, by the key it is written under.
-type repeatTest struct {
-	key, test string
+// RepeatTest is a test of a repeated job, by the key it is written under.
+type RepeatTest struct {
+	Key, Test string
 }
 
-// tests returns the tests of the job, by their keys under repeat, given or
+// Tests returns the tests of the job, by their keys under repeat, given or
 // not.
-func (r *Repeat) tests() []repeatTest {
-	return []repeatTest{
+func (r *Repeat) Tests() []RepeatTest {
+	return []RepeatTest{
 		{"test", r.Test},
 		{"baseline_test", r.BaselineTest},
 	}

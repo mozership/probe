@@ -156,7 +156,7 @@ func (st *stepRun) prepare(jCtx *JobContext) (string, bool) {
 
 // executeAction executes the step action and returns the result
 // If retry is configured, it will retry until status == 0 or max attempts reached
-func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, error) {
+func (st *stepRun) executeAction(name string, jCtx *JobContext) (ActionResult, error) {
 	st.given = nil
 	expW, err := st.expr.EvalTemplateMap(st.With, st.ctx)
 	if err != nil {
@@ -164,7 +164,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 		// error about another value cannot show them, and the details of a
 		// credential's own error are left out.
 		jCtx.Printer.Masker().Learn(expW)
-		return actionResult{}, redactCredentialErrors(fielderr.Prefix(err, "with."), st.With)
+		return ActionResult{}, redactCredentialErrors(fielderr.Prefix(err, "with."), st.With)
 	}
 
 	st.given = expW
@@ -179,7 +179,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 		for _, kind := range jCtx.Guard.Missing(st.Uses) {
 			flags = append(flags, "--"+kind)
 		}
-		return actionResult{}, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
+		return ActionResult{}, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
 	}
 
 	// If no retry configuration, execute once
@@ -194,7 +194,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (actionResult, e
 // executeSingleAction executes action once without retry
 // quiet marks an attempt whose failure will be retried, so that the action's
 // own error records stay out of the log.
-func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (actionResult, error) {
+func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any, jCtx *JobContext, quiet bool) (ActionResult, error) {
 	// Determine timeout duration
 	timeout := DefaultStepTimeout
 	if st.Timeout.Duration > 0 {
@@ -251,18 +251,18 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 		// is seen here, with an error that says less, even before ctx's own
 		// timer has gone off.
 		if d, _ := ctx.Deadline(); res.err != nil && !time.Now().Before(d) {
-			return actionResult{}, timedOut
+			return ActionResult{}, timedOut
 		}
 		if res.err != nil {
-			return actionResult{}, res.err
+			return ActionResult{}, res.err
 		}
 		if err := jCtx.states.set(st.Uses, res.state); err != nil {
-			return actionResult{}, err
+			return ActionResult{}, err
 		}
 		st.contract = res.contract
-		return readActionResult(res.ret), nil
+		return ReadActionResult(res.ret), nil
 	case <-ctx.Done():
-		return actionResult{}, timedOut
+		return ActionResult{}, timedOut
 	}
 }
 
@@ -283,7 +283,7 @@ func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
 
 // executeActionWithRetry executes action with retry logic based on test assertion results.
 // If no test is configured, retry is not performed and the action is executed once.
-func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (actionResult, error) {
+func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]any, jCtx *JobContext, name string) (ActionResult, error) {
 	retry := st.Retry
 	st.retryAttempt = 0
 
@@ -295,7 +295,7 @@ func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]a
 		time.Sleep(retry.InitialDelay.Duration)
 	}
 
-	var lastResult actionResult
+	var lastResult ActionResult
 	var lastErr error
 
 	// Retry loop
@@ -427,7 +427,7 @@ func (st *stepRun) handleActionError(err error, name string, jCtx *JobContext) {
 
 // processActionResult sets the context the step's test and echo are
 // evaluated in from what the action returned.
-func (st *stepRun) processActionResult(r actionResult, jCtx *JobContext) {
+func (st *stepRun) processActionResult(r ActionResult, jCtx *JobContext) {
 	// A response can hand out a credential too, such as a session cookie.
 	jCtx.Printer.Masker().Learn(r.Res)
 
@@ -1079,12 +1079,12 @@ func (st *stepRun) repeatID() string {
 	if st.placed {
 		pos = st.pos
 	}
-	return st.idAt(pos)
+	return st.IDAt(pos)
 }
 
-// idAt is the id the step, written at pos in its job, is read by: its own,
+// IDAt is the id the step, written at pos in its job, is read by: its own,
 // or the one a loaded workflow gives a step without one.
-func (st *Step) idAt(pos int) string {
+func (st *Step) IDAt(pos int) string {
 	if st.ID != "" {
 		return st.ID
 	}

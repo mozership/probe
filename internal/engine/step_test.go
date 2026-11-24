@@ -341,7 +341,7 @@ func TestStep_executeAction(t *testing.T) {
 		if err != testErr {
 			t.Errorf("Expected test error, got %v", err)
 		}
-		if !reflect.DeepEqual(result, actionResult{}) {
+		if !reflect.DeepEqual(result, ActionResult{}) {
 			t.Errorf("Expected no result on error, got %+v", result)
 		}
 	})
@@ -951,10 +951,10 @@ func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
 // TestStep_IDAt reads a step by its id, or by where it is written when it
 // has none.
 func TestStep_IDAt(t *testing.T) {
-	if got := (&Step{ID: "login"}).idAt(2); got != "login" {
+	if got := (&Step{ID: "login"}).IDAt(2); got != "login" {
 		t.Errorf("idAt of a step with an id = %q, want login", got)
 	}
-	if got := (&Step{}).idAt(2); got != "step_2" {
+	if got := (&Step{}).IDAt(2); got != "step_2" {
 		t.Errorf("idAt of a step without one = %q, want step_2", got)
 	}
 }

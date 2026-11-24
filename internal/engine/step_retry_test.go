@@ -57,7 +57,7 @@ func TestStep_executeActionWithRetry_Timeout(t *testing.T) {
 	}
 
 	// On timeout, result should be nil
-	if !reflect.DeepEqual(result, actionResult{}) {
+	if !reflect.DeepEqual(result, ActionResult{}) {
 		t.Errorf("Expected no result on timeout, got %+v", result)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/check"
 	"github.com/mozership/probe/internal/engine"
 )
 
@@ -19,9 +20,9 @@ type (
 	ActionCaller       = engine.ActionCaller
 	CallerOption       = engine.CallerOption
 	CallResult         = engine.CallResult
-	CheckOptions       = engine.CheckOptions
-	Choices            = engine.Choices
-	Finding            = engine.Finding
+	CheckOptions       = check.CheckOptions
+	Choices            = check.Choices
+	Finding            = check.Finding
 )
 
 const (
@@ -34,8 +35,8 @@ const (
 	ExitConfigError = engine.ExitConfigError
 	ExitActionError = engine.ExitActionError
 
-	SeverityError   = engine.SeverityError
-	SeverityWarning = engine.SeverityWarning
+	SeverityError   = check.SeverityError
+	SeverityWarning = check.SeverityWarning
 
 	ExecutableEnv = engine.ExecutableEnv
 )
@@ -54,7 +55,7 @@ func ParseOutputMode(s string) (OutputMode, error) {
 // Check reads the workflow at path, a comma-separated list of files, and
 // returns what keeps it from running or checking what it seems to.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
-	return engine.Check(path, opts)
+	return check.Check(path, opts)
 }
 
 // NewActionCaller returns a caller of actions that a step runs with call,

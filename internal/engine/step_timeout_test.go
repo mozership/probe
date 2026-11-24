@@ -72,7 +72,7 @@ func TestStep_executeSingleAction_CustomTimeout(t *testing.T) {
 	if !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("Expected timeout error, got: %v", err)
 	}
-	if !reflect.DeepEqual(result, actionResult{}) {
+	if !reflect.DeepEqual(result, ActionResult{}) {
 		t.Errorf("Expected no result on timeout, got %+v", result)
 	}
 	// Should timeout around 2 seconds

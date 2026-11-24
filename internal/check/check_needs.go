@@ -1,10 +1,11 @@
-package engine
+package check
 
 import (
 	"fmt"
 	"maps"
 	"slices"
 
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -32,12 +33,12 @@ func (c *checker) checkNeeds() {
 
 	s := schedule.New()
 	for i := range c.wf.Jobs {
-		if err := addToSchedule(s, &c.wf.Jobs[i]); err != nil {
-			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d]", i)), c.jobWhere(i), "%s", firstLine(err.Error()))
+		if err := engine.AddToSchedule(s, &c.wf.Jobs[i]); err != nil {
+			c.add(SeverityError, c.line(fmt.Sprintf("jobs[%d]", i)), c.jobWhere(i), "%s", engine.FirstLine(err.Error()))
 			return
 		}
 	}
 	if err := s.Validate(); err != nil {
-		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
+		c.add(SeverityError, 0, "", "%s", engine.FirstLine(err.Error()))
 	}
 }

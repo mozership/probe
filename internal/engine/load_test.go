@@ -72,7 +72,7 @@ func TestProbe_load(t *testing.T) {
 			}
 			var paths []string
 			for _, pr := range problems {
-				paths = append(paths, pr.path)
+				paths = append(paths, pr.Path)
 			}
 			if !reflect.DeepEqual(paths, tt.wantProblems) {
 				t.Errorf("load() problems at %v, want %v", paths, tt.wantProblems)
@@ -88,8 +88,8 @@ func TestProbe_load(t *testing.T) {
 
 // loadText loads text, the workflow at path, as Load reads it once the file
 // is read.
-func loadText(p *Probe, path, text string) ([]aliasProblem, []problem, error) {
-	src, err := newSource([]string{path}, [][]byte{[]byte(text)}, text)
+func loadText(p *Probe, path, text string) ([]AliasProblem, []Problem, error) {
+	src, err := NewSource([]string{path}, [][]byte{[]byte(text)}, text)
 	if err != nil {
 		return nil, nil, NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}

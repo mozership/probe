@@ -26,7 +26,7 @@ import (
 // job whose ID it cannot be given, giving each job without an ID its own,
 // and returns what keeps a job from running as it is written, as problems.
 // Load and Start both go through it, in this order.
-func (w *Workflow) validate() ([]problem, error) {
+func (w *Workflow) validate() ([]Problem, error) {
 	if err := w.validateRepeatLimits(); err != nil {
 		return nil, err
 	}

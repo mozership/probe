@@ -1,3 +1,5 @@
+// Package engine loads a workflow and runs it: the model of a workflow, the
+// loader that reads it from its files, and the engine that runs its jobs.
 package engine
 
 import (
@@ -141,7 +143,7 @@ func (p *Probe) Load() error {
 	if err != nil {
 		return NewFileError("load_yaml_files", "failed to locate YAML files", err)
 	}
-	y, data, err := workflowfile.Read(files, readFile)
+	y, data, err := workflowfile.Read(files, ReadFile)
 	if err != nil {
 		return NewFileError("read_yaml_files", "failed to read YAML files", err)
 	}
@@ -151,7 +153,7 @@ func (p *Probe) Load() error {
 		}
 	}
 
-	src, err := newSource(files, data, y)
+	src, err := NewSource(files, data, y)
 	if err != nil {
 		return NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}
@@ -176,22 +178,34 @@ func (p *Probe) Load() error {
 	return nil
 }
 
+// LoadSource loads src, the files of the workflow at path as read, as Load
+// would with actions, and returns the workflow with what load returns.
+func LoadSource(path string, actions []string, src *Source) (*Workflow, []AliasProblem, []Problem, error) {
+	p := New(path, false)
+	p.Config.Actions = actions
+	aliases, problems, err := p.load(src)
+	if err != nil {
+		return nil, aliases, problems, err
+	}
+	return &p.workflow, aliases, problems, nil
+}
+
 // load decodes src, the files of the workflow as read, into the workflow.
 // It returns what is wrong with the names the workflow's actions give, and
 // what keeps its jobs from running as they are written, rather than failing
 // on them, so that probe check can tell each one and Load the first. The
 // error is for what the load cannot go past, such as a text that does not
 // decode; the names found before it are returned with it.
-func (p *Probe) load(src *source) ([]aliasProblem, []problem, error) {
+func (p *Probe) load(src *Source) ([]AliasProblem, []Problem, error) {
 	v := validator.New()
 	if err := src.decode(&p.workflow, yaml.Validator(v), yaml.AllowDuplicateMapKey()); err != nil {
 		return nil, nil, NewConfigurationError("decode_yaml", "failed to decode YAML workflow", err)
 	}
 
-	files := src.files
+	files := src.Files
 	// Set base path for resolving relative paths in embedded actions
 	if len(files) > 0 {
-		absPath, err := filepath.Abs(files[0].name)
+		absPath, err := filepath.Abs(files[0].Name)
 		if err == nil {
 			p.workflow.basePath = filepath.Dir(absPath)
 		}

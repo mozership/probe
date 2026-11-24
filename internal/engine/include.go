@@ -14,53 +14,54 @@ import (
 	"github.com/goccy/go-yaml/lexer"
 	"github.com/goccy/go-yaml/parser"
 	"github.com/mozership/probe/internal/workflowfile"
+	"github.com/mozership/probe/internal/yamlnode"
 )
 
-// readFile reads a file of the workflow, one given or one it includes. It is
+// ReadFile reads a file of the workflow, one given or one it includes. It is
 // os.ReadFile but in the tests that count what is read.
-var readFile = os.ReadFile
+var ReadFile = os.ReadFile
 
 // includeKey is the key of an entry of steps that stands for the steps of
 // a file, which holds a list of them.
 const includeKey = "include"
 
-// source is a workflow as read: the text of the files given, one after
+// Source is a workflow as read: the text of the files given, one after
 // another, parsed, with the steps of the file each entry of steps includes
 // in place of the entry. The included files are numbered on past the text,
 // each from a line of its own, so that a line of the source tells the file
 // it is of and the line in it, as a line of the text does.
-type source struct {
-	file  *ast.File
-	files fileLines
+type Source struct {
+	File  *ast.File
+	Files yamlnode.Files
 	// included is the line the first included file starts on; 0 when none
 	// is included.
 	included int
 	// next is the line the next included file starts on.
 	next int
-	// problems are what kept an entry from including a file, by the line it
+	// Problems are what kept an entry from including a file, by the line it
 	// is found on. Such an entry is left out.
-	problems []includeProblem
+	Problems []IncludeProblem
 }
 
-// includeProblem is what kept an entry from including a file, on a line of
+// IncludeProblem is what kept an entry from including a file, on a line of
 // the source.
-type includeProblem struct {
-	line int
-	msg  string
+type IncludeProblem struct {
+	Line int
+	Msg  string
 }
 
-// newSource parses text, the files given one after another, whose contents
+// NewSource parses text, the files given one after another, whose contents
 // are data, and includes the files the entries of the steps of its jobs
 // name. The error is for a text that does not parse; what keeps an entry
 // from including its file is told in problems.
-func newSource(files []string, data [][]byte, text string) (*source, error) {
+func NewSource(files []string, data [][]byte, text string) (*Source, error) {
 	f, err := parser.ParseBytes([]byte(text), 0, parser.AllowDuplicateMapKey())
 	if err != nil {
 		return nil, err
 	}
-	s := &source{
-		file:  f,
-		files: mapFiles(files, data),
+	s := &Source{
+		File:  f,
+		Files: yamlnode.MapFiles(files, data),
 		next:  strings.Count(text, "\n") + 2,
 	}
 	if len(f.Docs) > 0 {
@@ -71,17 +72,17 @@ func newSource(files []string, data [][]byte, text string) (*source, error) {
 
 // body returns the top of the workflow, which is decoded; nil for a text
 // that holds nothing.
-func (s *source) body() ast.Node {
-	if len(s.file.Docs) == 0 {
+func (s *Source) body() ast.Node {
+	if len(s.File.Docs) == 0 {
 		return nil
 	}
-	return s.file.Docs[0].Body
+	return s.File.Docs[0].Body
 }
 
 // decode decodes the workflow into v. An error on a line of an included
 // file is told by the file and its line, as the line of the source means
 // nothing to whoever reads it.
-func (s *source) decode(v any, opts ...yaml.DecodeOption) error {
+func (s *Source) decode(v any, opts ...yaml.DecodeOption) error {
 	body := s.body()
 	if body == nil {
 		return errors.New("the workflow holds nothing")
@@ -95,57 +96,57 @@ func (s *source) decode(v any, opts ...yaml.DecodeOption) error {
 	if pos.Line < s.included {
 		return err
 	}
-	file, line := s.files.at(pos.Line)
+	file, line := s.Files.At(pos.Line)
 	return fmt.Errorf("%s:%d:%d: %s", file, line, pos.Column, yerr.GetMessage())
 }
 
 // problemError returns the first of problems as an error, by the file and
 // the line it is found on.
-func (s *source) problemError() error {
-	if len(s.problems) == 0 {
+func (s *Source) problemError() error {
+	if len(s.Problems) == 0 {
 		return nil
 	}
-	p := s.problems[0]
-	file, line := s.files.at(p.line)
-	return NewConfigurationError("include_steps", "failed to include steps", fmt.Errorf("%s:%d: %s", file, line, p.msg))
+	p := s.Problems[0]
+	file, line := s.Files.At(p.Line)
+	return NewConfigurationError("include_steps", "failed to include steps", fmt.Errorf("%s:%d: %s", file, line, p.Msg))
 }
 
-func (s *source) problem(line int, format string, args ...any) {
-	s.problems = append(s.problems, includeProblem{line: line, msg: fmt.Sprintf(format, args...)})
+func (s *Source) problem(line int, format string, args ...any) {
+	s.Problems = append(s.Problems, IncludeProblem{Line: line, Msg: fmt.Sprintf(format, args...)})
 }
 
 // include puts in place of each entry of the steps of the jobs of body that
 // includes a file the steps the file holds. Only the jobs that run are read:
 // when more than one file given writes jobs, those of the last. The jobs
 // stay in the workflow, so that what each needs is read in one place.
-func (s *source) include(body ast.Node) {
-	jobs := lastKey(body, "jobs")
+func (s *Source) include(body ast.Node) {
+	jobs := LastKey(body, "jobs")
 	if jobs == nil {
 		return
 	}
-	seq := sequence(resolve(body, jobs.Value))
+	seq := sequence(Resolve(body, jobs.Value))
 	if seq == nil {
 		return
 	}
 
 	// A path is told from the file that writes jobs, wherever the run is.
-	file, _ := s.files.at(lineOf(jobs.Key))
+	file, _ := s.Files.At(yamlnode.LineOf(jobs.Key))
 	dir := filepath.Dir(file)
 	// A list of steps anchored once and read by more than one job is
 	// included in once.
 	done := map[*ast.SequenceNode]bool{}
 	var out []ast.Node
 	for _, job := range seq.Values {
-		if isInclude(job) {
-			s.problem(lineOf(job), "include is an entry of steps, not of jobs: a job and what it needs are written in the workflow")
+		if IsInclude(job) {
+			s.problem(yamlnode.LineOf(job), "include is an entry of steps, not of jobs: a job and what it needs are written in the workflow")
 			continue
 		}
 		out = append(out, job)
-		steps := stepsOf(body, job)
+		steps := StepsOf(body, job)
 		if steps == nil {
 			continue
 		}
-		list := sequence(resolve(body, steps.Value))
+		list := sequence(Resolve(body, steps.Value))
 		if list == nil || done[list] {
 			continue
 		}
@@ -157,7 +158,7 @@ func (s *source) include(body ast.Node) {
 
 // expand puts in place of each entry of steps that includes a file the
 // steps it holds, the path told from dir.
-func (s *source) expand(steps *ast.SequenceNode, dir string) {
+func (s *Source) expand(steps *ast.SequenceNode, dir string) {
 	var out []ast.Node
 	for _, item := range steps.Values {
 		path, ok := s.includePath(item)
@@ -168,7 +169,7 @@ func (s *source) expand(steps *ast.SequenceNode, dir string) {
 		if path == "" {
 			continue
 		}
-		line := lineOf(item)
+		line := yamlnode.LineOf(item)
 		p, err := includeFile(dir, path)
 		if err != nil {
 			s.problem(line, "%s", err)
@@ -182,8 +183,8 @@ func (s *source) expand(steps *ast.SequenceNode, dir string) {
 // includePath returns the path the entry item of steps includes, and
 // whether item includes a file at all. The path is empty for an entry that
 // is wrong, which is told in problems.
-func (s *source) includePath(item ast.Node) (string, bool) {
-	kvs := pairs(item)
+func (s *Source) includePath(item ast.Node) (string, bool) {
+	kvs := yamlnode.Pairs(item)
 	i := slices.IndexFunc(kvs, func(kv *ast.MappingValueNode) bool { return keyOf(kv) == includeKey })
 	if i < 0 {
 		return "", false
@@ -195,7 +196,7 @@ func (s *source) includePath(item ast.Node) (string, bool) {
 				others = append(others, fmt.Sprintf("%q", k))
 			}
 		}
-		s.problem(lineOf(item), "include takes no other key, but %s is written with it", listNames(others))
+		s.problem(yamlnode.LineOf(item), "include takes no other key, but %s is written with it", ListNames(others))
 		return "", true
 	}
 	value := kvs[i].Value
@@ -204,7 +205,7 @@ func (s *source) includePath(item ast.Node) (string, bool) {
 	}
 	str, ok := value.(*ast.StringNode)
 	if !ok || strings.TrimSpace(str.Value) == "" {
-		s.problem(lineOf(kvs[i].Key), "include takes the path of a file")
+		s.problem(yamlnode.LineOf(kvs[i].Key), "include takes the path of a file")
 		return "", true
 	}
 	return str.Value, true
@@ -212,15 +213,15 @@ func (s *source) includePath(item ast.Node) (string, bool) {
 
 // read parses the file at path, which the entry of steps on line includes,
 // and returns the steps it holds.
-func (s *source) read(path string, line int) []ast.Node {
-	data, err := readFile(path)
+func (s *Source) read(path string, line int) []ast.Node {
+	data, err := ReadFile(path)
 	if err != nil {
 		s.problem(line, "%s", err)
 		return nil
 	}
 	start := s.next
 	s.next += strings.Count(string(data), "\n") + 2
-	s.files = append(s.files, fileStart{name: path, line: start})
+	s.Files = append(s.Files, yamlnode.FileStart{Name: path, Line: start})
 	if s.included == 0 {
 		s.included = start
 	}
@@ -237,7 +238,7 @@ func (s *source) read(path string, line int) []ast.Node {
 		if errors.As(err, &yerr) && yerr.GetToken() != nil {
 			s.problem(yerr.GetToken().Position.Line, "YAML: %s", yerr.GetMessage())
 		} else {
-			s.problem(line, "%s: YAML: %s", path, firstLine(err.Error()))
+			s.problem(line, "%s: YAML: %s", path, FirstLine(err.Error()))
 		}
 		return nil
 	}
@@ -253,7 +254,7 @@ func (s *source) read(path string, line int) []ast.Node {
 		s.problem(line, "%s: holds no step", path)
 		return nil
 	case len(docs) > 1:
-		s.problem(lineOf(docs[1]), "an included file holds a list of steps, not more than one document")
+		s.problem(yamlnode.LineOf(docs[1]), "an included file holds a list of steps, not more than one document")
 		return nil
 	}
 	steps := sequence(docs[0])
@@ -266,7 +267,7 @@ func (s *source) read(path string, line int) []ast.Node {
 	// as an anchor of another file, so that a step read here could not be
 	// read on its own.
 	if alias := foreignAlias(docs[0]); alias != nil {
-		s.problem(lineOf(alias), "alias *%s names no anchor of this file; an anchor is not shared between files", alias.Value.GetToken().Value)
+		s.problem(yamlnode.LineOf(alias), "alias *%s names no anchor of this file; an anchor is not shared between files", alias.Value.GetToken().Value)
 		return nil
 	}
 	// The workflow is decoded as one, where an anchor would be read by an
@@ -278,8 +279,8 @@ func (s *source) read(path string, line int) []ast.Node {
 
 	var out []ast.Node
 	for _, st := range steps.Values {
-		if isInclude(st) {
-			s.problem(lineOf(st), "an included file cannot include")
+		if IsInclude(st) {
+			s.problem(yamlnode.LineOf(st), "an included file cannot include")
 			continue
 		}
 		out = append(out, st)
@@ -315,7 +316,7 @@ func includeFile(dir, path string) (string, error) {
 func foreignAlias(n ast.Node) *ast.AliasNode {
 	anchors := map[string]bool{}
 	var found *ast.AliasNode
-	ast.Walk(visitorFunc(func(n ast.Node) bool {
+	ast.Walk(yamlnode.VisitorFunc(func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.AnchorNode:
 			if v.Name != nil && v.Name.GetToken() != nil {
@@ -342,7 +343,7 @@ func renameAnchors(n ast.Node, suffix string) {
 			}
 		}
 	}
-	ast.Walk(visitorFunc(func(n ast.Node) bool {
+	ast.Walk(yamlnode.VisitorFunc(func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.AnchorNode:
 			rename(v.Name)
@@ -353,36 +354,36 @@ func renameAnchors(n ast.Node, suffix string) {
 	}), n)
 }
 
-// resolve returns n, or the node it names when it is an alias of an anchor
+// Resolve returns n, or the node it names when it is an alias of an anchor
 // of body.
-func resolve(body, n ast.Node) ast.Node {
+func Resolve(body, n ast.Node) ast.Node {
 	if alias, ok := n.(*ast.AliasNode); ok && alias.Value != nil && alias.Value.GetToken() != nil {
 		return anchored(body, alias.Value.GetToken().Value)
 	}
 	return n
 }
 
-// stepsOf returns the pair of job, an entry of jobs, that gives its steps:
+// StepsOf returns the pair of job, an entry of jobs, that gives its steps:
 // its own, or those a merge key gives it, the first of them as the decoder
 // takes them; nil when there is none.
-func stepsOf(body, job ast.Node) *ast.MappingValueNode {
+func StepsOf(body, job ast.Node) *ast.MappingValueNode {
 	return mergedSteps(body, job, map[ast.Node]bool{})
 }
 
-// mergedSteps is stepsOf for job, a mapping reached through the mappings
+// mergedSteps is StepsOf for job, a mapping reached through the mappings
 // on, which it does not go back to: a merge key may name the mapping it is
 // in, which would be followed round for ever.
 func mergedSteps(body, job ast.Node, on map[ast.Node]bool) *ast.MappingValueNode {
-	job = resolve(body, job)
+	job = Resolve(body, job)
 	if job == nil || on[job] {
 		return nil
 	}
 	on[job] = true
 	defer delete(on, job)
-	if kv := lastKey(job, "steps"); kv != nil {
+	if kv := LastKey(job, "steps"); kv != nil {
 		return kv
 	}
-	for _, kv := range pairs(job) {
+	for _, kv := range yamlnode.Pairs(job) {
 		if kv.Key == nil || !kv.Key.IsMergeKey() {
 			continue
 		}
@@ -399,11 +400,11 @@ func mergedSteps(body, job ast.Node, on map[ast.Node]bool) *ast.MappingValueNode
 	return nil
 }
 
-// lastKey returns the last pair of the mapping n whose key is key, which is
+// LastKey returns the last pair of the mapping n whose key is key, which is
 // the one decoded; nil when there is none.
-func lastKey(n ast.Node, key string) *ast.MappingValueNode {
+func LastKey(n ast.Node, key string) *ast.MappingValueNode {
 	var found *ast.MappingValueNode
-	for _, kv := range pairs(n) {
+	for _, kv := range yamlnode.Pairs(n) {
 		if keyOf(kv) == key {
 			found = kv
 		}
@@ -417,7 +418,7 @@ func lastKey(n ast.Node, key string) *ast.MappingValueNode {
 // its name, even one written after it.
 func anchored(n ast.Node, name string) ast.Node {
 	var found ast.Node
-	ast.Walk(visitorFunc(func(n ast.Node) bool {
+	ast.Walk(yamlnode.VisitorFunc(func(n ast.Node) bool {
 		if a, ok := n.(*ast.AnchorNode); ok && a.Name != nil && a.Name.GetToken() != nil && a.Name.GetToken().Value == name {
 			found = a.Value
 		}
@@ -426,10 +427,10 @@ func anchored(n ast.Node, name string) ast.Node {
 	return found
 }
 
-// isInclude reports whether n, an entry of steps or of jobs, includes a
+// IsInclude reports whether n, an entry of steps or of jobs, includes a
 // file.
-func isInclude(n ast.Node) bool {
-	return slices.ContainsFunc(pairs(n), func(kv *ast.MappingValueNode) bool { return keyOf(kv) == includeKey })
+func IsInclude(n ast.Node) bool {
+	return slices.ContainsFunc(yamlnode.Pairs(n), func(kv *ast.MappingValueNode) bool { return keyOf(kv) == includeKey })
 }
 
 // keyOf returns the key of kv as it is written.
@@ -452,4 +453,18 @@ func sequence(n ast.Node) *ast.SequenceNode {
 		return sequence(v.Value)
 	}
 	return nil
+}
+
+// FirstLine returns the first line of s, trimmed.
+func FirstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
+}
+
+// ListNames lists names as a, b and c.
+func ListNames(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }

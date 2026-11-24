@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -17,8 +18,8 @@ import (
 // and those the tests of a repeated job read from, from the fields of what
 // they are evaluated against.
 var (
-	stepNames   = exprKeys(reflect.TypeFor[StepContext]())
-	repeatNames = exprKeys(reflect.TypeFor[repeatTestEnv]())
+	stepNames   = exprKeys(reflect.TypeFor[engine.StepContext]())
+	repeatNames = exprKeys(reflect.TypeFor[engine.RepeatTestEnv]())
 )
 
 func exprKeys(t reflect.Type) []string {
@@ -59,7 +60,7 @@ func (c *checker) checkNames() {
 			if names == nil || slices.Contains(names, name) {
 				continue
 			}
-			add(SeverityError, "%s is not defined; it can read %s%s", name, listNames(names), nameHint(name, names))
+			add(SeverityError, "%s is not defined; it can read %s%s", name, engine.ListNames(names), nameHint(name, names))
 		}
 		for _, h := range expr.MethodCallHints(input) {
 			add(SeverityError, "%s", h)
@@ -102,8 +103,8 @@ func (c *checker) checkNames() {
 		if job.Repeat == nil {
 			continue
 		}
-		for _, t := range job.Repeat.tests() {
-			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, repeatNames, workflowVars, nil)
+		for _, t := range job.Repeat.Tests() {
+			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.Key), c.jobWhere(i), "repeat."+t.Key, t.Test, repeatNames, workflowVars, nil)
 		}
 	}
 }
@@ -156,7 +157,7 @@ func (c *checker) checkResults() {
 				if s := suggest.Within(chain[0], declared, 1); s != "" {
 					msg += fmt.Sprintf("; did you mean %q?", s)
 				}
-				msg += fmt.Sprintf("; its %s has %s", name, listNames(declared))
+				msg += fmt.Sprintf("; its %s has %s", name, engine.ListNames(declared))
 				if name == "res" && chain[0] == "status" {
 					msg += "; the step's own status is read as status"
 				}
@@ -172,7 +173,7 @@ func (c *checker) checkResults() {
 // action that declares nothing, and for one that returns the keys of with,
 // for a step whose with has a key that holds a template, which names its
 // key only when it runs.
-func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
+func (c *checker) resultFields(st *engine.Step) (map[string][]string, bool) {
 	keys := slices.Collect(maps.Keys(st.With))
 	if slices.Contains(c.opts.WithFields, st.Uses) {
 		if slices.ContainsFunc(keys, expr.HasTemplate) {
@@ -189,7 +190,7 @@ func (c *checker) resultFields(st *Step) (map[string][]string, bool) {
 		}
 		fields = append(slices.Clone(fields), keys...)
 		if name == "res" {
-			fields = addedResFields(fields)
+			fields = engine.AddedResFields(fields)
 		}
 		slices.Sort(fields)
 		out[name] = slices.Compact(fields)
@@ -237,7 +238,7 @@ func varNames(vars map[string]any) []string {
 // of the iteration it runs with. vars is nil when the names are not known
 // before the step runs, as the keys of the entries a template gives are
 // not. later are the names the step defines that field does not read.
-func stepVars(workflow []string, st *Step, field string) (vars, later []string) {
+func stepVars(workflow []string, st *engine.Step, field string) (vars, later []string) {
 	own := varNames(st.Vars)
 	if workflow == nil || (own == nil && len(st.Vars) > 0) {
 		return nil, nil

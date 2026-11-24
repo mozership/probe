@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/kind"
 )
@@ -16,7 +17,7 @@ import (
 // reads, from the fields of what it is evaluated against. What a step's
 // action returns, under res and req, is added to them for the fields read
 // once it has.
-var stepShapes = withNoteShapes(contextShapes(reflect.TypeFor[StepContext]()))
+var stepShapes = withNoteShapes(contextShapes(reflect.TypeFor[engine.StepContext]()))
 
 // withNoteShapes gives the entries of notes in shapes their fields: the
 // context holds them as maps, for iteration and with to take as they are,
@@ -82,7 +83,7 @@ func (c *checker) checkTypes() {
 		if err == nil {
 			return
 		}
-		msg := firstLine(err.Error())
+		msg := engine.FirstLine(err.Error())
 		var hints []string
 		if h, ok := errors.AsType[*expr.HintError](err); ok {
 			msg, hints = h.Err.Error(), h.Hints
@@ -136,8 +137,8 @@ func (c *checker) checkTypes() {
 			continue
 		}
 		names := repeatShapes(job)
-		for _, t := range job.Repeat.tests() {
-			check(fmt.Sprintf("jobs[%d].repeat.%s", i, t.key), c.jobWhere(i), "repeat."+t.key, t.test, false, names, "so the job fails")
+		for _, t := range job.Repeat.Tests() {
+			check(fmt.Sprintf("jobs[%d].repeat.%s", i, t.Key), c.jobWhere(i), "repeat."+t.Key, t.Test, false, names, "so the job fails")
 		}
 	}
 }
@@ -146,7 +147,7 @@ func (c *checker) checkTypes() {
 // once its action has returned: those of stepShapes, with the fields of res
 // and req whose kinds the action declares. A step of an external action
 // reads its res and req as maps whose fields may hold anything.
-func (c *checker) resultShapes(st *Step) map[string]expr.Shape {
+func (c *checker) resultShapes(st *engine.Step) map[string]expr.Shape {
 	out := maps.Clone(stepShapes)
 	// What an external action returns is checked by no kind, whatever its
 	// name: it may hold anything.
@@ -155,7 +156,7 @@ func (c *checker) resultShapes(st *Step) map[string]expr.Shape {
 	}
 	for name, types := range map[string]map[string]string{
 		"req": c.opts.ReqTypes[st.Uses],
-		"res": readResTypes(c.opts.ResTypes[st.Uses]),
+		"res": engine.ReadResTypes(c.opts.ResTypes[st.Uses]),
 	} {
 		fields := make(map[string]expr.Shape, len(types))
 		for field, k := range types {
@@ -169,10 +170,10 @@ func (c *checker) resultShapes(st *Step) map[string]expr.Shape {
 // repeatShapes returns the shapes of the names the tests of job, a repeated
 // job, read: the fields of each of its steps, under steps and under
 // baseline.steps, and vars, which may hold anything.
-func repeatShapes(job Job) map[string]expr.Shape {
+func repeatShapes(job engine.Job) map[string]expr.Shape {
 	number := expr.Shape{Kind: kind.Number}
 	rt := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
-	for _, f := range repeatRTFields {
+	for _, f := range engine.RepeatRTFields {
 		rt.Fields[f] = number
 	}
 	run := func(fields []string) expr.Shape {
@@ -180,7 +181,7 @@ func repeatShapes(job Job) map[string]expr.Shape {
 		for _, f := range fields {
 			s.Fields[f] = number
 		}
-		s.Fields[runFieldRT] = rt
+		s.Fields[engine.RunFieldRT] = rt
 		return s
 	}
 	steps := expr.Shape{Kind: kind.Map, Fields: map[string]expr.Shape{}}
@@ -189,9 +190,9 @@ func repeatShapes(job Job) map[string]expr.Shape {
 		if st == nil {
 			continue
 		}
-		id := st.idAt(j)
-		steps.Fields[id] = run(repeatRunFields)
-		baseline.Fields[id] = run(baselineRunFields)
+		id := st.IDAt(j)
+		steps.Fields[id] = run(engine.RepeatRunFields)
+		baseline.Fields[id] = run(engine.BaselineRunFields)
 	}
 	return map[string]expr.Shape{
 		"vars":     {Kind: kind.Map},

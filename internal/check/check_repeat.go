@@ -1,10 +1,11 @@
-package engine
+package check
 
 import (
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 )
 
@@ -22,36 +23,36 @@ func (c *checker) checkRepeatTests() {
 			if st == nil {
 				continue
 			}
-			ids = append(ids, st.idAt(j))
+			ids = append(ids, st.IDAt(j))
 		}
-		for _, t := range job.Repeat.tests() {
-			if strings.TrimSpace(t.test) == "" || expr.Parse(t.test) != nil {
+		for _, t := range job.Repeat.Tests() {
+			if strings.TrimSpace(t.Test) == "" || expr.Parse(t.Test) != nil {
 				continue
 			}
-			key := "repeat." + t.key
+			key := "repeat." + t.Key
 			path := fmt.Sprintf("jobs[%d].%s", i, key)
 			add := func(severity, msg string) {
 				if msg != "" {
 					c.addOnce(severity, path, c.jobWhere(i), "%s: %s", key, msg)
 				}
 			}
-			for _, chain := range expr.Reads(t.test, "steps") {
-				add(SeverityError, repeatChainProblem("steps", chain, ids, repeatRunFields))
+			for _, chain := range expr.Reads(t.Test, "steps") {
+				add(SeverityError, repeatChainProblem("steps", chain, ids, engine.RepeatRunFields))
 			}
-			baseline := expr.Reads(t.test, "baseline")
-			byKey := expr.ReadsByVariableKey(t.test, "baseline")
+			baseline := expr.Reads(t.Test, "baseline")
+			byKey := expr.ReadsByVariableKey(t.Test, "baseline")
 			// A test against the run compared to that reads it by a key
 			// known only when it runs is refused as the workflow is loaded;
 			// see Repeat.Validate.
 			switch {
-			case t.key == "test" && len(baseline)+len(byKey) > 0:
+			case t.Key == "test" && len(baseline)+len(byKey) > 0:
 				add(SeverityError, "baseline is read only by repeat.baseline_test")
-			case t.key == "test":
+			case t.Key == "test":
 			case len(baseline) == 0 && len(byKey) == 0:
 				add(SeverityWarning, "it reads nothing under baseline, so it can go in repeat.test")
 			}
 			for _, chain := range baseline {
-				if t.key != "baseline_test" {
+				if t.Key != "baseline_test" {
 					break
 				}
 				if chain[0] != "steps" {
@@ -59,7 +60,7 @@ func (c *checker) checkRepeatTests() {
 					continue
 				}
 				if len(chain) > 1 {
-					add(SeverityError, repeatChainProblem("baseline.steps", chain[1:], ids, baselineRunFields))
+					add(SeverityError, repeatChainProblem("baseline.steps", chain[1:], ids, engine.BaselineRunFields))
 				}
 			}
 		}
@@ -77,12 +78,12 @@ func repeatChainProblem(prefix string, chain, ids, fields []string) string {
 	case len(chain) > 1 && !slices.Contains(fields, chain[1]):
 		return fmt.Sprintf("%s.%s has no %s; it has %s",
 			prefix, chain[0], chain[1], strings.Join(fields, ", "))
-	case len(chain) > 2 && chain[1] != runFieldRT:
+	case len(chain) > 2 && chain[1] != engine.RunFieldRT:
 		return fmt.Sprintf("%s.%s.%s is a number, which has no %s",
 			prefix, chain[0], chain[1], chain[2])
-	case len(chain) > 2 && !slices.Contains(repeatRTFields, chain[2]):
+	case len(chain) > 2 && !slices.Contains(engine.RepeatRTFields, chain[2]):
 		return fmt.Sprintf("%s.%s.rt has no %s; it has %s",
-			prefix, chain[0], chain[2], strings.Join(repeatRTFields, ", "))
+			prefix, chain[0], chain[2], strings.Join(engine.RepeatRTFields, ", "))
 	case len(chain) > 3:
 		return fmt.Sprintf("%s.%s.rt.%s is a number, which has no %s",
 			prefix, chain[0], chain[2], chain[3])

@@ -81,7 +81,7 @@ func (e *Executor) setupContext(ctx JobContext) JobContext {
 			tests = append(tests, r.BaselineTest)
 		}
 	}
-	rep.reads = repeatReads(tests...)
+	rep.reads = RepeatReads(tests...)
 	ctx.repeat = rep
 	return ctx
 }

@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -205,7 +206,7 @@ func (c *checker) ancestors() []map[int]bool {
 	}
 	out := make([]map[int]bool, len(c.wf.Jobs))
 	for i := range c.wf.Jobs {
-		out[i] = neededJobs(c.wf.Jobs, byID, i)
+		out[i] = engine.NeededJobs(c.wf.Jobs, byID, i)
 	}
 	return out
 }

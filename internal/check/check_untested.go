@@ -1,10 +1,11 @@
-package engine
+package check
 
 import (
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 )
 
@@ -16,14 +17,14 @@ func (c *checker) checkTests() {
 		// that test.
 		var tested map[string]bool
 		if job.Repeat != nil {
-			tested = repeatReads(job.Repeat.Test, job.Repeat.BaselineTest)
+			tested = engine.RepeatReads(job.Repeat.Test, job.Repeat.BaselineTest)
 		}
 		for j, st := range job.Steps {
 			if st == nil {
 				continue
 			}
 			path := fmt.Sprintf("jobs[%d].steps[%d]", i, j)
-			id := st.idAt(j)
+			id := st.IDAt(j)
 			switch {
 			case strings.TrimSpace(st.Test) == "":
 				// A step of an action that does nothing that could go
