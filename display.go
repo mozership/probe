@@ -11,7 +11,10 @@ import (
 type Printer = display.Printer
 
 // NewPrinter returns a printer that writes to the standard output and
-// error, as display.NewPrinter does.
+// error. Its output is colored whatever it is written to when FORCE_COLOR or
+// PROBE_TTY is 1: the CLI sets PROBE_TTY when its standard output is a
+// terminal, for the printer of an embedded job, which runs in the process
+// of an action, whose standard output is not the terminal.
 func NewPrinter(verbose bool) *Printer {
 	return display.NewPrinter(verbose)
 }
@@ -27,7 +30,8 @@ const (
 	// OutputModeSpinner shows a spinner while running and prints the whole
 	// report once every job has finished.
 	OutputModeSpinner = display.ModeSpinner
-	// OutputModeStream prints each job block as soon as it is final.
+	// OutputModeStream prints each job block as soon as it is final and logs
+	// step progress to stderr while jobs are still running.
 	OutputModeStream = display.ModeStream
 )
 

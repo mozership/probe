@@ -469,7 +469,10 @@ func TestPrinter_MasksOutput(t *testing.T) {
 		map[string]any{"body": strings.Repeat("x", 510) + `pa"ss`}))
 
 	p.verbose = true
-	p.PrintTestResult(false, "t", map[string]any{"res": map[string]any{"body": `pa"ss`}})
+	p.PrintTestResult(false, "t", map[string]any{
+		"req": map[string]any{"headers": map[string]any{"cookie": "c=1"}},
+		"res": map[string]any{"body": `pa"ss`},
+	})
 
 	out := p.outWriter.(*bytes.Buffer).String() + p.errWriter.(*bytes.Buffer).String()
 	if strings.Contains(out, "pa") {

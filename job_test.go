@@ -443,7 +443,7 @@ func TestJob_RunStandalone_Failure(t *testing.T) {
 			t.Errorf("Expected no error output while the job ran, but got: %s", errBuffer.String())
 		}
 	} else {
-		t.Errorf("Expected printer.errWriter to be *bytes.Buffer, but got %T", printer.Err())
+		t.Errorf("Expected printer.Err() to be *bytes.Buffer, but got %T", printer.Err())
 	}
 }
 

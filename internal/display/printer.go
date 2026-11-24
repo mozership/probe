@@ -252,7 +252,7 @@ type DebugBlock struct {
 	strings.Builder
 }
 
-// line adds a line to the block, as LogDebug writes it.
+// Line adds a line to the block, as LogDebug writes it.
 func (b *DebugBlock) Line(format string, args ...any) {
 	b.WriteString(debugLine(format, args...))
 }

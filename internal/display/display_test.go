@@ -134,10 +134,10 @@ func TestNewReporter(t *testing.T) {
 	p := newBufferPrinter()
 
 	if _, ok := NewReporter(ModeSpinner, p, NewRenderer(nil, nil, nil)).(*BufferedReporter); !ok {
-		t.Error("newReporter(spinner) should return a *BufferedReporter")
+		t.Error("NewReporter(spinner) should return a *BufferedReporter")
 	}
 	if _, ok := NewReporter(ModeStream, p, NewRenderer(nil, nil, nil)).(*StreamReporter); !ok {
-		t.Error("newReporter(stream) should return a *StreamReporter")
+		t.Error("NewReporter(stream) should return a *StreamReporter")
 	}
 }
 

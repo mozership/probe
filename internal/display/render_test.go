@@ -867,7 +867,7 @@ func TestReportRenderer_NilResult(t *testing.T) {
 		t.Errorf("reportText(nil) = %q, want nothing", got)
 	}
 	if got := r.StepsText(nil); got != "" {
-		t.Errorf("stepsText(nil) = %q, want nothing", got)
+		t.Errorf("StepsText(nil) = %q, want nothing", got)
 	}
 }
 
@@ -976,7 +976,7 @@ func TestReportRenderer_failureText(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := failureTextOf(tt.failure, tt.test); got != tt.want {
-				t.Errorf("failureText() = %q, want %q", got, tt.want)
+				t.Errorf("FailureText() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -1000,10 +1000,10 @@ func TestReportRenderer_failureText_MasksTheClause(t *testing.T) {
 
 	got := r.FailureText(f, `res.body == ""`)
 	if strings.Contains(got, secret[:6]) || !strings.Contains(got, "<") {
-		t.Errorf("failureText() = %q, want the secret hidden before the value is cut", got)
+		t.Errorf("FailureText() = %q, want the secret hidden before the value is cut", got)
 	}
 	if f.Clause.Operands[0].Value != value {
-		t.Error("failureText() changed the failure's clause, want it kept as it is")
+		t.Error("FailureText() changed the failure's clause, want it kept as it is")
 	}
 }
 
