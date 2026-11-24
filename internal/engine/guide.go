@@ -19,11 +19,11 @@ func WorkflowActions(workflow string) (guide.Workflow, error) {
 	if len(files) == 0 {
 		return guide.Workflow{}, fmt.Errorf("%s: no YAML file", workflow)
 	}
-	text, contents, err := workflowfile.Read(files, readFile)
+	text, contents, err := workflowfile.Read(files, ReadFile)
 	if err != nil {
 		return guide.Workflow{}, fmt.Errorf("workflow file %w", err)
 	}
-	src, err := newSource(files, contents, text)
+	src, err := NewSource(files, contents, text)
 	if err != nil {
 		return guide.Workflow{}, fmt.Errorf("%s: %w", workflow, err)
 	}

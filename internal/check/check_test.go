@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/yamlnode"
 )
 
@@ -815,8 +816,8 @@ func TestCheck_ReadsEachFileOnce(t *testing.T) {
 	jobs := writeWorkflow(t, dir, "jobs.yml", "jobs:\n- name: J\n  steps:\n  - uses: shell\n    tset: res.code == 0\n")
 
 	reads := map[string]int{}
-	t.Cleanup(func() { readFile = os.ReadFile })
-	readFile = func(name string) ([]byte, error) {
+	t.Cleanup(func() { engine.ReadFile = os.ReadFile })
+	engine.ReadFile = func(name string) ([]byte, error) {
 		reads[name]++
 		return os.ReadFile(name)
 	}

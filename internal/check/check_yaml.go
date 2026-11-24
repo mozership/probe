@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml/ast"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/yamlnode"
 )
@@ -19,11 +20,11 @@ func (c *checker) position(line int) (string, int) {
 
 // Keys each part of a workflow takes, from the fields Probe decodes them into.
 var (
-	workflowKeys = yamlKeys(reflect.TypeFor[Workflow]())
-	jobKeys      = yamlKeys(reflect.TypeFor[Job]())
-	stepKeys     = yamlKeys(reflect.TypeFor[Step]())
-	retryKeys    = yamlKeys(reflect.TypeFor[StepRetry]())
-	repeatKeys   = yamlKeys(reflect.TypeFor[Repeat]())
+	workflowKeys = yamlKeys(reflect.TypeFor[engine.Workflow]())
+	jobKeys      = yamlKeys(reflect.TypeFor[engine.Job]())
+	stepKeys     = yamlKeys(reflect.TypeFor[engine.Step]())
+	retryKeys    = yamlKeys(reflect.TypeFor[engine.StepRetry]())
+	repeatKeys   = yamlKeys(reflect.TypeFor[engine.Repeat]())
 )
 
 func yamlKeys(t reflect.Type) []string {
@@ -83,12 +84,12 @@ func (c *checker) walkWorkflow(body ast.Node) {
 		}
 		i := 0
 		// A list an alias names is checked as the jobs, as it is run.
-		for _, job := range yamlnode.Items(resolve(body, value)) {
+		for _, job := range yamlnode.Items(engine.Resolve(body, value)) {
 			// An entry of jobs that includes a file is told of as the
 			// files are read, and left out of the jobs that run. One is
 			// left only in jobs a later file replaces, which are not read,
 			// as is an entry of their steps.
-			if isInclude(job) {
+			if engine.IsInclude(job) {
 				continue
 			}
 			jp := fmt.Sprintf("jobs[%d]", i)
@@ -97,8 +98,8 @@ func (c *checker) walkWorkflow(body ast.Node) {
 			i++
 			walkSteps := func(value ast.Node) {
 				j := 0
-				for _, step := range yamlnode.Items(resolve(body, value)) {
-					if isInclude(step) {
+				for _, step := range yamlnode.Items(engine.Resolve(body, value)) {
+					if engine.IsInclude(step) {
 						continue
 					}
 					sp := fmt.Sprintf("%s.steps[%d]", jp, j)
@@ -127,8 +128,8 @@ func (c *checker) walkWorkflow(body ast.Node) {
 			})
 			// The steps a merge key gives a job are checked as its own,
 			// as they are run.
-			if lastKey(job, "steps") == nil {
-				if kv := stepsOf(body, job); kv != nil {
+			if engine.LastKey(job, "steps") == nil {
+				if kv := engine.StepsOf(body, job); kv != nil {
 					walkSteps(kv.Value)
 				}
 			}

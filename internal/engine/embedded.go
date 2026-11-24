@@ -61,7 +61,7 @@ func ReadJobFile(path string, names map[string]string) (*Job, error) {
 	return job, nil
 }
 
-// eachEmbeddedStep calls visit for each step of the job file st embeds, when
+// EachEmbeddedStep calls visit for each step of the job file st embeds, when
 // st is a step of the embedded action, and of the job files those steps
 // embed in turn, with the path of the file as it is written and the position
 // of the step in it. seen holds the files read, each of which is read once,
@@ -69,7 +69,7 @@ func ReadJobFile(path string, names map[string]string) (*Job, error) {
 //
 // Only what can be told before a run is read: a path that is a template is
 // not followed, and nor is a file that cannot be read.
-func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
+func EachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, index int, st *Step)) {
 	file, ok := embeddedJobFile(st)
 	if !ok || expr.HasTemplate(file) {
 		return
@@ -88,7 +88,7 @@ func eachEmbeddedStep(st *Step, seen map[string]bool, visit func(file string, in
 			continue
 		}
 		visit(file, i, es)
-		eachEmbeddedStep(es, seen, visit)
+		EachEmbeddedStep(es, seen, visit)
 	}
 }
 
@@ -125,7 +125,7 @@ func checkEmbeddedJobs(jobs []Job, named map[string]string, builtin []string, va
 				}
 				st = &Step{Uses: embeddedAction, With: map[string]any{"path": expanded}}
 			}
-			eachEmbeddedStep(st, map[string]bool{}, func(file string, i int, es *Step) {
+			EachEmbeddedStep(st, map[string]bool{}, func(file string, i int, es *Step) {
 				uses := es.Uses
 				if ref, ok := named[uses]; ok {
 					uses = ref

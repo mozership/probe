@@ -15,32 +15,32 @@ import (
 // cannot be taken for a path or a repository, or hold a template.
 var aliasName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-// aliasProblem is what is wrong with a name the workflow's actions give,
+// AliasProblem is what is wrong with a name the workflow's actions give,
 // or with a use of one.
-type aliasProblem struct {
+type AliasProblem struct {
 	// name is the name under actions, or empty when job is set.
-	name string
+	Name string
 	// job is the index of the job whose defaults are wrong, with action the
 	// key of them that is, or workflowDefaults for the defaults of the
 	// workflow.
-	job    int
-	action string
-	msg    string
+	Job    int
+	Action string
+	Msg    string
 }
 
-// workflowDefaults is the job of an aliasProblem in the defaults of the
+// WorkflowDefaults is the job of an aliasProblem in the defaults of the
 // workflow, which belong to no job.
-const workflowDefaults = -1
+const WorkflowDefaults = -1
 
-func (a aliasProblem) Error() string {
-	return a.msg
+func (a AliasProblem) Error() string {
+	return a.Msg
 }
 
 // aliasProblems returns what is wrong with the names the workflow's actions
 // give, in the order of the names. builtin are the names of the actions of
 // Probe, which a name must not be; when it is empty, that is not checked.
-func (w *Workflow) aliasProblems(builtin []string) []aliasProblem {
-	var problems []aliasProblem
+func (w *Workflow) aliasProblems(builtin []string) []AliasProblem {
+	var problems []AliasProblem
 	for _, name := range slices.Sorted(maps.Keys(w.Actions)) {
 		ref := w.Actions[name]
 		var msg string
@@ -61,7 +61,7 @@ func (w *Workflow) aliasProblems(builtin []string) []aliasProblem {
 			}
 		}
 		if msg != "" {
-			problems = append(problems, aliasProblem{name: name, msg: msg})
+			problems = append(problems, AliasProblem{Name: name, Msg: msg})
 		}
 	}
 	return problems
@@ -76,22 +76,22 @@ func (w *Workflow) aliasProblems(builtin []string) []aliasProblem {
 // A name that is wrong, as aliasProblems tells, is left as it is written. It
 // returns the defaults that are written for an action twice, once by its
 // name and once in full.
-func (w *Workflow) resolveAliases(wrong []aliasProblem) []aliasProblem {
+func (w *Workflow) resolveAliases(wrong []AliasProblem) []AliasProblem {
 	names := maps.Clone(w.Actions)
 	for _, p := range wrong {
-		delete(names, p.name)
+		delete(names, p.Name)
 	}
 	if len(names) == 0 {
 		return nil
 	}
 
-	var problems []aliasProblem
+	var problems []AliasProblem
 	twice := func(job int, actions []string) {
 		for _, action := range actions {
-			problems = append(problems, aliasProblem{job: job, action: action, msg: fmt.Sprintf("defaults: %s and %s are the same action, whose defaults can be written once", action, names[action])})
+			problems = append(problems, AliasProblem{Job: job, Action: action, Msg: fmt.Sprintf("defaults: %s and %s are the same action, whose defaults can be written once", action, names[action])})
 		}
 	}
-	twice(workflowDefaults, renameDefaults(w.Defaults, names))
+	twice(WorkflowDefaults, renameDefaults(w.Defaults, names))
 	for i := range w.Jobs {
 		twice(i, w.Jobs[i].useNames(names))
 	}
@@ -154,10 +154,10 @@ func (j *Job) UseActions(names map[string]string) error {
 // without those in wrong, for a job it embeds to be read by. A local action
 // is given as an absolute path: the workflow's ./action is relative to the
 // workflow file, where the job's own would be relative to the job file.
-func (w *Workflow) namedActions(wrong []aliasProblem) map[string]string {
+func (w *Workflow) namedActions(wrong []AliasProblem) map[string]string {
 	names := maps.Clone(w.Actions)
 	for _, p := range wrong {
-		delete(names, p.name)
+		delete(names, p.Name)
 	}
 	for name, action := range names {
 		ref, err := actionref.Parse(action)

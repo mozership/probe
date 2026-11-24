@@ -48,6 +48,11 @@ type Workflow struct {
 	runID string
 }
 
+// BaseDir returns the directory local actions are relative to.
+func (w *Workflow) BaseDir() string {
+	return w.basePath
+}
+
 // RunID returns the ID of the last run Start began, which every action of
 // the run is told about, or an empty string before Start.
 func (w *Workflow) RunID() string {
@@ -137,17 +142,17 @@ func jobNamer(jobs []Job, vars map[string]any) func(id string) string {
 func newScheduler(jobs []Job) (*schedule.Scheduler, error) {
 	scheduler := schedule.New()
 	for i := range jobs {
-		if err := addToSchedule(scheduler, &jobs[i]); err != nil {
+		if err := AddToSchedule(scheduler, &jobs[i]); err != nil {
 			return nil, err
 		}
 	}
 	return scheduler, nil
 }
 
-// addToSchedule adds job to s by what s waits on: its ID, its needs and
+// AddToSchedule adds job to s by what s waits on: its ID, its needs and
 // whether it always runs. The jobs of a workflow are given their IDs before
 // they are added, by assignJobIDs.
-func addToSchedule(s *schedule.Scheduler, job *Job) error {
+func AddToSchedule(s *schedule.Scheduler, job *Job) error {
 	if job.ID == "" {
 		return fmt.Errorf("job %q has no ID", job.Name)
 	}

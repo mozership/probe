@@ -60,7 +60,7 @@ func TestNeededJobs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := slices.Sorted(maps.Keys(neededJobs(jobs, byID, tt.from...)))
+			got := slices.Sorted(maps.Keys(NeededJobs(jobs, byID, tt.from...)))
 			if !slices.Equal(got, tt.want) {
 				t.Errorf("neededJobs(%v) = %v, want %v", tt.from, got, tt.want)
 			}

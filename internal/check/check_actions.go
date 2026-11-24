@@ -1,4 +1,4 @@
-package engine
+package check
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/suggest"
 )
@@ -39,7 +40,7 @@ func (c *checker) checkActions() {
 			path := fmt.Sprintf("jobs[%d].steps[%d].uses", i, j)
 			if actionref.IsExternal(st.Uses) {
 				if _, err := actionref.Parse(st.Uses); err != nil {
-					c.add(SeverityError, c.line(path), c.stepWhere(i, j), "uses: %s", firstLine(err.Error()))
+					c.add(SeverityError, c.line(path), c.stepWhere(i, j), "uses: %s", engine.FirstLine(err.Error()))
 					continue
 				}
 				c.readParams(st.Uses, c.line(path), c.stepWhere(i, j))
@@ -75,7 +76,7 @@ func (c *checker) checkEmbedded() {
 				continue
 			}
 			line := c.line(fmt.Sprintf("jobs[%d].steps[%d].with.path", i, j))
-			eachEmbeddedStep(st, map[string]bool{}, func(file string, k int, es *Step) {
+			engine.EachEmbeddedStep(st, map[string]bool{}, func(file string, k int, es *engine.Step) {
 				uses := es.Uses
 				// A name still here is one that is wrong, which is told
 				// where the workflow gives it.
@@ -84,7 +85,7 @@ func (c *checker) checkEmbedded() {
 				}
 				if actionref.IsExternal(uses) {
 					if _, err := actionref.Parse(uses); err != nil {
-						c.add(SeverityError, line, c.stepWhere(i, j), "%s: step %d: uses: %s", file, k, firstLine(err.Error()))
+						c.add(SeverityError, line, c.stepWhere(i, j), "%s: step %d: uses: %s", file, k, engine.FirstLine(err.Error()))
 					}
 					return
 				}
@@ -112,9 +113,9 @@ func (c *checker) readParams(uses string, line int, where string) {
 		return
 	}
 	c.readManifests[uses] = true
-	m, err := c.opts.Manifest(uses, c.wf.basePath)
+	m, err := c.opts.Manifest(uses, c.wf.BaseDir())
 	if err != nil {
-		c.add(SeverityWarning, line, where, "uses: the keys of with are not checked, as action.yml could not be read: %s", firstLine(err.Error()))
+		c.add(SeverityWarning, line, where, "uses: the keys of with are not checked, as action.yml could not be read: %s", engine.FirstLine(err.Error()))
 		return
 	}
 	if m.Params != nil {
@@ -319,7 +320,7 @@ func requiredNames(groups [][]string) string {
 			}
 		}
 	}
-	out := listNames(names)
+	out := engine.ListNames(names)
 	switch {
 	case len(others) == 0:
 	case len(names) == 1:

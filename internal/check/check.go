@@ -1,4 +1,6 @@
-package engine
+// Package check finds what keeps a workflow from running, or from checking
+// what it seems to, without running it: probe check.
+package check
 
 import (
 	"fmt"
@@ -8,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/workflowfile"
 	"github.com/mozership/probe/internal/yamlnode"
 )
@@ -132,15 +135,14 @@ type Choices struct {
 func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// What a run warns of as it loads is told as a finding here, as load
 	// writes no warning.
-	p := New(path, false)
-	files, err := workflowfile.Paths(p.FilePath)
+	files, err := workflowfile.Paths(path)
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no YAML file", path)
 	}
-	data, contents, err := workflowfile.Read(files, readFile)
+	data, contents, err := workflowfile.Read(files, engine.ReadFile)
 	if err != nil {
 		return nil, err
 	}
@@ -158,19 +160,19 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 
 	// A key may be written more than once, as a run reads the workflow,
 	// so that the files given can override one another.
-	src, err := newSource(files, contents, data)
+	src, err := engine.NewSource(files, contents, data)
 	if err != nil {
-		c.add(SeverityError, 0, "", "YAML: %s", firstLine(err.Error()))
+		c.add(SeverityError, 0, "", "YAML: %s", engine.FirstLine(err.Error()))
 		return c.sorted(), nil
 	}
 	// The files the steps include are read past those given, and what kept
 	// an entry from including its file is told on its line. The entry is
 	// left out, so that the rest is checked.
-	c.files = src.files
-	for _, pr := range src.problems {
-		c.add(SeverityError, pr.line, "", "%s", pr.msg)
+	c.files = src.Files
+	for _, pr := range src.Problems {
+		c.add(SeverityError, pr.Line, "", "%s", pr.Msg)
 	}
-	for _, doc := range src.file.Docs {
+	for _, doc := range src.File.Docs {
 		c.walkWorkflow(doc.Body)
 	}
 
@@ -178,13 +180,12 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// of each, with whatever else is wrong, rather than ending the check.
 	// The workflow is loaded from the source walked above, so that the
 	// lines mapped to the files are those of the source loaded.
-	p.Config.Actions = opts.Actions
-	aliases, problems, err := p.load(src)
+	wf, aliases, problems, err := engine.LoadSource(path, opts.Actions, src)
 	if err != nil {
-		c.add(SeverityError, 0, "", "%s", firstLine(err.Error()))
+		c.add(SeverityError, 0, "", "%s", engine.FirstLine(err.Error()))
 		return c.sorted(), nil
 	}
-	c.wf = &p.workflow
+	c.wf = wf
 	c.reportAliasProblems(aliases)
 	c.checkActions()
 	c.checkEmbedded()
@@ -210,7 +211,7 @@ type checker struct {
 	// action added as its action.yml is read.
 	params    map[string][]string
 	resFields map[string][]string
-	wf        *Workflow
+	wf        *engine.Workflow
 	findings  []Finding
 	// lines are the lines of the keys of the workflow, by their path, such
 	// as jobs[0].steps[1].test, and of each job and step, by jobs[0] and
@@ -305,15 +306,13 @@ func (c *checker) line(path string) int {
 	}
 }
 
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
-	return line
+// jobWhere names the job at index i of the workflow checked.
+func (c *checker) jobWhere(i int) string {
+	return engine.JobWhere(c.wf.Jobs, i)
 }
 
-// listNames lists names as a, b and c.
-func listNames(names []string) string {
-	if len(names) < 2 {
-		return strings.Join(names, "")
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+// stepWhere names the step at index j of the job at index i of the
+// workflow checked.
+func (c *checker) stepWhere(i, j int) string {
+	return engine.StepWhere(c.jobWhere(i), j, c.wf.Jobs[i].Steps[j])
 }

@@ -1,9 +1,10 @@
-package engine
+package check
 
 import (
 	"maps"
 	"testing"
 
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/kind"
 )
 
@@ -155,7 +156,7 @@ jobs:
 // check of.
 func TestReadResTypes(t *testing.T) {
 	declared := map[string]string{"body": kind.String, "code": kind.Number, "stdout": kind.String}
-	got := readResTypes(declared)
+	got := engine.ReadResTypes(declared)
 	want := map[string]string{"rawbody": kind.String, "code": kind.Number, "stdout": kind.String}
 	if !maps.Equal(got, want) {
 		t.Errorf("readResTypes(%v) = %v, want %v", declared, got, want)
@@ -167,7 +168,7 @@ func TestReadResTypes(t *testing.T) {
 		{"body": `{"id": 1}`, "code": int64(200), "stdout": `{"ok": true}`},
 		{"body": "text", "code": int64(200), "stdout": "text"},
 	} {
-		r := readActionResult(map[string]any{"res": res, "status": 0})
+		r := engine.ReadActionResult(map[string]any{"res": res, "status": 0})
 		for field, k := range got {
 			if v, ok := r.Res[field]; ok {
 				if vk, _ := kind.Of(v); vk != k {

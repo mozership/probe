@@ -96,7 +96,7 @@ func TestEvalRepeatTest(t *testing.T) {
 	defer func(was bool) { color.NoColor = was }(color.NoColor)
 	color.NoColor = true
 
-	env := repeatTestEnv{Steps: map[string]any{"search": map[string]any{"success": 3}}}
+	env := RepeatTestEnv{Steps: map[string]any{"search": map[string]any{"success": 3}}}
 	tests := []struct {
 		name        string
 		test        string
@@ -457,10 +457,10 @@ func TestRepeatFieldsAreThoseTheTestsRead(t *testing.T) {
 	}
 
 	run := repeatRuns([]outcome.RepeatCounter{{ID: "s", SuccessCount: 1, RTs: []float64{0.1}}})["s"]
-	if got, want := keys(run), sorted(repeatRunFields); !slices.Equal(got, want) {
+	if got, want := keys(run), sorted(RepeatRunFields); !slices.Equal(got, want) {
 		t.Errorf("fields of a step under steps = %v, want repeatRunFields %v", got, want)
 	}
-	if got, want := keys(run.(map[string]any)[runFieldRT]), sorted(repeatRTFields); !slices.Equal(got, want) {
+	if got, want := keys(run.(map[string]any)[RunFieldRT]), sorted(RepeatRTFields); !slices.Equal(got, want) {
 		t.Errorf("fields of rt under steps = %v, want repeatRTFields %v", got, want)
 	}
 
@@ -468,10 +468,10 @@ func TestRepeatFieldsAreThoseTheTestsRead(t *testing.T) {
 		{ID: "s", Repeat: &report.Repeat{Total: 1, Success: 1, Latency: &report.Latency{Count: 1}}},
 	}}}}
 	baseline := baselineRuns(base, "j")["s"]
-	if got, want := keys(baseline), sorted(baselineRunFields); !slices.Equal(got, want) {
+	if got, want := keys(baseline), sorted(BaselineRunFields); !slices.Equal(got, want) {
 		t.Errorf("fields of a step under baseline.steps = %v, want baselineRunFields %v", got, want)
 	}
-	if got, want := keys(baseline.(map[string]any)[runFieldRT]), sorted(repeatRTFields); !slices.Equal(got, want) {
+	if got, want := keys(baseline.(map[string]any)[RunFieldRT]), sorted(RepeatRTFields); !slices.Equal(got, want) {
 		t.Errorf("fields of rt under baseline.steps = %v, want repeatRTFields %v", got, want)
 	}
 }
