@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/textfile"
+	"github.com/mozership/probe/sdk"
 )
 
 const (
@@ -45,7 +45,7 @@ type Req struct {
 
 // Run does what with asks for at a path, under no guard. See RunGuarded.
 func Run(with map[string]any) (map[string]any, error) {
-	return RunGuarded(with, actionrpc.Guard{})
+	return RunGuarded(with, sdk.Guard{})
 }
 
 // RunGuarded does what op of with asks for at the path with gives, and
@@ -57,7 +57,7 @@ func Run(with map[string]any) (map[string]any, error) {
 // res.exists false and status 1, so that a step can wait with retry for a
 // file to come or to go. What is there is read only when it is a regular
 // file; a path that cannot be looked at or read is an error.
-func RunGuarded(with map[string]any, guard actionrpc.Guard) (map[string]any, error) {
+func RunGuarded(with map[string]any, guard sdk.Guard) (map[string]any, error) {
 	start := time.Now()
 
 	req, err := parse(with)
@@ -65,7 +65,7 @@ func RunGuarded(with map[string]any, guard actionrpc.Guard) (map[string]any, err
 		return map[string]any{}, err
 	}
 	if req.Op != opRead && guard.ReadOnly {
-		return map[string]any{}, actionrpc.Refuse("op %s changes what is at %s, and the run is read-only; only read is done", req.Op, req.Path)
+		return map[string]any{}, sdk.Refuse("op %s changes what is at %s, and the run is read-only; only read is done", req.Op, req.Path)
 	}
 
 	if err := change(req); err != nil {

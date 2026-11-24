@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/bufbuild/protocompile"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -569,8 +569,8 @@ func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
 	addr, path := startClockServer(t)
 	with := map[string]any{"addr": addr, "service": "clock.v1.Clock", "method": "Now", "body": `{"zone": "Asia/Tokyo"}`}
 
-	contract := &actionrpc.Contract{}
-	if _, err := RequestStep(actionrpc.Call{With: with, Contract: contract}); err != nil {
+	contract := &sdk.Contract{}
+	if _, err := RequestStep(sdk.Call{With: with, Contract: contract}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := contract.Check(); got != nil {
@@ -579,15 +579,15 @@ func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
 
 	checked := maps.Clone(with)
 	checked["proto"] = map[string]any{"files": []any{path}, "import_paths": []any{filepath.Dir(path)}}
-	contract = &actionrpc.Contract{}
-	ret, err := RequestStep(actionrpc.Call{With: checked, Contract: contract})
+	contract = &sdk.Contract{}
+	ret, err := RequestStep(sdk.Call{With: checked, Contract: contract})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	res := ret["res"].(map[string]any)
 	vs, _ := res["violations"].([]any)
 	matched, _ := res["contract"].(map[string]any)
-	if got, want := contract.Check(), actionrpc.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
+	if got, want := contract.Check(), sdk.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
 		t.Errorf("Check() = %+v, want %+v as res shows it", got, want)
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 var (
@@ -21,9 +21,9 @@ var (
 	pidfile string
 )
 
-type action struct{}
+type testAction struct{}
 
-func (action) Run(with map[string]any) (map[string]any, error) {
+func (testAction) Run(with map[string]any) (map[string]any, error) {
 	path, _ := with["pidfile"].(string)
 	if err := hang(path); err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (action) Run(with map[string]any) (map[string]any, error) {
 	return nil, nil
 }
 
-func (action) Cleanup(call actionrpc.CleanupCall) error {
+func (testAction) Cleanup(call sdk.CleanupCall) error {
 	return hang(call.RunID)
 }
 
@@ -61,5 +61,5 @@ func main() {
 		os.Exit(1)
 	}()
 
-	actionrpc.Serve(func(hclog.Logger) actionrpc.Action { return action{} })
+	sdk.Serve(func(hclog.Logger) sdk.Action { return testAction{} })
 }

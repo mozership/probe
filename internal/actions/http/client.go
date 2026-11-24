@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/body"
 	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 // DefaultTimeout bounds a request when the step does not set `timeout`. The
@@ -53,7 +53,7 @@ type Req struct {
 	contract *contract
 	// guard is what the run allows: Do refuses a request, or a redirect,
 	// it does not allow.
-	guard actionrpc.Guard
+	guard sdk.Guard
 }
 
 type Res struct {
@@ -309,10 +309,10 @@ var readMethods = []string{hp.MethodGet, hp.MethodHead, hp.MethodOptions}
 // some hosts, as the grpc action refuses a unix: target.
 func (r *Req) checkGuard(req *hp.Request) error {
 	if r.guard.ReadOnly && !slices.Contains(readMethods, req.Method) {
-		return actionrpc.Refuse("%s %s may write, and the run is read-only; only GET, HEAD and OPTIONS are sent", req.Method, req.URL.Redacted())
+		return sdk.Refuse("%s %s may write, and the run is read-only; only GET, HEAD and OPTIONS are sent", req.Method, req.URL.Redacted())
 	}
 	if r.UnixSocket != "" && len(r.guard.AllowHosts) > 0 {
-		return actionrpc.Refuse("the request is sent over the Unix socket %s, which names no host the run can allow (%s)", r.UnixSocket, strings.Join(r.guard.AllowHosts, ", "))
+		return sdk.Refuse("the request is sent over the Unix socket %s, which names no host the run can allow (%s)", r.UnixSocket, strings.Join(r.guard.AllowHosts, ", "))
 	}
 	return r.guard.CheckHost(hostport.OfURL(req.URL))
 }
@@ -470,7 +470,7 @@ func MarshalBodyIfJSON(data, m map[string]any) {
 }
 
 func Request(data map[string]any, opts ...Option) (map[string]any, error) {
-	ret, _, err := RequestStep(actionrpc.Call{With: data}, opts...)
+	ret, _, err := RequestStep(sdk.Call{With: data}, opts...)
 	return ret, err
 }
 
@@ -479,7 +479,7 @@ func Request(data map[string]any, opts ...Option) (map[string]any, error) {
 // the state returned keeps those the server set as well; otherwise the state
 // returned is nil, which leaves the job's state as it was. When trace_header
 // is given, the request carries a header that names the run, job and step.
-func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, map[string]any, error) {
+func RequestStep(call sdk.Call, opts ...Option) (map[string]any, map[string]any, error) {
 	ret, newState, err := request(call, opts...)
 	if err != nil {
 		return map[string]any{}, nil, err
@@ -487,7 +487,7 @@ func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, map[strin
 	return ret, newState, nil
 }
 
-func request(call actionrpc.Call, opts ...Option) (map[string]any, map[string]any, error) {
+func request(call sdk.Call, opts ...Option) (map[string]any, map[string]any, error) {
 	state := call.State
 	// Create a copy to avoid modifying the original data
 	m := make(map[string]any)

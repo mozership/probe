@@ -10,7 +10,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/style"
+	"github.com/mozership/probe/internal/style"
 )
 
 // newTestStreamPrinter builds a printer writing into buffers, together with a

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 // readOnlyGetUser is the server's .proto file with GetUser declared free of
@@ -18,10 +18,10 @@ func readOnlyGetUser(t *testing.T) string {
 		"rpc GetUser(GetUserRequest) returns (GetUserResponse) { option idempotency_level = NO_SIDE_EFFECTS; }", 1)
 }
 
-func guardedRequest(guard actionrpc.Guard, with map[string]any) (map[string]any, error) {
+func guardedRequest(guard sdk.Guard, with map[string]any) (map[string]any, error) {
 	data := map[string]any{"service": "UserService", "method": "GetUser", "body": `{"user_id": "123"}`}
 	maps.Copy(data, with)
-	return RequestStep(actionrpc.Call{With: data, Guard: guard})
+	return RequestStep(sdk.Call{With: data, Guard: guard})
 }
 
 func TestGRPCHosts(t *testing.T) {
@@ -70,7 +70,7 @@ func TestRequestUnderAllowHost(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ret, err := guardedRequest(actionrpc.Guard{AllowHosts: tt.allow}, tt.with)
+			ret, err := guardedRequest(sdk.Guard{AllowHosts: tt.allow}, tt.with)
 			if tt.wantRefused == "" {
 				if err != nil {
 					t.Fatalf("Request() error: %v", err)
@@ -80,7 +80,7 @@ func TestRequestUnderAllowHost(t *testing.T) {
 				}
 				return
 			}
-			if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.wantRefused) {
+			if !sdk.IsRefused(err) || !strings.Contains(err.Error(), tt.wantRefused) {
 				t.Errorf("Request() error = %v, want a refusal saying %q", err, tt.wantRefused)
 			}
 		})
@@ -141,7 +141,7 @@ func TestRequestUnderReadOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			before := s.calls.Load()
-			ret, err := guardedRequest(actionrpc.Guard{ReadOnly: true}, tt.with)
+			ret, err := guardedRequest(sdk.Guard{ReadOnly: true}, tt.with)
 			if tt.wantRefused == "" {
 				if err != nil {
 					t.Fatalf("Request() error: %v", err)
@@ -151,7 +151,7 @@ func TestRequestUnderReadOnly(t *testing.T) {
 				}
 				return
 			}
-			if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.wantRefused) {
+			if !sdk.IsRefused(err) || !strings.Contains(err.Error(), tt.wantRefused) {
 				t.Errorf("Request() error = %v, want a refusal saying %q", err, tt.wantRefused)
 			}
 			if s.calls.Load() != before {

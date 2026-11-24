@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actiontest"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
@@ -29,7 +29,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 			with := map[string]any{"service": "UserService"}
 			maps.Copy(with, protocol)
 			maps.Copy(with, call)
-			ret, _, err := a.RunStep(actionrpc.Call{With: with, Contract: &actionrpc.Contract{}})
+			ret, _, err := a.RunStep(sdk.Call{With: with, Contract: &sdk.Contract{}})
 			if err != nil {
 				t.Fatalf("%v: %v", with, err)
 			}
@@ -42,7 +42,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		{"addr": grpcAddr, "list": true},
 		{"addr": grpcAddr, "list": true, "service": "UserService"},
 	} {
-		ret, _, err := a.RunStep(actionrpc.Call{With: with, Contract: &actionrpc.Contract{}})
+		ret, _, err := a.RunStep(sdk.Call{With: with, Contract: &sdk.Contract{}})
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}

@@ -3,10 +3,11 @@ package engine
 import (
 	"sync"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
+	"github.com/mozership/probe/sdk"
 )
 
 // newBackground returns the tracker of the processes a run's steps leave in
@@ -14,7 +15,7 @@ import (
 // action can take to return, so that a process the action reports late is
 // stopped with the others.
 func newBackground() *procgroup.Tracker {
-	return procgroup.NewTracker(actionrpc.ExitWait)
+	return procgroup.NewTracker(sdk.ExitWait)
 }
 
 // ResponseTime provides response time information for expressions
@@ -94,7 +95,7 @@ type JobContext struct {
 	// RepeatCurrent is the index of the run, from 0, warmup runs included.
 	RepeatCurrent int
 	// The state each action keeps in this run of the job
-	states *actionStates
+	states *actionstate.Store
 	// The name of the job, with its templates evaluated
 	jobName string
 }

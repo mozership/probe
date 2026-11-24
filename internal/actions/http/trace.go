@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 // DefaultTraceHeader is the header trace_header: true sends.
@@ -60,7 +60,7 @@ func validHeaderName(s string) bool {
 // the run of a repeated job and the attempt of a retried step. Each value is
 // escaped as in a query, so that one holding a space, a semicolon or a letter
 // outside ASCII cannot break the header.
-func traceValue(s actionrpc.Step) string {
+func traceValue(s sdk.Step) string {
 	// Probe tells a step without an id as step_ and where it is written; a
 	// probe from before it did sends none for one in a job run by the
 	// embedded action, which is named the same way here.

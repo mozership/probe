@@ -12,7 +12,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mozership/probe/internal/dump"
 	"github.com/mozership/probe/internal/mask"
-	"github.com/mozership/probe/style"
+	"github.com/mozership/probe/internal/style"
 )
 
 // Printer implements PrintWriter for console print

@@ -12,14 +12,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 	"github.com/mozership/probe"
-	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"
 	"github.com/mozership/probe/internal/protocoverage"
 	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/suggest"
+	"github.com/mozership/probe/sdk"
 )
 
 var (
@@ -49,12 +49,12 @@ func exportTTY(out *os.File) {
 }
 
 // exportExecutable sets PROBE_EXECUTABLE to the executable of this process,
-// for an action that calls an action of Probe with probe.ActionCaller to
+// for an action that calls an action of Probe with sdk.Caller to
 // start it from: the action's own executable is not probe. It is left as it
 // is when the executable cannot be told.
 func exportExecutable() {
 	if exe, err := os.Executable(); err == nil {
-		_ = os.Setenv(probe.ExecutableEnv, exe)
+		_ = os.Setenv(sdk.ExecutableEnv, exe)
 	}
 }
 
@@ -443,7 +443,7 @@ func (c *Cmd) usageError(usage, format string, a ...any) {
 }
 
 func (c *Cmd) start(args []string) int {
-	if len(args) >= 3 && args[1] == actionrpc.BuiltinCmd {
+	if len(args) >= 3 && args[1] == sdk.BuiltinCmd {
 		c.runBuiltinActions(args[2])
 		return 0
 	}
@@ -722,12 +722,12 @@ func parseBool(s string) (bool, error) {
 // guard returns the guard of the run from the flags, each of which wins over
 // its environment variable when it is given, even empty or false:
 // PROBE_READ_ONLY, PROBE_ALLOW_HOSTS and PROBE_ALLOW_ACTIONS.
-func (c *Cmd) guard() (actionrpc.Guard, error) {
+func (c *Cmd) guard() (sdk.Guard, error) {
 	readOnly := c.ReadOnly
 	if !c.guardFlags["read-only"] {
 		v, err := parseBool(os.Getenv("PROBE_READ_ONLY"))
 		if err != nil {
-			return actionrpc.Guard{}, fmt.Errorf("PROBE_READ_ONLY %w", err)
+			return sdk.Guard{}, fmt.Errorf("PROBE_READ_ONLY %w", err)
 		}
 		readOnly = v
 	}
@@ -739,7 +739,7 @@ func (c *Cmd) guard() (actionrpc.Guard, error) {
 	if !c.guardFlags["allow-action"] {
 		allowed = os.Getenv("PROBE_ALLOW_ACTIONS")
 	}
-	return actionrpc.Guard{
+	return sdk.Guard{
 		ReadOnly:     readOnly,
 		AllowHosts:   splitList(hosts),
 		AllowActions: splitList(allowed),

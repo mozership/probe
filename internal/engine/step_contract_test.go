@@ -7,20 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/report"
+	"github.com/mozership/probe/sdk"
 )
 
 // contractOf is the check of an action that checked the step against a
 // contract and found the violations given.
-func contractOf(vs ...map[string]any) *actionrpc.ContractCheck {
+func contractOf(vs ...map[string]any) *sdk.ContractCheck {
 	list := []any{}
 	for _, v := range vs {
 		list = append(list, v)
 	}
-	check := actionrpc.ContractCheckOf(list, nil)
+	check := sdk.ContractCheckOf(list, nil)
 	return &check
 }
 
@@ -32,7 +32,7 @@ func TestStep_executeSingleAction_TakesTheContractTheActionReports(t *testing.T)
 	runner := &callCountingRunner{
 		callCount: &callCount,
 		result:    map[string]any{"res": map[string]any{"code": 200}},
-		contractFunc: func(int) *actionrpc.ContractCheck {
+		contractFunc: func(int) *sdk.ContractCheck {
 			return broken
 		},
 	}
@@ -61,7 +61,7 @@ func TestStep_check_Contract(t *testing.T) {
 	tests := []struct {
 		name        string
 		test        string
-		contract    *actionrpc.ContractCheck
+		contract    *sdk.ContractCheck
 		wantChecked bool
 		wantOK      bool
 		wantKind    string
@@ -147,7 +147,7 @@ func TestStep_createStepResult_Contract(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		contract   *actionrpc.ContractCheck
+		contract   *sdk.ContractCheck
 		wantStatus outcome.Status
 	}{
 		{name: "a response that keeps to its contract passes without a test", contract: contractOf(), wantStatus: outcome.StatusSuccess},
@@ -193,7 +193,7 @@ func TestStep_executeActionWithRetry_ContractBroken(t *testing.T) {
 		resultFunc: func(count int) map[string]any {
 			return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
 		},
-		contractFunc: func(count int) *actionrpc.ContractCheck {
+		contractFunc: func(count int) *sdk.ContractCheck {
 			if count <= 2 {
 				return contractOf(map[string]any{"in": "response", "message": "body failed"})
 			}
@@ -309,19 +309,19 @@ func TestStep_contractFailure_Kind(t *testing.T) {
 func TestStep_contractMatched(t *testing.T) {
 	tests := []struct {
 		name     string
-		contract *actionrpc.ContractCheck
+		contract *sdk.ContractCheck
 		want     *report.Contract
 	}{
 		{name: "no contract"},
 		{name: "a contract with nothing that matches", contract: contractOf()},
 		{
 			name:     "an operation and a response",
-			contract: &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}},
+			contract: &sdk.ContractCheck{Matched: &sdk.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}},
 			want:     &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"},
 		},
 		{
 			name:     "an operation that declares no response for the status",
-			contract: &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}"}},
+			contract: &sdk.ContractCheck{Matched: &sdk.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}"}},
 			want:     &report.Contract{Spec: "openapi.yml", Operation: "GET /users/{id}"},
 		},
 	}
@@ -336,7 +336,7 @@ func TestStep_contractMatched(t *testing.T) {
 }
 
 func TestStep_createStepResult_ContractMatched(t *testing.T) {
-	contract := &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}}
+	contract := &sdk.ContractCheck{Matched: &sdk.ContractMatch{Spec: "openapi.yml", Operation: "GET /users/{id}", Response: "200"}}
 	st := &stepRun{Step: &Step{}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 200}}, contract: contract}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
@@ -368,7 +368,7 @@ func TestStep_handleRepeatExecution_ContractMatched(t *testing.T) {
 	jCtx.Outcome.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
 
 	for _, response := range []string{"200", "2XX"} {
-		step.contract = &actionrpc.ContractCheck{Matched: &actionrpc.ContractMatch{Spec: "openapi.yml", Operation: "GET /items", Response: response}}
+		step.contract = &sdk.ContractCheck{Matched: &sdk.ContractMatch{Spec: "openapi.yml", Operation: "GET /items", Response: response}}
 		step.handleRepeatExecution(jCtx, "Items", false)
 	}
 
@@ -407,7 +407,7 @@ func TestStep_executeActionWithRetry_ContractOnly(t *testing.T) {
 				resultFunc: func(count int) map[string]any {
 					return map[string]any{"status": 0, "res": map[string]any{"code": 200}}
 				},
-				contractFunc: func(count int) *actionrpc.ContractCheck {
+				contractFunc: func(count int) *sdk.ContractCheck {
 					if count <= tt.brokenUntil {
 						return contractOf(broken)
 					}

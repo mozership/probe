@@ -10,7 +10,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/mozership/probe"
+	"github.com/mozership/probe/internal/check"
 
 	"github.com/mozership/probe/internal/actions/db"
 	"github.com/mozership/probe/internal/actions/dns"
@@ -168,11 +168,11 @@ func AllRequired() map[string][][]string {
 // AllChoices returns the values that the keys of with which take only some
 // take, by the name of each built-in action and then the key's, such as the
 // op of the file action. An action whose keys take any value is left out.
-func AllChoices() map[string]map[string]probe.Choices {
-	return collect(func(s actionspec.Spec) (map[string]probe.Choices, bool) {
-		out := make(map[string]probe.Choices, len(s.Choices))
+func AllChoices() map[string]map[string]check.Choices {
+	return collect(func(s actionspec.Spec) (map[string]check.Choices, bool) {
+		out := make(map[string]check.Choices, len(s.Choices))
 		for key, c := range s.Choices {
-			out[key] = probe.Choices{Values: slices.Clone(c.Values), IgnoreCase: c.IgnoreCase}
+			out[key] = check.Choices{Values: slices.Clone(c.Values), IgnoreCase: c.IgnoreCase}
 		}
 		return out, len(out) > 0
 	})

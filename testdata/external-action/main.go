@@ -8,12 +8,12 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
-type action struct{ log hclog.Logger }
+type testAction struct{ log hclog.Logger }
 
-func (a action) Run(with map[string]any) (map[string]any, error) {
+func (a testAction) Run(with map[string]any) (map[string]any, error) {
 	a.log.Debug("greeting", "name", with["name"], "with", with)
 	a.log.Trace("greeted")
 	res := map[string]any{"greeting": fmt.Sprintf("hello %v", with["name"])}
@@ -28,5 +28,5 @@ func (a action) Run(with map[string]any) (map[string]any, error) {
 }
 
 func main() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action { return action{log: log} })
+	sdk.Serve(func(log hclog.Logger) sdk.Action { return testAction{log: log} })
 }

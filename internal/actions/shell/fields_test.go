@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actiontest"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestFieldsDeclareWhatItReturns(t *testing.T) {
@@ -19,7 +19,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		{"cmd": "sleep 60", "background": true},
 		{"cmd": "echo ready; sleep 60", "background": true, "ready": map[string]any{"log": "ready"}},
 	} {
-		ret, _, err := a.RunStep(actionrpc.Call{With: with, Processes: &actionrpc.Processes{}})
+		ret, _, err := a.RunStep(sdk.Call{With: with, Processes: &sdk.Processes{}})
 		if err != nil {
 			t.Fatalf("%v: %v", with, err)
 		}

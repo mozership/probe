@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/report"
+	"github.com/mozership/probe/sdk"
 )
 
 // Status is how a step or a job ended.
@@ -153,7 +153,7 @@ type Failure struct {
 	Violations []report.Violation
 	// Refused is what the guard of the run refused, when Kind is
 	// FailureRefused, so that why is read from it rather than the message.
-	Refused *actionrpc.Refused
+	Refused *sdk.Refused
 	// Clause is the condition of the test that is false, when Kind is
 	// FailureAssertion and it could be told, as it is: the report hides the
 	// secrets in it as it shows it, as it does in Request and Response; Got

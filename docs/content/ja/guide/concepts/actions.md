@@ -908,7 +908,7 @@ Probeには強力な組み込みアクションが付属していますが、特
 
 ### カスタムアクション インターフェース
 
-カスタムアクションは`actionrpc.Action`インターフェースを実装します：
+カスタムアクションは`sdk.Action`インターフェースを実装します：
 
 ```go
 type Action interface {
@@ -920,7 +920,7 @@ type Action interface {
 
 #### ステップの情報を受け取り、状態を保持する
 
-httpアクションがトレースヘッダーやCookieのためにそうするように、実行するステップの情報を使うアクションや、ステップをまたいで何かを保持するアクションは、`actionrpc.StepAction`も実装します：
+httpアクションがトレースヘッダーやCookieのためにそうするように、実行するステップの情報を使うアクションや、ステップをまたいで何かを保持するアクションは、`sdk.StepAction`も実装します：
 
 ```go
 type StepAction interface {
@@ -953,7 +953,7 @@ type Step struct {
 
 Probeは、こうしたアクションに実行するステップの情報を常に渡します。それをどう使うかはアクション次第です。`RunID`は、1回の実行のすべてのステップで同じで、embeddedアクションで実行するジョブでも同じです。
 
-`Guard`は、`--read-only`、`--allow-host`、`--allow-action`で指定する実行のガードです。アクションは、許可されない操作に対して`actionrpc.Refuse(...)`を返すことでガードに従います。そのステップは種類`refused`で失敗します。何が許可されているかは`Guard.ReadOnly`、`Guard.AllowsHost`、`Guard.CheckHost`で分かります。外部アクションは、従うガードの種類を`action.yml`の`guard`で宣言します。宣言していない種類のガードの下では、`--allow-action`で指定しない限り拒否されます。詳しくは[ガード](/ja/guide/concepts/guard)を参照してください。
+`Guard`は、`--read-only`、`--allow-host`、`--allow-action`で指定する実行のガードです。アクションは、許可されない操作に対して`sdk.Refuse(...)`を返すことでガードに従います。そのステップは種類`refused`で失敗します。何が許可されているかは`Guard.ReadOnly`、`Guard.AllowsHost`、`Guard.CheckHost`で分かります。外部アクションは、従うガードの種類を`action.yml`の`guard`で宣言します。宣言していない種類のガードの下では、`--allow-action`で指定しない限り拒否されます。詳しくは[ガード](/ja/guide/concepts/guard)を参照してください。
 
 `Actions`には、ワークフローの[`actions`](/ja/reference/yaml-configuration#actions)で外部アクションに付けた名前と、それが指すアクションの完全な形が入ります。ローカルのアクションは絶対パスです。ワークフロー自身の中の名前はProbeが置き換え済みなので、アクションがこれを使うのは、embeddedアクションがジョブファイルを実行するときのように、自分でステップを実行する場合だけです。
 
@@ -961,7 +961,7 @@ Probeは、こうしたアクションに実行するステップの情報を常
 
 #### 実行の後始末
 
-アクションは、ステップが終わるとすぐに止められるプロセスで動きます。そのため、ステップが後続のステップのために残したもの（起動したコンテナなど）は、アクションより長く残ります。何かを残すアクションは、`action.yml`に`cleanup: true`を書き、`actionrpc.Cleaner`も実装します：
+アクションは、ステップが終わるとすぐに止められるプロセスで動きます。そのため、ステップが後続のステップのために残したもの（起動したコンテナなど）は、アクションより長く残ります。何かを残すアクションは、`action.yml`に`cleanup: true`を書き、`sdk.Cleaner`も実装します：
 
 ```go
 type Cleaner interface {
@@ -987,9 +987,9 @@ embeddedアクションで実行するジョブのステップが残したもの
 
 `Call.Cleanups`は、後始末をするProbeの下ではnilではありません。そのProbeは、`action.yml`に`cleanup`を書いたアクションの`Cleanup`を呼びます。後始末の仕組みができる前のProbeの下ではnilです。残したものが消されないままになるアクションは、そのときエラーを返せます。embeddedアクションのように自分でステップを実行するアクションは、そのステップが実行した外部アクションを`Call.Cleanups.Add`で伝え、Probeに呼ばせます。
 
-shellアクションの`background: true`のように、バックグラウンドでプロセスを動かし続けるアクションは、アクションより長く残るように、そのプロセスを独立したセッションで起動します。そして、`Call.Processes.Add(actionrpc.Process{PID: pid, Log: logFile})`でProbeに伝えます。その後でステップが失敗する場合も伝えます。Probeは、ワークフローが終わったとき、またはCtrl+C、`SIGTERM`、`SIGHUP`で終わったときに、そのプロセスをリーダーとするプロセスグループを止め、ログファイルがあれば削除します。この仕組みができる前のProbeには伝わらないので、プロセスは動いたまま残ります。
+shellアクションの`background: true`のように、バックグラウンドでプロセスを動かし続けるアクションは、アクションより長く残るように、そのプロセスを独立したセッションで起動します。そして、`Call.Processes.Add(sdk.Process{PID: pid, Log: logFile})`でProbeに伝えます。その後でステップが失敗する場合も伝えます。Probeは、ワークフローが終わったとき、またはCtrl+C、`SIGTERM`、`SIGHUP`で終わったときに、そのプロセスをリーダーとするプロセスグループを止め、ログファイルがあれば削除します。この仕組みができる前のProbeには伝わらないので、プロセスは動いたまま残ります。
 
-httpアクションの`openapi`のように、ステップを契約に照らして検証するアクションは、`Call.Contract.Report(actionrpc.ContractCheck{Matched: matched, Violations: violations})`でその結果をProbeに伝えます。契約がリクエストとレスポンスをすべて許可していれば、`Violations`は空です。Probeはこの結果をステップのテストとして扱います。違反があれば、`test`が成り立っていても、ステップは`contract_request`または`contract_response`として失敗します。`test`のないステップは、契約だけで検証されます。`Matched`は契約がステップに対応づけたもので、`probe coverage`が数えます。対応するものがなければnilです。この仕組みができる前のProbeには伝わらないので、ステップは検証されていないものとして扱われます。`probe check`では外部アクションのどのキーが契約による検証を行うのかを判別できないので、そのようなステップに`test`がなければ、何も検証していないと警告します。
+httpアクションの`openapi`のように、ステップを契約に照らして検証するアクションは、`Call.Contract.Report(sdk.ContractCheck{Matched: matched, Violations: violations})`でその結果をProbeに伝えます。契約がリクエストとレスポンスをすべて許可していれば、`Violations`は空です。Probeはこの結果をステップのテストとして扱います。違反があれば、`test`が成り立っていても、ステップは`contract_request`または`contract_response`として失敗します。`test`のないステップは、契約だけで検証されます。`Matched`は契約がステップに対応づけたもので、`probe coverage`が数えます。対応するものがなければnilです。この仕組みができる前のProbeには伝わらないので、ステップは検証されていないものとして扱われます。`probe check`では外部アクションのどのキーが契約による検証を行うのかを判別できないので、そのようなステップに`test`がなければ、何も検証していないと警告します。
 
 `SIGKILL`のように即座に終了させられたProbeは、何も呼びません。アクションは、後の実行のステップが始まるときに以前の実行が残したものを消すことで、これを補えます。
 
@@ -1101,7 +1101,7 @@ runs:
 
 #### 外部アクションの作り方
 
-実行ファイルは`actionrpc.Serve`でアクションを提供します：
+実行ファイルは`sdk.Serve`でアクションを提供します：
 
 ```go
 package main
@@ -1111,7 +1111,7 @@ import (
     "time"
 
     "github.com/hashicorp/go-hclog"
-    "github.com/mozership/probe/actionrpc"
+    "github.com/mozership/probe/sdk"
 )
 
 // Greet は専用の実行ファイルで提供されるアクションです。
@@ -1121,7 +1121,7 @@ type Greet struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     start := time.Now()
-    actionrpc.LogParams(g.log, "greet received parameters", with)
+    sdk.LogParams(g.log, "greet received parameters", with)
 
     name, _ := with["name"].(string)
     return map[string]any{
@@ -1133,7 +1133,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 }
 
 func main() {
-    actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+    sdk.Serve(func(log hclog.Logger) sdk.Action {
         return &Greet{log: log}
     })
 }
@@ -1146,18 +1146,18 @@ Probeは、アクションが記録したログをレベルに応じて表示し
 - 警告：どの実行でも表示します。ステップの結果にかかわらず利用者に見せる必要があることは、このレベルで記録してください。
 - エラー：`-v`を付けたときだけ表示します。アクションが返すエラーが同じことをすでに伝えるためです。
 - デバッグと情報：`-v`を付けたときに、Probe自身が表示するステップのリクエストとレスポンスと並べて表示します。リトライのように、結果からはわからないアクションの動作をこれらのレベルで記録してください。
-- トレース：`-vv`を付けたときだけ、Probeがアクションのプロセスを起動し、呼び出し、停止する過程とあわせて表示します。受け取ったパラメーターのように、アクション自体のデバッグに役立つことをこのレベルで記録してください。`actionrpc.LogParams`と`actionrpc.LogOutcome`は、パラメーターと、結果またはエラーをこのレベルで記録します。
+- トレース：`-vv`を付けたときだけ、Probeがアクションのプロセスを起動し、呼び出し、停止する過程とあわせて表示します。受け取ったパラメーターのように、アクション自体のデバッグに役立つことをこのレベルで記録してください。`sdk.LogParams`と`sdk.LogOutcome`は、パラメーターと、結果またはエラーをこのレベルで記録します。
 
 各ログは`[LEVEL] <アクション>: <メッセージ>`の形で表示し、その下にフィールドをYAMLに似た行で並べます。マップやリストも展開して表示します。
 
-アクションが結果の`report`に返す文字列は、ステップの下に、各行をステップと同じだけ字下げして表示します。判定とその理由のように、実行を読む人がひと目で知るべきことを書いてください。Probeの`style`パッケージには、Probeが状態を示す印（アイコンとその色）があります。`style.Success`は緑の`✓`、`style.Failure`は赤の`✗`、`style.NoTest`は青の`△`、`style.Skipped`は青の`⏭`、`style.Warning`は黄の`⚠︎`、`style.Info`は青の`⏺`です。`style.NoteLevel`はノートのレベルに対応する印を返します。印に色が付くのは、Probeが端末に表示するとき（Probeはこれを`PROBE_TTY`を`1`にしてアクションに伝えます）と、`FORCE_COLOR`が`1`のときです。それ以外ではアイコンだけになります。
+アクションが結果の`report`に返す文字列は、ステップの下に、各行をステップと同じだけ字下げして表示します。判定とその理由のように、実行を読む人がひと目で知るべきことを書いてください。Probeの`sdk`パッケージには、Probeが状態を示す印（アイコンとその色）があります。`sdk.MarkSuccess`は緑の`✓`、`sdk.MarkFailure`は赤の`✗`、`sdk.MarkNoTest`は青の`△`、`sdk.MarkSkipped`は青の`⏭`、`sdk.MarkWarning`は黄の`⚠︎`、`sdk.MarkInfo`は青の`⏺`です。`sdk.NoteLevelMark`はノートのレベルに対応する印を返します。印に色が付くのは、Probeが端末に表示するとき（Probeはこれを`PROBE_TTY`を`1`にしてアクションに伝えます）と、`FORCE_COLOR`が`1`のときです。それ以外ではアイコンだけになります。
 
 ```go
-fmt.Fprintf(&b, "%s %s\n", style.Success, "the page shows the name")
-fmt.Fprintf(&b, "%s %s\n", style.Failure, style.Failure.Paint("the name is not shown"))
+fmt.Fprintf(&b, "%s %s\n", sdk.MarkSuccess, "the page shows the name")
+fmt.Fprintf(&b, "%s %s\n", sdk.MarkFailure, sdk.MarkFailure.Paint("the name is not shown"))
 ```
 
-アクションは現在のProbeの`actionrpc`でビルドしてください。Probeは、現在の`actionrpc`がエラーに付ける印で、アクションが返したエラーと接続の切断とを区別します。印のないエラーのgRPCコードが`Unavailable`だと、Probeはプロセスが終了したかどうかを確かめるために少し待ちます。
+アクションは現在のProbeの`sdk`パッケージでビルドしてください。Probeは、現在の`sdk`パッケージがエラーに付ける印で、アクションが返したエラーと接続の切断とを区別します。印のないエラーのgRPCコードが`Unavailable`だと、Probeはプロセスが終了したかどうかを確かめるために少し待ちます。
 
 対応するプラットフォームごとにビルドして実行ファイルを公開し、そのURLとダイジェストを書いた`action.yml`をコミットします。利用者はその`action.yml`を含むコミットを指定します。[mozership/probe-graphql](https://github.com/mozership/probe-graphql)では、GoReleaserと、リリースのたびにダイジェストをコミットするワークフローでこれを行っています。
 
@@ -1196,14 +1196,14 @@ runs:
 
 #### パラメーターを構造体に読み込む
 
-`actionrpc`は、ステップのパラメーターを、組み込みアクションと同じ読み方で、フィールドの`map`タグにしたがって構造体に読み込みます。
+`sdk`パッケージは、ステップのパラメーターを、組み込みアクションと同じ読み方で、フィールドの`map`タグにしたがって構造体に読み込みます。
 
 | 関数 | 動作 |
 |------|------|
-| `actionrpc.DecodeParams(with, &req)` | `with`から`req`を埋めます。`validate:"required"`を付けたフィールドは省略できません。数値のフィールドは、収まる数値か10進数の文字列を受け取り、小数や範囲外の値は拒否します。boolのフィールドは、bool、`0`か`1`、`"true"`のような文字列を受け取ります。`map[string]string`のフィールドは、文字列、数値、boolをその文字列として受け取り、`null`は空文字列とし、リストやマップは拒否します。エラーはフィールドを名指しします |
-| `actionrpc.EncodeResult(res)` | 構造体を、同じタグをキーとする、`Run`が返すマップにします |
-| `actionrpc.ParamNames(Req{})` | 構造体が受け取るパラメーターを、フィールドの順に並べます。`action.yml`の`params`などに使えます |
-| `actionrpc.ParseTimeout(v)` | タイムアウトを組み込みアクションと同じく読みます。`"30s"`、秒数、数値の文字列を受け取り、それ以外とゼロは拒否します |
+| `sdk.DecodeParams(with, &req)` | `with`から`req`を埋めます。`validate:"required"`を付けたフィールドは省略できません。数値のフィールドは、収まる数値か10進数の文字列を受け取り、小数や範囲外の値は拒否します。boolのフィールドは、bool、`0`か`1`、`"true"`のような文字列を受け取ります。`map[string]string`のフィールドは、文字列、数値、boolをその文字列として受け取り、`null`は空文字列とし、リストやマップは拒否します。エラーはフィールドを名指しします |
+| `sdk.EncodeResult(res)` | 構造体を、同じタグをキーとする、`Run`が返すマップにします |
+| `sdk.ParamNames(Req{})` | 構造体が受け取るパラメーターを、フィールドの順に並べます。`action.yml`の`params`などに使えます |
+| `sdk.ParseTimeout(v)` | タイムアウトを組み込みアクションと同じく読みます。`"30s"`、秒数、数値の文字列を受け取り、それ以外とゼロは拒否します |
 
 ```go
 type Req struct {
@@ -1217,10 +1217,10 @@ type Res struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     req := Req{Repeat: 1}
-    if err := actionrpc.DecodeParams(with, &req); err != nil {
+    if err := sdk.DecodeParams(with, &req); err != nil {
         return nil, err
     }
-    res, err := actionrpc.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
+    res, err := sdk.EncodeResult(Res{Message: strings.Repeat("Hello, "+req.Name+"! ", req.Repeat)})
     if err != nil {
         return nil, err
     }
@@ -1230,11 +1230,11 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 
 #### アクションからアクションを呼ぶ
 
-操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`probe.ActionCaller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
+操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`sdk.Caller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
 
 ```go
-func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
-    caller := probe.NewActionCaller(call, "")
+func (a *Agent) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
+    caller := sdk.NewCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
         return nil, nil, err // Refused のエラーはステップを拒否します
@@ -1244,8 +1244,8 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 }
 ```
 
-- **名前**：`uses`はステップの`uses`と同じく読みます。ワークフローが[`actions`](/ja/reference/yaml-configuration#actions)で付けた名前、外部アクション、Probeのアクションのいずれかです。`actions`が名前を付けていないローカルのアクションは、`NewActionCaller`に渡したディレクトリからの相対パスとして扱います。
-- **ガード**：外部アクションを初めて呼ぶときに、その`action.yml`が`guard`で宣言している種類を実行のガードに加えます。ガードを守らないアクションは、`--allow-action`で名前を指定されていない限り、`actionrpc.Refused`のエラーで拒否されます。拒否したアクションはダウンロードしません。
+- **名前**：`uses`はステップの`uses`と同じく読みます。ワークフローが[`actions`](/ja/reference/yaml-configuration#actions)で付けた名前、外部アクション、Probeのアクションのいずれかです。`actions`が名前を付けていないローカルのアクションは、`NewCaller`に渡したディレクトリからの相対パスとして扱います。
+- **ガード**：外部アクションを初めて呼ぶときに、その`action.yml`が`guard`で宣言している種類を実行のガードに加えます。ガードを守らないアクションは、`--allow-action`で名前を指定されていない限り、`sdk.Refused`のエラーで拒否されます。拒否したアクションはダウンロードしません。
 - **実行**：呼ばれたアクションには呼び出し元のステップを伝えるので、`Step.RunID`は実行のIDになります。
 - **状態**：各アクションが残した状態をcallerが保持し、そのアクションの次の呼び出しに渡します。ジョブが状態を受け渡すのと同じです。callerはステップごとにひとつ作り、そのステップの呼び出しはすべてそれを通してください。
 - **後始末**：`action.yml`で`cleanup`を指定しているアクションは、何度呼んでも、実行の終了時に一度だけ後始末されます。アクションがバックグラウンドで動かし続けているプロセスも、同じく実行の終了時に止まります。
@@ -1269,8 +1269,7 @@ import (
 
     "github.com/hashicorp/go-hclog"
     "github.com/mozership/probe"
-    "github.com/mozership/probe/actionrpc"
-    "github.com/mozership/probe/actions"
+    "github.com/mozership/probe/sdk"
 )
 
 // Greet は `uses: greet` で使うカスタムアクション
@@ -1280,7 +1279,7 @@ type Greet struct {
 
 func (g *Greet) Run(with map[string]any) (map[string]any, error) {
     start := time.Now()
-    actionrpc.LogParams(g.log, "greet received parameters", with)
+    sdk.LogParams(g.log, "greet received parameters", with)
 
     name, _ := with["name"].(string)
     return map[string]any{
@@ -1294,15 +1293,15 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 func main() {
     // Probe はアクションごとに、この実行ファイルを
     // `<実行ファイル> builtin-actions <名前>` として起動し直す
-    if len(os.Args) == 3 && os.Args[1] == actionrpc.BuiltinCmd {
+    if len(os.Args) == 3 && os.Args[1] == sdk.BuiltinCmd {
         name := os.Args[2]
         if name == "greet" {
-            actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+            sdk.Serve(func(log hclog.Logger) sdk.Action {
                 return &Greet{log: log}
             })
             return
         }
-        if serve, ok := actions.Lookup(name); ok {
+        if serve, ok := probe.BuiltinAction(name); ok {
             serve()
             return
         }

@@ -1,5 +1,5 @@
 // Command caller-action serves an action that calls another with
-// probe.ActionCaller, the way an action that drives a target through the
+// sdk.Caller, the way an action that drives a target through the
 // action of the target does. It calls with.uses with with.with, as many
 // times as with.times says, and returns the res of the last call as
 // res.called, and how many calls it made as res.calls.
@@ -9,18 +9,17 @@ import (
 	"context"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
-type action struct{}
+type testAction struct{}
 
-func (a action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+func (a testAction) Run(with map[string]any) (map[string]any, error) {
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
-func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a testAction) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	uses, _ := call.With["uses"].(string)
 	with, _ := call.With["with"].(map[string]any)
 	// A number of with comes as an int64 over RPC.
@@ -31,8 +30,8 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 	case int:
 		times = n
 	}
-	caller := probe.NewActionCaller(call, "")
-	var last *probe.CallResult
+	caller := sdk.NewCaller(call, "")
+	var last *sdk.CallResult
 	calls := 0
 	for range times {
 		res, err := caller.Call(context.Background(), uses, with)
@@ -50,5 +49,5 @@ func (a action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, er
 }
 
 func main() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action { return action{} })
+	sdk.Serve(func(log hclog.Logger) sdk.Action { return testAction{} })
 }

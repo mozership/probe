@@ -1,5 +1,5 @@
 /*
- * How an action reaches Probe. Built from `internal/actions/registry.go`, `actionrpc/serve.go`
+ * How an action reaches Probe. Built from `internal/actions/registry.go`, `action/serve.go`
  * (the go-plugin handshake and gRPC server) and each action's own `main.go`,
  * which calls `plugin.Serve` exactly as an out-of-tree plugin would.
  *

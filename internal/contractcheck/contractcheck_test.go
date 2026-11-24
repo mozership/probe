@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestFlag(t *testing.T) {
@@ -46,17 +46,17 @@ func TestViolation(t *testing.T) {
 		name                       string
 		in, message, reason, field string
 		want                       map[string]any
-		wantViolation              actionrpc.Violation
+		wantViolation              sdk.Violation
 	}{
 		{
 			name: "all of it", in: "request", message: "m", reason: "r", field: "$.id",
 			want:          map[string]any{"in": "request", "message": "m", "reason": "r", "field": "$.id"},
-			wantViolation: actionrpc.Violation{In: "request", Field: "$.id", Reason: "r", Message: "m"},
+			wantViolation: sdk.Violation{In: "request", Field: "$.id", Reason: "r", Message: "m"},
 		},
 		{
 			name: "no reason or field", in: "response", message: "m",
 			want:          map[string]any{"in": "response", "message": "m"},
-			wantViolation: actionrpc.Violation{In: "response", Message: "m"},
+			wantViolation: sdk.Violation{In: "response", Message: "m"},
 		},
 	}
 	for _, tt := range tests {
@@ -66,7 +66,7 @@ func TestViolation(t *testing.T) {
 				t.Errorf("Violation() = %v, want %v", got, tt.want)
 			}
 			// The runner reads the violation back with ContractCheckOf.
-			check := actionrpc.ContractCheckOf([]any{got}, nil)
+			check := sdk.ContractCheckOf([]any{got}, nil)
 			if len(check.Violations) != 1 || check.Violations[0] != tt.wantViolation {
 				t.Errorf("ContractCheckOf(Violation()) = %+v, want %+v", check.Violations, tt.wantViolation)
 			}
@@ -82,7 +82,7 @@ func TestReport(t *testing.T) {
 		ret        map[string]any
 		violations []any
 		matched    map[string]any
-		wantCheck  *actionrpc.ContractCheck
+		wantCheck  *sdk.ContractCheck
 		wantRes    map[string]any
 	}{
 		{
@@ -90,9 +90,9 @@ func TestReport(t *testing.T) {
 			ret:        map[string]any{"res": map[string]any{"code": 200}},
 			violations: violations,
 			matched:    matched,
-			wantCheck: &actionrpc.ContractCheck{
-				Matched:    &actionrpc.ContractMatch{Spec: "api.yaml", Operation: "GET /users", Response: "200"},
-				Violations: []actionrpc.Violation{{In: "response", Message: "m"}},
+			wantCheck: &sdk.ContractCheck{
+				Matched:    &sdk.ContractMatch{Spec: "api.yaml", Operation: "GET /users", Response: "200"},
+				Violations: []sdk.Violation{{In: "response", Message: "m"}},
 			},
 			wantRes: map[string]any{"code": 200, "violations": violations, "contract": matched},
 		},
@@ -100,7 +100,7 @@ func TestReport(t *testing.T) {
 			name:       "no violations found",
 			ret:        map[string]any{"res": map[string]any{}},
 			violations: []any{},
-			wantCheck:  &actionrpc.ContractCheck{Violations: []actionrpc.Violation{}},
+			wantCheck:  &sdk.ContractCheck{Violations: []sdk.Violation{}},
 			wantRes:    map[string]any{"violations": []any{}},
 		},
 		{
@@ -112,14 +112,14 @@ func TestReport(t *testing.T) {
 			name:       "no res",
 			ret:        map[string]any{},
 			violations: violations,
-			wantCheck: &actionrpc.ContractCheck{
-				Violations: []actionrpc.Violation{{In: "response", Message: "m"}},
+			wantCheck: &sdk.ContractCheck{
+				Violations: []sdk.Violation{{In: "response", Message: "m"}},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &actionrpc.Contract{}
+			c := &sdk.Contract{}
 			Report(c, tt.ret, tt.violations, tt.matched)
 			if got := c.Check(); !reflect.DeepEqual(got, tt.wantCheck) {
 				t.Errorf("Check() = %+v, want %+v", got, tt.wantCheck)

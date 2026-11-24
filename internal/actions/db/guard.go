@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/lib/pq"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 // defaultPorts are the ports of the servers a DSN without one connects to.
@@ -57,11 +57,11 @@ func returnsRows(verb string) bool {
 // Under --read-only the query is also refused when it holds a semicolon
 // anywhere but at its end, so that it cannot hold a second statement, such
 // as one that ends the read-only transaction or turns query_only off.
-func (r *Req) checkGuard(guard actionrpc.Guard) error {
+func (r *Req) checkGuard(guard sdk.Guard) error {
 	if len(guard.AllowHosts) > 0 {
 		hosts, ok, err := r.hosts()
 		if err != nil {
-			return actionrpc.Refuse("%v", err)
+			return sdk.Refuse("%v", err)
 		}
 		if ok {
 			for _, host := range hosts {
@@ -80,17 +80,17 @@ func (r *Req) checkGuard(guard actionrpc.Guard) error {
 	query := strings.TrimRight(strings.TrimSpace(r.Query), "; \t\r\n")
 	words := strings.Fields(query)
 	if len(words) == 0 {
-		return actionrpc.Refuse("the query holds no statement")
+		return sdk.Refuse("the query holds no statement")
 	}
 	// A semicolon is refused wherever it is, in a string or a comment too:
 	// what ends a string or a comment differs from one database to another,
 	// and from one connection setting to another, so that a semicolon the
 	// guard took for text could end a statement and start one that writes.
 	if strings.Contains(query, ";") {
-		return actionrpc.Refuse("the query holds a semicolon, which may end a statement and start another, and the run is read-only; give one statement that reads, without one")
+		return sdk.Refuse("the query holds a semicolon, which may end a statement and start another, and the run is read-only; give one statement that reads, without one")
 	}
 	if !returnsRows(firstVerb(query)) {
-		return actionrpc.Refuse("the statement %s may write, and the run is read-only; only %s are run", strings.ToUpper(words[0]), strings.Join(readVerbs, ", "))
+		return sdk.Refuse("the statement %s may write, and the run is read-only; only %s are run", strings.ToUpper(words[0]), strings.Join(readVerbs, ", "))
 	}
 	return nil
 }
@@ -163,27 +163,27 @@ func (r *Req) checkConnectOptions() error {
 	case "mysql":
 		_, driverDSN, err := parseDSN(r.DSN)
 		if err != nil {
-			return actionrpc.Refuse("the DSN cannot be read: %v", err)
+			return sdk.Refuse("the DSN cannot be read: %v", err)
 		}
 		cfg, err := mysql.ParseDSN(driverDSN)
 		if err != nil {
-			return actionrpc.Refuse("the DSN cannot be read: %v", err)
+			return sdk.Refuse("the DSN cannot be read: %v", err)
 		}
 		if cfg.MultiStatements {
-			return actionrpc.Refuse("the DSN allows multiStatements, and the run is read-only")
+			return sdk.Refuse("the DSN allows multiStatements, and the run is read-only")
 		}
 		if len(cfg.Params) > 0 {
-			return actionrpc.Refuse("the DSN sets %s on connecting, with a statement run before the read-only transaction, and the run is read-only", strings.Join(slices.Sorted(maps.Keys(cfg.Params)), ", "))
+			return sdk.Refuse("the DSN sets %s on connecting, with a statement run before the read-only transaction, and the run is read-only", strings.Join(slices.Sorted(maps.Keys(cfg.Params)), ", "))
 		}
 	case "sqlite":
 		_, query, _ := strings.Cut(r.DSN, "?")
 		params, err := url.ParseQuery(query)
 		if err != nil {
-			return actionrpc.Refuse("the DSN cannot be read: %v", err)
+			return sdk.Refuse("the DSN cannot be read: %v", err)
 		}
 		for _, name := range slices.Sorted(maps.Keys(params)) {
 			if !slices.Contains(sqliteReadOptions, name) {
-				return actionrpc.Refuse("the DSN sets %s, which may run a statement on connecting, and the run is read-only; only %s are allowed", name, strings.Join(sqliteReadOptions, ", "))
+				return sdk.Refuse("the DSN sets %s, which may run a statement on connecting, and the run is read-only; only %s are allowed", name, strings.Join(sqliteReadOptions, ", "))
 			}
 		}
 	}

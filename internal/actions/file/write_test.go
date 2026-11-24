@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/sdk"
 )
 
 // run runs with, and fails the test on an error.
@@ -239,7 +239,7 @@ func TestWritesAreRefusedUnderReadOnly(t *testing.T) {
 	if err := os.WriteFile(path, []byte("kept"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	guard := actionrpc.Guard{ReadOnly: true}
+	guard := sdk.Guard{ReadOnly: true}
 
 	for _, with := range []map[string]any{
 		{"path": path, "op": "write", "content": "x"},
@@ -248,7 +248,7 @@ func TestWritesAreRefusedUnderReadOnly(t *testing.T) {
 		{"path": filepath.Join(dir, "new"), "op": "write"},
 	} {
 		_, err := RunGuarded(with, guard)
-		if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), "the run is read-only") {
+		if !sdk.IsRefused(err) || !strings.Contains(err.Error(), "the run is read-only") {
 			t.Errorf("RunGuarded(%v) error = %v, want a refusal", with, err)
 		}
 	}

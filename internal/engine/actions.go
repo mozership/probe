@@ -2,15 +2,13 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actionlog"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/mask"
+	"github.com/mozership/probe/sdk"
 )
 
 // RunOptions controls how a single action invocation is run and logged.
@@ -72,7 +70,7 @@ func (o RunOptions) logLevel() hclog.Level {
 // that only by running the action with PluginActionRunner and opts as it
 // was given them.
 type ActionRunner interface {
-	Run(name string, call actionrpc.Call, opts RunOptions) (result, newState map[string]any, err error)
+	Run(name string, call sdk.Call, opts RunOptions) (result, newState map[string]any, err error)
 }
 
 // PluginActionRunner is the ActionRunner a run uses unless it is given
@@ -83,7 +81,7 @@ type PluginActionRunner struct{}
 // Run runs the action for a step in a process of its own, telling it about
 // the step, giving it the state it left in the job and returning the state
 // it leaves.
-func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (p *PluginActionRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
 	log := actionlog.New(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
@@ -91,11 +89,11 @@ func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptio
 	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
 	if opts.cleanups != nil {
-		call.Cleanups = &actionrpc.Cleanups{}
+		call.Cleanups = &sdk.Cleanups{}
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return actionrpc.RunBuiltin(opts.Context(), name, call, log)
+		return sdk.RunBuiltin(opts.Context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -109,7 +107,7 @@ func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptio
 		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
-	return actionrpc.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
+	return sdk.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks
@@ -118,47 +116,4 @@ func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptio
 func cleansUp(name, baseDir string) bool {
 	m, err := actionref.ReadManifest(name, baseDir)
 	return err == nil && m.Cleanup
-}
-
-// actionStates holds the state each action keeps in one run of a job, keyed
-// by the action's name as the steps write it in uses.
-type actionStates struct {
-	mu     sync.Mutex
-	states map[string]map[string]any
-}
-
-func newActionStates() *actionStates {
-	return &actionStates{states: make(map[string]map[string]any)}
-}
-
-// get returns a copy of the state the action left, or nil when it left none.
-// A runner in this process may change what it is given, and the state kept
-// must not change with it, should the step then fail or time out.
-func (s *actionStates) get(name string) map[string]any {
-	if s == nil {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// What is kept was made sendable when it was set, so this cannot fail.
-	state, _ := actionrpc.Sendable(s.states[name])
-	return state
-}
-
-// set records the state the action leaves, in the form it takes when it is
-// sent, which is a copy of it: a runner in this process may still hold the
-// state it returned. A nil state keeps the one there was. A state that cannot
-// be sent is an error, as it is for an action in a process of its own.
-func (s *actionStates) set(name string, state map[string]any) error {
-	if s == nil || state == nil {
-		return nil
-	}
-	sendable, err := actionrpc.Sendable(state)
-	if err != nil {
-		return fmt.Errorf("cannot keep the action's state: %w", err)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.states[name] = sendable
-	return nil
 }

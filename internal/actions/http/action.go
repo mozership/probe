@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -17,47 +17,47 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
 // RunStep runs the request for a step: with the cookies the job keeps, when
 // the step asks for keep_cookies, returning the cookies to keep, and with a
 // header that names the step, when it asks for trace_header.
-func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	with := call.With
 	// Validate that required parameters are provided
 	if len(with) == 0 {
 		return map[string]any{}, nil, errors.New("http action requires parameters in 'with' section. Please specify request details like url, method, or use method fields (get, post, etc.)")
 	}
 
-	actionrpc.LogParams(a.log, "received request parameters", with)
+	sdk.LogParams(a.log, "received request parameters", with)
 
 	// The request and the response are logged as the parameters are, with
 	// credentials such as cookies hidden: the runner learns those in the
 	// response only once it has the result, after these records have gone.
 	before := WithBefore(func(req *hp.Request) {
-		actionrpc.LogParams(a.log, "http request prepared", map[string]any{
+		sdk.LogParams(a.log, "http request prepared", map[string]any{
 			"method":  req.Method,
 			"url":     req.URL.String(),
 			"headers": joinHeader(req.Header),
 		})
 	})
 	after := WithAfter(func(res *hp.Response) {
-		actionrpc.LogParams(a.log, "http response received", map[string]any{
+		sdk.LogParams(a.log, "http response received", map[string]any{
 			"status":  res.Status,
 			"headers": joinHeader(res.Header),
 		})
 	})
 	ret, newState, err := RequestStep(call, before, after)
 
-	actionrpc.LogOutcome(a.log, "http request", ret, err)
+	sdk.LogOutcome(a.log, "http request", ret, err)
 
 	return ret, newState, err
 }
 
 func serve() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log}
 	})
 }
@@ -72,7 +72,7 @@ func serve() {
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
-		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Keeps:     []string{sdk.KindReadOnly, sdk.KindAllowHost},
 		Params:    params(),
 		Contracts: []string{"openapi"},
 		ReqFields: append(mapping.FieldTags(Req{}), "multipart"),

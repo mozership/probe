@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/duration"
 	"github.com/mozership/probe/internal/expr"
@@ -20,6 +19,7 @@ import (
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/vareval"
+	"github.com/mozership/probe/sdk"
 )
 
 const (
@@ -74,7 +74,7 @@ type stepRun struct {
 	templateErr error
 	// contract is the check the action made of the last attempt against a
 	// contract, or nil when it checked it against none.
-	contract *actionrpc.ContractCheck
+	contract *sdk.ContractCheck
 	// given is the step's with, its templates evaluated, as the action was
 	// given it; nil until they are.
 	given map[string]any
@@ -179,7 +179,7 @@ func (st *stepRun) executeAction(name string, jCtx *JobContext) (ActionResult, e
 		for _, kind := range jCtx.Guard.Missing(st.Uses) {
 			flags = append(flags, "--"+kind)
 		}
-		return ActionResult{}, actionrpc.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
+		return ActionResult{}, sdk.Refuse("the action %s does not keep to %s, which the run is under; let it run with --allow-action %s", st.Uses, strings.Join(flags, " and "), st.Uses)
 	}
 
 	// If no retry configuration, execute once
@@ -209,7 +209,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	type result struct {
 		ret      map[string]any
 		state    map[string]any
-		contract *actionrpc.ContractCheck
+		contract *sdk.ContractCheck
 		err      error
 	}
 	resultCh := make(chan result, 1)
@@ -229,7 +229,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 	// The action is given ctx, so that it is stopped once the step times out
 	// rather than run on unseen.
 	opts := RunOptions{Verbose: jCtx.Verbose, Trace: jCtx.Trace, Quiet: quiet, Masker: masker, BaseDir: jCtx.baseDir, cleanups: jCtx.cleanups, ctx: ctx}
-	call := actionrpc.Call{With: expW, State: jCtx.states.get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &actionrpc.Processes{}, Contract: &actionrpc.Contract{}}
+	call := sdk.Call{With: expW, State: jCtx.states.Get(st.Uses), Step: st.stepInfo(jCtx), Guard: jCtx.Guard, Actions: jCtx.actions, Processes: &sdk.Processes{}, Contract: &sdk.Contract{}}
 	go func() {
 		defer done()
 		ret, state, err := runner.Run(st.Uses, call, opts)
@@ -256,7 +256,7 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 		if res.err != nil {
 			return ActionResult{}, res.err
 		}
-		if err := jCtx.states.set(st.Uses, res.state); err != nil {
+		if err := jCtx.states.Set(st.Uses, res.state); err != nil {
 			return ActionResult{}, err
 		}
 		st.contract = res.contract
@@ -267,9 +267,9 @@ func (st *stepRun) executeSingleAction(runner ActionRunner, expW map[string]any,
 }
 
 // stepInfo tells an action about the step it runs for.
-func (st *stepRun) stepInfo(jCtx *JobContext) actionrpc.Step {
+func (st *stepRun) stepInfo(jCtx *JobContext) sdk.Step {
 	attempt := max(st.attempt, 1)
-	return actionrpc.Step{
+	return sdk.Step{
 		RunID:   jCtx.runID,
 		JobID:   jCtx.CurrentJobID,
 		JobName: jCtx.jobName,
@@ -318,7 +318,7 @@ func (st *stepRun) executeActionWithRetry(runner ActionRunner, expW map[string]a
 			// A step without a test is retried only once a contract has
 			// shown that something checks it. What the guard refused is
 			// refused again, so it is not retried.
-			if (st.Test == "" && attempt == 1) || actionrpc.IsRefused(err) {
+			if (st.Test == "" && attempt == 1) || sdk.IsRefused(err) {
 				return result, err
 			}
 			// Action execution failed, retry
@@ -845,7 +845,7 @@ func evaluateTest(ev *expr.Expr, test string, env any, printer *Printer, hideOpe
 // its test could run. A refusal of the guard is kept on it as it is.
 func (st *stepRun) errorFailure() *outcome.Failure {
 	f := st.newFailure(failureKindOf(st.err), st.err.Error())
-	var refused *actionrpc.Refused
+	var refused *sdk.Refused
 	if errors.As(st.err, &refused) {
 		f.Refused = refused
 	}
@@ -1309,7 +1309,7 @@ func pathHoldsCredential(path string) bool {
 // failureKindOf tells a template that could not be evaluated, and what the
 // guard of the run refused, from an error of the action itself.
 func failureKindOf(err error) string {
-	if actionrpc.IsRefused(err) {
+	if sdk.IsRefused(err) {
 		return outcome.FailureRefused
 	}
 	var tErr *expr.TemplateError
