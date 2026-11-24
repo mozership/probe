@@ -10,7 +10,7 @@
 //	uses: ./path/to/action
 //
 // Either way the directory holds an action.yml that says which executable
-// serves the action. The executable speaks the protocol in package action.
+// serves the action. The executable speaks the protocol in package sdk.
 package actionref
 
 import (
