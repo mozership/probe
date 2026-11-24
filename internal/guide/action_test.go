@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 )
 
 const testSHA = "0123456789abcdef0123456789abcdef01234567"

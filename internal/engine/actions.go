@@ -6,8 +6,8 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/action"
-	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/internal/actionlog"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/mask"
 )
 

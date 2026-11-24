@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/expr"
 )
 

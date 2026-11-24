@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/yamlnode"
 )

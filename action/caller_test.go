@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 )
 
 // localAction writes a local action in a directory named name under dir,

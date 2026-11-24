@@ -13,7 +13,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/action"
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"

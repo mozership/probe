@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/actionref"
 	"github.com/mozership/probe/internal/expr"
 )
 
