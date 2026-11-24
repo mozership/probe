@@ -8,6 +8,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe/actionref"
 	"github.com/mozership/probe/internal/suggest"
+	"github.com/mozership/probe/internal/workflowfile"
 )
 
 // officialRepoPrefix is where an official action is published: the action
@@ -123,14 +124,14 @@ func unknownGuide(arg string) error {
 // workflowActions returns the names the workflow gives under actions, and
 // the directory a local path among them is taken from.
 func workflowActions(workflow string) (map[string]string, string, error) {
-	files, err := yamlFiles(workflow)
+	files, err := workflowfile.Paths(workflow)
 	if err != nil {
 		return nil, "", fmt.Errorf("workflow file %w", err)
 	}
 	if len(files) == 0 {
 		return nil, "", fmt.Errorf("%s: no YAML file", workflow)
 	}
-	text, contents, err := readYamlFiles(files)
+	text, contents, err := workflowfile.Read(files, readFile)
 	if err != nil {
 		return nil, "", fmt.Errorf("workflow file %w", err)
 	}
