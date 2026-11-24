@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mozership/probe"
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/mapping"
 )
 
@@ -81,7 +81,7 @@ func (r *Req) Do() (*Result, error) {
 	if r.cb != nil {
 		names = r.cb.actions
 	}
-	job, err := probe.ReadJobFile(absPath, names)
+	job, err := engine.ReadJobFile(absPath, names)
 	if err != nil {
 		return result, err
 	}
@@ -89,13 +89,13 @@ func (r *Req) Do() (*Result, error) {
 	// A local action in the job is found next to the job file, as one in a
 	// workflow is found next to the workflow file.
 	jobID := "embedded"
-	printer := probe.NewPrinter(true)
-	var opts []probe.StandaloneOption
+	printer := engine.NewPrinter(true)
+	var opts []engine.StandaloneOption
 	if r.cb != nil && r.cb.runID != "" {
-		opts = append(opts, probe.WithRunID(r.cb.runID))
+		opts = append(opts, engine.WithRunID(r.cb.runID))
 	}
 	if r.cb != nil {
-		opts = append(opts, probe.WithGuard(r.cb.guard), probe.WithActions(names), probe.WithBuiltinActions(r.cb.builtin), probe.WithNeedsNoCheck(r.cb.needsNoCheck), probe.WithCleanups(r.cb.cleanups))
+		opts = append(opts, engine.WithGuard(r.cb.guard), engine.WithActions(names), engine.WithBuiltinActions(r.cb.builtin), engine.WithNeedsNoCheck(r.cb.needsNoCheck), engine.WithCleanups(r.cb.cleanups))
 	}
 	run := job.RunStandalone(r.Vars, printer, jobID, filepath.Dir(absPath), opts...)
 
