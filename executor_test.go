@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/report"
 )
 
@@ -64,7 +65,7 @@ func TestExecutor_setupContext(t *testing.T) {
 // runJob runs job as the workflow runs each of its jobs, its actions run by
 // runner, and returns what Executor.Run reported and the result it left for
 // the job.
-func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
+func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *outcome.Job) {
 	t.Helper()
 	w := &Workflow{Name: "executor", Jobs: []Job{job}, printer: newBufferPrinter()}
 	scheduler, err := validatedScheduler(w.Jobs)
@@ -75,7 +76,7 @@ func runJob(t *testing.T, job Job, runner ActionRunner) (bool, *JobResult) {
 	ctx := r.newJobContext(nil, nil)
 	scheduler.Start(job.ID)
 	passed := NewExecutor(&w.Jobs[0]).Run(ctx)
-	return passed, ctx.Result.Jobs[job.ID]
+	return passed, ctx.Outcome.Jobs[job.ID]
 }
 
 // A job that fails reports so to its caller, which fails the workflow for
@@ -130,7 +131,7 @@ func TestExecutor_Run(t *testing.T) {
 			if passed != tt.wantPassed {
 				t.Errorf("Run() = %v, want %v", passed, tt.wantPassed)
 			}
-			if wantError := !tt.wantPassed; (jr.Status == StatusError) != wantError {
+			if wantError := !tt.wantPassed; (jr.Status == outcome.StatusError) != wantError {
 				t.Errorf("job status = %v, want an error %v", jr.Status, wantError)
 			}
 			if jr.EndTime.Before(jr.StartTime) {
@@ -212,39 +213,39 @@ func TestExecutor_Run_AsyncOverlaps(t *testing.T) {
 // it passed by which runs it passed, failed or was skipped in, and its
 // failure by the first run's with how many runs failed.
 func TestRepeatStepResult(t *testing.T) {
-	first := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	first := &outcome.Failure{Kind: outcome.FailureAssertion, Message: "test evaluated to false"}
 	tests := []struct {
 		name        string
-		counter     StepRepeatCounter
+		counter     outcome.RepeatCounter
 		readByTest  bool
-		wantStatus  StatusType
+		wantStatus  outcome.Status
 		wantHasTest bool
 		wantMessage string
 	}{
-		{name: "passed in every run", counter: StepRepeatCounter{SuccessCount: 3, Test: "true"}, wantStatus: StatusSuccess, wantHasTest: true},
-		{name: "passed in the runs it ran in", counter: StepRepeatCounter{SuccessCount: 1, SkippedCount: 2}, wantStatus: StatusSuccess},
-		{name: "ran in no run", counter: StepRepeatCounter{SkippedCount: 3}, wantStatus: StatusSkipped},
-		{name: "counted in no run", counter: StepRepeatCounter{}, wantStatus: StatusSuccess},
+		{name: "passed in every run", counter: outcome.RepeatCounter{SuccessCount: 3, Test: "true"}, wantStatus: outcome.StatusSuccess, wantHasTest: true},
+		{name: "passed in the runs it ran in", counter: outcome.RepeatCounter{SuccessCount: 1, SkippedCount: 2}, wantStatus: outcome.StatusSuccess},
+		{name: "ran in no run", counter: outcome.RepeatCounter{SkippedCount: 3}, wantStatus: outcome.StatusSkipped},
+		{name: "counted in no run", counter: outcome.RepeatCounter{}, wantStatus: outcome.StatusSuccess},
 		{
 			name:        "failed in every run",
-			counter:     StepRepeatCounter{FailureCount: 3, Failure: first},
-			wantStatus:  StatusError,
+			counter:     outcome.RepeatCounter{FailureCount: 3, Failure: first},
+			wantStatus:  outcome.StatusError,
 			wantMessage: "3 of 3 iterations failed; the first: test evaluated to false",
 		},
 		{
 			name:        "failed in the runs it ran in",
-			counter:     StepRepeatCounter{FailureCount: 1, SkippedCount: 2, Failure: first},
-			wantStatus:  StatusError,
+			counter:     outcome.RepeatCounter{FailureCount: 1, SkippedCount: 2, Failure: first},
+			wantStatus:  outcome.StatusError,
 			wantMessage: "1 of 3 iterations failed; the first: test evaluated to false",
 		},
 		{
 			name:        "failed in some runs",
-			counter:     StepRepeatCounter{SuccessCount: 2, FailureCount: 1, SkippedCount: 1, Failure: first},
-			wantStatus:  StatusWarning,
+			counter:     outcome.RepeatCounter{SuccessCount: 2, FailureCount: 1, SkippedCount: 1, Failure: first},
+			wantStatus:  outcome.StatusWarning,
 			wantMessage: "1 of 4 iterations failed; the first: test evaluated to false",
 		},
-		{name: "checked by a contract", counter: StepRepeatCounter{SuccessCount: 1, Checked: true}, wantStatus: StatusSuccess, wantHasTest: true},
-		{name: "read by the test over the runs", counter: StepRepeatCounter{SuccessCount: 1}, readByTest: true, wantStatus: StatusSuccess, wantHasTest: true},
+		{name: "checked by a contract", counter: outcome.RepeatCounter{SuccessCount: 1, Checked: true}, wantStatus: outcome.StatusSuccess, wantHasTest: true},
+		{name: "read by the test over the runs", counter: outcome.RepeatCounter{SuccessCount: 1}, readByTest: true, wantStatus: outcome.StatusSuccess, wantHasTest: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,17 +285,17 @@ func TestRepeatStepResult(t *testing.T) {
 // total by the step keeps it. The snapshot's fields are its own, and what
 // they point to is the stored counter's.
 func TestJobRepeat_snapshotCounters(t *testing.T) {
-	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	failure := &outcome.Failure{Kind: outcome.FailureAssertion, Message: "test evaluated to false"}
 	contract := &report.Contract{Spec: "openapi.yml"}
 	rep := newJobRepeat(5, 2)
 	rep.tested = true
-	rep.counters[7] = StepRepeatCounter{Name: "third"}
-	rep.counters[0] = StepRepeatCounter{
+	rep.counters[7] = outcome.RepeatCounter{Name: "third"}
+	rep.counters[0] = outcome.RepeatCounter{
 		Name: "first", RepeatTotal: 4,
 		Failure: failure, Contract: contract,
 		RTs: []float64{0.1}, Echoes: []string{"echo"},
 	}
-	rep.counters[3] = StepRepeatCounter{Name: "second"}
+	rep.counters[3] = outcome.RepeatCounter{Name: "second"}
 
 	got := rep.snapshotCounters()
 	var names []string
@@ -337,9 +338,9 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 	}
 	executor := NewExecutor(job)
 
-	// Create WorkflowBuffer with JobResult
-	result := NewResult()
-	jobResult := &JobResult{
+	// Create WorkflowBuffer with an outcome.Job
+	result := outcome.New()
+	jobResult := &outcome.Job{
 		JobName: job.Name,
 		JobID:   "test-job",
 	}
@@ -350,10 +351,10 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 		runEnv: &runEnv{
 			Config:  Config{Verbose: false},
 			Printer: NewPrinter(false),
-			Result:  result,
+			Outcome: result,
 		},
 		repeat: &jobRepeat{
-			counters: map[int]StepRepeatCounter{
+			counters: map[int]outcome.RepeatCounter{
 				0: {
 					SuccessCount: 3,
 					FailureCount: 1,
@@ -376,7 +377,7 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 		t.Error("appendRepeatStepResults should add StepResults to WorkflowBuffer")
 	}
 
-	// Should have created a StepResult with RepeatCounter
+	// Should have created an outcome.Step with RepeatCounter
 	if len(jobResult.StepResults) != 1 {
 		t.Errorf("Expected 1 step result, got %d", len(jobResult.StepResults))
 	}
@@ -397,8 +398,8 @@ func TestExecutor_AppendRepeatStepResults(t *testing.T) {
 
 // TestExecutor_AsyncRepeat_HandleSkipNoDataRace covers the handleSkip
 // path: when an async-repeat job evaluates skipif==true on every iteration,
-// each goroutine reaches Job.handleSkip and writes JobResult.Status /
-// JobResult.Success on the shared *JobResult. Without locking those
+// each goroutine reaches Job.handleSkip and writes outcome.Job.Status /
+// outcome.Job.Success on the shared *outcome.Job. Without locking those
 // writes, `go test -race` flags a data race between sibling iterations.
 func TestExecutor_AsyncRepeat_HandleSkipNoDataRace(t *testing.T) {
 	workflow := &Workflow{
@@ -577,15 +578,15 @@ func TestRepeatedJobOutputs(t *testing.T) {
 
 func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	job := &Job{ID: "work", Name: "Work", Steps: []*Step{{Name: "Never run", Test: "true"}, {Name: "Run once", Test: "true"}}}
-	result := NewResult()
-	result.Jobs[job.ID] = &JobResult{JobID: job.ID}
+	result := outcome.New()
+	result.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
 	ctx := &JobContext{
 		runEnv: &runEnv{
-			Result: result,
+			Outcome: result,
 		},
 		repeat: &jobRepeat{
 			total: 3,
-			counters: map[int]StepRepeatCounter{
+			counters: map[int]outcome.RepeatCounter{
 				0: {Name: "Never run", Test: "true", SkippedCount: 3, RepeatTotal: 3},
 				1: {Name: "Run once", Test: "true", SuccessCount: 1, SkippedCount: 2, RepeatTotal: 3},
 			},
@@ -594,11 +595,11 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	NewExecutor(job).appendRepeatStepResults(ctx)
 
 	steps := result.Jobs[job.ID].StepResults
-	if len(steps) != 2 || steps[0].Status != StatusSkipped || steps[1].Status != StatusSuccess {
+	if len(steps) != 2 || steps[0].Status != outcome.StatusSkipped || steps[1].Status != outcome.StatusSuccess {
 		t.Fatalf("statuses = %+v, want skipped then success", steps)
 	}
 
-	r := BuildReport("w", "", result, []string{job.ID}, time.Now(), time.Now())
+	r := buildReport("w", "", result, []string{job.ID}, time.Now(), time.Now(), nil)
 	got := r.Jobs[0].Steps
 	if got[0].Status != "skipped" || got[0].Repeat.Total != 3 || got[0].Repeat.Skipped != 3 || got[0].Repeat.Success != 0 {
 		t.Errorf("report of the step never run = %+v, repeat %+v", got[0], got[0].Repeat)
@@ -608,11 +609,11 @@ func TestExecutor_appendRepeatStepResults_Skipped(t *testing.T) {
 	}
 	// The message of a failure counts the runs the step was not run in
 	// among the runs, as the count of the report does.
-	failed := NewResult()
-	failed.Jobs[job.ID] = &JobResult{JobID: job.ID}
-	ctx.Result = failed
-	ctx.repeat.counters = map[int]StepRepeatCounter{
-		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}},
+	failed := outcome.New()
+	failed.Jobs[job.ID] = &outcome.Job{JobID: job.ID}
+	ctx.Outcome = failed
+	ctx.repeat.counters = map[int]outcome.RepeatCounter{
+		0: {Name: "Failed once", Test: "true", FailureCount: 1, SkippedCount: 2, RepeatTotal: 3, Failure: &outcome.Failure{Kind: outcome.FailureAssertion, Message: "test evaluated to false"}},
 	}
 	NewExecutor(job).appendRepeatStepResults(ctx)
 	if got := failed.Jobs[job.ID].StepResults[0].Failure.Message; got != "1 of 3 iterations failed; the first: test evaluated to false" {

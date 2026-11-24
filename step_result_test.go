@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 )
 
 func TestStep_createSkippedStepResult(t *testing.T) {
@@ -30,8 +31,8 @@ func TestStep_createSkippedStepResult(t *testing.T) {
 	if result.Name != "Test Step" {
 		t.Errorf("Name = %v, want %v", result.Name, "Test Step")
 	}
-	if result.Status != StatusSkipped {
-		t.Errorf("Status = %v, want %v", result.Status, StatusSkipped)
+	if result.Status != outcome.StatusSkipped {
+		t.Errorf("Status = %v, want %v", result.Status, outcome.StatusSkipped)
 	}
 	if result.WaitTime != "2s" {
 		t.Errorf("WaitTime = %v, want %v", result.WaitTime, "2s")
@@ -116,8 +117,8 @@ func TestStep_createFailedStepResult(t *testing.T) {
 	if result.Name != "Failed Step" {
 		t.Errorf("Name = %v, want %v", result.Name, "Failed Step")
 	}
-	if result.Status != StatusError {
-		t.Errorf("Status = %v, want %v", result.Status, StatusError)
+	if result.Status != outcome.StatusError {
+		t.Errorf("Status = %v, want %v", result.Status, outcome.StatusError)
 	}
 	if result.WaitTime != "3s" {
 		t.Errorf("WaitTime = %v, want %v", result.WaitTime, "3s")
@@ -151,14 +152,14 @@ func TestStep_verdict(t *testing.T) {
 		test         string
 		uses         string
 		needsNoCheck []string
-		wantStatus   StatusType
+		wantStatus   outcome.Status
 		wantFailed   bool
 		wantOutput   bool
 	}{
-		{name: "a test that holds passes", test: "res.code == 0", wantStatus: StatusSuccess},
-		{name: "a test that does not hold fails the job", test: "res.code == 1", wantStatus: StatusError, wantFailed: true, wantOutput: true},
-		{name: "an action that needs no check passes", uses: "hello", needsNoCheck: []string{"hello"}, wantStatus: StatusSuccess},
-		{name: "a step that nothing checks is a warning", uses: "hello", wantStatus: StatusWarning},
+		{name: "a test that holds passes", test: "res.code == 0", wantStatus: outcome.StatusSuccess},
+		{name: "a test that does not hold fails the job", test: "res.code == 1", wantStatus: outcome.StatusError, wantFailed: true, wantOutput: true},
+		{name: "an action that needs no check passes", uses: "hello", needsNoCheck: []string{"hello"}, wantStatus: outcome.StatusSuccess},
+		{name: "a step that nothing checks is a warning", uses: "hello", wantStatus: outcome.StatusWarning},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -167,7 +168,7 @@ func TestStep_verdict(t *testing.T) {
 				runEnv: &runEnv{
 					Config:  Config{NeedsNoCheck: tt.needsNoCheck},
 					Printer: newBufferPrinter(),
-					Result:  NewResult(),
+					Outcome: outcome.New(),
 				},
 			}
 
@@ -181,7 +182,7 @@ func TestStep_verdict(t *testing.T) {
 			if jCtx.Failed != tt.wantFailed {
 				t.Errorf("Failed = %v, want %v", jCtx.Failed, tt.wantFailed)
 			}
-			if got := jCtx.Result.failures[FailureAssertion]; got != tt.wantFailed {
+			if got := jCtx.Outcome.HasFailure(outcome.FailureAssertion); got != tt.wantFailed {
 				t.Errorf("assertion failure recorded = %v, want %v", got, tt.wantFailed)
 			}
 			if (st.failure != nil) != tt.wantFailed {
@@ -194,27 +195,33 @@ func TestStep_verdict(t *testing.T) {
 // Creating the result of a failed step only reads what the check left: it
 // neither fails the job nor records the failure, which verdict has done.
 func TestStep_createStepResult_ChangesNothing(t *testing.T) {
-	failure := &StepFailure{Kind: FailureAssertion, Message: "test evaluated to false"}
+	failure := &outcome.Failure{Kind: outcome.FailureAssertion, Message: "test evaluated to false"}
 	st := &stepRun{Step: &Step{Test: "res.code == 1"}, expr: &expr.Expr{}, ctx: StepContext{Res: map[string]any{"code": 0}}, failure: failure}
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  NewResult(),
+			Outcome: outcome.New(),
 		},
 	}
 
-	result := st.createStepResult("Check", jCtx, StatusError)
-	if result.Status != StatusError || result.Failure != failure {
+	result := st.createStepResult("Check", jCtx, outcome.StatusError)
+	if result.Status != outcome.StatusError || result.Failure != failure {
 		t.Errorf("result = %+v, want the status it was given and the failure the check left", result)
 	}
 	if jCtx.Failed {
 		t.Error("Failed = true, want the job left as it was")
 	}
-	if len(jCtx.Result.failures) != 0 {
-		t.Errorf("failures = %v, want none recorded", jCtx.Result.failures)
+	for _, kind := range []string{
+		outcome.FailureAssertion, outcome.FailureTestError, outcome.FailureTestType,
+		outcome.FailureAction, outcome.FailureTemplate, outcome.FailureContractResponse,
+		outcome.FailureContractRequest, outcome.FailureRefused, failureConfig,
+	} {
+		if jCtx.Outcome.HasFailure(kind) {
+			t.Errorf("a failure of kind %q is recorded, want none", kind)
+		}
 	}
 
-	passed := st.createStepResult("Check", jCtx, StatusSuccess)
+	passed := st.createStepResult("Check", jCtx, outcome.StatusSuccess)
 	if passed.Failure != nil {
 		t.Errorf("result = %+v, want no failure on a step that passed", passed)
 	}
@@ -239,7 +246,7 @@ func TestStep_createFailedStepResult_HasTestAsARunStepHas(t *testing.T) {
 			jCtx := &JobContext{runEnv: &runEnv{Config: Config{NeedsNoCheck: []string{"hello"}}}}
 
 			failed := st.createFailedStepResult("Step", jCtx)
-			ran := st.createStepResult("Step", jCtx, StatusSuccess)
+			ran := st.createStepResult("Step", jCtx, outcome.StatusSuccess)
 			if failed.HasTest != tt.want || ran.HasTest != tt.want {
 				t.Errorf("HasTest = %v failed and %v run, want %v", failed.HasTest, ran.HasTest, tt.want)
 			}
@@ -282,15 +289,15 @@ func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 	jCtx := &JobContext{
 		runEnv: &runEnv{
 			Printer: newBufferPrinter(),
-			Result:  NewResult(),
+			Outcome: outcome.New(),
 		},
 		repeat: &jobRepeat{
-			counters: make(map[int]StepRepeatCounter),
+			counters: make(map[int]outcome.RepeatCounter),
 			total:    3,
 		},
 		CurrentJobID: "job-1",
 	}
-	jCtx.Result.Jobs["job-1"] = &JobResult{JobID: "job-1"}
+	jCtx.Outcome.Jobs["job-1"] = &outcome.Job{JobID: "job-1"}
 
 	// Runs are counted from 0, as the executor counts them.
 	for i := range 3 {
@@ -316,13 +323,13 @@ func TestStep_handleRepeatExecution_AccumulatesEchoes(t *testing.T) {
 
 	// The runs themselves add no result; the executor makes one from the
 	// counter once they are done.
-	if got := len(jCtx.Result.Jobs["job-1"].StepResults); got != 0 {
+	if got := len(jCtx.Outcome.Jobs["job-1"].StepResults); got != 0 {
 		t.Fatalf("StepResults length = %d after the runs, want 0", got)
 	}
 	e := &Executor{job: &Job{ID: "job-1", Steps: []*Step{{Name: "first"}, step.Step}}}
 	e.appendRepeatStepResults(jCtx)
 
-	stepResults := jCtx.Result.Jobs["job-1"].StepResults
+	stepResults := jCtx.Outcome.Jobs["job-1"].StepResults
 	if len(stepResults) != 1 {
 		t.Fatalf("StepResults length = %d, want 1", len(stepResults))
 	}
@@ -345,7 +352,7 @@ func TestStepRepeatCounterUpdate(t *testing.T) {
 		},
 		repeat: &jobRepeat{
 			total:    10,
-			counters: make(map[int]StepRepeatCounter),
+			counters: make(map[int]outcome.RepeatCounter),
 		},
 		RepeatCurrent: 3,
 	}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
+	"github.com/mozership/probe/internal/workflowfile"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
@@ -135,17 +137,17 @@ func (p *Probe) loadGraph() error {
 // Load reads the workflow at FilePath, as a run reads it, and refuses it
 // for the first thing that keeps it from running as it is written.
 func (p *Probe) Load() error {
-	files, err := yamlFiles(p.FilePath)
+	files, err := workflowfile.Paths(p.FilePath)
 	if err != nil {
 		return NewFileError("load_yaml_files", "failed to locate YAML files", err)
 	}
-	y, data, err := readYamlFiles(files)
+	y, data, err := workflowfile.Read(files, readFile)
 	if err != nil {
 		return NewFileError("read_yaml_files", "failed to read YAML files", err)
 	}
 	if p.Config.Warn != nil {
-		for _, r := range redefinedJobs(files, data) {
-			_, _ = io.WriteString(p.Config.Warn, warnLine(r.String()))
+		for _, r := range workflowfile.RedefinedJobs(files, data) {
+			_, _ = io.WriteString(p.Config.Warn, display.WarnLine(r.String()))
 		}
 	}
 

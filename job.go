@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -38,7 +40,7 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 	ev := &expr.Expr{}
 
 	if err := j.expandJobName(ev, ctxPtr); err != nil {
-		ctx.Result.recordFailure(failureConfig)
+		ctx.Outcome.RecordFailure(failureConfig)
 		ctx.Printer.PrintError("job %q: name: %v", j.Name, err)
 		return false, NewExecutionError("job_start", "failed to expand job name", err)
 	}
@@ -141,12 +143,12 @@ func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 	ctx.jobName = name
 
 	// Update the job name in the result as well. Async repeat shares the
-	// JobResult across iterations, so writers must take the mutex.
-	if ctx.Result != nil {
-		if jobResult, exists := ctx.Result.Jobs[j.ID]; exists {
-			jobResult.mutex.Lock()
+	// outcome.Job across iterations, so writers must take its Mu.
+	if ctx.Outcome != nil {
+		if jobResult, exists := ctx.Outcome.Jobs[j.ID]; exists {
+			jobResult.Mu.Lock()
 			jobResult.JobName = name
-			jobResult.mutex.Unlock()
+			jobResult.Mu.Unlock()
 		}
 	}
 
@@ -325,21 +327,21 @@ func (j *Job) shouldSkip(ev *expr.Expr, ctx JobContext) bool {
 // handleSkip handles the skipped job logic
 func (j *Job) handleSkip(ctx JobContext) {
 	if ctx.Verbose {
-		var b debugBlock
-		b.line("Job '%s' (SKIPPED)", ctx.jobName)
-		b.line("Skip condition: %s", j.SkipIf)
-		ctx.Printer.logDebugBlock(&b)
+		var b display.DebugBlock
+		b.Line("Job '%s' (SKIPPED)", ctx.jobName)
+		b.Line("Skip condition: %s", j.SkipIf)
+		ctx.Printer.LogDebugBlock(&b)
 		ctx.Printer.PrintSeparator()
 	}
 
 	// Mark job as skipped in the result. Async repeat shares the
-	// JobResult across iterations, so writers must take the mutex
+	// outcome.Job across iterations, so writers must take its Mu
 	// to stay race-free with sibling iterations and Executor.finalize.
-	if ctx.Result != nil {
-		if jobResult, exists := ctx.Result.Jobs[j.ID]; exists {
-			jobResult.mutex.Lock()
-			jobResult.Status = StatusSkipped
-			jobResult.mutex.Unlock()
+	if ctx.Outcome != nil {
+		if jobResult, exists := ctx.Outcome.Jobs[j.ID]; exists {
+			jobResult.Mu.Lock()
+			jobResult.Status = outcome.StatusSkipped
+			jobResult.Mu.Unlock()
 		}
 	}
 }
@@ -447,14 +449,14 @@ func WithBuiltinActions(names []string) StandaloneOption {
 
 // firstRefusal returns why the guard refused the first step of jr it
 // refused, or nil when it refused none.
-func firstRefusal(jr *JobResult) *actionrpc.Refused {
+func firstRefusal(jr *outcome.Job) *actionrpc.Refused {
 	for _, sr := range jr.StepResults {
 		f := sr.Failure
 		if sr.RepeatCounter != nil {
 			f = sr.RepeatCounter.Failure
 		}
-		if f != nil && f.refused != nil {
-			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.refused.Reason)}
+		if f != nil && f.Refused != nil {
+			return &actionrpc.Refused{Reason: fmt.Sprintf("step %d %q of the embedded job: %s", sr.Index, sr.Name, f.Refused.Reason)}
 		}
 	}
 	return nil
@@ -480,8 +482,8 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	if printer.Masker() == nil {
 		printer.SetMasker(mask.New(nil, nil))
 	}
-	result := NewResult()
-	jr := &JobResult{
+	result := outcome.New()
+	jr := &outcome.Job{
 		JobName:   j.Name,
 		JobID:     jobID,
 		StartTime: start,
@@ -491,13 +493,13 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	ctx := JobContext{
 		runEnv: &runEnv{
 			Config: Config{
-				Verbose:      printer.verbose,
+				Verbose:      printer.Verbose(),
 				Guard:        cfg.guard,
 				NeedsNoCheck: cfg.needsNoCheck,
 				ActionRunner: cfg.runner,
 			},
 			Printer:    printer,
-			Result:     result,
+			Outcome:    result,
 			background: newBackground(),
 			cleanups:   newCleanups(runID, printer, false),
 			baseDir:    baseDir,
@@ -527,7 +529,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	var err error
 	if found := j.problems("", fmt.Sprintf("job %q", j.Name)); len(found) > 0 {
 		err = NewExecutionError("job_start", "step validation failed", problemsError(found))
-		ctx.Result.recordFailure(failureConfig)
+		ctx.Outcome.RecordFailure(failureConfig)
 		ctx.Printer.PrintError("%v", err)
 	}
 	if err == nil {
@@ -542,7 +544,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 
 	run := JobRun{Err: err, Success: err == nil && !failed}
 	if !run.Success {
-		jr.Status = StatusError
+		jr.Status = outcome.StatusError
 	}
 
 	run.Refused = firstRefusal(jr)
@@ -550,7 +552,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	run.Duration = time.Since(start)
 	jr.EndTime = jr.StartTime.Add(run.Duration)
 	run.Outputs = ctx.Outputs.GetAll()
-	run.Report = newReportRenderer([]string{jobID}, nil, ctx.Printer.Masker()).stepsText(result)
+	run.Report = display.NewRenderer([]string{jobID}, nil, ctx.Printer.Masker()).StepsText(result)
 
 	return run
 }

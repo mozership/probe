@@ -824,7 +824,7 @@ func TestWorkflowRepeatWarmupAsync(t *testing.T) {
 	if runner.calls != 5 {
 		t.Errorf("action called %d times, want 5", runner.calls)
 	}
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	if !strings.Contains(out, "(repeating 3 times, after 2 to warm up)") || !strings.Contains(out, "3/3 success") {
 		t.Errorf("terminal should count the 3 runs after the warmup, got:\n%s", out)
 	}

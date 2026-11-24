@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mozership/probe/internal/display"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/schedule"
 	"github.com/mozership/probe/internal/vareval"
 	"github.com/mozership/probe/mask"
@@ -44,7 +46,7 @@ type workflowRun struct {
 	failed atomic.Bool
 
 	// What execute leaves for the report files.
-	result     *Result
+	outcome    *outcome.Run
 	startedAt  time.Time
 	finishedAt time.Time
 	exitStatus int
@@ -138,14 +140,14 @@ func (r *workflowRun) execute() error {
 	// A job is named with the vars, as the report names it, where the run
 	// says which job is which.
 	namer := jobNamer(r.jobs, vars)
-	if l, ok := reporter.(jobLabeler); ok {
-		l.labelJobs(namer)
+	if l, ok := reporter.(display.JobLabeler); ok {
+		l.LabelJobs(namer)
 	}
 	if r.selection != nil {
 		// Said apart from the report, which is that of the jobs that run,
 		// so that a run of some jobs is not taken for one of them all.
 		p := r.printer()
-		p.Fprintln(p.errWriter, colorDim().Sprint(r.selection.describe(namer)))
+		p.Fprintln(p.Err(), display.ColorDim().Sprint(r.selection.describe(namer)))
 	}
 
 	// The job files the steps embed are read with the vars the run has, so
@@ -171,10 +173,10 @@ func (r *workflowRun) execute() error {
 		return err
 	}
 
-	reporter.Finish(ctx.Result)
+	reporter.Finish(ctx.Outcome)
 	r.finishedAt = time.Now()
-	r.result = ctx.Result
-	r.exitStatus = ctx.Result.exitCode(r.failed.Load())
+	r.outcome = ctx.Outcome
+	r.exitStatus = runExitCode(ctx.Outcome, r.failed.Load())
 	return nil
 }
 
@@ -186,7 +188,7 @@ func (r *workflowRun) printer() *Printer {
 // startReport sets up what the run prints with, the masker of its secrets
 // and a reporter of its own, and prints the header of the report. It
 // returns the reporter.
-func (r *workflowRun) startReport() Reporter {
+func (r *workflowRun) startReport() outcome.Reporter {
 	if r.w.printer == nil {
 		r.w.printer = NewPrinter(r.config.Verbose)
 	}
@@ -205,8 +207,8 @@ func (r *workflowRun) startReport() Reporter {
 
 	// A reporter tracks how far the report has been emitted, which is state
 	// for this run alone, so every run gets a fresh one.
-	render := newReportRenderer(r.jobIDs(), r.config.Baseline, p.Masker())
-	reporter := newReporter(r.config.Output, p, render)
+	render := display.NewRenderer(r.jobIDs(), r.config.Baseline, p.Masker())
+	reporter := display.NewReporter(r.config.Output, p, render)
 
 	r.startedAt = time.Now()
 	reporter.Start(r.w.Name, r.w.Description)
@@ -223,7 +225,7 @@ func (r *workflowRun) evalVars() (map[string]any, error) {
 
 // newJobContext returns the context the jobs of the run run with, with a
 // result of their own, which tells reporter how the run goes, and vars.
-func (r *workflowRun) newJobContext(vars map[string]any, reporter Reporter) JobContext {
+func (r *workflowRun) newJobContext(vars map[string]any, reporter outcome.Reporter) JobContext {
 	p := r.printer()
 	rs := r.newResult()
 	rs.SetReporter(reporter)
@@ -232,7 +234,7 @@ func (r *workflowRun) newJobContext(vars map[string]any, reporter Reporter) JobC
 		runEnv: &runEnv{
 			Config:     r.config,
 			Printer:    p,
-			Result:     rs,
+			Outcome:    rs,
 			scheduler:  r.scheduler,
 			background: newBackground(),
 			cleanups:   newCleanups(r.id, p, r.config.Trace),
@@ -248,10 +250,10 @@ func (r *workflowRun) newJobContext(vars map[string]any, reporter Reporter) JobC
 
 // newResult returns the result of the run, with a result for each of its
 // jobs.
-func (r *workflowRun) newResult() *Result {
-	rs := NewResult()
+func (r *workflowRun) newResult() *outcome.Run {
+	rs := outcome.New()
 	for _, job := range r.jobs {
-		rs.Jobs[job.ID] = &JobResult{
+		rs.Jobs[job.ID] = &outcome.Job{
 			JobName:   job.Name,
 			JobID:     job.ID,
 			StartTime: time.Now(),
@@ -270,8 +272,8 @@ func (r *workflowRun) runJobs(ctx JobContext) error {
 
 	for {
 		skippedJobs := ctx.scheduler.SkipBlocked()
-		if ctx.Result != nil {
-			skipJobs(skippedJobs, ctx.Result)
+		if ctx.Outcome != nil {
+			skipJobs(skippedJobs, ctx.Outcome)
 		}
 
 		running += r.startJobs(ctx.scheduler.Runnable(), ctx, done)
@@ -294,17 +296,17 @@ func (r *workflowRun) runJobs(ctx JobContext) error {
 
 // skipJobs records the jobs of jobIDs as skipped in rs, as jobs whose
 // dependencies failed.
-func skipJobs(jobIDs []string, rs *Result) {
+func skipJobs(jobIDs []string, rs *outcome.Run) {
 	for _, jobID := range jobIDs {
 		if jr, exists := rs.Jobs[jobID]; exists {
-			jr.mutex.Lock()
+			jr.Mu.Lock()
 			jr.EndTime = jr.StartTime // Set end time same as start time (0 duration)
-			jr.Status = StatusSkipped
-			jr.mutex.Unlock()
+			jr.Status = outcome.StatusSkipped
+			jr.Mu.Unlock()
 
 			// These jobs never reach Executor.finalize, so announce them here
 			// or the streaming report would stall on them.
-			rs.notifyJobDone(jobID)
+			rs.NotifyJobDone(jobID)
 		}
 	}
 }
@@ -347,7 +349,7 @@ func (r *workflowRun) writeReports() error {
 		return nil
 	}
 
-	rep := buildReport(r.w.Name, r.w.Description, r.result, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
+	rep := buildReport(r.w.Name, r.w.Description, r.outcome, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
 	if r.selection != nil {
 		rep.Selection = r.selection.report()

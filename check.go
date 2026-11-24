@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mozership/probe/actionref"
+	"github.com/mozership/probe/internal/workflowfile"
 )
 
 // Severities of a Finding.
@@ -131,26 +132,26 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// What a run warns of as it loads is told as a finding here, as load
 	// writes no warning.
 	p := New(path, false)
-	files, err := yamlFiles(p.FilePath)
+	files, err := workflowfile.Paths(p.FilePath)
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no YAML file", path)
 	}
-	data, contents, err := readYamlFiles(files)
+	data, contents, err := workflowfile.Read(files, readFile)
 	if err != nil {
 		return nil, err
 	}
 
 	c := newChecker(opts)
 	c.files = mapFiles(files, contents)
-	for _, r := range redefinedJobs(files, contents) {
+	for _, r := range workflowfile.RedefinedJobs(files, contents) {
 		c.findings = append(c.findings, Finding{
 			Severity: SeverityWarning,
 			File:     r.File,
 			Line:     r.Line,
-			Message:  r.message(),
+			Message:  r.Message(),
 		})
 	}
 

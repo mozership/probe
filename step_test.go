@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -31,12 +32,12 @@ func TestStep_shouldSkip_errorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			printer := newBufferPrinter()
 			st := newStepRun(&Step{Name: "step", SkipIf: tt.skipIf}, nil)
-			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Result: NewResult()}}
+			jCtx := &JobContext{runEnv: &runEnv{Printer: printer, Outcome: outcome.New()}}
 
 			if st.shouldSkip(jCtx) {
 				t.Error("shouldSkip() = true, want the step to run")
 			}
-			if out := printer.errWriter.(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
+			if out := printer.Err().(*bytes.Buffer).String(); !strings.Contains(out, tt.want) {
 				t.Errorf("output = %q, want %q", out, tt.want)
 			}
 			if _, ok := st.prepare(jCtx); !ok {
@@ -377,7 +378,7 @@ func TestStep_handleActionError(t *testing.T) {
 				expr: &expr.Expr{},
 			}
 			printer := newBufferPrinter()
-			printer.verbose = tt.verbose
+			printer.SetVerbose(tt.verbose)
 			jCtx := &JobContext{
 				runEnv: &runEnv{
 					Config:  Config{Verbose: tt.verbose},
@@ -397,7 +398,7 @@ func TestStep_handleActionError(t *testing.T) {
 			}
 			// The step's result tells the error, so it is told as it
 			// happens only in a verbose run, before the exchange.
-			got := printer.errWriter.(*bytes.Buffer).String()
+			got := printer.Err().(*bytes.Buffer).String()
 			if tt.wantOut == "" && got != "" || !strings.HasPrefix(got, tt.wantOut) {
 				t.Errorf("printed %q, want it to start with %q", got, tt.wantOut)
 			}
@@ -859,8 +860,8 @@ func TestStep_executeActionWithRetry_Refused(t *testing.T) {
 }
 
 func TestFailureKindOf_Refused(t *testing.T) {
-	if got := failureKindOf(fmt.Errorf("step: %w", actionrpc.Refuse("no"))); got != FailureRefused {
-		t.Errorf("failureKindOf = %q, want %q", got, FailureRefused)
+	if got := failureKindOf(fmt.Errorf("step: %w", actionrpc.Refuse("no"))); got != outcome.FailureRefused {
+		t.Errorf("failureKindOf = %q, want %q", got, outcome.FailureRefused)
 	}
 }
 
@@ -869,14 +870,14 @@ func TestFailureKindOf_Refused(t *testing.T) {
 func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 	for _, afterFailure := range []bool{false, true} {
 		printer := newBufferPrinter()
-		printer.verbose = true
+		printer.SetVerbose(true)
 		printer.SetMasker(mask.New(nil, nil))
-		result := NewResult()
-		result.Jobs["job"] = &JobResult{JobID: "job"}
+		result := outcome.New()
+		result.Jobs["job"] = &outcome.Job{JobID: "job"}
 		jCtx := &JobContext{
 			runEnv: &runEnv{
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 				Config:  Config{Verbose: true},
 			},
 			CurrentJobID: "job",
@@ -886,7 +887,7 @@ func TestStep_handleSkip_VerboseRecordsTheStep(t *testing.T) {
 		st.handleSkip("Skipped", "the reason", afterFailure, jCtx)
 
 		steps := result.Jobs["job"].StepResults
-		if len(steps) != 1 || steps[0].Status != StatusSkipped || steps[0].Name != "Skipped" {
+		if len(steps) != 1 || steps[0].Status != outcome.StatusSkipped || steps[0].Name != "Skipped" {
 			t.Errorf("afterFailure %v: results = %+v, want the step recorded as skipped", afterFailure, steps)
 		}
 	}
@@ -910,7 +911,7 @@ func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
 		ctx:  StepContext{Vars: map[string]any{"host": "127.0.0.1:1"}},
 	}
 	printer := newBufferPrinter()
-	printer.verbose = true
+	printer.SetVerbose(true)
 	printer.SetMasker(mask.New(nil, nil))
 	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true, ActionRunner: mock}, Printer: printer}}
 
@@ -920,7 +921,7 @@ func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
 	}
 	st.handleActionError(err, "h", jCtx)
 
-	out := printer.errWriter.(*bytes.Buffer).String()
+	out := printer.Err().(*bytes.Buffer).String()
 	want := "[DEBUG] Request (as the step gave it; the action returned none):\n[DEBUG]   password: <redacted>\n[DEBUG]   url: http://127.0.0.1:1\n"
 	if !strings.Contains(out, want) {
 		t.Errorf("output does not have\n%s\ngot:\n%s", want, out)
@@ -934,14 +935,14 @@ func TestStep_handleActionError_ShowsTheGivenRequest(t *testing.T) {
 // step gave it.
 func TestStep_handleActionError_ShowsTheRequestTheActionMade(t *testing.T) {
 	printer := newBufferPrinter()
-	printer.verbose = true
+	printer.SetVerbose(true)
 	jCtx := &JobContext{runEnv: &runEnv{Config: Config{Verbose: true}, Printer: printer}}
 	st := &stepRun{Step: &Step{Uses: "http"}, expr: &expr.Expr{}, given: map[string]any{"url": "given"}}
 	st.ctx.Req = map[string]any{"url": "made"}
 
 	st.handleActionError(errors.New("failed"), "h", jCtx)
 
-	out := printer.errWriter.(*bytes.Buffer).String()
+	out := printer.Err().(*bytes.Buffer).String()
 	if !strings.Contains(out, "[DEBUG] Request:\n[DEBUG]   url: made\n") || strings.Contains(out, "given") {
 		t.Errorf("output should show the request the action made:\n%s", out)
 	}

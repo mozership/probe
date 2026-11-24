@@ -1,6 +1,13 @@
-package probe
+// Package outcome holds what a run of a workflow came to: the result of each
+// step and job, as it is reported, and the kinds of failure that decide the
+// exit code.
+package outcome
 
 import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,18 +18,18 @@ import (
 	"github.com/mozership/probe/report"
 )
 
-// StatusType represents the status of execution
-type StatusType int
+// Status is how a step or a job ended.
+type Status int
 
 const (
-	StatusSuccess StatusType = iota
+	StatusSuccess Status = iota
 	StatusError
 	StatusWarning
 	StatusSkipped
 )
 
-// StepRepeatCounter tracks the execution results of repeated steps
-type StepRepeatCounter struct {
+// RepeatCounter tracks the runs of a step of a repeated job.
+type RepeatCounter struct {
 	// ID is the id of the step, by which the test of the repeated job reads
 	// its runs.
 	ID           string
@@ -55,7 +62,7 @@ type StepRepeatCounter struct {
 	// Failure is why the first iteration that failed did, so that the step's
 	// result keeps the kind of failure, such as an action error, rather than
 	// only the count.
-	Failure *StepFailure
+	Failure *Failure
 	// Checked is whether an action checked a response against a contract,
 	// which checks the step as a test does, or the step is one that passes
 	// without being checked, as one of the hello action does.
@@ -63,35 +70,35 @@ type StepRepeatCounter struct {
 	// Contract is what the first iteration's response was matched to in
 	// its contract.
 	Contract *report.Contract
-	// notes are those of the first run that failed, or of the last run
-	// while none has, and notesRun is that run, counted from 1 without the
-	// warmup runs. notesWarned is whether a run's notes were warned of, so
+	// Notes are those of the first run that failed, or of the last run
+	// while none has, and NotesRun is that run, counted from 1 without the
+	// warmup runs. NotesWarned is whether a run's notes were warned of, so
 	// that a repeated job warns of them once.
-	notes       []notes.Note
-	notesRun    int
-	notesWarned bool
+	Notes       []notes.Note
+	NotesRun    int
+	NotesWarned bool
 }
 
-// keepNotes keeps the notes of run, a run of the step that failed or not,
+// KeepNotes keeps the notes of run, a run of the step that failed or not,
 // as those of the step, while no run has failed: the notes are those of the
 // run the failure is of, so that the two tell of one run, and until one
 // fails, those of the last run. The runs of an async job end in any order,
 // so a run that passed replaces the notes only of an earlier run.
-func (c *StepRepeatCounter) keepNotes(n []notes.Note, run int, failed bool) {
-	if !failed && run < c.notesRun {
+func (c *RepeatCounter) KeepNotes(n []notes.Note, run int, failed bool) {
+	if !failed && run < c.NotesRun {
 		return
 	}
-	c.notes, c.notesRun = n, run
+	c.Notes, c.NotesRun = n, run
 }
 
-// StepResult represents the result of a step execution
-type StepResult struct {
+// Step is what a step came to.
+type Step struct {
 	Index int
 	// ID is the id of the step, or step_ and where it is written in the job
-	// when it has none; see Step.repeatID.
+	// when it has none, as the step that ran tells it.
 	ID        string
 	Name      string
-	Status    StatusType
+	Status    Status
 	StartedAt time.Time
 	RT        string
 	RTSec     float64
@@ -103,23 +110,23 @@ type StepResult struct {
 	HasEcho       bool
 	Report        string
 	HasTest       bool
-	RetryAttempt  int                // Number of attempts made (0 = retry not performed, 1 = succeeded first try)
-	RetryMax      int                // Maximum retry attempts configured
-	RepeatCounter *StepRepeatCounter // For repeat execution information
+	RetryAttempt  int            // Number of attempts made (0 = retry not performed, 1 = succeeded first try)
+	RetryMax      int            // Maximum retry attempts configured
+	RepeatCounter *RepeatCounter // For repeat execution information
 	// The fields below feed the report files. Unlike StartedAt and RT they are
 	// recorded whether or not --timing is set, and they carry no terminal styling.
 	Test    string        // The test expression, empty when the step has none
 	Elapsed time.Duration // Wall time from the action's start to the result
-	Failure *StepFailure  // Why the step failed; nil unless Status is StatusError
+	Failure *Failure      // Why the step failed; nil unless Status is StatusError
 	// Contract is what the response was matched to in the contract the
 	// action checked it against; nil when it checked none.
 	Contract *report.Contract
-	// notes are what the action left for people in res.notes; for a
+	// Notes are what the action left for people in res.notes; for a
 	// repeated step, those of its counter.
-	notes []notes.Note
+	Notes []notes.Note
 }
 
-// Failure kinds recorded on a StepFailure. They are the kinds a report
+// Failure kinds recorded on a Failure. They are the kinds a report
 // carries, so they are defined there.
 const (
 	FailureAssertion = report.FailureAssertion
@@ -133,9 +140,9 @@ const (
 	FailureRefused          = report.FailureRefused
 )
 
-// StepFailure describes a failed step without terminal formatting, so that
+// Failure describes a failed step without terminal formatting, so that
 // reports can serialize it.
-type StepFailure struct {
+type Failure struct {
 	Kind    string
 	Message string
 	// Request and Response are what the action sent and received. They are left
@@ -144,84 +151,85 @@ type StepFailure struct {
 	Response map[string]any
 	// Violations are what broke the contract, when Kind is a contract's.
 	Violations []report.Violation
-	// refused is what the guard of the run refused, when Kind is
+	// Refused is what the guard of the run refused, when Kind is
 	// FailureRefused, so that why is read from it rather than the message.
-	refused *actionrpc.Refused
-	// clause is the condition of the test that is false, when Kind is
+	Refused *actionrpc.Refused
+	// Clause is the condition of the test that is false, when Kind is
 	// FailureAssertion and it could be told, as it is: the report hides the
-	// secrets in it as it shows it, as it does in Request and Response; got
+	// secrets in it as it shows it, as it does in Request and Response; Got
 	// is what the test came to, when Kind is FailureTestType. The report
 	// shows them under the step.
-	clause *expr.Clause
-	got    any
-	// head is what Message has before the condition, when there is one, so
+	Clause *expr.Clause
+	Got    any
+	// Head is what Message has before the condition, when there is one, so
 	// that the report files can tell the condition anew with the secrets
-	// known by then; see reportMessage.
-	head string
+	// known by then; see ReportMessage.
+	Head string
 }
 
-// reportMessage is the message of f as the report files have it. With a
-// condition of a test that is false, it is head and the condition told anew
+// ReportMessage is the message of f as the report files have it. With a
+// condition of a test that is false, it is Head and the condition told anew
 // from the condition as it is, masked by m before its values are cut: a
 // secret a later step taught m would otherwise be left in the message as
 // the part of it the cut kept, which no masker finds. Without a condition,
 // or with no masker, it is Message.
-func (f *StepFailure) reportMessage(m *mask.Masker) string {
-	if m == nil || f.clause == nil {
+func (f *Failure) ReportMessage(m *mask.Masker) string {
+	if m == nil || f.Clause == nil {
 		return f.Message
 	}
-	return f.head + clauseSummary(maskClause(m, *f.clause))
+	return f.Head + ClauseSummary(MaskClause(m, *f.Clause))
 }
 
-// prefixed returns a copy of f whose message starts with prefix, in the
+// Prefixed returns a copy of f whose message starts with prefix, in the
 // report files as well.
-func (f StepFailure) prefixed(prefix string) *StepFailure {
+func (f Failure) Prefixed(prefix string) *Failure {
 	f.Message = prefix + f.Message
-	f.head = prefix + f.head
+	f.Head = prefix + f.Head
 	return &f
 }
 
-// JobResult stores execution results for a job
-type JobResult struct {
+// Job is what a job came to: how it ended and the results of its steps.
+type Job struct {
 	JobName string
 	JobID   string
 	// Status is how the job ended: StatusSuccess, StatusError or
 	// StatusSkipped, which a job skipped by its skipif or by a job it needs
 	// is. It is StatusSuccess while the job runs.
-	Status      StatusType
+	Status      Status
 	StartTime   time.Time
 	EndTime     time.Time
-	StepResults []StepResult // Store all step results for this job
+	StepResults []Step // Store all step results for this job
 	// RepeatTest is the outcome of the test of a repeated job over its
 	// runs; nil when it has none.
-	RepeatTest *RepeatTestResult
+	RepeatTest *RepeatTest
 	// BaselineTest is the outcome of the test of a repeated job against the
 	// run compared to; nil when it has none.
-	BaselineTest *RepeatTestResult
-	mutex        sync.Mutex
+	BaselineTest *RepeatTest
+	Mu           sync.Mutex
 }
 
 // Succeeded reports whether the job did not fail, which a skipped job did
-// not. Callers hold jr.mutex.
-func (jr *JobResult) Succeeded() bool {
+// not. Callers hold jr.Mu.
+func (jr *Job) Succeeded() bool {
 	return jr.Status != StatusError
 }
 
-// RepeatTestResult is the outcome of the test of a repeated job.
-type RepeatTestResult struct {
+// RepeatTest is the outcome of the test of a repeated job.
+type RepeatTest struct {
 	Test   string
 	Passed bool
 	// Failure is why the test failed; nil when it passed.
-	Failure *StepFailure
+	Failure *Failure
 	// Skipped is why the test was not checked, which a test against the run
 	// compared to is not when there is nothing to compare to; empty when it
 	// was checked.
 	Skipped string
 }
 
-// Result manages execution results for multiple jobs
-type Result struct {
-	Jobs map[string]*JobResult
+// Run is what a run of a workflow came to: the result of each job, by its
+// id, and the kinds of failure seen.
+type Run struct {
+	Jobs map[string]*Job
 	// reporter is told as steps start and as results become final, so
 	// that the report can be emitted incrementally. It is the one way the
 	// run tells it anything. It may be nil, in which case nothing is told.
@@ -234,23 +242,23 @@ type Result struct {
 
 // SetReporter installs the reporter told when steps start and when steps
 // and jobs finish.
-func (rs *Result) SetReporter(r Reporter) {
+func (rs *Run) SetReporter(r Reporter) {
 	rs.reporter = r
 }
 
-// notifyStepStart tells the reporter that a step of the job of jobID
+// NotifyStepStart tells the reporter that a step of the job of jobID
 // began. The buffered reporter shows it by the spinner, the stream reporter
-// by a line of progress. A nil Result, which some contexts run without,
+// by a line of progress. A nil Run, which some contexts run without,
 // tells nothing.
-func (rs *Result) notifyStepStart(jobID, stepName string) {
+func (rs *Run) NotifyStepStart(jobID, stepName string) {
 	if rs == nil || rs.reporter == nil {
 		return
 	}
 	rs.reporter.StepStart(jobID, stepName)
 }
 
-// notifyJobDone tells the reporter that a job's report block is final.
-func (rs *Result) notifyJobDone(jobID string) {
+// NotifyJobDone tells the reporter that a job's report block is final.
+func (rs *Run) NotifyJobDone(jobID string) {
 	if rs.reporter == nil {
 		return
 	}
@@ -259,27 +267,112 @@ func (rs *Result) notifyJobDone(jobID string) {
 	}
 }
 
-// NewResult creates a new Result instance
-func NewResult() *Result {
-	return &Result{
-		Jobs: make(map[string]*JobResult),
+// New returns a Run with no job.
+func New() *Run {
+	return &Run{
+		Jobs: make(map[string]*Job),
 	}
 }
 
-// AddStepResult adds a StepResult to the specified job result
-func (rs *Result) AddStepResult(jobID string, stepResult StepResult) {
+// AddStepResult adds sr to the job of jobID, and tells the reporter.
+func (rs *Run) AddStepResult(jobID string, sr Step) {
 	jr, exists := rs.Jobs[jobID]
 	if !exists {
 		return
 	}
 
-	jr.mutex.Lock()
-	jr.StepResults = append(jr.StepResults, stepResult)
-	jr.mutex.Unlock()
+	jr.Mu.Lock()
+	jr.StepResults = append(jr.StepResults, sr)
+	jr.Mu.Unlock()
 
 	// Notify outside the job lock: the reporter takes its own lock and may
 	// render other jobs, so holding this one here would nest the two.
 	if rs.reporter != nil {
-		rs.reporter.StepDone(jobID, stepResult)
+		rs.reporter.StepDone(jobID, sr)
 	}
+}
+
+// Reporter decides when the parts of a workflow report reach the user, and
+// on which of stdout and stderr.
+// Jobs run concurrently, so implementations are called from several
+// goroutines and must serialize their own writes.
+type Reporter interface {
+	Start(name, description string)
+	StepStart(jobID, stepName string)
+	StepDone(jobID string, sr Step)
+	JobDone(jobID string, jr *Job)
+	Finish(rs *Run)
+}
+
+// RecordFailure notes that a failure of the given kind happened during the run.
+func (rs *Run) RecordFailure(kind string) {
+	if rs == nil || kind == "" {
+		return
+	}
+	rs.failuresMu.Lock()
+	defer rs.failuresMu.Unlock()
+	if rs.failures == nil {
+		rs.failures = make(map[string]bool)
+	}
+	rs.failures[kind] = true
+}
+
+// HasFailure reports whether a failure of the given kind happened during
+// the run.
+func (rs *Run) HasFailure(kind string) bool {
+	rs.failuresMu.Lock()
+	defer rs.failuresMu.Unlock()
+	return rs.failures[kind]
+}
+
+// MaskClause returns c with the secrets m knows hidden in the condition and
+// in what its operands evaluated to. The values are masked as data, before
+// they are written out and cut: a secret that is cut, or whose quotes are
+// escaped, is no longer the text the masker knows.
+func MaskClause(m *mask.Masker, c expr.Clause) expr.Clause {
+	out := expr.Clause{Expr: m.String(c.Expr)}
+	for _, o := range c.Operands {
+		out.Operands = append(out.Operands, expr.Operand{Expr: m.String(o.Expr), Value: m.Value(o.Value)})
+	}
+	return out
+}
+
+// MaxOperandLength is how much of a value a false condition compared is
+// shown, as a whole response body may be one.
+const MaxOperandLength = 200
+
+// OperandText is an operand and its value on one line, as res.code = 500.
+// A string is quoted, so that an empty one and one that ends with a newline
+// can be seen, and anything else is written as JSON.
+func OperandText(o expr.Operand) string {
+	var value string
+	switch v := o.Value.(type) {
+	case nil:
+		value = "nil"
+	case string:
+		value = strconv.Quote(v)
+	default:
+		if data, err := json.Marshal(v); err == nil {
+			value = string(data)
+		} else {
+			value = fmt.Sprintf("%v", v)
+		}
+	}
+	if r := []rune(value); len(r) > MaxOperandLength {
+		value = string(r[:MaxOperandLength]) + "..."
+	}
+	return o.Expr + " = " + value
+}
+
+// ClauseSummary is a false condition on one line, for the message of a
+// failure: res.code == 200 (res.code = 500).
+func ClauseSummary(c expr.Clause) string {
+	if len(c.Operands) == 0 {
+		return c.Expr
+	}
+	parts := make([]string, len(c.Operands))
+	for i, o := range c.Operands {
+		parts[i] = OperandText(o)
+	}
+	return fmt.Sprintf("%s (%s)", c.Expr, strings.Join(parts, ", "))
 }

@@ -1,7 +1,6 @@
-package probe
+package display
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -64,14 +63,44 @@ func NewPrinter(verbose bool) *Printer {
 	}
 }
 
-func newBufferPrinter() *Printer {
-	pr := NewPrinter(false)
-	pr.outWriter = new(bytes.Buffer)
-	pr.errWriter = new(bytes.Buffer)
-	// Tests do not render a live spinner; nil here makes the spinner
-	// helpers no-op.
-	pr.spinner = nil
-	return pr
+// NewPrinterTo returns a printer that writes to out and err and shows no
+// spinner, for a run whose output is captured, as a test captures it.
+func NewPrinterTo(verbose bool, out, err io.Writer) *Printer {
+	p := NewPrinter(verbose)
+	p.spinner = nil
+	p.outWriter = out
+	p.errWriter = err
+	return p
+}
+
+// Verbose reports whether the printer writes the verbose output of a run.
+func (p *Printer) Verbose() bool {
+	return p.verbose
+}
+
+// SetVerbose sets whether the printer writes the verbose output of a run.
+func (p *Printer) SetVerbose(v bool) {
+	p.verbose = v
+}
+
+// Out is where the printer writes the report of a run.
+func (p *Printer) Out() io.Writer {
+	return p.outWriter
+}
+
+// Err is where the printer writes errors, warnings and progress.
+func (p *Printer) Err() io.Writer {
+	return p.errWriter
+}
+
+// SetOut sets where the printer writes the report of a run.
+func (p *Printer) SetOut(w io.Writer) {
+	p.outWriter = w
+}
+
+// SetErr sets where the printer writes errors, warnings and progress.
+func (p *Printer) SetErr(w io.Writer) {
+	p.errWriter = w
 }
 
 func (p *Printer) StartSpinner() {
@@ -180,77 +209,64 @@ func (p *Printer) LogError(format string, args ...any) {
 // LogWarn prints a warning to the error writer: something the user should
 // know about that does not make the run fail.
 func (p *Printer) LogWarn(format string, args ...any) {
-	p.Fprint(p.errWriter, warnLine(fmt.Sprintf(format, args...)))
+	p.Fprint(p.errWriter, WarnLine(fmt.Sprintf(format, args...)))
 }
 
-// warnLine returns msg as a line of warning, as LogWarn writes it, for what
+// WarnLine returns msg as a line of warning, as LogWarn writes it, for what
 // warns without a Printer, such as Load.
-func warnLine(msg string) string {
-	return colorWarning().Sprintf("[WARN] %s", msg) + "\n"
+func WarnLine(msg string) string {
+	return ColorWarning().Sprintf("[WARN] %s", msg) + "\n"
 }
 
-// logTestError logs, in verbose mode, the error a test could not be
+// LogTestError logs, in verbose mode, the error a test could not be
 // evaluated for.
-func (p *Printer) logTestError(testExpr string, err error) {
+func (p *Printer) LogTestError(testExpr string, err error) {
 	if p.verbose {
 		p.Fprint(p.errWriter, p.generateLogError("Test Error: %s", err)+p.generateLogError("Input: %s", testExpr))
 	}
 }
 
-// PrintTestResult prints test result in verbose mode
-func (p *Printer) PrintTestResult(success bool, testExpr string, context any) {
+// PrintTestResult prints, in verbose mode, what the test testExpr came to,
+// with env, the names it was evaluated with, when it is not nil.
+func (p *Printer) PrintTestResult(success bool, testExpr string, env map[string]any) {
 	var resultStr string
 	if success {
 		resultStr = colorSuccess().Sprintf("Success")
 	} else {
 		resultStr = colorError().Sprintf("Failure")
 	}
-	var b debugBlock
-	b.line("Test: %s (input: %s)", resultStr, testExpr)
-	if env := testEnvOf(context); env != nil {
-		b.line("Env:")
+	var b DebugBlock
+	b.Line("Test: %s (input: %s)", resultStr, testExpr)
+	if env != nil {
+		b.Line("Env:")
 		b.mapData(p.masker.Map(env))
 	}
-	p.logDebugBlock(&b)
+	p.LogDebugBlock(&b)
 }
 
-// testEnvOf is what PrintTestResult shows of the context a test was
-// evaluated in: that of a step as StepContext.testEnv tells it, and a map as
-// it is.
-func testEnvOf(context any) map[string]any {
-	switch c := context.(type) {
-	case StepContext:
-		return c.testEnv()
-	case map[string]any:
-		return c
-	default:
-		return nil
-	}
-}
-
-// debugBlock collects the lines of a block of verbose output, such as the
+// DebugBlock collects the lines of a block of verbose output, such as the
 // request and the response of a step, so that the block is written at once.
 // Jobs run concurrently, and a block written a line at a time would have
 // the lines of another job land inside it.
-type debugBlock struct {
+type DebugBlock struct {
 	strings.Builder
 }
 
-// line adds a line to the block, as LogDebug writes it.
-func (b *debugBlock) line(format string, args ...any) {
+// Line adds a line to the block, as LogDebug writes it.
+func (b *DebugBlock) Line(format string, args ...any) {
 	b.WriteString(debugLine(format, args...))
 }
 
 // mapData adds the lines PrintMapData writes of data to the block.
-func (b *debugBlock) mapData(data map[string]any) {
+func (b *DebugBlock) mapData(data map[string]any) {
 	for _, l := range dump.Lines(data, dump.Options{}) {
-		b.line("  %s", l)
+		b.Line("  %s", l)
 	}
 }
 
-// logDebugBlock writes a block of verbose output in one write, only in
+// LogDebugBlock writes a block of verbose output in one write, only in
 // verbose mode.
-func (p *Printer) logDebugBlock(b *debugBlock) {
+func (p *Printer) LogDebugBlock(b *DebugBlock) {
 	if p.verbose && b.Len() > 0 {
 		p.Fprint(p.errWriter, b.String())
 	}
@@ -260,42 +276,42 @@ func (p *Printer) logDebugBlock(b *debugBlock) {
 func (p *Printer) PrintEchoContent(content string) {
 	// Add indent to all lines, including after user-specified newlines
 	indent := "       "
-	var b debugBlock
+	var b DebugBlock
 	for line := range strings.SplitSeq(content, "\n") {
-		b.line("%s%s", indent, line)
+		b.Line("%s%s", indent, line)
 	}
-	p.logDebugBlock(&b)
+	p.LogDebugBlock(&b)
 }
 
 // PrintRequestResponse prints request and response data with proper formatting
 func (p *Printer) PrintRequestResponse(stepIdx int, stepName string, req, res map[string]any, rt string) {
-	var b debugBlock
-	b.line("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
-	b.line("Request:")
+	var b DebugBlock
+	b.Line("%s", ColorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	b.Line("Request:")
 	b.mapData(p.masker.Map(req))
 
-	b.line("Response:")
+	b.Line("Response:")
 	b.mapData(p.masker.Map(res))
 
-	b.line("RT: %s", colorInfo().Sprintf("%s", rt))
-	p.logDebugBlock(&b)
+	b.Line("RT: %s", colorInfo().Sprintf("%s", rt))
+	p.LogDebugBlock(&b)
 }
 
 // PrintGivenRequest prints, for a step whose action failed without
 // returning the request it made, the parameters the step gave the action,
 // its templates evaluated, in place of the request and the response.
 func (p *Printer) PrintGivenRequest(stepIdx int, stepName string, with map[string]any) {
-	var b debugBlock
-	b.line("%s", colorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
-	b.line("Request (as the step gave it; the action returned none):")
+	var b DebugBlock
+	b.Line("%s", ColorWarning().Sprintf("--- Step %d: %s", stepIdx, stepName))
+	b.Line("Request (as the step gave it; the action returned none):")
 	b.mapData(p.masker.Map(with))
-	p.logDebugBlock(&b)
+	p.LogDebugBlock(&b)
 }
 
 // PrintMapData prints map data in verbose mode as YAML-like lines, its keys
 // sorted, and all of it, as it is: nothing is cut or left out.
 func (p *Printer) PrintMapData(data map[string]any) {
-	var b debugBlock
+	var b DebugBlock
 	b.mapData(data)
-	p.logDebugBlock(&b)
+	p.LogDebugBlock(&b)
 }

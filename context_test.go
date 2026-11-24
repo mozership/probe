@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 )
 
 func TestResponseTimeExpressions(t *testing.T) {
@@ -193,7 +194,7 @@ func TestJobContextRepeatTracking(t *testing.T) {
 		},
 		repeat: &jobRepeat{
 			total:    10,
-			counters: make(map[int]StepRepeatCounter),
+			counters: make(map[int]outcome.RepeatCounter),
 		},
 		RepeatCurrent: 5,
 	}
@@ -212,7 +213,7 @@ func TestJobContextRepeatTracking(t *testing.T) {
 	}
 
 	// Test step counter initialization
-	counter := StepRepeatCounter{
+	counter := outcome.RepeatCounter{
 		SuccessCount: 3,
 		FailureCount: 2,
 		Name:         "Test Step",

@@ -14,13 +14,15 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 	"github.com/mozership/probe/report"
 )
 
 func TestRepeatRuns(t *testing.T) {
-	steps := repeatRuns([]StepRepeatCounter{
+	steps := repeatRuns([]outcome.RepeatCounter{
 		{ID: "search", SuccessCount: 3, FailureCount: 1, RTs: []float64{0.010, 0.020, 0.030, 0.300}},
 		// The entries of an iteration have a counter each, of one step.
 		{ID: "each", SuccessCount: 2, RTs: []float64{0.001, 0.002}},
@@ -104,9 +106,9 @@ func TestEvalRepeatTest(t *testing.T) {
 		wantOutput  string
 	}{
 		{name: "a test that holds", test: "steps.search.success == 3", wantPassed: true},
-		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: FailureTestError},
-		{name: "a test that is not a boolean", test: "steps.search.success", wantKind: FailureTestType, wantMessage: "test evaluated to 3 (int), not a boolean", wantOutput: typeMismatchDetail("steps.search.success", 3)},
-		{name: "a test that is false", test: "steps.search.success == 4", wantKind: FailureAssertion, wantMessage: "test evaluated to false: steps.search.success == 4 (steps.search.success = 3)", wantOutput: "       failed: steps.search.success == 4\n         steps.search.success = 3\n"},
+		{name: "a test that cannot be evaluated", test: "nosuch(1)", wantKind: outcome.FailureTestError},
+		{name: "a test that is not a boolean", test: "steps.search.success", wantKind: outcome.FailureTestType, wantMessage: "test evaluated to 3 (int), not a boolean", wantOutput: display.TypeMismatchDetail("steps.search.success", 3)},
+		{name: "a test that is false", test: "steps.search.success == 4", wantKind: outcome.FailureAssertion, wantMessage: "test evaluated to false: steps.search.success == 4 (steps.search.success = 3)", wantOutput: "       failed: steps.search.success == 4\n         steps.search.success = 3\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,9 +129,9 @@ func TestEvalRepeatTest(t *testing.T) {
 			if res.Failure == nil || res.Failure.Kind != tt.wantKind {
 				t.Fatalf("failure = %+v, want %s", res.Failure, tt.wantKind)
 			}
-			if tt.wantKind == FailureTestError {
+			if tt.wantKind == outcome.FailureTestError {
 				_, err := (&expr.Expr{}).Eval(tt.test, env)
-				tt.wantMessage, tt.wantOutput = err.Error(), testErrorDetail(err.Error())
+				tt.wantMessage, tt.wantOutput = err.Error(), display.TestErrorDetail(err.Error())
 			}
 			if res.Failure.Message != tt.wantMessage {
 				t.Errorf("message = %q, want %q", res.Failure.Message, tt.wantMessage)
@@ -174,7 +176,7 @@ func TestWorkflow_RepeatTestPassesOverFailedRuns(t *testing.T) {
 		t.Errorf("step = %+v, want it passed with the failed run counted", st)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	if !strings.Contains(out, "✓  repeat test: steps.query.success_rate >= vars.rate") {
 		t.Errorf("terminal should show the test passed, got:\n%s", out)
 	}
@@ -210,7 +212,7 @@ func TestWorkflow_RepeatTestFails(t *testing.T) {
 		t.Errorf("failure = %+v, want the false condition and what it compared", rt.Failure)
 	}
 
-	out := workflow.printer.outWriter.(*bytes.Buffer).String()
+	out := workflow.printer.Out().(*bytes.Buffer).String()
 	// The test lines up with the steps above it: its icon with theirs, and
 	// why it failed with its text.
 	for _, s := range []string{
@@ -363,11 +365,11 @@ func TestWorkflowStartRefusesRepeatTestIDCollision(t *testing.T) {
 // with a test over its runs that failed in one run and was not run in
 // another as passed: it ran, and its runs are counted.
 func TestBuildReport_RepeatTestedStepFailedAndSkipped(t *testing.T) {
-	st := buildStepReport(StepResult{
+	st := buildStepReport(outcome.Step{
 		Name:          "Query",
 		HasTest:       true,
-		Status:        StatusError,
-		RepeatCounter: &StepRepeatCounter{Name: "Query", FailureCount: 1, SkippedCount: 1, Tested: true},
+		Status:        outcome.StatusError,
+		RepeatCounter: &outcome.RepeatCounter{Name: "Query", FailureCount: 1, SkippedCount: 1, Tested: true},
 	}, nil)
 	if st.Status != report.Passed {
 		t.Errorf("status = %q, want %q", st.Status, report.Passed)
@@ -454,7 +456,7 @@ func TestRepeatFieldsAreThoseTheTestsRead(t *testing.T) {
 		return slices.Sorted(slices.Values(fields))
 	}
 
-	run := repeatRuns([]StepRepeatCounter{{ID: "s", SuccessCount: 1, RTs: []float64{0.1}}})["s"]
+	run := repeatRuns([]outcome.RepeatCounter{{ID: "s", SuccessCount: 1, RTs: []float64{0.1}}})["s"]
 	if got, want := keys(run), sorted(repeatRunFields); !slices.Equal(got, want) {
 		t.Errorf("fields of a step under steps = %v, want repeatRunFields %v", got, want)
 	}
@@ -589,7 +591,7 @@ func TestWorkflow_BaselineTest(t *testing.T) {
 				t.Errorf("step status = %q, want %q", st.Status, wantStep)
 			}
 
-			out := workflow.printer.outWriter.(*bytes.Buffer).String()
+			out := workflow.printer.Out().(*bytes.Buffer).String()
 			for _, s := range tt.terminal {
 				if !strings.Contains(out, s) {
 					t.Errorf("terminal should contain %q, got:\n%s", s, out)

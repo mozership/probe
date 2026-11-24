@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mozership/probe/internal/outcome"
 )
 
 // Executor runs a job: once, or as many times as its repeat says, and then
@@ -22,10 +24,10 @@ func NewExecutor(job *Job) *Executor {
 // Run runs the job and records its result, and reports whether it passed.
 // A job that did not pass is the caller's to fail the workflow for.
 func (e *Executor) Run(ctx JobContext) bool {
-	jr := ctx.Result.Jobs[e.job.ID]
-	jr.mutex.Lock()
+	jr := ctx.Outcome.Jobs[e.job.ID]
+	jr.Mu.Lock()
 	jr.StartTime = time.Now()
-	jr.mutex.Unlock()
+	jr.Mu.Unlock()
 
 	ctx = e.setupContext(ctx)
 
@@ -203,21 +205,21 @@ func (e *Executor) sleepBetweenRepeats(done, total int) {
 // over, once all of its runs are done.
 func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	jobID := e.job.ID
-	jr := ctx.Result.Jobs[jobID]
-	jr.mutex.Lock()
+	jr := ctx.Outcome.Jobs[jobID]
+	jr.Mu.Lock()
 	duration := time.Since(jr.StartTime)
 	jr.EndTime = jr.StartTime.Add(duration)
 	// A job that passed keeps the status it has, which is skipped when its
 	// skipif skipped it.
 	if !overallSuccess {
-		jr.Status = StatusError
+		jr.Status = outcome.StatusError
 	}
-	jr.mutex.Unlock()
+	jr.Mu.Unlock()
 
 	ctx.scheduler.Finish(jobID, overallSuccess)
 
 	// The job's report block is final now, so it can be streamed out.
-	ctx.Result.notifyJobDone(jobID)
+	ctx.Outcome.NotifyJobDone(jobID)
 }
 
 // appendRepeatStepResults adds a result for each step of the repeated job,
@@ -229,7 +231,7 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 // from there as the steps of any job are.
 //
 // It returns the counters, for the test of the job over its runs.
-func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter {
+func (e *Executor) appendRepeatStepResults(ctx *JobContext) []outcome.RepeatCounter {
 	rep := ctx.repeat
 	counters := rep.snapshotCounters()
 	// The context is the job's, not that of one of its runs, which is
@@ -248,7 +250,7 @@ func (e *Executor) appendRepeatStepResults(ctx *JobContext) []StepRepeatCounter 
 // The copy is shallow: its fields can be set apart from the stored counter,
 // but its Failure, Contract, RTs and Echoes are the stored counter's,
 // so what they point to is not to be changed through it.
-func (r *jobRepeat) snapshotCounters() []StepRepeatCounter {
+func (r *jobRepeat) snapshotCounters() []outcome.RepeatCounter {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	keys := make([]int, 0, len(r.counters))
@@ -256,7 +258,7 @@ func (r *jobRepeat) snapshotCounters() []StepRepeatCounter {
 		keys = append(keys, k)
 	}
 	sort.Ints(keys)
-	counters := make([]StepRepeatCounter, len(keys))
+	counters := make([]outcome.RepeatCounter, len(keys))
 	for n, k := range keys {
 		counter := r.counters[k]
 		if counter.RepeatTotal == 0 {
@@ -276,20 +278,20 @@ func (r *jobRepeat) snapshotCounters() []StepRepeatCounter {
 // The step is skipped when it ran in no run, passed when it failed in none,
 // failed when it passed in none, and warned of otherwise. Its failure is the
 // first run's, with the number of runs it failed in.
-func repeatStepResult(index int, counter StepRepeatCounter, readByTest bool) StepResult {
-	var status StatusType
+func repeatStepResult(index int, counter outcome.RepeatCounter, readByTest bool) outcome.Step {
+	var status outcome.Status
 	switch {
 	case counter.FailureCount == 0 && counter.SuccessCount == 0 && counter.SkippedCount > 0:
-		status = StatusSkipped
+		status = outcome.StatusSkipped
 	case counter.FailureCount == 0:
-		status = StatusSuccess
+		status = outcome.StatusSuccess
 	case counter.SuccessCount == 0:
-		status = StatusError
+		status = outcome.StatusError
 	default:
-		status = StatusWarning
+		status = outcome.StatusWarning
 	}
 
-	result := StepResult{
+	result := outcome.Step{
 		Index:         index,
 		ID:            counter.ID,
 		Name:          counter.Name,
@@ -298,12 +300,12 @@ func repeatStepResult(index int, counter StepRepeatCounter, readByTest bool) Ste
 		RepeatCounter: &counter,
 		Test:          counter.Test,
 		Contract:      counter.Contract,
-		notes:         counter.notes,
+		Notes:         counter.Notes,
 	}
 	if counter.Failure != nil {
 		// The runs the step was not run in are runs of the job too, as the
 		// count in the report files has them.
-		result.Failure = counter.Failure.prefixed(fmt.Sprintf("%d of %d iterations failed; the first: ",
+		result.Failure = counter.Failure.Prefixed(fmt.Sprintf("%d of %d iterations failed; the first: ",
 			counter.FailureCount, counter.SuccessCount+counter.FailureCount+counter.SkippedCount))
 	}
 	return result

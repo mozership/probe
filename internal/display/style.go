@@ -1,8 +1,9 @@
-package probe
+package display
 
 import (
 	"github.com/fatih/color"
 
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/style"
 )
 
@@ -27,13 +28,13 @@ func colorInfo() *color.Color {
 	return style.Skipped.Color()
 }
 
-// colorDim returns a *color.Color for subdued text
-func colorDim() *color.Color {
+// ColorDim returns a *color.Color for subdued text
+func ColorDim() *color.Color {
 	return color.New(color.FgHiBlack)
 }
 
-// colorWarning returns a *color.Color for warnings (yellow)
-func colorWarning() *color.Color {
+// ColorWarning returns a *color.Color for warnings (yellow)
+func ColorWarning() *color.Color {
 	return style.Warning.Color()
 }
 
@@ -64,19 +65,19 @@ const (
 // progress of a run show it, and its color. The icon ends with the space
 // that sets it apart in the report; the progress trims it. A status the
 // report does not know is shown by a question mark.
-func statusIcon(status StatusType) (string, *color.Color) {
+func statusIcon(status outcome.Status) (string, *color.Color) {
 	var m style.Mark
 	switch status {
-	case StatusSuccess:
+	case outcome.StatusSuccess:
 		m = style.Success
-	case StatusError:
+	case outcome.StatusError:
 		m = style.Failure
-	case StatusWarning:
+	case outcome.StatusWarning:
 		m = style.NoTest
-	case StatusSkipped:
+	case outcome.StatusSkipped:
 		m = style.Skipped
 	default:
-		return "?", colorWarning()
+		return "?", ColorWarning()
 	}
 	return m.Icon() + " ", m.Color()
 }

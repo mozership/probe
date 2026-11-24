@@ -1,13 +1,12 @@
-package probe
+package display
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/mozership/probe/internal/dump"
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/mask"
 )
 
@@ -111,71 +110,19 @@ func withoutRawBody(res map[string]any) map[string]any {
 //	failed: res.code == 200
 //	  res.code = 500
 //
-// c is a condition maskClause has hidden the secrets of.
+// c is a condition outcome.MaskClause has hidden the secrets of.
 func falseClauseDetail(c expr.Clause) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "       %s %s\n", colorInfo().Sprintf("failed:"), c.Expr)
 	for _, o := range c.Operands {
-		fmt.Fprintf(&b, "         %s\n", operandText(o))
+		fmt.Fprintf(&b, "         %s\n", outcome.OperandText(o))
 	}
 	return b.String()
 }
 
-// maskClause returns c with the secrets m knows hidden in the condition and
-// in what its operands evaluated to. The values are masked as data, before
-// they are written out and cut: a secret that is cut, or whose quotes are
-// escaped, is no longer the text the masker knows.
-func maskClause(m *mask.Masker, c expr.Clause) expr.Clause {
-	out := expr.Clause{Expr: m.String(c.Expr)}
-	for _, o := range c.Operands {
-		out.Operands = append(out.Operands, expr.Operand{Expr: m.String(o.Expr), Value: m.Value(o.Value)})
-	}
-	return out
-}
-
-// maxOperandLength is how much of a value a false condition compared is
-// shown, as a whole response body may be one.
-const maxOperandLength = 200
-
-// operandText is an operand and its value on one line, as res.code = 500.
-// A string is quoted, so that an empty one and one that ends with a newline
-// can be seen, and anything else is written as JSON.
-func operandText(o expr.Operand) string {
-	var value string
-	switch v := o.Value.(type) {
-	case nil:
-		value = "nil"
-	case string:
-		value = strconv.Quote(v)
-	default:
-		if data, err := json.Marshal(v); err == nil {
-			value = string(data)
-		} else {
-			value = fmt.Sprintf("%v", v)
-		}
-	}
-	if r := []rune(value); len(r) > maxOperandLength {
-		value = string(r[:maxOperandLength]) + "..."
-	}
-	return o.Expr + " = " + value
-}
-
-// clauseSummary is a false condition on one line, for the message of a
-// failure: res.code == 200 (res.code = 500).
-func clauseSummary(c expr.Clause) string {
-	if len(c.Operands) == 0 {
-		return c.Expr
-	}
-	parts := make([]string, len(c.Operands))
-	for i, o := range c.Operands {
-		parts[i] = operandText(o)
-	}
-	return fmt.Sprintf("%s (%s)", c.Expr, strings.Join(parts, ", "))
-}
-
 // contractDetail formats a response that breaks its contract: each
 // violation, then the request and response as a failed test shows them.
-func contractDetail(m *mask.Masker, f *StepFailure) string {
+func contractDetail(m *mask.Masker, f *outcome.Failure) string {
 	var b strings.Builder
 	for _, v := range f.Violations {
 		b.WriteString(indentDetail(m.String(v.String())))
@@ -184,19 +131,19 @@ func contractDetail(m *mask.Masker, f *StepFailure) string {
 	return b.String()
 }
 
-// testErrorDetail formats the error a test could not be evaluated for, by
+// TestErrorDetail formats the error a test could not be evaluated for, by
 // its message.
-func testErrorDetail(message string) string {
+func TestErrorDetail(message string) string {
 	return indentDetail("test error: " + message)
 }
 
-// typeMismatchText is what a test that did not evaluate to a boolean is
+// TypeMismatchText is what a test that did not evaluate to a boolean is
 // told by.
-func typeMismatchText(testExpr string, result any) string {
+func TypeMismatchText(testExpr string, result any) string {
 	return fmt.Sprintf("Test: `%s` = %v\n", testExpr, result)
 }
 
-// typeMismatchDetail formats a test that did not evaluate to a boolean.
-func typeMismatchDetail(testExpr string, result any) string {
-	return indentDetail(typeMismatchText(testExpr, result))
+// TypeMismatchDetail formats a test that did not evaluate to a boolean.
+func TypeMismatchDetail(testExpr string, result any) string {
+	return indentDetail(TypeMismatchText(testExpr, result))
 }

@@ -1,12 +1,15 @@
-package probe
+package outcome
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/mozership/probe/internal/expr"
 )
 
-// Test StatusType constants have expected values
-func TestStatusTypeConstants(t *testing.T) {
+// Test Status constants have expected values
+func TestStatusConstants(t *testing.T) {
 	// Test that status constants are assigned in expected order
 	if StatusSuccess != 0 {
 		t.Errorf("StatusSuccess should be 0, got %d", StatusSuccess)
@@ -22,40 +25,40 @@ func TestStatusTypeConstants(t *testing.T) {
 	}
 
 	// Test that all constants are different
-	statuses := []StatusType{StatusSuccess, StatusError, StatusWarning, StatusSkipped}
+	statuses := []Status{StatusSuccess, StatusError, StatusWarning, StatusSkipped}
 	for i, status1 := range statuses {
 		for j, status2 := range statuses {
 			if i != j && status1 == status2 {
-				t.Errorf("StatusType constants should be unique, but %d and %d are both %d", i, j, status1)
+				t.Errorf("Status constants should be unique, but %d and %d are both %d", i, j, status1)
 			}
 		}
 	}
 }
 
-func TestResult_AddStepResult(t *testing.T) {
-	wb := NewResult()
+func TestRun_AddStepResult(t *testing.T) {
+	wb := New()
 	jobID := "test-job"
 
 	// Add a job buffer first
-	wb.Jobs[jobID] = &JobResult{
+	wb.Jobs[jobID] = &Job{
 		JobID:       jobID,
 		JobName:     "Test Job",
 		StartTime:   time.Now(),
-		StepResults: []StepResult{},
+		StepResults: []Step{},
 	}
 
 	// Create test step results
-	stepResult1 := StepResult{
+	stepResult1 := Step{
 		Index:  0,
 		Name:   "Step 1",
 		Status: StatusSuccess,
 	}
 
-	stepResult2 := StepResult{
+	stepResult2 := Step{
 		Index:  1,
 		Name:   "Step 2",
 		Status: StatusError,
-		RepeatCounter: &StepRepeatCounter{
+		RepeatCounter: &RepeatCounter{
 			SuccessCount: 3,
 			FailureCount: 1,
 		},
@@ -89,10 +92,10 @@ func TestResult_AddStepResult(t *testing.T) {
 	}
 }
 
-func TestResult_AddStepResult_NonExistentJob(t *testing.T) {
-	wb := NewResult()
+func TestRun_AddStepResult_NonExistentJob(t *testing.T) {
+	wb := New()
 
-	stepResult := StepResult{
+	stepResult := Step{
 		Index:  0,
 		Name:   "Step 1",
 		Status: StatusSuccess,
@@ -107,16 +110,16 @@ func TestResult_AddStepResult_NonExistentJob(t *testing.T) {
 	}
 }
 
-func TestResult_AddStepResult_Concurrent(t *testing.T) {
-	wb := NewResult()
+func TestRun_AddStepResult_Concurrent(t *testing.T) {
+	wb := New()
 	jobID := "test-job"
 
 	// Add a job buffer first
-	wb.Jobs[jobID] = &JobResult{
+	wb.Jobs[jobID] = &Job{
 		JobID:       jobID,
 		JobName:     "Test Job",
 		StartTime:   time.Now(),
-		StepResults: []StepResult{},
+		StepResults: []Step{},
 	}
 
 	// Test concurrent add and get operations
@@ -125,7 +128,7 @@ func TestResult_AddStepResult_Concurrent(t *testing.T) {
 	// Goroutine 1: Add step results
 	go func() {
 		for i := range 10 {
-			stepResult := StepResult{
+			stepResult := Step{
 				Index:  i,
 				Name:   "Step " + string(rune('0'+i)),
 				Status: StatusSuccess,
@@ -136,16 +139,16 @@ func TestResult_AddStepResult_Concurrent(t *testing.T) {
 	}()
 
 	// Goroutine 2: Read job buffer.
-	// AddStepResult writes StepResults under JobResult.mutex, so readers
+	// AddStepResult writes StepResults under Job.Mu, so readers
 	// must take the same lock — see printer.go where reports do exactly
 	// this. Reading without the lock races with the writer goroutine.
 	go func() {
 		for range 5 {
 			jobResult := wb.Jobs[jobID]
 			if jobResult != nil {
-				jobResult.mutex.Lock()
+				jobResult.Mu.Lock()
 				_ = len(jobResult.StepResults)
-				jobResult.mutex.Unlock()
+				jobResult.Mu.Unlock()
 			}
 		}
 		done <- true
@@ -160,10 +163,43 @@ func TestResult_AddStepResult_Concurrent(t *testing.T) {
 	if !exists {
 		t.Fatal("Job buffer should exist after concurrent operations")
 	}
-	jobResult.mutex.Lock()
+	jobResult.Mu.Lock()
 	stepCount := len(jobResult.StepResults)
-	jobResult.mutex.Unlock()
+	jobResult.Mu.Unlock()
 	if stepCount != 10 {
 		t.Errorf("Expected 10 step results after concurrent operations, got %d", stepCount)
+	}
+}
+
+func TestOperandText(t *testing.T) {
+	tests := []struct {
+		name    string
+		operand expr.Operand
+		want    string
+	}{
+		{"nil", expr.Operand{Expr: "res.body.id", Value: nil}, "res.body.id = nil"},
+		{"a string is quoted", expr.Operand{Expr: "res.stdout", Value: "ok\n"}, `res.stdout = "ok\n"`},
+		{"an empty string", expr.Operand{Expr: "vars.name", Value: ""}, `vars.name = ""`},
+		{"a number", expr.Operand{Expr: "rt.sec", Value: 0.25}, "rt.sec = 0.25"},
+		{"a bool", expr.Operand{Expr: "res.complete", Value: false}, "res.complete = false"},
+		{"a list", expr.Operand{Expr: "res.values", Value: []any{"a", 1}}, `res.values = ["a",1]`},
+		{"a map", expr.Operand{Expr: "res.body", Value: map[string]any{"ok": true}}, `res.body = {"ok":true}`},
+		{"a long value is cut", expr.Operand{Expr: "res.body", Value: strings.Repeat("x", 300)}, `res.body = "` + strings.Repeat("x", MaxOperandLength-1) + "..."},
+		{"a value JSON cannot hold", expr.Operand{Expr: "f", Value: func() {}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := OperandText(tt.operand)
+			if tt.want == "" {
+				if !strings.HasPrefix(got, "f = 0x") {
+					t.Errorf("OperandText() = %q, want the value as %%v writes it", got)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("OperandText() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
