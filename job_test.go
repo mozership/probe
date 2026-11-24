@@ -344,7 +344,7 @@ func TestJob_handleSkip(t *testing.T) {
 
 	ctx := JobContext{
 		runEnv: &runEnv{
-			Result:  result,
+			Outcome: result,
 			Printer: newBufferPrinter(),
 			Config:  Config{Verbose: false},
 		},
@@ -815,7 +815,7 @@ func TestJob_RunLeavesTheJobAsWritten(t *testing.T) {
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: runner},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Vars:    map[string]any{"n": n},
 			Outputs: NewOutputs(),
@@ -919,7 +919,7 @@ func TestJob_FailFastStartsOverEachRun(t *testing.T) {
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: runner},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Outputs:       NewOutputs(),
 			RepeatCurrent: i,
@@ -963,7 +963,7 @@ func TestJob_StepReadsWhetherAnEarlierStepFailed(t *testing.T) {
 				runEnv: &runEnv{
 					Config:  Config{ActionRunner: runner},
 					Printer: printer,
-					Result:  result,
+					Outcome: result,
 				},
 				Outputs: NewOutputs(),
 			}); err != nil {
@@ -1002,7 +1002,7 @@ func TestJob_JobFailedAcrossEntriesAndRuns(t *testing.T) {
 			runEnv: &runEnv{
 				Config:  Config{ActionRunner: newMockRunner()},
 				Printer: printer,
-				Result:  result,
+				Outcome: result,
 			},
 			Outputs:       NewOutputs(),
 			RepeatCurrent: run,

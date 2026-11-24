@@ -15,7 +15,8 @@ import (
 	"github.com/mozership/probe/mask"
 )
 
-// newReportResult builds a Result covering every status a report has to map.
+// newReportResult builds the outcome of a run covering every status a report
+// has to map.
 func newReportResult() (*outcome.Run, []string) {
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	rs := outcome.New()

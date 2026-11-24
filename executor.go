@@ -24,7 +24,7 @@ func NewExecutor(job *Job) *Executor {
 // Run runs the job and records its result, and reports whether it passed.
 // A job that did not pass is the caller's to fail the workflow for.
 func (e *Executor) Run(ctx JobContext) bool {
-	jr := ctx.Result.Jobs[e.job.ID]
+	jr := ctx.Outcome.Jobs[e.job.ID]
 	jr.Mu.Lock()
 	jr.StartTime = time.Now()
 	jr.Mu.Unlock()
@@ -205,7 +205,7 @@ func (e *Executor) sleepBetweenRepeats(done, total int) {
 // over, once all of its runs are done.
 func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	jobID := e.job.ID
-	jr := ctx.Result.Jobs[jobID]
+	jr := ctx.Outcome.Jobs[jobID]
 	jr.Mu.Lock()
 	duration := time.Since(jr.StartTime)
 	jr.EndTime = jr.StartTime.Add(duration)
@@ -219,7 +219,7 @@ func (e *Executor) finalize(overallSuccess bool, ctx JobContext) {
 	ctx.scheduler.Finish(jobID, overallSuccess)
 
 	// The job's report block is final now, so it can be streamed out.
-	ctx.Result.NotifyJobDone(jobID)
+	ctx.Outcome.NotifyJobDone(jobID)
 }
 
 // appendRepeatStepResults adds a result for each step of the repeated job,

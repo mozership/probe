@@ -40,7 +40,7 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 	ev := &expr.Expr{}
 
 	if err := j.expandJobName(ev, ctxPtr); err != nil {
-		ctx.Result.RecordFailure(failureConfig)
+		ctx.Outcome.RecordFailure(failureConfig)
 		ctx.Printer.PrintError("job %q: name: %v", j.Name, err)
 		return false, NewExecutionError("job_start", "failed to expand job name", err)
 	}
@@ -144,8 +144,8 @@ func (j *Job) expandJobName(ev *expr.Expr, ctx *JobContext) error {
 
 	// Update the job name in the result as well. Async repeat shares the
 	// outcome.Job across iterations, so writers must take its Mu.
-	if ctx.Result != nil {
-		if jobResult, exists := ctx.Result.Jobs[j.ID]; exists {
+	if ctx.Outcome != nil {
+		if jobResult, exists := ctx.Outcome.Jobs[j.ID]; exists {
 			jobResult.Mu.Lock()
 			jobResult.JobName = name
 			jobResult.Mu.Unlock()
@@ -337,8 +337,8 @@ func (j *Job) handleSkip(ctx JobContext) {
 	// Mark job as skipped in the result. Async repeat shares the
 	// outcome.Job across iterations, so writers must take its Mu
 	// to stay race-free with sibling iterations and Executor.finalize.
-	if ctx.Result != nil {
-		if jobResult, exists := ctx.Result.Jobs[j.ID]; exists {
+	if ctx.Outcome != nil {
+		if jobResult, exists := ctx.Outcome.Jobs[j.ID]; exists {
 			jobResult.Mu.Lock()
 			jobResult.Status = outcome.StatusSkipped
 			jobResult.Mu.Unlock()
@@ -499,7 +499,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 				ActionRunner: cfg.runner,
 			},
 			Printer:    printer,
-			Result:     result,
+			Outcome:    result,
 			background: newBackground(),
 			cleanups:   newCleanups(runID, printer, false),
 			baseDir:    baseDir,
@@ -529,7 +529,7 @@ func (j *Job) RunStandalone(vars map[string]any, printer *Printer, jobID, baseDi
 	var err error
 	if found := j.problems("", fmt.Sprintf("job %q", j.Name)); len(found) > 0 {
 		err = NewExecutionError("job_start", "step validation failed", problemsError(found))
-		ctx.Result.RecordFailure(failureConfig)
+		ctx.Outcome.RecordFailure(failureConfig)
 		ctx.Printer.PrintError("%v", err)
 	}
 	if err == nil {

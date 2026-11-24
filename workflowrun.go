@@ -46,7 +46,7 @@ type workflowRun struct {
 	failed atomic.Bool
 
 	// What execute leaves for the report files.
-	result     *outcome.Run
+	outcome    *outcome.Run
 	startedAt  time.Time
 	finishedAt time.Time
 	exitStatus int
@@ -173,10 +173,10 @@ func (r *workflowRun) execute() error {
 		return err
 	}
 
-	reporter.Finish(ctx.Result)
+	reporter.Finish(ctx.Outcome)
 	r.finishedAt = time.Now()
-	r.result = ctx.Result
-	r.exitStatus = runExitCode(ctx.Result, r.failed.Load())
+	r.outcome = ctx.Outcome
+	r.exitStatus = runExitCode(ctx.Outcome, r.failed.Load())
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (r *workflowRun) newJobContext(vars map[string]any, reporter outcome.Report
 		runEnv: &runEnv{
 			Config:     r.config,
 			Printer:    p,
-			Result:     rs,
+			Outcome:    rs,
 			scheduler:  r.scheduler,
 			background: newBackground(),
 			cleanups:   newCleanups(r.id, p, r.config.Trace),
@@ -272,8 +272,8 @@ func (r *workflowRun) runJobs(ctx JobContext) error {
 
 	for {
 		skippedJobs := ctx.scheduler.SkipBlocked()
-		if ctx.Result != nil {
-			skipJobs(skippedJobs, ctx.Result)
+		if ctx.Outcome != nil {
+			skipJobs(skippedJobs, ctx.Outcome)
 		}
 
 		running += r.startJobs(ctx.scheduler.Runnable(), ctx, done)
@@ -349,7 +349,7 @@ func (r *workflowRun) writeReports() error {
 		return nil
 	}
 
-	rep := buildReport(r.w.Name, r.w.Description, r.result, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
+	rep := buildReport(r.w.Name, r.w.Description, r.outcome, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
 	if r.selection != nil {
 		rep.Selection = r.selection.report()
