@@ -19,8 +19,8 @@ jobs:
       # every request and response is checked against the .proto files,
       # rather than against the server's own reflection
       proto:
-        files: [./actions/grpc/testserver/pb/user_service.proto]
-        import_paths: [./actions/grpc/testserver/pb]
+        files: [./internal/actions/grpc/testserver/pb/user_service.proto]
+        import_paths: [./internal/actions/grpc/testserver/pb]
   steps:
   - name: Get User
     id: get_user
@@ -132,8 +132,8 @@ jobs:
       body:
         user_id: "123"
       proto:
-        files: [./actions/grpc/testserver/pb/user_service.proto]
-        import_paths: [./actions/grpc/testserver/pb]
+        files: [./internal/actions/grpc/testserver/pb/user_service.proto]
+        import_paths: [./internal/actions/grpc/testserver/pb]
     test: res.status_code == "OK" && res.body.user.id == "123"
   - name: Get User as protobuf
     uses: grpc
@@ -143,8 +143,8 @@ jobs:
       body:
         user_id: "123"
       proto:
-        files: [./actions/grpc/testserver/pb/user_service.proto]
-        import_paths: [./actions/grpc/testserver/pb]
+        files: [./internal/actions/grpc/testserver/pb/user_service.proto]
+        import_paths: [./internal/actions/grpc/testserver/pb]
     test: res.status_code == "OK" && res.body.user.id == "123"
   - name: A user that does not exist
     uses: grpc
@@ -160,8 +160,8 @@ jobs:
       body:
         count: 3
       proto:
-        files: [./actions/grpc/testserver/pb/user_service.proto]
-        import_paths: [./actions/grpc/testserver/pb]
+        files: [./internal/actions/grpc/testserver/pb/user_service.proto]
+        import_paths: [./internal/actions/grpc/testserver/pb]
     test: res.status_code == "OK" && len(res.messages) == 3 && res.complete
   - name: Import Users over HTTP/1.1
     uses: grpc
@@ -171,6 +171,6 @@ jobs:
       - name: Ada
       - name: Grace
       proto:
-        files: [./actions/grpc/testserver/pb/user_service.proto]
-        import_paths: [./actions/grpc/testserver/pb]
+        files: [./internal/actions/grpc/testserver/pb/user_service.proto]
+        import_paths: [./internal/actions/grpc/testserver/pb]
     test: res.status_code == "OK" && res.body.imported == 2

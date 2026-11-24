@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // newTestReport returns the report of a run with a job of every outcome: a

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // TestEndToEndNotes runs a workflow whose steps use an action served by an

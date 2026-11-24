@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 )
 
 // Printer interface tests

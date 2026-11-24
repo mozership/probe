@@ -1,10 +1,10 @@
-// Package markdown writes the placeholders a mask.Masker puts in place of
-// hidden values so that Markdown shows them, for an action that posts text
+// Package markdown writes the placeholders Probe puts in place of hidden
+// values so that Markdown shows them, for an action that posts text
 // with them, such as the notes of a run, where <secret:NAME> and
 // <redacted> would be taken for something else: an HTML tag on GitHub,
 // which leaves it out, or a link or a mention on Slack.
 //
-// It is a package of its own, apart from mask, which every action links
+// It is a package of its own, apart from the masking every action links
 // through actionrpc, so that only an action that writes Markdown carries
 // the Markdown parser it reads the text with.
 package markdown
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mozership/probe/mask"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 
 	"github.com/mozership/probe/internal/expr"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 // newReportResult builds the outcome of a run covering every status a report

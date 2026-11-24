@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // buildReport assembles a Report from the results of a run. Jobs are listed

@@ -5,9 +5,9 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
 )
 
 // noteBook keeps the notes the actions of a run left for people, by the

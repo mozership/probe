@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/notes"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

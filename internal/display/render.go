@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/textwidth"
-	"github.com/mozership/probe/mask"
-	"github.com/mozership/probe/report"
 )
 
 // Renderer renders the report of a run as text: a block for each job,

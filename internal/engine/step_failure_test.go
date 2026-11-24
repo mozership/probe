@@ -12,7 +12,7 @@ import (
 
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/outcome"
-	"github.com/mozership/probe/report"
+	"github.com/mozership/probe/internal/report"
 )
 
 // runStepForTemplateError runs st in a job context of its own and returns
