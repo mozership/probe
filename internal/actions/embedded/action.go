@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -21,20 +21,20 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(action.Call{With: with})
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
 // RunStep runs the job as part of the run of the step that embeds it. It
 // keeps no state of its own: the job keeps its own state, in its own run.
-func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	with := call.With
 	// Validate that required parameters are provided
 	if len(with) == 0 {
 		return map[string]any{}, nil, errors.New("embedded action requires parameters in 'with' section. Please specify embedded job details like path")
 	}
 
-	action.LogParams(a.log, "received embedded request parameters", with)
+	sdk.LogParams(a.log, "received embedded request parameters", with)
 
 	before := WithBefore(func(path string, vars map[string]any) {
 		a.log.Trace("embedded job prepared", "path", path, "vars", vars)
@@ -45,7 +45,7 @@ func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, erro
 	opts := []Option{before, after, WithRunID(call.Step.RunID), WithGuard(call.Guard), WithActions(call.Actions), WithBuiltinActions(a.builtin), WithCleanups(call.Cleanups)}
 	ret, err := Execute(with, append(opts, a.opts...)...)
 
-	action.LogOutcome(a.log, "embedded job", ret, err)
+	sdk.LogOutcome(a.log, "embedded job", ret, err)
 
 	return ret, nil, err
 }
@@ -55,7 +55,7 @@ func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, erro
 // before its first step, and told which name. opts are given to every job
 // it runs, such as WithNeedsNoCheck.
 func ServeWithActions(builtin []string, opts ...Option) {
-	action.Serve(func(log hclog.Logger) action.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log, builtin: builtin, opts: opts}
 	})
 }
@@ -68,7 +68,7 @@ func ServeWithActions(builtin []string, opts ...Option) {
 // ServeWithActions to tell it the names of the actions of Probe.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
-		Keeps:     []string{action.KindReadOnly, action.KindAllowHost},
+		Keeps:     []string{sdk.KindReadOnly, sdk.KindAllowHost},
 		Params:    mapping.FieldTags(Req{}),
 		Contracts: actionspec.NoContracts(),
 		ReqFields: mapping.FieldTags(Req{}),

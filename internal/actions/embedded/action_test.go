@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 // TestRunStepGivesTheJobItsOptions checks that the options the action is
@@ -18,7 +18,7 @@ func TestRunStepGivesTheJobItsOptions(t *testing.T) {
 	record := func(c *Callback) { got = append(got, *c) }
 	a := &Action{log: hclog.NewNullLogger(), builtin: []string{"hello"}, opts: []Option{WithNeedsNoCheck([]string{"hello"}), record}}
 
-	if _, _, err := a.RunStep(action.Call{With: map[string]any{"path": path}, Step: action.Step{RunID: "parent-run"}}); err != nil {
+	if _, _, err := a.RunStep(sdk.Call{With: map[string]any{"path": path}, Step: sdk.Step{RunID: "parent-run"}}); err != nil {
 		t.Fatalf("RunStep() error = %v", err)
 	}
 	if len(got) != 1 {

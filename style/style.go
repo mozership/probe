@@ -83,9 +83,9 @@ func (m Mark) String() string {
 	return m.Paint(m.Icon())
 }
 
-// NoteLevel is the Mark of a note of level, as the action package names the levels:
-// Failure for "critical", Warning for "warning" and Info for "info". A
-// level that is none of these is Warning.
+// NoteLevel is the Mark of a note of level, as the sdk package names the
+// levels: Failure for "critical", Warning for "warning" and Info for
+// "info". A level that is none of these is Warning.
 func NoteLevel(level string) Mark {
 	switch level {
 	case "critical":

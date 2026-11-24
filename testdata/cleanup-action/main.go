@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 type testAction struct{}
 
 func (a testAction) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(action.Call{With: with})
+	ret, _, err := a.RunStep(sdk.Call{With: with})
 	return ret, err
 }
 
@@ -27,7 +27,7 @@ func (a testAction) Run(with map[string]any) (map[string]any, error) {
 // as delay says. res.promised tells whether the runner said it cleans up,
 // and the actions that ran names are passed on to it as ones to clean up, as
 // by an action that ran steps of its own.
-func (testAction) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (testAction) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
 	if delay, ok := call.With["delay"].(string); ok {
 		d, err := time.ParseDuration(delay)
 		if err != nil {
@@ -53,7 +53,7 @@ func (testAction) RunStep(call action.Call) (map[string]any, map[string]any, err
 
 // Cleanup removes the files the steps of the run left, and fails when the
 // environment variable CLEANUP_FAIL is set.
-func (testAction) Cleanup(call action.CleanupCall) error {
+func (testAction) Cleanup(call sdk.CleanupCall) error {
 	dir := os.Getenv("CLEANUP_DIR")
 	log, err := os.OpenFile(filepath.Join(dir, "cleanup.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -81,5 +81,5 @@ func (testAction) Cleanup(call action.CleanupCall) error {
 }
 
 func main() {
-	action.Serve(func(hclog.Logger) action.Action { return testAction{} })
+	sdk.Serve(func(hclog.Logger) sdk.Action { return testAction{} })
 }

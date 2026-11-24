@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestKeeps(t *testing.T) {
 	names := Names()
-	known := []string{action.KindReadOnly, action.KindAllowHost}
+	known := []string{sdk.KindReadOnly, sdk.KindAllowHost}
 	for name, kinds := range Keeps() {
 		if !slices.Contains(names, name) {
 			t.Errorf("%s declares guard kinds but is not a built-in action", name)

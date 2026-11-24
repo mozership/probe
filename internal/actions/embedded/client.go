@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/engine"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Req struct {
@@ -40,7 +40,7 @@ type Callback struct {
 	// runID is the run the job is part of, or empty for a run of its own.
 	runID string
 	// guard is the guard of the run the job is part of.
-	guard action.Guard
+	guard sdk.Guard
 	// actions are the names the workflow that embeds the job gives its
 	// external actions.
 	actions map[string]string
@@ -50,7 +50,7 @@ type Callback struct {
 	needsNoCheck []string
 	// cleanups are those of the run the job is part of, or nil for a job
 	// that cleans up after itself.
-	cleanups *action.Cleanups
+	cleanups *sdk.Cleanups
 }
 
 func NewReq() *Req {
@@ -192,7 +192,7 @@ func WithAfter(f func(result *Result)) Option {
 
 // WithGuard runs the job under the guard of the run of the step that
 // embeds it.
-func WithGuard(guard action.Guard) Option {
+func WithGuard(guard sdk.Guard) Option {
 	return func(c *Callback) {
 		c.guard = guard
 	}
@@ -226,7 +226,7 @@ func WithNeedsNoCheck(names []string) Option {
 // WithCleanups leaves what the steps of the job left behind for the rest of
 // the run of the step that embeds it, which cleans up once it is over: the
 // actions to call then are named in c.
-func WithCleanups(c *action.Cleanups) Option {
+func WithCleanups(c *sdk.Cleanups) Option {
 	return func(cb *Callback) {
 		cb.cleanups = c
 	}

@@ -39,7 +39,7 @@ import (
 const ManifestFile = "action.yml"
 
 // UsingBinary is the only kind of action an action.yml can describe: an
-// executable that serves the action over the protocol of the action package.
+// executable that serves the action over the protocol of the sdk package.
 const UsingBinary = "binary"
 
 const githubHost = "github.com"

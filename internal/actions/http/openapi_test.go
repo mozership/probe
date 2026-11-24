@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 	"github.com/pb33f/libopenapi"
 )
 
@@ -257,7 +257,7 @@ func TestRequestStepChecksAgainstOpenAPI(t *testing.T) {
 			maps.Copy(openapi, tt.openapi)
 			with := map[string]any{"url": srv.URL + "/v1", "openapi": openapi}
 			maps.Copy(with, tt.with)
-			ret, _, err := RequestStep(action.Call{With: with})
+			ret, _, err := RequestStep(sdk.Call{With: with})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -311,7 +311,7 @@ func TestRequestStepReportsWhatTheResponseWasMatchedTo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			with := map[string]any{"url": srv.URL + "/v1", "openapi": map[string]any{"spec": spec}}
 			maps.Copy(with, tt.with)
-			ret, _, err := RequestStep(action.Call{With: with})
+			ret, _, err := RequestStep(sdk.Call{With: with})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -347,22 +347,22 @@ func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			with := map[string]any{"url": srv.URL + "/v1", "openapi": map[string]any{"spec": spec}}
 			maps.Copy(with, tt.with)
-			contract := &action.Contract{}
-			ret, _, err := RequestStep(action.Call{With: with, Contract: contract})
+			contract := &sdk.Contract{}
+			ret, _, err := RequestStep(sdk.Call{With: with, Contract: contract})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			res := ret["res"].(map[string]any)
 			vs, _ := res["violations"].([]any)
 			matched, _ := res["contract"].(map[string]any)
-			if got, want := contract.Check(), action.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
+			if got, want := contract.Check(), sdk.ContractCheckOf(vs, matched); got == nil || !reflect.DeepEqual(*got, want) {
 				t.Errorf("Check() = %+v, want %+v as res shows it", got, want)
 			}
 		})
 	}
 
-	contract := &action.Contract{}
-	if _, _, err := RequestStep(action.Call{With: map[string]any{"url": srv.URL + "/v1", "get": "/users/1"}, Contract: contract}); err != nil {
+	contract := &sdk.Contract{}
+	if _, _, err := RequestStep(sdk.Call{With: map[string]any{"url": srv.URL + "/v1", "get": "/users/1"}, Contract: contract}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := contract.Check(); got != nil {
@@ -372,7 +372,7 @@ func TestRequestStepReportsTheContractToTheRunner(t *testing.T) {
 
 func TestRequestStepNamesTheFieldThatBreaksTheSchema(t *testing.T) {
 	srv := usersServer(t)
-	ret, _, err := RequestStep(action.Call{With: map[string]any{
+	ret, _, err := RequestStep(sdk.Call{With: map[string]any{
 		"url":     srv.URL + "/v1",
 		"get":     "/users/2",
 		"openapi": map[string]any{"spec": writeSpec(t, srv.URL)},
@@ -396,7 +396,7 @@ func TestRequestStepWithoutOpenAPIChecksNothing(t *testing.T) {
 		if openapi != nil {
 			with["openapi"] = openapi
 		}
-		ret, _, err := RequestStep(action.Call{With: with})
+		ret, _, err := RequestStep(sdk.Call{With: with})
 		if err != nil {
 			t.Fatalf("with openapi %v: unexpected error: %v", openapi, err)
 		}
@@ -434,7 +434,7 @@ func TestRequestStepOpenAPIRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := RequestStep(action.Call{With: map[string]any{
+			_, _, err := RequestStep(sdk.Call{With: map[string]any{
 				"url":     srv.URL,
 				"get":     "/",
 				"openapi": tt.openapi,
@@ -523,7 +523,7 @@ paths:
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			ret, _, err := RequestStep(action.Call{With: map[string]any{
+			ret, _, err := RequestStep(sdk.Call{With: map[string]any{
 				"url":     srv.URL,
 				"get":     tt.path,
 				"openapi": map[string]any{"spec": path},

@@ -71,16 +71,16 @@ probe --read-only --allow-action shell workflow.yml
 
 ## 外部アクションでガードに従う
 
-外部アクションにも、組み込みアクションと同じく`Call.Guard`で実行のガードが伝えられます。外部アクションは、何かを送る前に、ガードが許可しない操作に対して`action.Refuse(...)`を返すことでガードに従います。
+外部アクションにも、組み込みアクションと同じく`Call.Guard`で実行のガードが伝えられます。外部アクションは、何かを送る前に、ガードが許可しない操作に対して`sdk.Refuse(...)`を返すことでガードに従います。
 
 ```go
-func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call sdk.Call) (map[string]any, map[string]any, error) {
     req, err := parse(call.With)
     if err != nil {
         return nil, nil, err
     }
     if call.Guard.ReadOnly && req.writes() {
-        return nil, nil, action.Refuse("%s may write, and the run is read-only", req.Name)
+        return nil, nil, sdk.Refuse("%s may write, and the run is read-only", req.Name)
     }
     if err := call.Guard.CheckHost(req.Host); err != nil {
         return nil, nil, err // すでに拒否のエラー

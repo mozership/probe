@@ -19,7 +19,7 @@ type Spec struct {
 	// workflow runner closes the plugin connection.
 	Serve func()
 	// Keeps are the kinds of guard the action keeps to, of
-	// action.KindReadOnly and action.KindAllowHost. An action that
+	// sdk.KindReadOnly and sdk.KindAllowHost. An action that
 	// keeps to none, as it cannot tell what it is about to do, declares
 	// KeepsNone, and is refused under a guard unless it is allowed by name.
 	Keeps []string

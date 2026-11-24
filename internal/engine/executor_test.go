@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/report"
+	"github.com/mozership/probe/sdk"
 )
 
 // The runs of a job are counted only when it is repeated, warmed up or
@@ -157,7 +157,7 @@ func newOverlapRunner(wait time.Duration) *overlapRunner {
 	return &overlapRunner{wait: wait, both: make(chan struct{})}
 }
 
-func (r *overlapRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *overlapRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	r.running++
 	if r.running > 1 && !r.overlapped {
@@ -476,7 +476,7 @@ type echoRunner struct {
 	got []string
 }
 
-func (r *echoRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *echoRunner) Run(name string, call sdk.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with := call.With
 	if s, ok := with["sleep"].(string); ok {
 		if d, err := time.ParseDuration(s); err == nil {

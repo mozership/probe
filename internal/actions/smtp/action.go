@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -20,7 +20,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 		return map[string]any{}, errors.New("smtp action requires parameters in 'with' section. Please specify email details like addr, from, to")
 	}
 
-	action.LogParams(a.log, "received smtp request parameters", with)
+	sdk.LogParams(a.log, "received smtp request parameters", with)
 
 	before := WithBefore(func(from string, to string, subject string) {
 		a.log.Trace("email prepared", "from", from, "to", to, "subject", subject)
@@ -30,13 +30,13 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	})
 	ret, err := Deliver(with, before, after)
 
-	action.LogOutcome(a.log, "email delivery", ret, err)
+	sdk.LogOutcome(a.log, "email delivery", ret, err)
 
 	return ret, err
 }
 
 func serve() {
-	action.Serve(func(log hclog.Logger) action.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log}
 	})
 }

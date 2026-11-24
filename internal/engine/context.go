@@ -3,11 +3,11 @@ package engine
 import (
 	"sync"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
+	"github.com/mozership/probe/sdk"
 )
 
 // newBackground returns the tracker of the processes a run's steps leave in
@@ -15,7 +15,7 @@ import (
 // action can take to return, so that a process the action reports late is
 // stopped with the others.
 func newBackground() *procgroup.Tracker {
-	return procgroup.NewTracker(action.ExitWait)
+	return procgroup.NewTracker(sdk.ExitWait)
 }
 
 // ResponseTime provides response time information for expressions

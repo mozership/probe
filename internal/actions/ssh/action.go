@@ -4,10 +4,10 @@ import (
 	"errors"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
+	"github.com/mozership/probe/sdk"
 )
 
 type Action struct {
@@ -23,7 +23,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 		return map[string]any{}, errors.New("ssh action requires parameters in 'with' section. Please specify connection details like host, user, cmd")
 	}
 
-	action.LogParams(a.log, "received ssh request parameters", with)
+	sdk.LogParams(a.log, "received ssh request parameters", with)
 
 	before := WithBefore(func(host string, port int, user string, cmd string) {
 		a.log.Trace("ssh connection prepared", "host", host, "port", port, "user", user, "cmd", cmd)
@@ -34,13 +34,13 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	})
 	ret, err := Execute(with, before, envRefused)
 
-	action.LogOutcome(a.log, "ssh command", ret, err)
+	sdk.LogOutcome(a.log, "ssh command", ret, err)
 
 	return ret, err
 }
 
 func serve() {
-	action.Serve(func(log hclog.Logger) action.Action {
+	sdk.Serve(func(log hclog.Logger) sdk.Action {
 		return &Action{log: log}
 	})
 }

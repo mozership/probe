@@ -8,8 +8,8 @@ import (
 )
 
 // Sendable turns a state into the form it takes when it is sent to an action
-// in a process of its own, as action.Sendable does. It is given to New for
-// this package not to import the action package, which imports this one.
+// in a process of its own, as sdk.Sendable does. It is given to New for
+// this package not to import the sdk package, which imports this one.
 type Sendable func(map[string]any) (map[string]any, error)
 
 // Store holds the state each action leaves, keyed by the name of the action.

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
 	"github.com/mozership/probe/internal/outcome"
+	"github.com/mozership/probe/sdk"
 )
 
 func TestJob_validateSteps(t *testing.T) {
@@ -652,7 +652,7 @@ func TestRunStandaloneTellsTheRun(t *testing.T) {
 // embedded action runs, keeps to the guard WithGuard gives it, so that a
 // workflow cannot get round its guard by embedding a job.
 func TestRunStandaloneUnderAGuard(t *testing.T) {
-	guard := action.Guard{ReadOnly: true, Keeps: map[string][]string{"hello": {action.KindReadOnly, action.KindAllowHost}}}
+	guard := sdk.Guard{ReadOnly: true, Keeps: map[string][]string{"hello": {sdk.KindReadOnly, sdk.KindAllowHost}}}
 	dir := t.TempDir()
 	// Two local actions: one whose action.yml says it keeps to read-only,
 	// and one that says nothing. Neither executable exists, so fetching one
@@ -714,7 +714,7 @@ func TestRunStandaloneTakesTheActionAtItsWord(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "declared", "action.yml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	guard := action.Guard{ReadOnly: true}
+	guard := sdk.Guard{ReadOnly: true}
 	runner := newMockRunner()
 	job := &Job{Name: "embedded", Steps: []*Step{{Name: "declared", Uses: "./declared", Test: "true"}}}
 	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard), WithActionRunner(runner))
@@ -723,7 +723,7 @@ func TestRunStandaloneTakesTheActionAtItsWord(t *testing.T) {
 		t.Fatalf("Err = %v, Success = %v; want the declared action to run", run.Err, run.Success)
 	}
 	calls := runner.Calls["./declared"]
-	want := guard.WithKeeps("./declared", []string{action.KindReadOnly})
+	want := guard.WithKeeps("./declared", []string{sdk.KindReadOnly})
 	if len(calls) != 1 || !reflect.DeepEqual(calls[0].Guard, want) {
 		t.Errorf("./declared was called %v, want once under %+v", calls, want)
 	}
@@ -741,7 +741,7 @@ func TestRunStandaloneReplacesAnInheritedDeclaration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "silent", "action.yml"), []byte("name: silent\nruns:\n  using: binary\n  path: missing\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	guard := action.Guard{ReadOnly: true, Keeps: map[string][]string{"./silent": {action.KindReadOnly}}}
+	guard := sdk.Guard{ReadOnly: true, Keeps: map[string][]string{"./silent": {sdk.KindReadOnly}}}
 	runner := newMockRunner()
 	job := &Job{Name: "embedded", Steps: []*Step{{Name: "silent", Uses: "./silent", Test: "true"}}}
 	run := job.RunStandalone(map[string]any{}, newBufferPrinter(), "embedded", dir, WithGuard(guard), WithActionRunner(runner))
@@ -866,19 +866,19 @@ func TestFirstRefusal(t *testing.T) {
 			name: "the first of those refused",
 			jr: &outcome.Job{StepResults: []outcome.Step{
 				{Index: 0, Name: "a"},
-				{Index: 1, Name: "b", Failure: failure(action.Refuse("the action ssh does not keep to --read-only"))},
-				{Index: 2, Name: "c", Failure: failure(action.Refuse("the second"))},
+				{Index: 1, Name: "b", Failure: failure(sdk.Refuse("the action ssh does not keep to --read-only"))},
+				{Index: 2, Name: "c", Failure: failure(sdk.Refuse("the second"))},
 			}},
 			want: `step 1 "b" of the embedded job: the action ssh does not keep to --read-only`,
 		},
 		{
 			name: "a refusal wrapped in another error",
-			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", action.Refuse("no network")))}}},
+			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", Failure: failure(fmt.Errorf("embedded: %w", sdk.Refuse("no network")))}}},
 			want: `step 0 "a" of the embedded job: no network`,
 		},
 		{
 			name: "a repeated step",
-			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", RepeatCounter: &outcome.RepeatCounter{Failure: failure(action.Refuse("no network"))}}}},
+			jr:   &outcome.Job{StepResults: []outcome.Step{{Index: 0, Name: "a", RepeatCounter: &outcome.RepeatCounter{Failure: failure(sdk.Refuse("no network"))}}}},
 			want: `step 0 "a" of the embedded job: no network`,
 		},
 	}

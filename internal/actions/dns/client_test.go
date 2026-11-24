@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/sdk"
 )
 
 // zone is what the test server answers from, by name and type.
@@ -451,7 +451,7 @@ func TestRequestUnderAGuard(t *testing.T) {
 
 	// A server the guard allows is asked.
 	for _, allow := range []string{server, host} {
-		guard := action.Guard{ReadOnly: true, AllowHosts: []string{allow}}
+		guard := sdk.Guard{ReadOnly: true, AllowHosts: []string{allow}}
 		ret, err := Request(map[string]any{"name": "example.test", "server": server}, WithGuard(guard))
 		if err != nil {
 			t.Fatalf("Request() under --allow-host %s error = %v", allow, err)
@@ -463,17 +463,17 @@ func TestRequestUnderAGuard(t *testing.T) {
 	before := udp.Load() + tcp.Load()
 
 	// A server it does not allow is sent nothing.
-	guard := action.Guard{AllowHosts: []string{"198.51.100.1"}}
+	guard := sdk.Guard{AllowHosts: []string{"198.51.100.1"}}
 	_, err := Request(map[string]any{"name": "example.test", "server": server}, WithGuard(guard))
-	if !action.IsRefused(err) {
+	if !sdk.IsRefused(err) {
 		t.Fatalf("Request() error = %v, want it refused", err)
 	}
 
 	// Nor is a resolver of the machine, though one of them is allowed.
 	conf := useResolvConf(t, "nameserver "+host+"\nnameserver 198.51.100.2\noptions port:"+port+"\n")
-	guard = action.Guard{AllowHosts: []string{host}}
+	guard = sdk.Guard{AllowHosts: []string{host}}
 	_, err = Request(map[string]any{"name": "example.test"}, WithGuard(guard), conf)
-	if !action.IsRefused(err) || !strings.Contains(err.Error(), "give server") {
+	if !sdk.IsRefused(err) || !strings.Contains(err.Error(), "give server") {
 		t.Fatalf("Request() error = %v, want it refused, saying to give server", err)
 	}
 	if after := udp.Load() + tcp.Load(); after != before {
