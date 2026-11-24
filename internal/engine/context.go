@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/outcome"
 	"github.com/mozership/probe/internal/procgroup"
 	"github.com/mozership/probe/internal/schedule"
@@ -94,7 +95,7 @@ type JobContext struct {
 	// RepeatCurrent is the index of the run, from 0, warmup runs included.
 	RepeatCurrent int
 	// The state each action keeps in this run of the job
-	states *actionStates
+	states *actionstate.Store
 	// The name of the job, with its templates evaluated
 	jobName string
 }

@@ -2,9 +2,7 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"sync"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/mozership/probe/action"
@@ -118,47 +116,4 @@ func (p *PluginActionRunner) Run(name string, call action.Call, opts RunOptions)
 func cleansUp(name, baseDir string) bool {
 	m, err := actionref.ReadManifest(name, baseDir)
 	return err == nil && m.Cleanup
-}
-
-// actionStates holds the state each action keeps in one run of a job, keyed
-// by the action's name as the steps write it in uses.
-type actionStates struct {
-	mu     sync.Mutex
-	states map[string]map[string]any
-}
-
-func newActionStates() *actionStates {
-	return &actionStates{states: make(map[string]map[string]any)}
-}
-
-// get returns a copy of the state the action left, or nil when it left none.
-// A runner in this process may change what it is given, and the state kept
-// must not change with it, should the step then fail or time out.
-func (s *actionStates) get(name string) map[string]any {
-	if s == nil {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// What is kept was made sendable when it was set, so this cannot fail.
-	state, _ := action.Sendable(s.states[name])
-	return state
-}
-
-// set records the state the action leaves, in the form it takes when it is
-// sent, which is a copy of it: a runner in this process may still hold the
-// state it returned. A nil state keeps the one there was. A state that cannot
-// be sent is an error, as it is for an action in a process of its own.
-func (s *actionStates) set(name string, state map[string]any) error {
-	if s == nil || state == nil {
-		return nil
-	}
-	sendable, err := action.Sendable(state)
-	if err != nil {
-		return fmt.Errorf("cannot keep the action's state: %w", err)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.states[name] = sendable
-	return nil
 }

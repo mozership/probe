@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mozership/probe/action"
+	"github.com/mozership/probe/internal/actionstate"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/expr"
 	"github.com/mozership/probe/internal/mask"
@@ -33,7 +34,7 @@ func (j *Job) run(ctx JobContext) (failed bool, err error) {
 	ctx.CurrentJobID = j.ID
 	// Each run of the job starts with no state, as a repeated run is a run
 	// of its own and an embedded job a job of its own.
-	ctx.states = newActionStates()
+	ctx.states = actionstate.New(action.Sendable)
 
 	// Use local pointer instead of j.ctx to avoid race conditions in async mode
 	ctxPtr := &ctx

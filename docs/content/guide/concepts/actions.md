@@ -1027,11 +1027,11 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 
 #### Calling an Action from an Action
 
-An action that drives a target through the action of that target, as an agent drives an app through probe-ios, calls it with `probe.ActionCaller`. Each call is what a step of the workflow would be, for the step the calling action runs for:
+An action that drives a target through the action of that target, as an agent drives an app through probe-ios, calls it with `action.Caller`. Each call is what a step of the workflow would be, for the step the calling action runs for:
 
 ```go
 func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error) {
-    caller := probe.NewActionCaller(call, "")
+    caller := action.NewCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
         return nil, nil, err // a Refused error refuses the step
@@ -1041,7 +1041,7 @@ func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error
 }
 ```
 
-- **Names.** `uses` is read as a step's is: a name the workflow gives an action under [`actions`](/reference/yaml-configuration#actions), an external action, or an action of Probe. A local action that `actions` does not name is taken relative to the directory given to `NewActionCaller`.
+- **Names.** `uses` is read as a step's is: a name the workflow gives an action under [`actions`](/reference/yaml-configuration#actions), an external action, or an action of Probe. A local action that `actions` does not name is taken relative to the directory given to `NewCaller`.
 - **Guard.** On the first call of an external action, what its `action.yml` declares under `guard` is put in the guard of the run, and an action that does not keep to the guard is refused with an `action.Refused` error, unless `--allow-action` names it. An action the guard refuses is not fetched.
 - **Run.** The action is told the step of the calling action, so that `Step.RunID` is the run's.
 - **State.** The caller keeps the state each action leaves, and gives it to the next call of that action, as a job does. Make one caller for a step, and call through it.

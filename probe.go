@@ -3,9 +3,6 @@
 package probe
 
 import (
-	"io"
-
-	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/check"
 	"github.com/mozership/probe/internal/engine"
@@ -18,9 +15,6 @@ type (
 	ActionRunner       = engine.ActionRunner
 	RunOptions         = engine.RunOptions
 	PluginActionRunner = engine.PluginActionRunner
-	ActionCaller       = engine.ActionCaller
-	CallerOption       = engine.CallerOption
-	CallResult         = engine.CallResult
 	CheckOptions       = check.CheckOptions
 	Choices            = check.Choices
 	Finding            = check.Finding
@@ -38,8 +32,6 @@ const (
 
 	SeverityError   = check.SeverityError
 	SeverityWarning = check.SeverityWarning
-
-	ExecutableEnv = engine.ExecutableEnv
 )
 
 // New returns a Probe that runs the workflow at path, printing step details
@@ -57,17 +49,6 @@ func ParseOutputMode(s string) (OutputMode, error) {
 // returns what keeps it from running or checking what it seems to.
 func Check(path string, opts CheckOptions) ([]Finding, error) {
 	return check.Check(path, opts)
-}
-
-// NewActionCaller returns a caller of actions that a step runs with call,
-// with local actions relative to baseDir.
-func NewActionCaller(call action.Call, baseDir string, opts ...CallerOption) *ActionCaller {
-	return engine.NewActionCaller(call, baseDir, opts...)
-}
-
-// WithCallerLogOutput writes the log records of the actions called to w.
-func WithCallerLogOutput(w io.Writer) CallerOption {
-	return engine.WithCallerLogOutput(w)
 }
 
 // BuiltinAction returns the function that serves the built-in action name,

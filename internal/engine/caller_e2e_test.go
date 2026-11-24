@@ -8,7 +8,7 @@ import (
 )
 
 // newCallerEnv is the directory of newCleanupEnv, with the local actions
-// ./caller, which calls another with ActionCaller, and ./greet.
+// ./caller, which calls another with action.Caller, and ./greet.
 func newCallerEnv(t *testing.T) *cleanupEnv {
 	t.Helper()
 	e := newCleanupEnv(t, cleaningManifest)
@@ -26,7 +26,7 @@ func newCallerEnv(t *testing.T) *cleanupEnv {
 // and an action of Probe from the probe that runs it, which the CLI names
 // in PROBE_EXECUTABLE. An action called that cleans up is called once the
 // run is over, once however many times it was called.
-func TestEndToEndActionCaller(t *testing.T) {
+func TestEndToEndCaller(t *testing.T) {
 	e := newCallerEnv(t)
 	e.write(t, "workflow.yml", `name: caller
 actions:
@@ -74,7 +74,7 @@ jobs:
 
 // Under a guard, an action called is refused when it does not keep to it,
 // although the calling action was allowed to run.
-func TestEndToEndActionCallerUnderGuard(t *testing.T) {
+func TestEndToEndCallerUnderGuard(t *testing.T) {
 	e := newCallerEnv(t)
 	e.write(t, "workflow.yml", `name: caller
 actions:
@@ -100,7 +100,7 @@ jobs:
 
 // The credentials of what an action called is given are hidden in its
 // records, although the step of the calling action was not given them.
-func TestEndToEndActionCallerHidesCredentials(t *testing.T) {
+func TestEndToEndCallerHidesCredentials(t *testing.T) {
 	e := newCallerEnv(t)
 	e.write(t, "workflow.yml", `name: caller
 actions:

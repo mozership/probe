@@ -49,12 +49,12 @@ func exportTTY(out *os.File) {
 }
 
 // exportExecutable sets PROBE_EXECUTABLE to the executable of this process,
-// for an action that calls an action of Probe with probe.ActionCaller to
+// for an action that calls an action of Probe with action.Caller to
 // start it from: the action's own executable is not probe. It is left as it
 // is when the executable cannot be told.
 func exportExecutable() {
 	if exe, err := os.Executable(); err == nil {
-		_ = os.Setenv(probe.ExecutableEnv, exe)
+		_ = os.Setenv(action.ExecutableEnv, exe)
 	}
 }
 
