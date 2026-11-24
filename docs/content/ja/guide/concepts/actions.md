@@ -1233,7 +1233,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 操作対象のアクションを通して対象を動かすアクション、たとえばprobe-iosを通してアプリを操作するエージェントは、`probe.ActionCaller`でそのアクションを呼びます。呼び出しのひとつひとつが、呼び出し元のアクションが実行されているステップのための、ワークフローのステップと同じものになります。
 
 ```go
-func (a action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error) {
     caller := probe.NewActionCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {

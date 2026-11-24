@@ -1030,7 +1030,7 @@ func (g *Greet) Run(with map[string]any) (map[string]any, error) {
 An action that drives a target through the action of that target, as an agent drives an app through probe-ios, calls it with `probe.ActionCaller`. Each call is what a step of the workflow would be, for the step the calling action runs for:
 
 ```go
-func (a action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
+func (a *Agent) RunStep(call action.Call) (map[string]any, map[string]any, error) {
     caller := probe.NewActionCaller(call, "")
     res, err := caller.Call(ctx, "ios", map[string]any{"app": "com.apple.Preferences", "actions": actions})
     if err != nil {
