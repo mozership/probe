@@ -23,7 +23,7 @@ type fileLines []fileStart
 
 // mapFiles returns the line each of files starts on in the text read, the
 // files one after another, so that a line of the text can be told as a line
-// of a file, whose contents are data. readYamlFiles adds a newline after a
+// of a file, whose contents are data. workflowfile.Read adds a newline after a
 // file that does not end in one, unless it is the last.
 func mapFiles(files []string, data [][]byte) fileLines {
 	var out fileLines
