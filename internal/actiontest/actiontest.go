@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/kind"
 )
 
@@ -86,7 +86,7 @@ func NewKinds(t testing.TB, req, res map[string]string) *Kinds {
 // step, is of another kind than the one declared for it.
 func (k *Kinds) Check(ret map[string]any) {
 	k.t.Helper()
-	sent, err := actionrpc.Sendable(ret)
+	sent, err := action.Sendable(ret)
 	if err != nil {
 		k.t.Fatalf("the result cannot be sent: %v", err)
 	}

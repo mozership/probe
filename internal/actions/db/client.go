@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/mapping"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -409,7 +409,7 @@ type Callback struct {
 	before func(query string, params []any)
 	after  func(result *Result)
 	// guard is what the run allows.
-	guard actionrpc.Guard
+	guard action.Guard
 }
 
 func ExecuteQuery(data map[string]any, opts ...Option) (map[string]any, error) {
@@ -433,7 +433,7 @@ func ExecuteQuery(data map[string]any, opts ...Option) (map[string]any, error) {
 }
 
 // WithGuard runs the query under the guard of the run.
-func WithGuard(guard actionrpc.Guard) Option {
+func WithGuard(guard action.Guard) Option {
 	return func(c *Callback) {
 		c.guard = guard
 	}

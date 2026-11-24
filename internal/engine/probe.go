@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/display"
 	"github.com/mozership/probe/internal/workflowfile"
 
@@ -43,7 +43,7 @@ type Config struct {
 	// Guard is what the run allows its actions to do, such as only reading,
 	// and only from some hosts. Each step's action is told it, and a step
 	// whose action does not keep to it is refused unless it is allowed.
-	Guard actionrpc.Guard
+	Guard action.Guard
 	// Env are environment variables read from files, by name, for the vars
 	// of the workflow to read where the environment has none of the name.
 	// They are given to the vars alone: Probe reads none of its own

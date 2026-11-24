@@ -9,14 +9,14 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestMockRunner(t *testing.T) {
 	mock := newMockRunner()
 
 	// Test default behavior
-	result, _, err := mock.Run("test", actionrpc.Call{With: map[string]any{"key": "value"}}, RunOptions{})
+	result, _, err := mock.Run("test", action.Call{With: map[string]any{"key": "value"}}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -34,7 +34,7 @@ func TestMockRunner(t *testing.T) {
 	}
 	mock.SetResult("http", customResult)
 
-	result, _, err = mock.Run("http", actionrpc.Call{}, RunOptions{})
+	result, _, err = mock.Run("http", action.Call{}, RunOptions{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -46,7 +46,7 @@ func TestMockRunner(t *testing.T) {
 	testErr := errors.New("test error")
 	mock.SetError("failing-action", testErr)
 
-	result, _, err = mock.Run("failing-action", actionrpc.Call{}, RunOptions{})
+	result, _, err = mock.Run("failing-action", action.Call{}, RunOptions{})
 	if err != testErr {
 		t.Errorf("Expected test error, got %v", err)
 	}
@@ -152,7 +152,7 @@ type countingRunner struct {
 	received []string
 }
 
-func (r *countingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *countingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -236,7 +236,7 @@ func TestMockRunnerCarriesState(t *testing.T) {
 	m := newMockRunner()
 	m.States["counter"] = map[string]any{"n": 1}
 
-	_, state, err := m.Run("counter", actionrpc.Call{State: map[string]any{"n": 0}}, RunOptions{})
+	_, state, err := m.Run("counter", action.Call{State: map[string]any{"n": 0}}, RunOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -254,7 +254,7 @@ type mutatingRunner struct {
 	got []any
 }
 
-func (r *mutatingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *mutatingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with, state := call.With, call.State
 	list, _ := state["list"].([]any)
 	r.got = append(r.got, fmt.Sprint(list))
@@ -301,7 +301,7 @@ type typedStateRunner struct {
 	got  []string
 }
 
-func (r *typedStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *typedStateRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.got = append(r.got, fmt.Sprint(call.State))
 	if r.kept != nil {
 		r.kept["tags"].([]string)[0] = "changed"
@@ -337,7 +337,7 @@ func TestActionStateOfOtherTypesIsNotChangedByTheRunner(t *testing.T) {
 // unsendableStateRunner leaves a state that cannot be sent.
 type unsendableStateRunner struct{}
 
-func (unsendableStateRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (unsendableStateRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	return map[string]any{"status": 0}, map[string]any{"bad": map[struct{}]int{{}: 1}}, nil
 }
 

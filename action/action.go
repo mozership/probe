@@ -1,7 +1,7 @@
-// Package actionrpc is the protocol between the workflow runner and its
+// Package action is the protocol between the workflow runner and its
 // actions. Each action runs in a process of its own, started from the probe
 // binary, and is called over go-plugin's gRPC transport.
-package actionrpc
+package action
 
 import (
 	"context"

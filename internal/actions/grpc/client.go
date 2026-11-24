@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/contractcheck"
 	"github.com/mozership/probe/internal/mapping"
 	"google.golang.org/grpc"
@@ -66,7 +66,7 @@ type Req struct {
 	// guard is what the run allows: a call to a host it does not allow, or
 	// under --read-only one to a method that may write, is refused before
 	// anything is sent.
-	guard actionrpc.Guard
+	guard action.Guard
 }
 
 type Res struct {
@@ -702,11 +702,11 @@ type Callback struct {
 }
 
 func Request(data map[string]any, opts ...Option) (map[string]any, error) {
-	return RequestStep(actionrpc.Call{With: data}, opts...)
+	return RequestStep(action.Call{With: data}, opts...)
 }
 
 // RequestStep is Request for a step, made under the guard of the run.
-func RequestStep(call actionrpc.Call, opts ...Option) (map[string]any, error) {
+func RequestStep(call action.Call, opts ...Option) (map[string]any, error) {
 	// Create a copy to avoid modifying the original data
 	m := make(map[string]any)
 	maps.Copy(m, call.With)

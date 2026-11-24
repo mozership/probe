@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actionlog"
 	"github.com/mozership/probe/internal/mask"
 )
@@ -72,7 +72,7 @@ func (o RunOptions) logLevel() hclog.Level {
 // that only by running the action with PluginActionRunner and opts as it
 // was given them.
 type ActionRunner interface {
-	Run(name string, call actionrpc.Call, opts RunOptions) (result, newState map[string]any, err error)
+	Run(name string, call action.Call, opts RunOptions) (result, newState map[string]any, err error)
 }
 
 // PluginActionRunner is the ActionRunner a run uses unless it is given
@@ -83,7 +83,7 @@ type PluginActionRunner struct{}
 // Run runs the action for a step in a process of its own, telling it about
 // the step, giving it the state it left in the job and returning the state
 // it leaves.
-func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (p *PluginActionRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	// Actions are separate processes: they log to stderr as JSON and the
 	// records are re-filtered here, so this level decides what the user sees.
 	log := actionlog.New(name, os.Stderr, opts.Masker, opts.logLevel(), opts.Verbose)
@@ -91,11 +91,11 @@ func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptio
 	// external actions they ran that are to clean up, however it ends.
 	call.Cleanups = nil
 	if opts.cleanups != nil {
-		call.Cleanups = &actionrpc.Cleanups{}
+		call.Cleanups = &action.Cleanups{}
 		defer func() { opts.cleanups.owe(call.Cleanups.List()...) }()
 	}
 	if !actionref.IsExternal(name) {
-		return actionrpc.RunBuiltin(opts.Context(), name, call, log)
+		return action.RunBuiltin(opts.Context(), name, call, log)
 	}
 	exe, err := actionref.Resolve(name, opts.BaseDir)
 	if err != nil {
@@ -109,7 +109,7 @@ func (p *PluginActionRunner) Run(name string, call actionrpc.Call, opts RunOptio
 		opts.cleanups.writtenAs(full, name)
 		defer opts.cleanups.begin(full)()
 	}
-	return actionrpc.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
+	return action.RunExecutable(opts.Context(), exe.Path, exe.SHA256, call, log)
 }
 
 // cleansUp reports whether the action.yml of the external action name asks
@@ -141,7 +141,7 @@ func (s *actionStates) get(name string) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// What is kept was made sendable when it was set, so this cannot fail.
-	state, _ := actionrpc.Sendable(s.states[name])
+	state, _ := action.Sendable(s.states[name])
 	return state
 }
 
@@ -153,7 +153,7 @@ func (s *actionStates) set(name string, state map[string]any) error {
 	if s == nil || state == nil {
 		return nil
 	}
-	sendable, err := actionrpc.Sendable(state)
+	sendable, err := action.Sendable(state)
 	if err != nil {
 		return fmt.Errorf("cannot keep the action's state: %w", err)
 	}

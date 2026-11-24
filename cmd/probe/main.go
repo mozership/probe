@@ -12,8 +12,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 	"github.com/mozership/probe"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/actionref"
-	"github.com/mozership/probe/actionrpc"
 	"github.com/mozership/probe/internal/actions"
 	"github.com/mozership/probe/internal/envfile"
 	"github.com/mozership/probe/internal/oas"
@@ -443,7 +443,7 @@ func (c *Cmd) usageError(usage, format string, a ...any) {
 }
 
 func (c *Cmd) start(args []string) int {
-	if len(args) >= 3 && args[1] == actionrpc.BuiltinCmd {
+	if len(args) >= 3 && args[1] == action.BuiltinCmd {
 		c.runBuiltinActions(args[2])
 		return 0
 	}
@@ -722,12 +722,12 @@ func parseBool(s string) (bool, error) {
 // guard returns the guard of the run from the flags, each of which wins over
 // its environment variable when it is given, even empty or false:
 // PROBE_READ_ONLY, PROBE_ALLOW_HOSTS and PROBE_ALLOW_ACTIONS.
-func (c *Cmd) guard() (actionrpc.Guard, error) {
+func (c *Cmd) guard() (action.Guard, error) {
 	readOnly := c.ReadOnly
 	if !c.guardFlags["read-only"] {
 		v, err := parseBool(os.Getenv("PROBE_READ_ONLY"))
 		if err != nil {
-			return actionrpc.Guard{}, fmt.Errorf("PROBE_READ_ONLY %w", err)
+			return action.Guard{}, fmt.Errorf("PROBE_READ_ONLY %w", err)
 		}
 		readOnly = v
 	}
@@ -739,7 +739,7 @@ func (c *Cmd) guard() (actionrpc.Guard, error) {
 	if !c.guardFlags["allow-action"] {
 		allowed = os.Getenv("PROBE_ALLOW_ACTIONS")
 	}
-	return actionrpc.Guard{
+	return action.Guard{
 		ReadOnly:     readOnly,
 		AllowHosts:   splitList(hosts),
 		AllowActions: splitList(allowed),

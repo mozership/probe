@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
@@ -15,21 +15,21 @@ type Action struct {
 }
 
 func (a *Action) Run(with map[string]any) (map[string]any, error) {
-	ret, _, err := a.RunStep(actionrpc.Call{With: with})
+	ret, _, err := a.RunStep(action.Call{With: with})
 	return ret, err
 }
 
 // RunStep runs the query under the guard of the run, which may allow only
 // reading, or only some hosts.
-func (a *Action) RunStep(call actionrpc.Call) (map[string]any, map[string]any, error) {
+func (a *Action) RunStep(call action.Call) (map[string]any, map[string]any, error) {
 	ret, err := a.run(call.With, call.Guard)
 	return ret, nil, err
 }
 
-func (a *Action) run(with map[string]any, guard actionrpc.Guard) (map[string]any, error) {
+func (a *Action) run(with map[string]any, guard action.Guard) (map[string]any, error) {
 	// The password in the DSN is hidden by the workflow runner, which learns
 	// it before the action starts and masks the records this action logs.
-	actionrpc.LogParams(a.log, "received db request parameters", with)
+	action.LogParams(a.log, "received db request parameters", with)
 
 	// Validate required parameters
 	dsnVal, exists := with["dsn"]
@@ -60,13 +60,13 @@ func (a *Action) run(with map[string]any, guard actionrpc.Guard) (map[string]any
 		}),
 		WithGuard(guard),
 	)
-	actionrpc.LogOutcome(a.log, "database query", result, err)
+	action.LogOutcome(a.log, "database query", result, err)
 
 	return result, err
 }
 
 func serve() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+	action.Serve(func(log hclog.Logger) action.Action {
 		return &Action{log: log}
 	})
 }
@@ -77,7 +77,7 @@ func serve() {
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
-		Keeps:     []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Keeps:     []string{action.KindReadOnly, action.KindAllowHost},
 		Params:    mapping.FieldTags(Req{}),
 		Contracts: actionspec.NoContracts(),
 		ReqFields: mapping.FieldTags(Req{}),

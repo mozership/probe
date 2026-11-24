@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestReqCheckGuard(t *testing.T) {
-	readOnly := actionrpc.Guard{ReadOnly: true}
+	readOnly := action.Guard{ReadOnly: true}
 	tests := []struct {
 		name    string
-		guard   actionrpc.Guard
+		guard   action.Guard
 		dsn     string
 		query   string
 		refused string // a part of the reason; empty when the query runs
@@ -40,19 +40,19 @@ func TestReqCheckGuard(t *testing.T) {
 		{name: "UPDATE", guard: readOnly, query: "update users set a = 1", refused: "the statement UPDATE may write"},
 		{name: "two statements", guard: readOnly, query: "SELECT 1; DELETE FROM users", refused: "the query holds a semicolon"},
 		{name: "INSERT without a guard", query: "INSERT INTO users VALUES (1)"},
-		{name: "a server allowed", guard: actionrpc.Guard{AllowHosts: []string{"db.internal"}}, dsn: "mysql://u:p@db.internal:3306/app", query: "INSERT INTO t VALUES (1)"},
-		{name: "the default port", guard: actionrpc.Guard{AllowHosts: []string{"db.internal:5432"}}, dsn: "postgres://u:p@db.internal/app", query: "SELECT 1"},
-		{name: "localhost without a host", guard: actionrpc.Guard{AllowHosts: []string{"localhost:3306"}}, dsn: "mysql://u:p@/app", query: "SELECT 1"},
-		{name: "a server not allowed", guard: actionrpc.Guard{AllowHosts: []string{"db.internal"}}, dsn: "postgres://u:p@prod.example.com:5432/app", query: "SELECT 1", refused: "the host prod.example.com:5432 is not one the run allows"},
-		{name: "SQLite names no host", guard: actionrpc.Guard{AllowHosts: []string{"db.internal"}}, dsn: "file:./test.db", query: "SELECT 1"},
+		{name: "a server allowed", guard: action.Guard{AllowHosts: []string{"db.internal"}}, dsn: "mysql://u:p@db.internal:3306/app", query: "INSERT INTO t VALUES (1)"},
+		{name: "the default port", guard: action.Guard{AllowHosts: []string{"db.internal:5432"}}, dsn: "postgres://u:p@db.internal/app", query: "SELECT 1"},
+		{name: "localhost without a host", guard: action.Guard{AllowHosts: []string{"localhost:3306"}}, dsn: "mysql://u:p@/app", query: "SELECT 1"},
+		{name: "a server not allowed", guard: action.Guard{AllowHosts: []string{"db.internal"}}, dsn: "postgres://u:p@prod.example.com:5432/app", query: "SELECT 1", refused: "the host prod.example.com:5432 is not one the run allows"},
+		{name: "SQLite names no host", guard: action.Guard{AllowHosts: []string{"db.internal"}}, dsn: "file:./test.db", query: "SELECT 1"},
 		// The servers are those lib/pq resolves the DSN to, which it then
 		// connects to.
-		{name: "a PostgreSQL port parameter", guard: actionrpc.Guard{AllowHosts: []string{"allowed.example:5432"}}, dsn: "postgres://u:p@allowed.example/app?port=5433", query: "SELECT 1", refused: "the host allowed.example:5433 is not one the run allows"},
-		{name: "a PostgreSQL hostaddr", guard: actionrpc.Guard{AllowHosts: []string{"db.internal"}}, dsn: "postgres://u:p@db.internal/app?hostaddr=10.0.0.9", query: "SELECT 1", refused: "the host 10.0.0.9:5432 is not one the run allows"},
-		{name: "a PostgreSQL hostaddr allowed", guard: actionrpc.Guard{AllowHosts: []string{"10.0.0.9"}}, dsn: "postgres://u:p@db.internal/app?hostaddr=10.0.0.9", query: "SELECT 1"},
-		{name: "one of several PostgreSQL hosts not allowed", guard: actionrpc.Guard{AllowHosts: []string{"a.example"}}, dsn: "postgres://u:p@/app?host=a.example,b.example", query: "SELECT 1", refused: "the host b.example:5432 is not one the run allows"},
-		{name: "several PostgreSQL hosts allowed", guard: actionrpc.Guard{AllowHosts: []string{"*.example"}}, dsn: "postgres://u:p@/app?host=a.example,b.example", query: "SELECT 1"},
-		{name: "a PostgreSQL DSN lib/pq cannot read", guard: actionrpc.Guard{AllowHosts: []string{"a.example"}}, dsn: "postgres://u:p@a.example/app?sslmode=bogus", query: "SELECT 1", refused: "the DSN cannot be read for its server"},
+		{name: "a PostgreSQL port parameter", guard: action.Guard{AllowHosts: []string{"allowed.example:5432"}}, dsn: "postgres://u:p@allowed.example/app?port=5433", query: "SELECT 1", refused: "the host allowed.example:5433 is not one the run allows"},
+		{name: "a PostgreSQL hostaddr", guard: action.Guard{AllowHosts: []string{"db.internal"}}, dsn: "postgres://u:p@db.internal/app?hostaddr=10.0.0.9", query: "SELECT 1", refused: "the host 10.0.0.9:5432 is not one the run allows"},
+		{name: "a PostgreSQL hostaddr allowed", guard: action.Guard{AllowHosts: []string{"10.0.0.9"}}, dsn: "postgres://u:p@db.internal/app?hostaddr=10.0.0.9", query: "SELECT 1"},
+		{name: "one of several PostgreSQL hosts not allowed", guard: action.Guard{AllowHosts: []string{"a.example"}}, dsn: "postgres://u:p@/app?host=a.example,b.example", query: "SELECT 1", refused: "the host b.example:5432 is not one the run allows"},
+		{name: "several PostgreSQL hosts allowed", guard: action.Guard{AllowHosts: []string{"*.example"}}, dsn: "postgres://u:p@/app?host=a.example,b.example", query: "SELECT 1"},
+		{name: "a PostgreSQL DSN lib/pq cannot read", guard: action.Guard{AllowHosts: []string{"a.example"}}, dsn: "postgres://u:p@a.example/app?sslmode=bogus", query: "SELECT 1", refused: "the DSN cannot be read for its server"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestReqCheckGuard(t *testing.T) {
 				}
 				return
 			}
-			if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+			if !action.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 				t.Errorf("checkGuard = %v, want a refusal saying %q", err, tt.refused)
 			}
 		})
@@ -83,13 +83,13 @@ func TestReqHostsTakeTheEnvironment(t *testing.T) {
 	t.Setenv("PGHOST", "env.example")
 	t.Setenv("PGPORT", "6543")
 	r := &Req{Driver: "postgres", DSN: "postgres://u:p@/app", Query: "SELECT 1"}
-	err := r.checkGuard(actionrpc.Guard{AllowHosts: []string{"localhost"}})
-	if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), "the host env.example:6543") {
+	err := r.checkGuard(action.Guard{AllowHosts: []string{"localhost"}})
+	if !action.IsRefused(err) || !strings.Contains(err.Error(), "the host env.example:6543") {
 		t.Errorf("checkGuard = %v, want the host PGHOST and PGPORT name refused", err)
 	}
 	// A host the DSN names wins over PGHOST.
 	r.DSN = "postgres://u:p@localhost/app"
-	if err := r.checkGuard(actionrpc.Guard{AllowHosts: []string{"localhost"}}); err != nil {
+	if err := r.checkGuard(action.Guard{AllowHosts: []string{"localhost"}}); err != nil {
 		t.Errorf("checkGuard = %v, want nil", err)
 	}
 }
@@ -97,8 +97,8 @@ func TestReqHostsTakeTheEnvironment(t *testing.T) {
 func TestReqHostsTakePGHOSTADDR(t *testing.T) {
 	t.Setenv("PGHOSTADDR", "10.0.0.7")
 	r := &Req{Driver: "postgres", DSN: "postgres://u:p@db.internal/app", Query: "SELECT 1"}
-	err := r.checkGuard(actionrpc.Guard{AllowHosts: []string{"db.internal"}})
-	if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), "the host 10.0.0.7:5432") {
+	err := r.checkGuard(action.Guard{AllowHosts: []string{"db.internal"}})
+	if !action.IsRefused(err) || !strings.Contains(err.Error(), "the host 10.0.0.7:5432") {
 		t.Errorf("checkGuard = %v, want the address PGHOSTADDR names refused", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestReqHostsTakePGHOSTADDR(t *testing.T) {
 // the first semicolon.
 func TestReqCheckGuardPostgreSQLBackslash(t *testing.T) {
 	r := &Req{Driver: "postgres", DSN: "postgres://u:p@db.internal/app", Query: `SELECT '\'; COMMIT; DELETE FROM t; -- '`}
-	if err := r.checkGuard(actionrpc.Guard{ReadOnly: true}); !actionrpc.IsRefused(err) {
+	if err := r.checkGuard(action.Guard{ReadOnly: true}); !action.IsRefused(err) {
 		t.Errorf("checkGuard = %v, want a refusal", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestReqCheckGuardPostgreSQLBackslash(t *testing.T) {
 // before the query runs in its read-only transaction, so that under a
 // read-only guard only the options known not to are allowed.
 func TestReqCheckGuardConnectOptions(t *testing.T) {
-	readOnly := actionrpc.Guard{ReadOnly: true}
+	readOnly := action.Guard{ReadOnly: true}
 	tests := []struct {
 		name    string
 		dsn     string
@@ -148,11 +148,11 @@ func TestReqCheckGuardConnectOptions(t *testing.T) {
 				}
 				return
 			}
-			if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+			if !action.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 				t.Errorf("checkGuard = %v, want a refusal saying %q", err, tt.refused)
 			}
 			// Without the guard, the options are the workflow's to set.
-			if err := r.checkGuard(actionrpc.Guard{}); err != nil {
+			if err := r.checkGuard(action.Guard{}); err != nil {
 				t.Errorf("checkGuard without a guard = %v, want nil", err)
 			}
 		})
@@ -162,7 +162,7 @@ func TestReqCheckGuardConnectOptions(t *testing.T) {
 // The MySQL server checked is the address go-sql-driver dials, which a path
 // that holds an @tcp(...) of its own would otherwise hide.
 func TestReqCheckGuardMySQLAddress(t *testing.T) {
-	guard := actionrpc.Guard{AllowHosts: []string{"allowed.example"}}
+	guard := action.Guard{AllowHosts: []string{"allowed.example"}}
 	tests := []struct {
 		dsn     string
 		refused string // a part of the reason; empty when the DSN is allowed
@@ -182,7 +182,7 @@ func TestReqCheckGuardMySQLAddress(t *testing.T) {
 			}
 			continue
 		}
-		if !actionrpc.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
+		if !action.IsRefused(err) || !strings.Contains(err.Error(), tt.refused) {
 			t.Errorf("checkGuard(%s) = %v, want a refusal saying %q", tt.dsn, err, tt.refused)
 		}
 	}

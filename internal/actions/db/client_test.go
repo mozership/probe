@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestParseParams(t *testing.T) {
@@ -589,7 +589,7 @@ func TestExecuteQueryReadOnlySQLite(t *testing.T) {
 			t.Fatalf("%s: %v", q, err)
 		}
 	}
-	readOnly := WithGuard(actionrpc.Guard{ReadOnly: true})
+	readOnly := WithGuard(action.Guard{ReadOnly: true})
 
 	res, err := ExecuteQuery(map[string]any{"dsn": dsn, "query": "SELECT count(*) AS n FROM t"}, readOnly)
 	if err != nil {
@@ -612,7 +612,7 @@ func TestExecuteQueryReadOnlySQLite(t *testing.T) {
 
 	// A statement that writes is refused before the database is opened.
 	_, err = ExecuteQuery(map[string]any{"dsn": dsn, "query": "DELETE FROM t"}, readOnly)
-	if !actionrpc.IsRefused(err) {
+	if !action.IsRefused(err) {
 		t.Errorf("err = %v, want a refusal", err)
 	}
 
@@ -631,8 +631,8 @@ func TestExecuteQueryReadOnlySQLiteRefusesAPragmaOnConnecting(t *testing.T) {
 	if _, err := ExecuteQuery(map[string]any{"dsn": "file:" + path, "query": "CREATE TABLE t (v INTEGER)"}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := ExecuteQuery(map[string]any{"dsn": "file:" + path + "?_pragma=user_version(7)", "query": "SELECT 1"}, WithGuard(actionrpc.Guard{ReadOnly: true}))
-	if !actionrpc.IsRefused(err) {
+	_, err := ExecuteQuery(map[string]any{"dsn": "file:" + path + "?_pragma=user_version(7)", "query": "SELECT 1"}, WithGuard(action.Guard{ReadOnly: true}))
+	if !action.IsRefused(err) {
 		t.Fatalf("err = %v, want a refusal", err)
 	}
 	res, err := ExecuteQuery(map[string]any{"dsn": "file:" + path, "query": "SELECT user_version FROM pragma_user_version"})

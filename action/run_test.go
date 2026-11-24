@@ -1,4 +1,4 @@
-package actionrpc
+package action
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 var testActionDir string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "actionrpc-test")
+	dir, err := os.MkdirTemp("", "action-test")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

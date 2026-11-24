@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/hostport"
 	"github.com/mozership/probe/internal/mapping"
 )
@@ -42,7 +42,7 @@ type Req struct {
 	Protocol string `map:"protocol"`
 	Timeout  string `map:"timeout"`
 
-	guard actionrpc.Guard
+	guard action.Guard
 	// resolvConf is the file the system's resolvers are read from when no
 	// server is given.
 	resolvConf string
@@ -51,7 +51,7 @@ type Req struct {
 type Option func(*Req)
 
 // WithGuard has the query sent only to a server the guard of the run allows.
-func WithGuard(guard actionrpc.Guard) Option {
+func WithGuard(guard action.Guard) Option {
 	return func(r *Req) {
 		r.guard = guard
 	}
@@ -84,7 +84,7 @@ func Request(with map[string]any, opts ...Option) (map[string]any, error) {
 		for _, server := range servers {
 			if err := req.guard.CheckHost(server); err != nil {
 				if req.Server == "" {
-					return map[string]any{}, actionrpc.Refuse("%v: it is a resolver of this machine, from %s; give server to ask one the run allows", err, req.resolvConf)
+					return map[string]any{}, action.Refuse("%v: it is a resolver of this machine, from %s; give server to ask one the run allows", err, req.resolvConf)
 				}
 				return map[string]any{}, err
 			}

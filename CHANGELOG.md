@@ -8,10 +8,13 @@ importing probe as a library.
 
 ### Breaking Changes
 
-This release breaks the Go API of the root package, and moves the packages
+This release breaks the Go API of the root package, renames `actionrpc`,
+which every external action imports, to `action`, and moves the packages
 no external action imports under `internal/`, for code that imports probe
-as a library. Workflow files are not affected, except as told under
-Behaviour Changes below.
+as a library. An external action builds again once it imports
+`github.com/mozership/probe/action` in place of
+`github.com/mozership/probe/actionrpc`. Workflow files are not affected,
+except as told under Behaviour Changes below.
 
 The root package now holds only what is used from outside probe: calling
 actions as a step does (`ActionCaller`, `NewActionCaller`, `CallResult`,
@@ -53,10 +56,16 @@ of what moved.
 | `Probe`, `Config`, `OutputMode` and its constants, `ParseOutputMode`, `ActionRunner`, `RunOptions`, `PluginActionRunner`, `ActionCaller`, `CallerOption`, `CallResult`, `CheckOptions`, `Choices`, `Finding` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 | `OfficialAction`, `DocReader` | the same names, now aliases of types under `internal/`; code that uses them is not affected |
 
+#### Renamed
+
+| Before | After |
+|---|---|
+| `actionrpc` | `action`, with the same names in it |
+
 #### Moved under `internal/`
 
-What external actions import stays: the root package, `actionrpc`,
-`actionref`, `style` and `mask/markdown`.
+What external actions import stays, `actionrpc` under its new name: the
+root package, `action`, `actionref`, `style` and `mask/markdown`.
 
 | Before | After |
 |---|---|

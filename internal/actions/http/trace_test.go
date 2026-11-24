@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 func TestRequestStepSendsATraceHeader(t *testing.T) {
@@ -17,11 +17,11 @@ func TestRequestStepSendsATraceHeader(t *testing.T) {
 
 	// A step without an id, as in a job run by the embedded action, is named
 	// as probe names one in a workflow.
-	step := actionrpc.Step{RunID: "7f3a9c21e4b05d68", JobID: "login", Index: 2, Repeat: 1, Attempt: 3}
+	step := action.Step{RunID: "7f3a9c21e4b05d68", JobID: "login", Index: 2, Repeat: 1, Attempt: 3}
 	tests := []struct {
 		name   string
 		trace  any
-		step   actionrpc.Step
+		step   action.Step
 		header string
 		want   string
 	}{
@@ -42,21 +42,21 @@ func TestRequestStepSendsATraceHeader(t *testing.T) {
 		{
 			name:   "a step with an id is named by it",
 			trace:  true,
-			step:   actionrpc.Step{RunID: "r", JobID: "login", Index: 2, ID: "auth", Attempt: 1},
+			step:   action.Step{RunID: "r", JobID: "login", Index: 2, ID: "auth", Attempt: 1},
 			header: "X-Probe-Trace",
 			want:   "run=r; job=login; step=auth; repeat=0; attempt=1",
 		},
 		{
 			name:   "values that would break the header are escaped",
 			trace:  true,
-			step:   actionrpc.Step{RunID: "r", JobID: "log in; now", Index: 0, ID: "ステップ", Attempt: 1},
+			step:   action.Step{RunID: "r", JobID: "log in; now", Index: 0, ID: "ステップ", Attempt: 1},
 			header: "X-Probe-Trace",
 			want:   "run=r; job=log+in%3B+now; step=%E3%82%B9%E3%83%86%E3%83%83%E3%83%97; repeat=0; attempt=1",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ret, _, err := RequestStep(actionrpc.Call{
+			ret, _, err := RequestStep(action.Call{
 				With: map[string]any{"url": srv.URL, "get": "/", "trace_header": tt.trace},
 				Step: tt.step,
 			})
@@ -82,7 +82,7 @@ func TestRequestStepSendsATraceHeader(t *testing.T) {
 		if trace != nil {
 			with["trace_header"] = trace
 		}
-		if _, _, err := RequestStep(actionrpc.Call{With: with, Step: step}); err != nil {
+		if _, _, err := RequestStep(action.Call{With: with, Step: step}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if v := got.Get(DefaultTraceHeader); v != "" {
@@ -128,7 +128,7 @@ func TestRequestStepTraceHeaderRejected(t *testing.T) {
 
 			tt.with["url"] = srv.URL
 			tt.with["method"] = "GET"
-			_, _, err := RequestStep(actionrpc.Call{With: tt.with})
+			_, _, err := RequestStep(action.Call{With: tt.with})
 			if err == nil || err.Error() != tt.wantErr {
 				t.Errorf("error = %v, want %q", err, tt.wantErr)
 			}

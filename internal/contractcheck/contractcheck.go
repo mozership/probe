@@ -7,7 +7,7 @@ package contractcheck
 import (
 	"fmt"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // Flag returns the boolean key of the option o, named name as the step
@@ -25,7 +25,7 @@ func Flag(o map[string]any, name, key string, def bool) (bool, error) {
 }
 
 // Violation is one thing a contract does not allow, found in the request
-// or the response as in says, in the shape actionrpc.ContractCheckOf reads.
+// or the response as in says, in the shape action.ContractCheckOf reads.
 func Violation(in, message, reason, field string) map[string]any {
 	v := map[string]any{"in": in, "message": message}
 	if reason != "" {
@@ -42,9 +42,9 @@ func Violation(in, message, reason, field string) map[string]any {
 // the res of ret, as violations and contract, for the step's own test to
 // read. A nil violations means the step was checked against no contract,
 // and nothing is reported.
-func Report(c *actionrpc.Contract, ret map[string]any, violations []any, matched map[string]any) {
+func Report(c *action.Contract, ret map[string]any, violations []any, matched map[string]any) {
 	if violations != nil {
-		c.Report(actionrpc.ContractCheckOf(violations, matched))
+		c.Report(action.ContractCheckOf(violations, matched))
 	}
 	res, ok := ret["res"].(map[string]any)
 	if !ok {

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/report"
 
 	"github.com/fatih/color"
@@ -997,7 +997,7 @@ type recordingRunner struct {
 	opts   RunOptions
 }
 
-func (r *recordingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *recordingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.with = call.With
@@ -1221,7 +1221,7 @@ type timingRunner struct {
 	ended map[string]time.Time
 }
 
-func (r *timingRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *timingRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	with := call.With
 	key, _ := with["key"].(string)
 	r.mu.Lock()

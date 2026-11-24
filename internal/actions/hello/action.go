@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 )
@@ -36,7 +36,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 }
 
 func serve() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+	action.Serve(func(log hclog.Logger) action.Action {
 		return &Action{log: log}
 	})
 }
@@ -50,7 +50,7 @@ func serve() {
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:        serve,
-		Keeps:        []string{actionrpc.KindReadOnly, actionrpc.KindAllowHost},
+		Keeps:        []string{action.KindReadOnly, action.KindAllowHost},
 		AnyParams:    true,
 		Contracts:    actionspec.NoContracts(),
 		ReqFields:    []string{},

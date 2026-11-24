@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 	"github.com/mozership/probe/internal/actionspec"
 	"github.com/mozership/probe/internal/kind"
 	"github.com/mozership/probe/internal/mapping"
@@ -20,7 +20,7 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 		return map[string]any{}, errors.New("imap action requires parameters in 'with' section. Please specify connection details like host, username, password")
 	}
 
-	actionrpc.LogParams(a.log, "received imap request parameters", with)
+	action.LogParams(a.log, "received imap request parameters", with)
 
 	// The request and the response are logged as the parameters are, with
 	// the password hidden and long values such as message bodies truncated.
@@ -32,24 +32,24 @@ func (a *Action) Run(with map[string]any) (map[string]any, error) {
 	})
 	ret, err := Request(with, before, after)
 
-	actionrpc.LogOutcome(a.log, "imap request", ret, err)
+	action.LogOutcome(a.log, "imap request", ret, err)
 
 	return ret, err
 }
 
 // logStruct records v, a Req or a Res, by its map tags through
-// actionrpc.LogParams, which hides credentials such as the password.
+// action.LogParams, which hides credentials such as the password.
 func (a *Action) logStruct(msg string, v any) {
 	m, err := mapping.StructToMapByTags(v)
 	if err != nil {
 		a.log.Trace(msg, "error", err)
 		return
 	}
-	actionrpc.LogParams(a.log, msg, m)
+	action.LogParams(a.log, msg, m)
 }
 
 func serve() {
-	actionrpc.Serve(func(log hclog.Logger) actionrpc.Action {
+	action.Serve(func(log hclog.Logger) action.Action {
 		return &Action{log: log}
 	})
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mozership/probe/actionrpc"
+	"github.com/mozership/probe/action"
 )
 
 // A cycle is told from its first job in the workflow, not in the order of
@@ -50,7 +50,7 @@ type orderRunner struct {
 	calls []string
 }
 
-func (r *orderRunner) Run(name string, call actionrpc.Call, opts RunOptions) (map[string]any, map[string]any, error) {
+func (r *orderRunner) Run(name string, call action.Call, opts RunOptions) (map[string]any, map[string]any, error) {
 	who, _ := call.With["who"].(string)
 	r.mu.Lock()
 	r.calls = append(r.calls, who)
