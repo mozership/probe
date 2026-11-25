@@ -71,6 +71,7 @@ func TestParse_Refuses(t *testing.T) {
 		{"a name twice once trimmed", `{"a": "1", " a ": "2"}`, "var a is given more than once"},
 		{"not closed", `{"a": "1"`, "unexpected end of JSON input"},
 		{"where it fails", `{"a": "1",, }`, "at byte 11"},
+		{"where it fails after the BOM", "\uFEFF" + `{"a": "1",, }`, "at byte 14"},
 		{"a name that is not a string", `{1: "1"}`, "object member name must be a string, at byte 2"},
 	}
 	for _, tt := range tests {

@@ -43,8 +43,9 @@ func Read(path string, r io.Reader) (map[string]string, error) {
 // --var takes it, and is refused when the object has it twice.
 func Parse(r io.Reader) (map[string]string, error) {
 	br := bufio.NewReader(r)
+	skipped := 0
 	if bom, err := br.Peek(len(utf8BOM)); err == nil && bytes.Equal(bom, utf8BOM) {
-		_, _ = br.Discard(len(utf8BOM))
+		skipped, _ = br.Discard(len(utf8BOM))
 	}
 	dec := json.NewDecoder(br)
 	dec.UseNumber()
@@ -52,7 +53,7 @@ func Parse(r io.Reader) (map[string]string, error) {
 	if err != nil {
 		var syntax *json.SyntaxError
 		if errors.As(err, &syntax) {
-			return nil, fmt.Errorf("%w, at byte %d", err, syntax.Offset)
+			return nil, fmt.Errorf("%w, at byte %d", err, syntax.Offset+int64(skipped))
 		}
 		return nil, err
 	}
