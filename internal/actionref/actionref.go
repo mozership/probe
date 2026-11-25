@@ -130,6 +130,10 @@ type Manifest struct {
 	// check to report a step that reads another. Nil, when action.yml does
 	// not say, leaves what a step reads of res unchecked.
 	Res []string `yaml:"res"`
+	// Contracts are the keys of with that ask the action to check a step
+	// against a contract, such as a .proto file, for probe check to count a
+	// step that gives one as checked, as it does one with a test.
+	Contracts []string `yaml:"contracts"`
 	// Choices are the values that the keys of with which take only some
 	// take, by the key, for probe check to report a value written that is
 	// not one of them. A key left out takes any value.
@@ -238,6 +242,11 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	// as none.
 	if len(m.Choices) == 0 {
 		m.Choices = nil
+	}
+	for _, key := range m.Contracts {
+		if m.Params != nil && !slices.Contains(m.Params, key) {
+			return nil, fmt.Errorf("contracts: %s is not a key params lists", key)
+		}
 	}
 	for _, key := range slices.Sorted(maps.Keys(m.Choices)) {
 		if len(m.Choices[key].Values) == 0 {

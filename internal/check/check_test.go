@@ -778,6 +778,28 @@ func TestCheck_ContractsFromTheActions(t *testing.T) {
 	checkFindings(t, findings, []want{{SeverityWarning, 5, "nothing checks this step: it has no test"}})
 }
 
+// The action.yml of an external action names the keys that ask it to check
+// a step against a contract, as a built-in action's declaration does.
+func TestCheck_ContractsFromActionYML(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "rpc"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rpc", "action.yml"), []byte("params: [addr, proto]\ncontracts: [proto]\nruns:\n  using: binary\n  path: rpc\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := writeWorkflow(t, dir, "workflow.yml", "name: a\njobs:\n- name: J\n  steps:\n  - name: Contract\n    uses: ./rpc\n    with:\n      addr: localhost:50051\n      proto:\n        files: [api.proto]\n  - name: Bare\n    uses: ./rpc\n    with:\n      addr: localhost:50051\n")
+	opts := CheckOptions{Actions: []string{"http"}, Manifest: actionref.ReadManifest}
+	findings, err := Check(path, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFindings(t, findings, []want{{SeverityWarning, 11, "nothing checks this step: it has no test"}})
+	if opts.Contracts != nil {
+		t.Errorf("Check changed the Contracts it was given: %v", opts.Contracts)
+	}
+}
+
 func TestCheck_WithoutActions(t *testing.T) {
 	path := writeWorkflow(t, t.TempDir(), "workflow.yml", "name: a\njobs:\n- name: J\n  steps:\n  - uses: anything\n    test: res.code == 0\n")
 	findings, err := Check(path, CheckOptions{})

@@ -59,7 +59,8 @@ func serve() {
 // for a call checked against .proto files, and messages and complete, for
 // one whose responses stream, and services, methods and types, for a
 // listing. It cannot run without addr, nor without service and method
-// unless list asks for a listing.
+// unless list asks for a listing. It is being replaced by
+// github.com/mozership/probe-grpc, which a workflow can name grpc.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
@@ -75,6 +76,7 @@ func Spec() actionspec.Spec {
 			"protocol": {Values: []string{"grpc", "connect"}},
 			"codec":    {Values: []string{"json", "proto"}},
 		},
+		Replaceable: true,
 	}
 }
 

@@ -214,6 +214,10 @@ type checker struct {
 	// action added as its action.yml is read.
 	params    map[string][]string
 	resFields map[string][]string
+	// contracts are the keys of with that ask each action to check a step
+	// against a contract: those of opts, and those the action.yml of an
+	// external action declares.
+	contracts map[string][]string
 	wf        *engine.Workflow
 	findings  []Finding
 	// lines are the lines of the keys of the workflow, by their path, such
@@ -240,6 +244,7 @@ func newChecker(opts CheckOptions) *checker {
 		opts:      opts,
 		params:    maps.Clone(opts.Params),
 		resFields: maps.Clone(opts.ResFields),
+		contracts: maps.Clone(opts.Contracts),
 		choices:   maps.Clone(opts.Choices),
 		lines:     map[string]int{},
 		reported:  map[string]bool{},
@@ -249,6 +254,9 @@ func newChecker(opts CheckOptions) *checker {
 	}
 	if c.resFields == nil {
 		c.resFields = map[string][]string{}
+	}
+	if c.contracts == nil {
+		c.contracts = map[string][]string{}
 	}
 	if c.choices == nil {
 		c.choices = map[string]map[string]Choices{}

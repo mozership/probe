@@ -1042,7 +1042,7 @@ jobs:
     test: res.code == 200
 ```
 
-コミットを書く場所が1か所になり、新しいリリースへの更新はその1行の変更で済みます。組み込みアクションの名前は付けられません。ただし`db`は、[probe-db](https://github.com/mozership/probe-db)に置き換わる途中のため付けられます。`--allow-action`には、名前ではなく完全な形のアクションを指定します。規則は[`actions`](/ja/reference/yaml-configuration#actions)を参照してください。
+コミットを書く場所が1か所になり、新しいリリースへの更新はその1行の変更で済みます。組み込みアクションの名前は付けられません。ただし`db`と`grpc`は、[probe-db](https://github.com/mozership/probe-db)と[probe-grpc](https://github.com/mozership/probe-grpc)に置き換わる途中のため付けられます。`--allow-action`には、名前ではなく完全な形のアクションを指定します。規則は[`actions`](/ja/reference/yaml-configuration#actions)を参照してください。
 
 #### 公開されているアクション
 
@@ -1092,6 +1092,7 @@ runs:
 | `guard` | アクションが従うガードの種類。`read-only`、`allow-host`、またはその両方。Probeはこの宣言を検証せずに、その種類のガードの下でアクションを実行します。書かなければ、`--allow-action`で指定しない限り、どのガードの下でも拒否されます。[ガード](/ja/guide/concepts/guard)を参照してください |
 | `params` | アクションが`with`で受け取るキー。`probe check`が、受け取らないキーを報告するのに使います。書かなければ`with`は検査しません。`[]`はキーを受け取らないことを示します |
 | `res` | アクションが返す`res`の最上位のフィールド。`[code, body]`のように書きます。`probe check`が、それ以外を読むステップを警告するのに使います。書かなければ、ステップが`res`から読むものは検査しません。`[]`はフィールドを宣言しないので、読むものはすべて警告します |
+| `contracts` | ステップをコントラクトと照らし合わせるようアクションに求める`with`のキー。`.proto`ファイルで呼び出しを検証するアクションなら`[proto]`のように書きます。`probe check`は、このキーを指定したステップを、`test`のあるステップと同じく検証ありと数えます。書かなければ、`test`のないそのようなステップは検証なしとして警告します。`params`がある場合、キーは`params`にあるものでなければなりません |
 | `choices` | `with`のキーのうち、値の候補が決まっているものの値を、キーごとに書きます。`level: [info, warn]`のように書き、`probe check`が、受け付けない値を報告するのに使います。大文字と小文字を区別しないキーは`{values: [info, warn], ignore_case: true}`と書きます。値は文字列なので、数値は引用符で囲みます。ステップでは、アクションに渡す文字列として比べるので、引用符なしで書いてもかまいません。`ignore_case`は、アクションが大文字と小文字を区別しないという宣言で、`probe check`はそれが正しいかどうかは確かめません。`params`がある場合、キーは`params`にあるものでなければなりません。テンプレートを含む値と空の値は検査せず、書かないキーはどんな値も受け付けます |
 | `cleanup` | ワークフローが終わったときにProbeに呼ばせ、Stepが残したものを消すアクションでは`true`。書かなければ呼ばれません。[実行の後始末](#実行の後始末)を参照してください |
 
@@ -1170,9 +1171,9 @@ cp "$RUNNER_TEMP/action.yml" action.yml
 
 `GITHUB_REF_NAME`は、タグで起動したGitHub Actionsの実行ではそのタグです。
 
-名前、説明、`guard`、`params`、`res`、`choices`、`cleanup`は`action.yml`にあるまま残るので、これらを書く場所は`action.yml`だけになります。
+名前、説明、`guard`、`params`、`res`、`contracts`、`choices`、`cleanup`は`action.yml`にあるまま残るので、これらを書く場所は`action.yml`だけになります。
 
-新しいアクションでは、`probe manifest init`が雛形の`action.yml`を出力します。アクションを公開するGitHubリポジトリを指定して実行し、説明と`guard`、`params`、`res`、`choices`、`cleanup`を書き入れてコミットします。最初のリリースで、そのタグとダイジェストが入ります：
+新しいアクションでは、`probe manifest init`が雛形の`action.yml`を出力します。アクションを公開するGitHubリポジトリを指定して実行し、説明と`guard`、`params`、`res`、`contracts`、`choices`、`cleanup`を書き入れてコミットします。最初のリリースで、そのタグとダイジェストが入ります：
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml
