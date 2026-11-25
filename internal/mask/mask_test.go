@@ -1068,8 +1068,9 @@ func TestGeneration(t *testing.T) {
 }
 
 func TestMasker_Data(t *testing.T) {
-	m := New([]string{"S"}, map[string]string{"S": "sekret"})
+	m := New([]string{"S", "PIN"}, map[string]string{"S": "sekret", "PIN": "123"})
 	original := map[string]any{
+		"pin":      123,
 		"password": "plain",
 		"cookies":  map[string]any{"sid": "1"},
 		"url":      "https://user:pass@example.com/sekret",
@@ -1082,6 +1083,7 @@ func TestMasker_Data(t *testing.T) {
 	got := m.Data(original)
 
 	want := map[string]any{
+		"pin":        "<secret:PIN>",
 		"password":   "plain",
 		"cookies":    map[string]any{"sid": "1"},
 		"url":        "https://user:<redacted>@example.com/<secret:S>",

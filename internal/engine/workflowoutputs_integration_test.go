@@ -117,8 +117,9 @@ func TestWorkflow_StartWarnsOfOutputNotGiven(t *testing.T) {
 }
 
 // A job that did not run to its end may be why an output cannot be
-// evaluated, so it is left out without a word: in a run narrowed with
-// --job, and in one with a job that was skipped or failed.
+// evaluated, as it reads what no step published, so it is left out without
+// a word: in a run narrowed with --job, and in one with a job that was
+// skipped or failed.
 func TestWorkflow_StartQuietOfOutputsJobsDidNotPublish(t *testing.T) {
 	runner := newMockRunner()
 	runner.SetResult("ok", map[string]any{"res": map[string]any{"code": 200, "rows": []any{1}}})
@@ -164,6 +165,27 @@ func TestWorkflow_StartQuietOfOutputsJobsDidNotPublish(t *testing.T) {
 				t.Errorf("warned of the output: %q", errOut)
 			}
 		})
+	}
+}
+
+// An output that cannot be evaluated although what it reads was published
+// is a mistake in it, which is warned of in a run whose job failed too.
+func TestWorkflow_StartWarnsOfBrokenOutputWhenAJobFailed(t *testing.T) {
+	runner := newMockRunner()
+	runner.SetResult("fail", map[string]any{"res": map[string]any{"code": 500, "body": "down"}})
+	w := &Workflow{
+		Name: "Warns",
+		Jobs: []Job{{ID: "j", Name: "J", Steps: []*Step{{
+			ID: "s", Name: "S", Uses: "fail", Test: "res.code == 200", Outputs: map[string]string{"body": "res.body"},
+		}}}},
+		Outputs: map[string]string{"typo": "len(outputs.s.body) + 'a'"},
+	}
+	_, status, errOut := runForOutputs(t, w, runner)
+	if status != 1 {
+		t.Errorf("exit status = %d, want 1", status)
+	}
+	if !strings.Contains(errOut, "output 'typo' of the workflow is not given") {
+		t.Errorf("no warning of the broken output in %q", errOut)
 	}
 }
 

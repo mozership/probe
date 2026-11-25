@@ -185,15 +185,20 @@ func (r *workflowRun) execute() error {
 }
 
 // evalOutputs evaluates the outputs of the workflow once every job is over,
-// with vars, and warns of each that is not given as it cannot be evaluated,
-// unless a job of the workflow did not run to its end, as rs tells, which
-// may be why: what the output reads was then not published.
+// with vars, and warns of each that is not given as it cannot be evaluated.
+// One that reads what no step published is not warned of when a job did not
+// run to its end, as rs tells, as that may be why.
 func (r *workflowRun) evalOutputs(vars map[string]any, rs *outcome.Run) map[string]any {
-	given, errs := evalWorkflowOutputs(r.w.Outputs, WorkflowOutputEnv{Vars: vars, Outputs: r.outputs.GetAll()})
-	if r.someJobLeftOut(rs) {
+	published := r.outputs.GetAll()
+	given, errs := evalWorkflowOutputs(r.w.Outputs, WorkflowOutputEnv{Vars: vars, Outputs: published})
+	if len(errs) == 0 {
 		return given
 	}
+	leftOut := r.someJobLeftOut(rs)
 	for _, err := range errs {
+		if leftOut && readsUnpublished(r.w.Outputs[err.name], published) {
+			continue
+		}
 		r.printer().LogWarn("%v", err)
 	}
 	return given

@@ -880,7 +880,7 @@ func (m *Masker) Data(v any) any {
 		}
 		return out
 	default:
-		return v
+		return m.number(v)
 	}
 }
 

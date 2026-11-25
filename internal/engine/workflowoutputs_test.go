@@ -65,3 +65,23 @@ func TestWorkflow_OutputProblems(t *testing.T) {
 		t.Errorf("problems[1] = %s at %s", problems[1], problems[1].Path)
 	}
 }
+
+func TestReadsUnpublished(t *testing.T) {
+	published := map[string]any{"take": map[string]any{"rows": 1}, "rows": 1}
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"outputs.take.rows", false},
+		{"outputs.rows + 1", false},
+		{"len(outputs.take.rows) + 'a'", false},
+		{"outputs.late.rows", true},
+		{"outputs.rows + outputs.late", true},
+		{"vars.x", false},
+	}
+	for _, tt := range tests {
+		if got := readsUnpublished(tt.input, published); got != tt.want {
+			t.Errorf("readsUnpublished(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
