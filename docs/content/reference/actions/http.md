@@ -25,10 +25,11 @@ The fields below describe the request. All of them accept template expressions.
 | `url` | String | Yes | - | Request URL, or the base URL when a method shorthand carries a path. Not needed with `unix_socket` and a method shorthand |
 | `method` | String | Yes | - | HTTP method. Supplied by a method shorthand when one is used |
 | `headers` | Object | No | - | Request headers |
-| `body` | String or Object | No | - | Request body. An object is serialized as JSON when `content-type` is a JSON type: `application/json`, with or without parameters such as `charset`, or one ending in `+json` |
+| `body` | String or Object | No | - | Request body. An object is serialized as JSON when `content-type` is a JSON type: `application/json`, with or without parameters such as `charset`, one ending in `+json`, or one of the JSON protocols of AWS, such as `application/x-amz-json-1.0` |
 | `timeout` | Duration | No | `30s` | Time limit for the whole request, including reading the response |
 | `unix_socket` | String | No | - | Path of a Unix domain socket to send the request over. See [Over a Unix Socket](#over-a-unix-socket) |
 | `basic_auth` | Object | No | - | `username` and `password` for HTTP Basic authentication, sent as the `Authorization` header |
+| `aws_sigv4` | Object | No | - | Sign the request with AWS Signature Version 4, for an AWS service such as SQS. See [Signing for AWS](#signing-for-aws) |
 | `form` | Object | No | - | Form fields, sent as an `application/x-www-form-urlencoded` body. See [Sending a Form](#sending-a-form) |
 | `multipart` | Object | No | - | Form fields and files, sent as a `multipart/form-data` body. See [Uploading Files](#uploading-files) |
 | `cookies` | Object | No | - | Cookies to send, by name. See [Cookies](#cookies) |
@@ -197,7 +198,7 @@ After the request, `res` holds what came back.
 | `res.headers` | Object | Response headers, keyed by canonical name such as `Content-Type` |
 | `res.body` | Any | Response body. Parsed into an object or array when the response is JSON, otherwise the raw string |
 | `res.rawbody` | String | The unparsed body, present when the body was parsed as JSON |
-| `res.filepath` | String | Path to the saved file when the response is binary, that is when its `Content-Type` is not text: `text/*`, JSON, XML, JavaScript, a form, or a type ending in `+json` or `+xml` such as `application/problem+json` or `image/svg+xml`. A response without a `Content-Type` is text |
+| `res.filepath` | String | Path to the saved file when the response is binary, that is when its `Content-Type` is not text: `text/*`, JSON, XML, JavaScript, a form, a type ending in `+json` or `+xml` such as `application/problem+json` or `image/svg+xml`, or a JSON type of AWS such as `application/x-amz-json-1.0`. A response without a `Content-Type` is text |
 | `res.cookies` | Object | The cookies the server set, by name, on redirects included |
 | `res.violations` | Array | What the OpenAPI document does not allow in the request and the response, empty when it allows all of it. Present only when `openapi` is given |
 | `res.contract` | Object | What the response was matched to in the OpenAPI document: `spec`, `operation` such as `GET /users/{id}`, and `response` such as `200`, `2XX` or `default`, left out when the operation declares none for the status. Present only when the document has an operation for the request |
@@ -282,6 +283,46 @@ A server that takes HTTP Basic authentication is given the username and password
 ```
 
 A username must not contain a colon, which would end it early, and a password may be empty. `basic_auth` cannot be given together with an `authorization` header, since only one of them could be sent. The password and the header built from it are hidden in the output as other credentials are.
+
+### Signing for AWS
+
+An AWS service takes a request signed with AWS Signature Version 4, which `aws_sigv4` adds: the request is sent as written, with the headers of a signature for the service and region it names. Any API of AWS that is sent over HTTP can be called so, and the services compatible with one, such as S3-compatible storage or a queue compatible with SQS.
+
+This waits for a message on an SQS queue, polling for up to 20 seconds a request, and as many times as `retry` allows:
+
+```yaml
+- name: Wait for a job
+  uses: http
+  with:
+    post: https://sqs.ap-northeast-1.amazonaws.com/
+    aws_sigv4:
+      service: sqs
+      region: ap-northeast-1
+    headers:
+      content-type: application/x-amz-json-1.0
+      x-amz-target: AmazonSQS.ReceiveMessage
+    body:
+      QueueUrl: "{{vars.queue_url}}"
+      WaitTimeSeconds: 20
+      MaxNumberOfMessages: 1
+    timeout: 30s
+  test: res.code == 200 && len(res.body.Messages ?? []) > 0
+  retry:
+    max_attempts: 180
+  outputs:
+    message: res.body.Messages[0].Body
+```
+
+| Key | Required | Description |
+|---|---|---|
+| `service` | Yes | The name of the service the endpoint signs for, such as `sqs`, `execute-api` for API Gateway, `lambda` for a function URL, `es` for OpenSearch or `s3` |
+| `region` | No | The region of the endpoint, such as `ap-northeast-1`. Defaults to `AWS_REGION`, then `AWS_DEFAULT_REGION` |
+| `access_key_id`, `secret_access_key` | No | The access key to sign with, given together. Default to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` |
+| `session_token` | No | The session token of temporary credentials, sent as `X-Amz-Security-Token`. Defaults to `AWS_SESSION_TOKEN` when the access key is read from the environment |
+
+The credentials are read from those variables only, not from the files or the roles the AWS CLI also reads: export the credentials of a profile or a role before running Probe, as `eval "$(aws configure export-credentials --format env)"` does. Set in a job's `defaults`, `aws_sigv4` signs every request of the job.
+
+The signature covers the method, the URL, the body and the headers, but not `User-Agent`, `Accept-Encoding`, `Expect` and `X-Amzn-Trace-Id`, which something on the way may change or add. For `s3` the request also carries the digest of its body in `X-Amz-Content-Sha256`, as S3 requires. A redirect is followed without a signature. `aws_sigv4` cannot be given together with `basic_auth` or an `authorization` header, since the signature is sent in `Authorization`. The secret key, the session token and the `Authorization` header are hidden in the output as other credentials are.
 
 ### Cookies
 

@@ -26,6 +26,7 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 		{"url": srv.URL, "method": "GET", "headers": map[string]any{"accept": "application/json"}, "timeout": "5s"},
 		{"url": srv.URL, "post": "/users", "body": map[string]any{"name": "probe"}, "headers": map[string]any{"content-type": "application/json"}},
 		{"url": srv.URL, "post": "/form", "form": map[string]any{"name": "probe"}, "basic_auth": map[string]any{"username": "u", "password": "p"}},
+		{"url": srv.URL, "post": "/queue", "aws_sigv4": map[string]any{"service": "sqs", "region": "us-east-1", "access_key_id": "AKID", "secret_access_key": "secret"}},
 		{"url": srv.URL, "post": "/upload", "multipart": map[string]any{"title": "hello"}},
 		{"url": srv.URL, "get": "/", "keep_cookies": true, "cookies": map[string]any{"theme": "dark"}, "trace_header": "x-probe-step"},
 		{"url": srv.URL + "/v1", "get": "/users/1", "openapi": map[string]any{"spec": spec}},

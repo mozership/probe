@@ -92,7 +92,7 @@ func params() []string {
 	for _, m := range httpMethods {
 		params = append(params, strings.ToLower(m))
 	}
-	return append(params, "basic_auth", "cookies", "form", "keep_cookies", "multipart", "openapi", "trace_header")
+	return append(params, "aws_sigv4", "basic_auth", "cookies", "form", "keep_cookies", "multipart", "openapi", "trace_header")
 }
 
 // resTypes returns the kinds of the fields of Res and of those the action

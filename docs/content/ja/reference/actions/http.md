@@ -25,10 +25,11 @@ steps:
 | `url` | String | 必須 | - | リクエストURL。メソッド省略記法でパスを渡す場合はベースURL。`unix_socket`とメソッド省略記法を使うときは不要 |
 | `method` | String | 必須 | - | HTTPメソッド。メソッド省略記法を使う場合はそちらが設定します |
 | `headers` | Object | 任意 | - | リクエストヘッダー |
-| `body` | StringまたはObject | 任意 | - | リクエストボディ。`content-type`がJSONの型のとき、オブジェクトはJSONにシリアライズされます。JSONの型とは、`charset`などのパラメータの有無を問わない`application/json`と、`+json`で終わる型です |
+| `body` | StringまたはObject | 任意 | - | リクエストボディ。`content-type`がJSONの型のとき、オブジェクトはJSONにシリアライズされます。JSONの型とは、`charset`などのパラメータの有無を問わない`application/json`と、`+json`で終わる型と、`application/x-amz-json-1.0`のようなAWSのJSONプロトコルの型です |
 | `timeout` | Duration | 任意 | `30s` | レスポンスの読み取りまで含めた、リクエスト全体の制限時間 |
 | `unix_socket` | String | 任意 | - | リクエストを送るUnixドメインソケットのパス。[Unixソケット経由の送信](#unixソケット経由の送信)を参照 |
 | `basic_auth` | Object | 任意 | - | HTTP Basic認証の`username`と`password`。`Authorization`ヘッダーとして送ります |
+| `aws_sigv4` | Object | 任意 | - | SQSなどのAWSのサービスに向けて、リクエストにAWS Signature Version 4で署名します。[AWSへの署名](#awsへの署名)を参照してください |
 | `form` | Object | 任意 | - | フォームのフィールド。`application/x-www-form-urlencoded`のボディとして送ります。[フォームの送信](#フォームの送信)を参照 |
 | `multipart` | Object | 任意 | - | フォームのフィールドとファイル。`multipart/form-data`のボディとして送ります。[ファイルのアップロード](#ファイルのアップロード)を参照 |
 | `cookies` | Object | 任意 | - | 送るCookie。名前と値で指定します。[Cookie](#cookie)を参照 |
@@ -199,7 +200,7 @@ jobs:
 | `res.headers` | Object | レスポンスヘッダー。キーは`Content-Type`のような正規形 |
 | `res.body` | Any | レスポンスボディ。JSONならオブジェクトや配列に解析され、それ以外は文字列 |
 | `res.rawbody` | String | 解析前のボディ。JSONとして解析したときに入ります |
-| `res.filepath` | String | バイナリレスポンスを保存したファイルのパス。`Content-Type`がテキストでないものをバイナリとします。テキストは`text/*`、JSON、XML、JavaScript、フォーム、`application/problem+json`や`image/svg+xml`のように`+json`か`+xml`で終わる型です。`Content-Type`のないレスポンスはテキストです |
+| `res.filepath` | String | バイナリレスポンスを保存したファイルのパス。`Content-Type`がテキストでないものをバイナリとします。テキストは`text/*`、JSON、XML、JavaScript、フォーム、`application/problem+json`や`image/svg+xml`のように`+json`か`+xml`で終わる型、`application/x-amz-json-1.0`のようなAWSのJSONの型です。`Content-Type`のないレスポンスはテキストです |
 | `res.cookies` | Object | サーバーが設定したCookie。名前と値で入り、リダイレクトの途中で設定されたものも含みます |
 | `res.violations` | Array | リクエストとレスポンスのうちOpenAPIドキュメントが許可しないもの。すべて許可されていれば空です。`openapi`を指定したときだけ入ります |
 | `res.contract` | Object | OpenAPIドキュメントでレスポンスを対応付けた先。`spec`、`GET /users/{id}`のような`operation`、`200`、`2XX`、`default`のような`response`が入ります。`response`は、オペレーションがそのステータスのレスポンスを宣言していない場合は入りません。ドキュメントにリクエストのオペレーションがある場合だけ入ります |
@@ -284,6 +285,46 @@ HTTP Basic認証を受け付けるサーバーには、`basic_auth`でユーザ�
 ```
 
 ユーザー名にはコロンを含められません。そこでユーザー名が終わったと解釈されるためです。パスワードは空でも構いません。送れるのはどちらか一方なので、`basic_auth`と`authorization`ヘッダーは同時に指定できません。パスワードと、そこから組み立てたヘッダーは、ほかの資格情報と同じく出力では伏せられます。
+
+### AWSへの署名
+
+AWSのサービスは、AWS Signature Version 4で署名したリクエストを受け付けます。`aws_sigv4`はこの署名を付けます。リクエストは書いたとおりに送られ、指定したサービスとリージョンに向けた署名のヘッダーが加わります。HTTPで送るAWSのAPIならどれでも呼べます。S3互換のストレージやSQS互換のキューのように、AWSと互換のあるサービスも同様です。
+
+次の例は、SQSのキューにメッセージが届くのを待ちます。1回のリクエストで最大20秒待ち、それを`retry`の回数だけ繰り返します。
+
+```yaml
+- name: Wait for a job
+  uses: http
+  with:
+    post: https://sqs.ap-northeast-1.amazonaws.com/
+    aws_sigv4:
+      service: sqs
+      region: ap-northeast-1
+    headers:
+      content-type: application/x-amz-json-1.0
+      x-amz-target: AmazonSQS.ReceiveMessage
+    body:
+      QueueUrl: "{{vars.queue_url}}"
+      WaitTimeSeconds: 20
+      MaxNumberOfMessages: 1
+    timeout: 30s
+  test: res.code == 200 && len(res.body.Messages ?? []) > 0
+  retry:
+    max_attempts: 180
+  outputs:
+    message: res.body.Messages[0].Body
+```
+
+| キー | 必須 | 説明 |
+|---|---|---|
+| `service` | はい | エンドポイントが署名を検証するサービスの名前。`sqs`、API Gatewayの`execute-api`、関数URLの`lambda`、OpenSearchの`es`、`s3`など |
+| `region` | いいえ | エンドポイントのリージョン。`ap-northeast-1`など。省略すると`AWS_REGION`、次に`AWS_DEFAULT_REGION`を使います |
+| `access_key_id`、`secret_access_key` | いいえ | 署名に使うアクセスキー。2つを一緒に指定します。省略すると`AWS_ACCESS_KEY_ID`と`AWS_SECRET_ACCESS_KEY`を使います |
+| `session_token` | いいえ | 一時的な認証情報のセッショントークン。`X-Amz-Security-Token`として送ります。アクセスキーを環境変数から読むときは`AWS_SESSION_TOKEN`を使います |
+
+認証情報はこれらの環境変数からだけ読みます。AWS CLIが読む設定ファイルやロールは読みません。プロファイルやロールの認証情報は、`eval "$(aws configure export-credentials --format env)"`のようにして、Probeを実行する前に環境変数に書き出してください。ジョブの`defaults`に書けば、`aws_sigv4`はジョブのすべてのリクエストに署名します。
+
+署名はメソッド、URL、ボディ、ヘッダーを対象にします。ただし、途中で変更や追加をされうる`User-Agent`、`Accept-Encoding`、`Expect`、`X-Amzn-Trace-Id`は対象にしません。`s3`では、S3が求めるとおり、ボディのダイジェストも`X-Amz-Content-Sha256`で送ります。リダイレクト先へは署名せずに送ります。署名は`Authorization`で送るので、`aws_sigv4`は`basic_auth`や`authorization`ヘッダーと同時に指定できません。シークレットキー、セッショントークン、`Authorization`ヘッダーは、ほかの資格情報と同じく出力では伏せられます。
 
 ### Cookie
 

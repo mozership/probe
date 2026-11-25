@@ -427,16 +427,17 @@ func TestMasker_LearnActionCredentials(t *testing.T) {
 
 func TestHoldsCredential(t *testing.T) {
 	for key, want := range map[string]bool{
-		"password":          true,
-		"Password":          true,
-		"key_passphrase":    true,
-		"secret_access_key": true,
-		"session_token":     true,
-		"authorization":     true,
-		"Cookie":            true,
-		"dsn":               true,
-		"url":               false,
-		"headers":           false,
+		"password":             true,
+		"Password":             true,
+		"key_passphrase":       true,
+		"secret_access_key":    true,
+		"session_token":        true,
+		"X-Amz-Security-Token": true,
+		"authorization":        true,
+		"Cookie":               true,
+		"dsn":                  true,
+		"url":                  false,
+		"headers":              false,
 	} {
 		if got := HoldsCredential(key); got != want {
 			t.Errorf("HoldsCredential(%q) = %v, want %v", key, got, want)

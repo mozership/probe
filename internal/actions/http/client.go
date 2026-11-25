@@ -12,6 +12,7 @@ import (
 	"net"
 	hp "net/http"
 	"net/url"
+	"os"
 	"path"
 	"slices"
 	"strconv"
@@ -54,6 +55,9 @@ type Req struct {
 	// guard is what the run allows: Do refuses a request, or a redirect,
 	// it does not allow.
 	guard sdk.Guard
+	// signing, when it is set, signs the request with AWS Signature
+	// Version 4. A redirect is not signed again.
+	signing *awsSigning
 }
 
 type Res struct {
@@ -202,6 +206,14 @@ func (r *Req) Do() (*Result, error) {
 		// Clean header value by removing newlines and other invalid characters
 		cleanValue := strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
 		req.Header.Set(mapping.TitleCase(k, "-"), cleanValue)
+	}
+
+	if r.signing != nil {
+		sent := []byte(r.Body)
+		if r.payload != nil {
+			sent = r.payload
+		}
+		r.signing.sign(req, sent)
 	}
 
 	// callback
@@ -560,6 +572,15 @@ func request(call sdk.Call, opts ...Option) (map[string]any, map[string]any, err
 		customHeaders = setHeader(customHeaders, "authorization", value)
 	}
 
+	// aws_sigv4 signs the request as it is sent, in Do.
+	if _, exists := m[sigV4Key]; exists && hasHeader(customHeaders, "authorization") {
+		return nil, nil, errors.New("aws_sigv4 and basic_auth or an authorization header cannot be given together")
+	}
+	signing, err := takeSigV4(m, os.Getenv)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// The body built from form or multipart is sent with its own Content-Type,
 	// which replaces one set for the job's other requests, such as JSON in
 	// defaults; a multipart one also carries the boundary only it knows.
@@ -593,6 +614,7 @@ func request(call sdk.Call, opts ...Option) (map[string]any, map[string]any, err
 	r.payload = payload
 	r.contract = contract
 	r.guard = call.Guard
+	r.signing = signing
 
 	var stored []storedCookie
 	if keepCookies {

@@ -25,15 +25,16 @@ const redactedValue = "<redacted>"
 // not be declared either. Their values are hidden wherever they are shown.
 // cookies holds the cookies the http action sends and receives, by name.
 var sensitiveKeys = map[string]bool{
-	"authorization":       true,
-	"proxy-authorization": true,
-	"cookie":              true,
-	"set-cookie":          true,
-	"cookies":             true,
-	"password":            true,
-	"key_passphrase":      true,
-	"secret_access_key":   true,
-	"session_token":       true,
+	"authorization":        true,
+	"proxy-authorization":  true,
+	"cookie":               true,
+	"set-cookie":           true,
+	"cookies":              true,
+	"password":             true,
+	"key_passphrase":       true,
+	"secret_access_key":    true,
+	"session_token":        true,
+	"x-amz-security-token": true,
 }
 
 // MinLength is the fewest characters a value must have to be masked inside

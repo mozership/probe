@@ -30,11 +30,12 @@ func TextOrFile(data []byte, contentType string) (text, path string, err error) 
 }
 
 // IsJSON reports whether a Content-Type value names JSON:
-// application/json, or a structured syntax type such as
-// application/problem+json, ignoring parameters such as charset.
+// application/json, a structured syntax type such as
+// application/problem+json, or a type of the JSON protocols of AWS, such as
+// application/x-amz-json-1.0, ignoring parameters such as charset.
 func IsJSON(contentType string) bool {
 	mt := mediaType(contentType)
-	return mt == "application/json" || strings.HasSuffix(mt, "+json")
+	return mt == "application/json" || strings.HasSuffix(mt, "+json") || strings.HasPrefix(mt, "application/x-amz-json-")
 }
 
 // mediaType returns the media type of a Content-Type value, lowercased and
