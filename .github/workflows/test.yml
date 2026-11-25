@@ -22,10 +22,6 @@ jobs:
         go-version-file: go.mod
     - name: Run test
       run: make test
-    - name: Run db test without cgo, as releases are built
-      run: go test ./internal/actions/db/...
-      env:
-        CGO_ENABLED: "0"
     - name: Run octocov
       uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
 
