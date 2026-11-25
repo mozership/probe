@@ -88,6 +88,8 @@ func TestParseManifest(t *testing.T) {
 		{name: "both", yml: "runs:\n  using: binary\n  url: https://example.com/x\n  path: x\n", wantErr: "exactly one of url and path"},
 		{name: "bad checksum", yml: "runs:\n  using: binary\n  url: https://example.com/x\n  checksums:\n    linux_amd64: abc\n", wantErr: "runs.checksums.linux_amd64"},
 		{name: "choices", yml: "runs:\n  using: binary\n  path: x\nparams: [level]\nchoices:\n  level: [info, warn]\n"},
+		{name: "contracts", yml: "runs:\n  using: binary\n  path: x\nparams: [proto]\ncontracts: [proto]\n"},
+		{name: "a contract of a key params does not list", yml: "runs:\n  using: binary\n  path: x\nparams: [addr]\ncontracts: [proto]\n", wantErr: "contracts: proto is not a key params lists"},
 		{name: "a choice of no value", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: []\n", wantErr: "choices.level must list a value"},
 		{name: "a choice of a key params does not list", yml: "runs:\n  using: binary\n  path: x\nparams: [mode]\nchoices:\n  level: [info]\n", wantErr: "choices.level is not a key params lists"},
 		{name: "a choice of a number", yml: "runs:\n  using: binary\n  path: x\nchoices:\n  level: [1, \"2\"]\n", wantErr: "value 1 must be a string; quote it"},
@@ -631,14 +633,14 @@ func TestRelease(t *testing.T) {
 			name: "replaces the tag and the checksums, and keeps the rest",
 			manifest: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom']\ncleanup:   true # removes its files\nres:\n  - greeting\n" +
+				"guard:\n  - allow-host # not read-only\nparams: [name, 'to, whom', schema]\ncleanup:   true # removes its files\ncontracts: [schema]\nres:\n  - greeting\n" +
 				"runs:\n    using: binary\n    checksums:\n        linux_amd64: " + c + "\n        freebsd_amd64: " + c + "\n" +
 				"    url: https://github.com/example/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}\n",
 			tag:       "v0.2.0",
 			checksums: checksums,
 			want: "# It declares allow-host, as it connects to no host.\n\n" +
 				"name: greet\ndescription: Say hello\n" +
-				"guard: [allow-host]\nparams: [name, \"to, whom\"]\nres: [greeting]\ncleanup: true\n" +
+				"guard: [allow-host]\nparams: [name, \"to, whom\", schema]\nres: [greeting]\ncontracts: [schema]\ncleanup: true\n" +
 				"runs:\n  using: binary\n" +
 				"  url: https://github.com/example/probe-greet/releases/download/v0.2.0/probe-greet_{os}_{arch}\n" +
 				"  checksums:\n" +

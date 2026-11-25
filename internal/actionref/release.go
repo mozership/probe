@@ -169,6 +169,9 @@ func (m *Manifest) encode() []byte {
 	if m.Res != nil {
 		fmt.Fprintf(&b, "res: %s\n", flowList(m.Res))
 	}
+	if len(m.Contracts) > 0 {
+		fmt.Fprintf(&b, "contracts: %s\n", flowList(m.Contracts))
+	}
 	if len(m.Choices) > 0 {
 		b.WriteString("choices:\n")
 		for _, key := range slices.Sorted(maps.Keys(m.Choices)) {
@@ -264,6 +267,9 @@ description: ""
 # The fields of res the action returns, for probe check to report a step
 # that reads another. Without res, what a step reads of res is not checked.
 # res: [code, body]
+# The keys of with that ask the action to check a step against a contract,
+# for probe check to count a step that gives one as checked.
+# contracts: [schema]
 # The values of the keys of with that take only some, for probe check to
 # report any other. Without choices, every key takes any value.
 # choices:

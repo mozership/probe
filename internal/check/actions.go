@@ -124,6 +124,9 @@ func (c *checker) readParams(uses string, line int, where string) {
 	if m.Res != nil {
 		c.resFields[uses] = m.Res
 	}
+	if len(m.Contracts) > 0 {
+		c.contracts[uses] = m.Contracts
+	}
 	if len(m.Choices) > 0 {
 		choices := make(map[string]Choices, len(m.Choices))
 		for key, choice := range m.Choices {

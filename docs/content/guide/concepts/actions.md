@@ -839,7 +839,7 @@ jobs:
     test: res.code == 200
 ```
 
-The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, apart from `db`, which [probe-db](https://github.com/mozership/probe-db) is replacing, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
+The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, apart from `db` and `grpc`, which [probe-db](https://github.com/mozership/probe-db) and [probe-grpc](https://github.com/mozership/probe-grpc) are replacing, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
 
 #### Published Actions
 
@@ -889,6 +889,7 @@ runs:
 | `guard` | The kinds of guard the action keeps to itself: `read-only`, `allow-host` or both. Probe takes the action at its word and runs it under a guard of those kinds. Without it, the action is refused under any guard unless `--allow-action` names it. See [Guard](/guide/concepts/guard) |
 | `params` | The keys the action takes in `with`, for `probe check` to report a key it does not take. Without it, `with` is not checked; `[]` takes no key |
 | `res` | The top-level fields of the `res` the action returns, such as `[code, body]`, for `probe check` to warn of a step that reads another. Without it, what a step reads of `res` is not checked; `[]` declares no field, so every read is warned of |
+| `contracts` | The keys of `with` that ask the action to check a step against a contract, such as `[proto]` for one that checks a call against `.proto` files, for `probe check` to count a step that gives one as checked, as it counts a step with a `test`. Without it, such a step with no `test` is warned of as unchecked. A key must be one `params` lists, when there is `params` |
 | `choices` | The values that the keys of `with` which take only some take, by the key, for `probe check` to report a value it does not take, such as `level: [info, warn]`. A key that takes them in any case is written as `{values: [info, warn], ignore_case: true}`. The values are strings, so quote a number; a step may write it unquoted, as it is compared as the text the action is given. `ignore_case` is the action's word that it takes a value in any case, which `probe check` does not test. A key must be one `params` lists, when there is `params`. A value that holds a template, and an empty one, are not checked, and a key left out takes any value |
 | `cleanup` | `true` for an action that Probe is to call once the workflow is over, for it to remove what its steps left behind. Without it, the action is not called. See [Cleaning Up After a Run](#cleaning-up-after-a-run) |
 
@@ -967,9 +968,9 @@ cp "$RUNNER_TEMP/action.yml" action.yml
 
 In a GitHub Actions run started by a tag, `GITHUB_REF_NAME` is that tag.
 
-The name, the description, `guard`, `params`, `res`, `choices` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
+The name, the description, `guard`, `params`, `res`, `contracts`, `choices` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
 
-For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params`, `res`, `choices` and `cleanup`, and commit it; the first release then puts its tag and digests in:
+For a new action, `probe manifest init` prints the `action.yml` to start from. Give it the GitHub repository that will publish the action, fill in the description, `guard`, `params`, `res`, `contracts`, `choices` and `cleanup`, and commit it; the first release then puts its tag and digests in:
 
 ```bash
 probe manifest init mozership/probe-greet > action.yml

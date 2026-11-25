@@ -41,10 +41,11 @@ func (c *checker) checkTests() {
 }
 
 // checkedByContract reports whether with asks the action uses to check the
-// step against a contract, as CheckOptions.Contracts says. The same key
+// step against a contract, as CheckOptions.Contracts or the action.yml of
+// an external action says. The same key
 // given to another action asks it nothing of the kind.
 func (c *checker) checkedByContract(uses string, with map[string]any) bool {
-	for _, key := range c.opts.Contracts[uses] {
+	for _, key := range c.contracts[uses] {
 		if _, ok := with[key].(map[string]any); ok {
 			return true
 		}

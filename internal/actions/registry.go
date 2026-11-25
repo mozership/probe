@@ -180,7 +180,8 @@ func AllChoices() map[string]map[string]check.Choices {
 
 // Replaceable returns, in alphabetical order, the names of the built-in
 // actions that a workflow can give to an external action under actions, as
-// they are being replaced by one, such as db by probe-db.
+// they are being replaced by one, such as db by probe-db and grpc by
+// probe-grpc.
 func Replaceable() []string {
 	var names []string
 	for _, name := range Names() {
