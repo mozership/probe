@@ -1052,6 +1052,7 @@ Probeとあわせて公開している外部アクションです。それぞれ
 |---|---|
 | [agent](/ja/reference/actions/agent) | 自然言語で書いたタスク、またはペルソナと目標からWebアプリケーションをテストします。モデルが実際のChromeで操作し、別に呼び出したモデルがページに表示された内容から判定します。Anthropic、OpenAI、xAI、Gemini、さくらのAI Engineのモデルで動きます |
 | [android](/ja/reference/actions/android) | adbを通して、Androidのエミュレーターやデバイスでアプリを操作します。アプリを起動し、タップや入力をし、要素を待ち、そのテキストを読み、スクリーンショットを撮ります |
+| [aws](/ja/reference/actions/aws) | AWSのサービスと、それと互換のあるサービスを呼びます。リクエストの署名はアクション自身が行います。S3、MinIO、Cloudflare R2のオブジェクトを読み書きし、SQSのメッセージをロングポーリングで待って受信し、送信し、削除し、ほかのAWSのAPIには自分で書いたリクエストを送ります |
 | [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした |
 | [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます |
 | [github-notes](/ja/reference/actions/github-notes) | 実行の[ノート](/ja/reference/yaml-configuration#notes)をGitHubに投稿します。投稿先はプルリクエストのコメント、ジョブのサマリー、Issueのいずれかで、次の実行では同じものを編集します |
@@ -1060,7 +1061,6 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます |
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした |
 | [redis](/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでコマンドを実行し、その応答を返します。サーバーが返したエラーは`res.errors`に集めます。`--read-only`の下では、読み取りだけと分かっているコマンドだけを実行します |
-| [s3](/ja/reference/actions/s3) | S3と、MinIOやCloudflare R2のようなS3互換ストレージのオブジェクトを読み、一覧し、書き、削除します。リクエストの署名はアクション自身が行います |
 | [slack](/ja/reference/actions/slack) | 実行の[ノート](/ja/reference/yaml-configuration#notes)やテキストをSlackのチャンネルに投稿します。Incoming Webhookかボットトークンで投稿します |
 | [websocket](/ja/reference/actions/websocket) | WebSocketのサーバーに接続し、メッセージを順に送受信して、受け取ったものを返します。受信は次の1通、指定した数、サーバーが閉じるまでのすべての中から選べ、一致するものだけに絞ることもできます |
 

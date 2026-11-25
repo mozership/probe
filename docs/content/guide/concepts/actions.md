@@ -849,6 +849,7 @@ These external actions are published alongside Probe, each in a repository of it
 |---|---|
 | [agent](/reference/actions/agent) | Tests a web application from a task, or a persona and a goal, written in natural language: a model uses it through a real Chrome, and another call of the model judges it from what the pages showed. It runs with models of Anthropic, OpenAI, xAI, Gemini or the Sakura AI Engine |
 | [android](/reference/actions/android) | Drives an app on an Android emulator or device through adb: launches it, taps and types into it, waits for elements, reads their text and takes screenshots |
+| [aws](/reference/actions/aws) | Calls AWS services and the services compatible with them, signing each request itself: reads and writes objects in S3, MinIO or Cloudflare R2, receives, sends and deletes messages in SQS, waiting for them with a long poll, and sends a request of your own to any other API of AWS |
 | [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 |
 | [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman |
 | [github-notes](/reference/actions/github-notes) | Puts the [notes](/reference/yaml-configuration#notes) of a run on GitHub: in a comment on the pull request, the summary of the job, or an issue, and edits the same one on the next run |
@@ -857,7 +858,6 @@ These external actions are published alongside Probe, each in a repository of it
 | [jmap](/reference/actions/jmap) | Calls [JMAP](https://jmap.io/) methods: fetches the session, fills in the account of each call, and gathers the method errors, which come with HTTP 200, in `res.errors` |
 | [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 |
 | [redis](/reference/actions/redis) | Runs commands on a Redis or Valkey server and returns their replies, with the errors the server answered gathered in `res.errors`. Under `--read-only` it runs only commands known to only read |
-| [s3](/reference/actions/s3) | Reads, lists, writes and deletes objects in S3 and S3-compatible storage such as MinIO or Cloudflare R2, signing each request itself |
 | [slack](/reference/actions/slack) | Posts the [notes](/reference/yaml-configuration#notes) of a run, a text, or both to a Slack channel, by an Incoming Webhook or with a bot token |
 | [websocket](/reference/actions/websocket) | Connects to a WebSocket server, sends and receives messages in order, and returns those it received. A receive takes the next message, a number of them, or every message until the server closes, optionally only those that match |
 

@@ -136,6 +136,7 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 |---|---|
 | [agent](https://probe.linyo.ws/ja/reference/actions/agent) | 自然言語で書いたタスクからの、モデルによるWebアプリケーションのテスト |
 | [android](https://probe.linyo.ws/ja/reference/actions/android) | Androidのエミュレータや実機の上のアプリの操作 |
+| [aws](https://probe.linyo.ws/ja/reference/actions/aws) | S3のオブジェクト、SQSのメッセージ、Signature Version 4で署名したAWSの任意のAPI |
 | [browser](https://probe.linyo.ws/ja/reference/actions/browser) | 実際のブラウザの操作 |
 | [container](https://probe.linyo.ws/ja/reference/actions/container) | 実行のためのコンテナの起動と、終了後の削除 |
 | [github-notes](https://probe.linyo.ws/ja/reference/actions/github-notes) | 実行のノートのGitHubへの投稿 |
@@ -144,7 +145,6 @@ AIエージェントが書いたワークフローを`--read-only`で実行す�
 | [jmap](https://probe.linyo.ws/ja/reference/actions/jmap) | JMAPのメソッドの呼び出し |
 | [mail-latency](https://probe.linyo.ws/ja/reference/actions/mail-latency) | 受信したメールからの配送遅延の計測 |
 | [redis](https://probe.linyo.ws/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでのコマンドの実行 |
-| [s3](https://probe.linyo.ws/ja/reference/actions/s3) | S3とS3互換ストレージのオブジェクトの読み書き |
 | [slack](https://probe.linyo.ws/ja/reference/actions/slack) | 実行のノートやテキストのSlackへの投稿 |
 | [websocket](https://probe.linyo.ws/ja/reference/actions/websocket) | WebSocketでのメッセージの送受信 |
 
