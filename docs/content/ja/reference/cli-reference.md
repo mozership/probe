@@ -281,6 +281,25 @@ probe --var url=https://staging.example.com --var retries=5 workflow.yml
 
 この方法で与えた値は、[`secrets`](/ja/reference/yaml-configuration#secrets)に書いた値のようにレポートで伏せられることはなく、コマンドラインは同じマシンの他のユーザーから見えます。認証情報は環境変数か`--env-file`で渡してください。
 
+### `--vars-file`
+
+**型:** String  
+**値:** ファイルのパス。標準入力は`-`  
+**説明:** ワークフローのvarを、名前ごとのJSONオブジェクトとして、ファイルか標準入力から読んで与えます。Probeを実行するプログラムが、varをコマンドラインに載せずに渡すためのものです。
+
+```bash
+probe --vars-file vars.json workflow.yml
+echo '{"body": "{\"order\": 42}", "receipt": "AQEB..."}' | probe --vars-file - workflow.yml
+```
+
+- 各varは[`--var`](#--var)で与えたものと同じく扱われます。文字列は値そのものです。数値、真偽値、オブジェクト、リストはそのJSONになり、ステップでは`parse_json`で読み戻せます。数値は書かれたとおりなので、`1.50`は`1.50`のままです。
+- 値が`null`のvarは与えられず、ワークフローが書いた値が使われます。
+- 読むものは1つのJSONオブジェクトで、各varには名前が必要です。そうでない場合は、最初のジョブの前に終了ステータス2で止まります。
+- `--var`でも与えた名前は、`--var`の値になります。
+- `--vars-file`は1回だけ指定できます。
+
+`--var`と同じく、この方法で与えた値は、[`secrets`](/ja/reference/yaml-configuration#secrets)に書いた値のようにレポートで伏せられることはありません。
+
 ### `--env-file`
 
 **型:** String（繰り返し指定可）  
