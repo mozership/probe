@@ -695,9 +695,11 @@ probe manifest init mozership/probe-greet > action.yml
 
 **例:**
 ```bash
-probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
+probe manifest "$GITHUB_REF_NAME" dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
+
+`GITHUB_REF_NAME`は、タグで起動したGitHub Actionsの実行ではそのタグです。
 
 読み込むファイルに出力を直接リダイレクトしないでください。Probeが読む前にシェルが`action.yml`を空にします。
 

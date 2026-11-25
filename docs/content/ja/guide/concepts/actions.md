@@ -1075,7 +1075,7 @@ guard: [read-only, allow-host]
 params: [url, query, variables, operation_name, headers, timeout]
 runs:
   using: binary
-  url: https://github.com/mozership/probe-graphql/releases/download/v0.2.0/probe-graphql_{os}_{arch}
+  url: https://github.com/mozership/probe-graphql/releases/download/<tag>/probe-graphql_{os}_{arch}
   checksums:
     darwin_amd64: <probe-graphql_darwin_amd64のSHA-256>
     darwin_arm64: <probe-graphql_darwin_arm64のSHA-256>
@@ -1164,9 +1164,11 @@ fmt.Fprintf(&b, "%s %s\n", sdk.MarkFailure, sdk.MarkFailure.Paint("the name is n
 リリースの`action.yml`は`probe manifest`で作れます。リポジトリの`action.yml`を読み、`runs.url`のタグを置き換え、`runs.checksums`をチェックサムファイルのダイジェストに置き換えて出力します：
 
 ```bash
-probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
+probe manifest "$GITHUB_REF_NAME" dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
+
+`GITHUB_REF_NAME`は、タグで起動したGitHub Actionsの実行ではそのタグです。
 
 名前、説明、`guard`、`params`、`res`、`choices`、`cleanup`は`action.yml`にあるまま残るので、これらを書く場所は`action.yml`だけになります。
 

@@ -63,11 +63,13 @@ macOSでは`shasum -a 256 -c --ignore-missing checksums.txt`で照合します�
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: mozership/probe-action@v1.3.0
+- uses: mozership/probe-action@<commit SHA>
   with:
     path: probe/api.yml
     options: --report github-summary
 ```
+
+`<commit SHA>`には、[リリース](https://github.com/mozership/probe-action/releases)のコミットを書きます。
 
 `install-only: true`を指定すると、`probe`を`PATH`に入れるだけで終わるので、後続のステップから自分で実行できます。
 

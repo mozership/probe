@@ -872,7 +872,7 @@ guard: [read-only, allow-host]
 params: [url, query, variables, operation_name, headers, timeout]
 runs:
   using: binary
-  url: https://github.com/mozership/probe-graphql/releases/download/v0.2.0/probe-graphql_{os}_{arch}
+  url: https://github.com/mozership/probe-graphql/releases/download/<tag>/probe-graphql_{os}_{arch}
   checksums:
     darwin_amd64: <SHA-256 of probe-graphql_darwin_amd64>
     darwin_arm64: <SHA-256 of probe-graphql_darwin_arm64>
@@ -961,9 +961,11 @@ Build it for every platform it supports, publish the executables, and commit an 
 `probe manifest` writes the `action.yml` of a release. It reads the `action.yml` of the repository, puts the tag in `runs.url` and the digests of the checksums file in `runs.checksums`, and prints the result:
 
 ```bash
-probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
+probe manifest "$GITHUB_REF_NAME" dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
+
+In a GitHub Actions run started by a tag, `GITHUB_REF_NAME` is that tag.
 
 The name, the description, `guard`, `params`, `res`, `choices` and `cleanup` are kept as `action.yml` has them, so `action.yml` is the one place they are written in.
 

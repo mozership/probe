@@ -63,11 +63,13 @@ On macOS, `shasum -a 256 -c --ignore-missing checksums.txt` verifies it. For a r
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: mozership/probe-action@v1.3.0
+- uses: mozership/probe-action@<commit SHA>
   with:
     path: probe/api.yml
     options: --report github-summary
 ```
+
+Write the commit of a [release](https://github.com/mozership/probe-action/releases) in place of `<commit SHA>`.
 
 With `install-only: true` it only puts `probe` in `PATH`, for later steps to run themselves.
 
