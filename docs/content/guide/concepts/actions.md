@@ -977,6 +977,19 @@ probe manifest init mozership/probe-greet > action.yml
 
 See [`manifest`](/reference/cli-reference#manifest) for what both take.
 
+The executables are built from modules whose licenses mostly ask to go with a copy in binary form. `probe licenses` prints the licenses of every module the action in the working directory is built from, and of the Go standard library, and fails when a module has no license file to pass on. With GoReleaser, write it before the build and publish it beside the executables, and add `THIRD_PARTY_LICENSES` to `.gitignore`:
+
+```yaml
+before:
+  hooks:
+    - sh -c "probe licenses > THIRD_PARTY_LICENSES"
+release:
+  extra_files:
+    - glob: THIRD_PARTY_LICENSES
+```
+
+See [`licenses`](/reference/cli-reference#licenses) for what it prints.
+
 While developing, point a local `action.yml` at the executable you build:
 
 ```yaml

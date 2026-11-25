@@ -80,13 +80,14 @@ func TestWrite(t *testing.T) {
 	b := module(t, "example.com/b", map[string]string{"COPYING": "BSD\nCopyright B\n"})
 
 	var out bytes.Buffer
-	if err := Write(&out, []Module{a, b}); err != nil {
+	if err := Write(&out, "probe", []Module{a, b}); err != nil {
 		t.Fatal(err)
 	}
 	want := `Third-party licenses
 
-The probe executable is built from the software below. Each is under its own
-license, whose text follows the list, with where its source is published.
+The probe executable is built from the software below. Each is under
+its own license, whose text follows the list, with where its source is
+published.
 
 - example.com/a v1.2.3
 - example.com/b v1.2.3
@@ -127,7 +128,7 @@ func TestWrite_Error(t *testing.T) {
 	c := module(t, "example.com/c", map[string]string{"main.go": "x"})
 
 	var out bytes.Buffer
-	err := Write(&out, []Module{a, b, c})
+	err := Write(&out, "probe", []Module{a, b, c})
 	if err == nil {
 		t.Fatal("Write should fail for modules without a license file")
 	}
@@ -167,7 +168,7 @@ func TestModules_Error(t *testing.T) {
 // file to pass on. A dependency added or updated without one fails here,
 // rather than when a release is made.
 func TestModules_Probe(t *testing.T) {
-	modules, err := Modules("../..", "./cmd/probe", []string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"})
+	modules, err := Modules("../..", "./cmd/probe", Platforms)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,11 +189,42 @@ func TestModules_Probe(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Write(&out, modules); err != nil {
+	if err := Write(&out, "probe", modules); err != nil {
 		t.Fatal(err)
 	}
 	// The NOTICE of a module under the Apache License goes with it.
 	if !strings.Contains(out.String(), "google.golang.org/grpc") || !strings.Contains(out.String(), "--- NOTICE.txt ---") {
 		t.Error("the licenses should include the NOTICE.txt of google.golang.org/grpc")
+	}
+}
+
+func TestExecutable(t *testing.T) {
+	tests := []struct {
+		name       string
+		pattern    string
+		want       string
+		errContain string
+	}{
+		{"a command", "./cmd/probe", "probe", ""},
+		{"a library", "./internal/thirdparty", "", "is package thirdparty, not a command"},
+		{"several packages", "./internal/actions/...", "", "must be one package"},
+		{"a package that does not exist", "./cmd/none", "", "go list"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Executable("../..", tt.pattern)
+			if tt.errContain != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContain) {
+					t.Errorf("Executable error = %v, want one that contains %q", err, tt.errContain)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("Executable = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -1180,6 +1180,19 @@ probe manifest init mozership/probe-greet > action.yml
 
 どちらの引数も[`manifest`](/ja/reference/cli-reference#manifest)を参照してください。
 
+実行ファイルのビルドに使われるモジュールの多くは、バイナリ形式で配布するときにライセンスを添えることを求めています。`probe licenses`は、作業ディレクトリのアクションのビルドに使われるすべてのモジュールとGoの標準ライブラリのライセンスを出力し、ライセンスファイルのないモジュールがあると失敗します。GoReleaserでは、ビルドの前に書き出して実行ファイルと並べて公開し、`THIRD_PARTY_LICENSES`を`.gitignore`に加えます。
+
+```yaml
+before:
+  hooks:
+    - sh -c "probe licenses > THIRD_PARTY_LICENSES"
+release:
+  extra_files:
+    - glob: THIRD_PARTY_LICENSES
+```
+
+出力の内容は[`licenses`](/ja/reference/cli-reference#licenses)を参照してください。
+
 開発中は、ローカルの`action.yml`でビルドした実行ファイルを指します：
 
 ```yaml

@@ -1,7 +1,8 @@
-// Package thirdparty collects the licenses of what is built into the probe
-// executable: the modules it links, and the Go standard library. Most of
-// them ask that their copyright notice and license go with a copy in binary
-// form, which a release archive is, so the archive carries them in one file.
+// Package thirdparty collects the licenses of what is built into an
+// executable, such as probe or an external action: the modules it links, and
+// the Go standard library. Most of them ask that their copyright notice and
+// license go with a copy in binary form, which a release is, so the release
+// carries them in one file.
 package thirdparty
 
 import (
@@ -12,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -36,6 +38,31 @@ type File struct {
 // copyright notices, or what its license asks to be passed on with them,
 // such as the NOTICE of the Apache License.
 var noticeFile = regexp.MustCompile(`(?i)^(licen[sc]e|copying|unlicense|notice|patents|copyright|authors)([-_.].*)?$`)
+
+// Platforms are those probe and its external actions are released for.
+var Platforms = []string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"}
+
+// Executable returns the name of the executable that the package at pattern
+// builds, which go build gives it: the last element of its import path.
+func Executable(dir, pattern string) (string, error) {
+	cmd := exec.Command("go", "list", "-f", "{{.Name}}\t{{.ImportPath}}", pattern)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("go list: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) != 1 {
+		return "", fmt.Errorf("%s must be one package, not %d", pattern, len(lines))
+	}
+	name, importPath, _ := strings.Cut(lines[0], "\t")
+	if name != "main" {
+		return "", fmt.Errorf("%s is package %s, not a command", importPath, name)
+	}
+	return path.Base(importPath), nil
+}
 
 // Modules returns the modules that the package at pattern links when it is
 // built for each of the platforms, given as os/arch, apart from the main
@@ -131,11 +158,12 @@ func Files(m Module) ([]File, error) {
 
 const rule = "================================================================================\n"
 
-// Write writes the licenses of the modules to w: a list of the modules,
+// Write writes the licenses of the modules built into the executable named
+// name to w: a list of the modules,
 // and then, for each, where its source is and the text of its files. It
 // writes nothing for the modules when any of them has no license file, and
 // the error names every such module.
-func Write(w io.Writer, modules []Module) error {
+func Write(w io.Writer, name string, modules []Module) error {
 	files := make([][]File, len(modules))
 	var errs []error
 	for i, m := range modules {
@@ -152,8 +180,9 @@ func Write(w io.Writer, modules []Module) error {
 	// A write to a buffer does not fail.
 	var b bytes.Buffer
 	b.WriteString("Third-party licenses\n\n")
-	b.WriteString("The probe executable is built from the software below. Each is under its own\n")
-	b.WriteString("license, whose text follows the list, with where its source is published.\n\n")
+	b.WriteString("The " + name + " executable is built from the software below. Each is under\n")
+	b.WriteString("its own license, whose text follows the list, with where its source is\n")
+	b.WriteString("published.\n\n")
 	for _, m := range modules {
 		b.WriteString("- " + m.Path + " " + m.Version + "\n")
 	}
