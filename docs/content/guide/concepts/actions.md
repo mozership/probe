@@ -839,7 +839,7 @@ jobs:
     test: res.code == 200
 ```
 
-The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
+The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, apart from `db`, which [probe-db](https://github.com/mozership/probe-db) is replacing, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
 
 #### Published Actions
 

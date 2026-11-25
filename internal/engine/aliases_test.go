@@ -132,6 +132,34 @@ func TestLoad_ActionNamesRefused(t *testing.T) {
 	}
 }
 
+// A replaceable action of Probe can be named by a workflow: its steps, and
+// the defaults written for it, then go to the external action, while the
+// other actions of Probe stay refused.
+func TestLoad_ReplaceableName(t *testing.T) {
+	load := func(content string) (*Probe, error) {
+		dir := t.TempDir()
+		path := writeWorkflow(t, dir, "workflow.yml", content)
+		p := &Probe{FilePath: path, Config: Config{Actions: []string{"db", "http"}, Replaceable: []string{"db"}}}
+		return p, p.Load()
+	}
+
+	p, err := load("name: n\nactions:\n  db: ./db\njobs:\n- name: J\n  defaults:\n    db: {dsn: \"file::memory:\"}\n  steps:\n  - uses: db\n    with: {query: SELECT 1}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := p.workflow.Jobs[0].Steps[0]
+	if st.Uses != "./db" {
+		t.Errorf("uses = %q, want ./db", st.Uses)
+	}
+	if st.With["dsn"] != "file::memory:" {
+		t.Errorf("with = %v, want the dsn of the defaults", st.With)
+	}
+
+	if _, err := load("name: n\nactions:\n  http: ./web\njobs:\n- name: J\n  steps:\n  - uses: http\n"); err == nil || !strings.Contains(err.Error(), `the name "http" is that of an action of Probe`) {
+		t.Errorf("Load() error = %v, want http refused", err)
+	}
+}
+
 // Without the names of the actions of Probe, as a caller of the package may
 // leave them, a name is not checked against them.
 func TestLoad_ActionNamesWithoutBuiltin(t *testing.T) {

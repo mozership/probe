@@ -178,6 +178,19 @@ func AllChoices() map[string]map[string]check.Choices {
 	})
 }
 
+// Replaceable returns, in alphabetical order, the names of the built-in
+// actions that a workflow can give to an external action under actions, as
+// they are being replaced by one, such as db by probe-db.
+func Replaceable() []string {
+	var names []string
+	for _, name := range Names() {
+		if specs[name]().Replaceable {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // Lookup returns the serve function of a built-in action.
 func Lookup(name string) (func(), bool) {
 	spec, ok := specs[name]

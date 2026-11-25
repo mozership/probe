@@ -388,6 +388,12 @@ func TestRegistryReturnsCopies(t *testing.T) {
 
 // WithFields gives the actions that declare their req and res hold the keys
 // of with: hello alone.
+func TestReplaceable(t *testing.T) {
+	if got := Replaceable(); !slices.Equal(got, []string{"db"}) {
+		t.Errorf("Replaceable() = %v, want [db]", got)
+	}
+}
+
 func TestWithFields(t *testing.T) {
 	if got := WithFields(); !slices.Equal(got, []string{"hello"}) {
 		t.Errorf("WithFields() = %v, want [hello]", got)

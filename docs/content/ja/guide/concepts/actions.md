@@ -1042,7 +1042,7 @@ jobs:
     test: res.code == 200
 ```
 
-コミットを書く場所が1か所になり、新しいリリースへの更新はその1行の変更で済みます。組み込みアクションの名前は付けられません。`--allow-action`には、名前ではなく完全な形のアクションを指定します。規則は[`actions`](/ja/reference/yaml-configuration#actions)を参照してください。
+コミットを書く場所が1か所になり、新しいリリースへの更新はその1行の変更で済みます。組み込みアクションの名前は付けられません。ただし`db`は、[probe-db](https://github.com/mozership/probe-db)に置き換わる途中のため付けられます。`--allow-action`には、名前ではなく完全な形のアクションを指定します。規則は[`actions`](/ja/reference/yaml-configuration#actions)を参照してください。
 
 #### 公開されているアクション
 
