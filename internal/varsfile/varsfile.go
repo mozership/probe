@@ -4,6 +4,7 @@
 package varsfile
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -38,28 +39,58 @@ func Read(path string, r io.Reader) (map[string]string, error) {
 // Parse reads a JSON object of vars by name. A string is the value as it
 // is; a number, a boolean, an object or a list is its JSON, with numbers as
 // they are written; a null is no value, which leaves the var to what the
-// workflow writes.
+// workflow writes. A name is taken without the white space around it, as
+// --var takes it, and is refused when the object has it twice.
 func Parse(r io.Reader) (map[string]string, error) {
-	dec := json.NewDecoder(r)
+	br := bufio.NewReader(r)
+	if bom, err := br.Peek(len(utf8BOM)); err == nil && bytes.Equal(bom, utf8BOM) {
+		_, _ = br.Discard(len(utf8BOM))
+	}
+	dec := json.NewDecoder(br)
 	dec.UseNumber()
-	var raw any
-	if err := dec.Decode(&raw); err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, errors.New("no JSON object")
+	vars, err := parseObject(dec)
+	if err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return nil, fmt.Errorf("%w, at byte %d", err, syntax.Offset)
 		}
 		return nil, err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, errors.New("more follows the JSON object")
+	return vars, nil
+}
+
+// utf8BOM is the mark some editors write at the start of a UTF-8 file.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+func parseObject(dec *json.Decoder) (map[string]string, error) {
+	start, err := dec.Token()
+	if errors.Is(err, io.EOF) {
+		return nil, errors.New("no JSON object")
 	}
-	object, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("a JSON object of vars by name is needed, not %s", kind(raw))
+	if err != nil {
+		return nil, err
 	}
-	vars := make(map[string]string, len(object))
-	for name, v := range object {
-		if strings.TrimSpace(name) == "" {
+	if start != json.Delim('{') {
+		return nil, fmt.Errorf("a JSON object of vars by name is needed, not %s", kind(start))
+	}
+	vars := map[string]string{}
+	seen := map[string]bool{}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(key.(string))
+		if name == "" {
 			return nil, errors.New("a var has no name")
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("var %s is given more than once", name)
+		}
+		seen[name] = true
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			return nil, err
 		}
 		if v == nil {
 			continue
@@ -69,6 +100,12 @@ func Parse(r io.Reader) (map[string]string, error) {
 			return nil, fmt.Errorf("var %s: %w", name, err)
 		}
 		vars[name] = s
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, errors.New("more follows the JSON object")
 	}
 	return vars, nil
 }
@@ -90,10 +127,10 @@ func text(v any) (string, error) {
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
-// kind names what v, a value decoded from JSON, is.
-func kind(v any) string {
-	switch v.(type) {
-	case []any:
+// kind names what t, the first token of a JSON value, starts.
+func kind(t json.Token) string {
+	switch t.(type) {
+	case json.Delim:
 		return "a list"
 	case string:
 		return "a string"

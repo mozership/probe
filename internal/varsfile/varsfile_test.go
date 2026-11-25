@@ -40,6 +40,18 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// A name is taken as --var takes it, without the white space around it,
+// and a file may start with the mark some editors write.
+func TestParse_TrimsNamesAndSkipsTheBOM(t *testing.T) {
+	got, err := Parse(strings.NewReader("\uFEFF" + `{" a ": "1", "b\t": 2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"a": "1", "b": "2"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Parse = %#v, want %#v", got, want)
+	}
+}
+
 func TestParse_Refuses(t *testing.T) {
 	tests := []struct {
 		name, input, want string
@@ -55,6 +67,11 @@ func TestParse_Refuses(t *testing.T) {
 		{"cut short", `{"a": `, "unexpected EOF"},
 		{"no name", `{"": "1"}`, "a var has no name"},
 		{"a blank name", `{" ": "1"}`, "a var has no name"},
+		{"a name twice", `{"a": "1", "a": null}`, "var a is given more than once"},
+		{"a name twice once trimmed", `{"a": "1", " a ": "2"}`, "var a is given more than once"},
+		{"not closed", `{"a": "1"`, "unexpected end of JSON input"},
+		{"where it fails", `{"a": "1",, }`, "at byte 11"},
+		{"a name that is not a string", `{1: "1"}`, "object member name must be a string, at byte 2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1648,6 +1648,17 @@ func TestCmd_parseArgs_envFile(t *testing.T) {
 	}
 }
 
+// - alone is a value only of --vars-file, the one flag that reads the
+// standard input; any other flag is told it needs one.
+func TestCmd_dashIsAValueOfVarsFileAlone(t *testing.T) {
+	for _, flag := range []string{"--env-file", "--baseline", "--report", "--var", "--job"} {
+		err := newBufferCmd().parseArgs([]string{flag, "-", "w.yml"})
+		if want := "flag needs an argument: " + flag; err == nil || err.Error() != want {
+			t.Errorf("parseArgs(%s -) = %v, want %q", flag, err, want)
+		}
+	}
+}
+
 func TestCmd_parseArgs_varsFile(t *testing.T) {
 	c := newBufferCmd()
 	if err := c.parseArgs([]string{"--vars-file", "-", "w.yml"}); err != nil {

@@ -170,7 +170,12 @@ func (c *Cmd) parseArgs(args []string) error {
 			// A flag that takes a value has it after =, as --report=junit,
 			// or as the next argument, as --report junit.
 			if takesValue(flagName) && !hasValue {
-				if i+1 >= len(args) || (strings.HasPrefix(args[i+1], "-") && args[i+1] != "-") {
+				// - alone is the standard input, which only --vars-file reads.
+				next := ""
+				if i+1 < len(args) {
+					next = args[i+1]
+				}
+				if i+1 >= len(args) || strings.HasPrefix(next, "-") && (next != "-" || flagName != "vars-file") {
 					return fmt.Errorf("flag needs an argument: %s", arg)
 				}
 				flagValue = args[i+1]
