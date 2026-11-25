@@ -974,7 +974,7 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 - `name` is required at the workflow level, and `jobs` must be a non-empty list.
 - Every job needs a `name` and at least one step.
 - Every step needs a `uses`, and it must name an action: one of Probe, an external action, or a name given under `actions`. One that names none stops the run before its first job, with exit status 2, even in a step that would be skipped.
-- A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
+- A name under `actions` must not be that of an action of Probe, apart from `db`, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
 - `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.
 
