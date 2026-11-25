@@ -293,7 +293,7 @@ func takesValue(name string) bool {
 	return false
 }
 
-var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest", "licenses"}
+var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest", "licenses", "serve"}
 
 func isSubCommand(name string) bool {
 	return slices.Contains(subCommands, name)
@@ -355,6 +355,7 @@ Usage: probe [options] <workflow-file>...
        probe manifest init <owner>/<repo>
        probe manifest <tag> <checksums-file> [action-file]
        probe licenses [package]
+       probe serve <serve-file>
 
 Arguments:
   workflow-file    Path to a YAML workflow file, a directory or a glob.
@@ -395,6 +396,9 @@ Subcommands:
   licenses [package]
                    Print the licenses of the modules that the command package
                    (.) is built from, for its release to carry
+  serve <file>     Keep running the workflows of a serve file, on a schedule
+                   or again and again, each run a process of probe, until
+                   interrupted
 
 Options:`
 
@@ -540,6 +544,8 @@ func (c *Cmd) runSubCommand() int {
 		return c.runManifest()
 	case "licenses":
 		return c.runLicenses()
+	case "serve":
+		return c.runServe()
 	default:
 		c.errorf("unknown subcommand: %s", c.SubCommand)
 		return probe.ExitConfigError

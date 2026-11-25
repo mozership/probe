@@ -745,6 +745,80 @@ probe licenses > THIRD_PARTY_LICENSES
 
 Probeのリリースは、Probeについてこのコマンドが出力するファイルをアーカイブに入れています。外部アクションでも、[外部アクションの作り方](/ja/guide/concepts/actions#外部アクションの作り方)のとおり、実行ファイルと並べて公開できます。
 
+### `serve`
+
+ワークフローを実行し続けます。監視のように予定の時刻に実行することも、キューの中身を取り出すワーカーのように繰り返し実行することもできます。1回の実行はそれぞれ独立した`probe`のプロセスで、同じファイルとvarで人が実行した場合と同じ実行になり、`json`レポートをserveのログが示す場所に書き出します。
+
+**使い方:**
+```bash
+probe serve <serve-file>
+```
+
+serveファイルには、ワークフローごとに名前を付け、1回の実行がマージするファイルと、実行の始め方を書きます。
+
+```yaml
+workers: 4
+results:
+  dir: runs
+  keep: 720h
+grace: 30s
+workflows:
+  health:
+    files: [workflows/health.yml]
+    schedule: "*/5 * * * *"
+    read_only: true
+    allow_hosts: [api.example.com]
+    timeout: 2m
+  intake:
+    files: [workflows/receive.yml]
+    vars:
+      queue: orders
+    loop: true
+    interval: 10s
+```
+
+| キー | 既定値 | 説明 |
+|---|---|---|
+| `workers` | `4` | すべてのワークフローを通して同時に動かす実行の数。この数が動いている間、次の実行は空くのを待ちます |
+| `results.dir` | `runs` | 実行が報告するものを置く場所 |
+| `results.keep` | なし | 終わった実行を残しておく期間。`720h`のように書きます。書かなければすべて残します |
+| `grace` | `30s` | serveを止めたときに、動いている実行を待つ時間 |
+| `workflows` | （必須） | 名前ごとのワークフロー。名前は英数字、`_`、`-`です |
+
+各ワークフローには次を書けます。
+
+| キー | 説明 |
+|---|---|
+| `files` | 実行がマージするワークフローファイル。順に読みます（必須） |
+| `vars` | 実行に与えるvar。[`--vars-file`](#--vars-file)と同じく扱います |
+| `env_files` | [`--env-file`](#--env-file)と同じです |
+| `jobs` | [`--job`](#--job)と同じです |
+| `read_only`、`allow_hosts`、`allow_actions` | 実行のガードで、[`--read-only`](#--read-only)、[`--allow-host`](#--allow-host)、[`--allow-action`](#--allow-action)と同じです。毎回すべてを指定して実行するので、`PROBE_READ_ONLY`のようなserveの環境変数で緩むことも厳しくなることもありません |
+| `schedule` | ワークフローを実行する時刻を表すcron式。ローカルのタイムゾーンで、分、時、日、月、曜日の順に、`*`、値、範囲`a-b`、間隔`*/n`や`a-b/n`、またはそれらのリストを書きます。月と曜日は`jan`や`mon`のように名前でも書けます。日と曜日の両方を書くと、cronと同じく、どちらかに合う日に実行します |
+| `loop` | 前の実行が終わるとすぐ、ワークフローを再び実行します |
+| `interval` | `loop`で、実行と実行の間に待つ時間 |
+| `timeout` | これより長く続く実行を、人がProbeを止めるときと同じくSIGTERMで終わらせます |
+
+パスはserveファイルのディレクトリから読みます。ワークフローには`schedule`か`loop`のどちらか一方を書きます。どちらもないワークフローは、何も実行を始めないので警告します。ワークフローの実行が動いている間は、同じワークフローの次の実行を始めず、そのことをログに書きます。
+
+各実行は`results.dir/<workflow>/`の下の、開始時刻を名前にしたディレクトリで、実行の[`json`レポート](#--report)である`report.json`と、実行が出力した`output.log`があります。serveは実行ごとに1行を、JSONとして標準エラーに書きます。
+
+```json
+{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
+```
+
+| `status` | 実行 |
+|---|---|
+| `passed` | 終了ステータス0で終わった |
+| `failed` | 終了ステータス1か3で、テストかアクションが失敗した |
+| `error` | 終了ステータス2で、ワークフローを実行できなかった。または実行を始められなかった。理由は`error`に書きます |
+| `timeout` | `timeout`で終わらせた |
+| `stopped` | serveを止めたので終わらせた |
+
+`passed`でない実行は、レベル`ERROR`で書きます。失敗した実行を誰かに知らせるのは、ワークフローの役目です。Slackのアクションなど投稿するアクションを使う`always`のジョブで知らせます。
+
+SIGINTかSIGTERMでserveは止まります。新しい実行は始めず、動いている実行を`grace`の間待ち、その後SIGTERMで終わらせます。2つ目のシグナルを受けると、すぐに終わらせます。読めないserveファイルは、実行を始める前に終了ステータス2で終わります。
+
 ## 環境変数
 
 以下の環境変数がProbeの動作に影響します。
