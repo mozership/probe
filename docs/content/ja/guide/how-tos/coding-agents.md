@@ -130,7 +130,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - run: docker compose up -d --wait
-    - uses: mozership/probe-action@v1.4.1
+    - uses: mozership/probe-action@<commit SHA>
       with:
         path: probe/signup.yml
         options: --report github-summary

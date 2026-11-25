@@ -136,7 +136,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install Probe
-        uses: mozership/probe-action@v1.4.1
+        uses: mozership/probe-action@<commit SHA>
         with:
           install-only: true
       - name: Enable KVM
