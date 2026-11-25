@@ -63,7 +63,7 @@ On macOS, `shasum -a 256 -c --ignore-missing checksums.txt` verifies it. For a r
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: mozership/probe-action@v1.3.0
+- uses: mozership/probe-action@v1.4.1
   with:
     path: probe/api.yml
     options: --report github-summary
