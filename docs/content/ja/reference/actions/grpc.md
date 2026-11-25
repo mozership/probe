@@ -2,12 +2,19 @@
 
 `grpc`アクションはgRPCのメソッドを呼び出します。サービス定義はサーバーリフレクションで解決するため、実行時に`.proto`ファイルは必要ありません。本番環境に多い、リフレクションのないサーバーは、[`proto`](#protoファイルによる検証)に指定した`.proto`ファイルの定義を使って呼び出します。`protocol: connect`を指定すると、HTTPの[Connectプロトコル](#connectプロトコル)で呼び出します。
 
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-grpc](https://github.com/mozership/probe-grpc)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.42.0以降が必要です。v1.42.0より前はProbeに組み込まれていました。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide grpc`が表示し、各リリースのノートにもあります。
+
 ## 基本的な構文
 
-gRPCのステップでは、サーバー、サービス、メソッド、リクエストの内容を指定します。
+ワークフローでは40文字のコミットSHAでアクションを固定し、[`actions`](/ja/reference/yaml-configuration#actions)で一度だけ`grpc`という名前を付けます。ステップは`uses: grpc`と、`defaults`は`grpc:`と書けます。gRPCのステップでは、サーバー、サービス、メソッド、リクエストの内容を指定します。
 
 ```yaml
-steps:
+name: Users
+actions:
+  grpc: github.com/mozership/probe-grpc@<commit SHA>
+jobs:
+- name: users
+  steps:
   - name: Get a user
     uses: grpc
     with:
@@ -19,6 +26,8 @@ steps:
         {"id": "123"}
     test: res.status_code == "OK"
 ```
+
+以下の例では、ステップだけを示します。
 
 ## パラメータ
 
@@ -167,7 +176,7 @@ message CreateUserRequest {
 }
 ```
 
-`buf/validate/validate.proto`と`google/api/field_behavior.proto`はProbeに組み込まれているため、インポートパスに置かなくてもファイルからインポートできます。インポートパスにあるコピーは読みません。
+`buf/validate/validate.proto`と`google/api/field_behavior.proto`はアクションに組み込まれているため、インポートパスに置かなくてもファイルからインポートできます。インポートパスにあるコピーは読みません。
 
 ## Connectプロトコル
 

@@ -286,6 +286,8 @@ mainブランチでの実行のように`--baseline`を指定しないときは�
 
 ```yaml
 name: Order History
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   api_url: "{{API_URL ?? 'http://localhost:8080'}}"
   db_dsn: "{{DB_DSN}}"

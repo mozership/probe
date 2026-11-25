@@ -4,6 +4,34 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## v1.42.0 (2026-11-25)
+
+### Breaking Changes
+
+The `db` and `grpc` actions are no longer built into Probe. They are the
+external actions [probe-db](https://github.com/mozership/probe-db) and
+[probe-grpc](https://github.com/mozership/probe-grpc), with the same
+parameters, the same result and the same guard, and they take 11 modules,
+among them the drivers of MySQL and PostgreSQL, the SQLite of modernc.org,
+Connect and protovalidate, out of the probe executable. A workflow that uses
+either names it once under `actions`, and its steps, and the `defaults`
+written for it, stay as they are:
+
+```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
+  grpc: github.com/mozership/probe-grpc@<commit SHA>
+```
+
+`probe guide db` and `probe guide grpc` print the `uses` line of the latest
+release of each. Without the line under `actions`, a workflow that uses
+`db` or `grpc` stops before its first job with exit status 2, as for any
+action that is not there. `probe coverage` counts the calls of probe-grpc
+checked against a `.proto` file as it counted those of the built-in action.
+
+An action that calls `db` or `grpc` with `sdk.Caller` calls what the
+workflow names so under `actions`.
+
 ## v1.40.0 (2026-11-25)
 
 ### Breaking Changes

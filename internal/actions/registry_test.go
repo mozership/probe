@@ -35,7 +35,7 @@ func TestKeeps(t *testing.T) {
 		}
 	}
 	// The others keep to every kind.
-	for _, name := range []string{"db", "dns", "embedded", "file", "grpc", "hello", "http"} {
+	for _, name := range []string{"dns", "embedded", "file", "hello", "http"} {
 		for _, k := range known {
 			if !slices.Contains(Keeps()[name], k) {
 				t.Errorf("%s should keep to %q, got %v", name, k, Keeps()[name])
@@ -79,7 +79,7 @@ func TestParams(t *testing.T) {
 // TestContracts checks that each key asking a built-in action to check a
 // step against a contract is a key the action takes.
 func TestContracts(t *testing.T) {
-	want := map[string][]string{"grpc": {"proto"}, "http": {"openapi"}}
+	want := map[string][]string{"http": {"openapi"}}
 	got := Contracts()
 	if len(got) != len(want) {
 		t.Errorf("Contracts() = %v, want %v", got, want)
@@ -388,12 +388,6 @@ func TestRegistryReturnsCopies(t *testing.T) {
 
 // WithFields gives the actions that declare their req and res hold the keys
 // of with: hello alone.
-func TestReplaceable(t *testing.T) {
-	if got := Replaceable(); !slices.Equal(got, []string{"db", "grpc"}) {
-		t.Errorf("Replaceable() = %v, want [db grpc]", got)
-	}
-}
-
 func TestWithFields(t *testing.T) {
 	if got := WithFields(); !slices.Equal(got, []string{"hello"}) {
 		t.Errorf("WithFields() = %v, want [hello]", got)

@@ -577,7 +577,7 @@ The built-in actions are part of the Probe binary. Probe runs each one by starti
 probe workflow.yml  # Starts the built-in actions its steps use
 
 # No separate installation needed for built-in actions:
-# http, db, shell, ssh, grpc, smtp, imap,
+# http, shell, ssh, smtp, imap,
 # dns, file, embedded, hello
 ```
 
@@ -839,7 +839,7 @@ jobs:
     test: res.code == 200
 ```
 
-The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, apart from `db` and `grpc`, which [probe-db](https://github.com/mozership/probe-db) and [probe-grpc](https://github.com/mozership/probe-grpc) are replacing, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
+The commit is then written in one place, which is the line to change for a newer release. A name cannot be that of a built-in action, and `--allow-action` takes the action in full, not the name. See [`actions`](/reference/yaml-configuration#actions) for the rules.
 
 #### Published Actions
 

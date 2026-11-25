@@ -62,10 +62,6 @@ type Spec struct {
 	// not one of them, as op: remove for the file action. An action whose
 	// keys take any value declares NoChoices.
 	Choices map[string]Choices
-	// Replaceable says that the action is being replaced by an external
-	// one, so that a workflow can give its name to that action under
-	// actions, and its steps run the external action unchanged.
-	Replaceable bool
 }
 
 // Choices are the values a key of with takes. An empty value, which leaves

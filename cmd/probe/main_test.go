@@ -849,7 +849,7 @@ func TestCmd_runBuiltinActions(t *testing.T) {
 		{name: "hello", expected: ""},
 		{name: "http", expected: ""},
 		{name: "smtp", expected: ""},
-		{name: "db", expected: ""},
+		{name: "dns", expected: ""},
 		{name: "shell", expected: ""},
 		{name: "embedded", expected: ""},
 		{name: "unknown", expected: "[ERROR] not supported plugin: unknown\n"},

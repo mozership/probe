@@ -2,22 +2,32 @@
 
 The `grpc` action calls a gRPC method. The service definition is resolved through server reflection, so no `.proto` file is needed at run time. A server without reflection, as many in production are, is called with the definition of the `.proto` files given in [`proto`](#checking-against-proto-files). With `protocol: connect`, the method is called with the [Connect protocol](#connect-protocol) over HTTP instead.
 
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-grpc](https://github.com/mozership/probe-grpc). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.42.0 or later; until v1.42.0 it was built into Probe. The examples write `<commit SHA>` for the commit to pin: `probe guide grpc` prints the `uses` line of the latest release, and so do the notes of each release.
+
 ## Basic Syntax
 
-A gRPC step names the server, the service, the method, and the request body.
+A workflow pins the action by a full commit SHA, and gives it the name `grpc` once, under [`actions`](/reference/yaml-configuration#actions). Its steps then write `uses: grpc`, and its `defaults` `grpc:`. A gRPC step names the server, the service, the method, and the request body.
 
 ```yaml
-- name: Get a user
-  uses: grpc
-  with:
-    addr: "grpc.example.com:443"
-    service: "user.v1.UserService"
-    method: "GetUser"
-    tls: true
-    body: |
-      {"id": "123"}
-  test: res.status_code == "OK"
+name: Users
+actions:
+  grpc: github.com/mozership/probe-grpc@<commit SHA>
+jobs:
+- name: users
+  steps:
+  - name: Get a user
+    uses: grpc
+    with:
+      addr: "grpc.example.com:443"
+      service: "user.v1.UserService"
+      method: "GetUser"
+      tls: true
+      body: |
+        {"id": "123"}
+    test: res.status_code == "OK"
 ```
+
+The examples below show the steps alone.
 
 ## Parameters
 
@@ -140,7 +150,7 @@ message CreateUserRequest {
 }
 ```
 
-`buf/validate/validate.proto` and `google/api/field_behavior.proto` are built into Probe, so the files can import them without having them in an import path; a copy in one is not read.
+`buf/validate/validate.proto` and `google/api/field_behavior.proto` are built into the action, so the files can import them without having them in an import path; a copy in one is not read.
 
 ## Connect Protocol
 

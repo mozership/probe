@@ -250,6 +250,8 @@ $ probe workflow.yml,local-overrides.yml
 
 ```yaml
 name: Database Test
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 
 vars:
   db_host: "{{DB_HOST ?? 'localhost'}}"

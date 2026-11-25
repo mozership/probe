@@ -317,6 +317,8 @@ Probeはエラーを処理するためのいくつかのメカニズムを提供
 対象が同じステップは1つのジョブにまとめます。ジョブは順に実行され、まとめて失敗する単位だからです。
 
 ```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   db_dsn: "{{DB_DSN}}"
 

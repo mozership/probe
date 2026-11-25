@@ -318,6 +318,8 @@ Names appear in the report, so they are what a failure is read by.
 Steps that share a subject belong in one job, because that is the unit that runs in order and fails together.
 
 ```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   db_dsn: "{{DB_DSN}}"
 

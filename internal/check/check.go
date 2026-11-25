@@ -61,9 +61,6 @@ type CheckOptions struct {
 	// external ones it names by a path or a repository. When it is empty,
 	// the names are not checked.
 	Actions []string
-	// Replaceable are those of Actions a workflow can give to an external
-	// action under actions, as they are being replaced by one.
-	Replaceable []string
 	// Params are the keys each action takes in with, by its name. The with
 	// of an action it does not name, which may take any key, is not
 	// checked.
@@ -183,7 +180,7 @@ func Check(path string, opts CheckOptions) ([]Finding, error) {
 	// of each, with whatever else is wrong, rather than ending the check.
 	// The workflow is loaded from the source walked above, so that the
 	// lines mapped to the files are those of the source loaded.
-	wf, aliases, problems, err := engine.LoadSource(path, opts.Actions, opts.Replaceable, src)
+	wf, aliases, problems, err := engine.LoadSource(path, opts.Actions, src)
 	if err != nil {
 		c.add(SeverityError, 0, "", "%s", engine.FirstLine(err.Error()))
 		return c.sorted(), nil

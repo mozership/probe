@@ -58,9 +58,6 @@ type Config struct {
 	// cannot give to an external action under actions. When it is empty,
 	// the names a workflow gives are not checked against them.
 	Actions []string
-	// Replaceable are those of Actions a workflow can give to an external
-	// action under actions, as they are being replaced by one.
-	Replaceable []string
 	// Jobs narrows the run to the jobs of these ids or names, with the jobs
 	// they need and those that always run after them; all jobs when it is
 	// empty.
@@ -182,12 +179,10 @@ func (p *Probe) Load() error {
 }
 
 // LoadSource loads src, the files of the workflow at path as read, as Load
-// would with actions and replaceable, as Config has them, and returns the
-// workflow with what load returns.
-func LoadSource(path string, actions, replaceable []string, src *Source) (*Workflow, []AliasProblem, []Problem, error) {
+// would with actions, and returns the workflow with what load returns.
+func LoadSource(path string, actions []string, src *Source) (*Workflow, []AliasProblem, []Problem, error) {
 	p := New(path, false)
 	p.Config.Actions = actions
-	p.Config.Replaceable = replaceable
 	aliases, problems, err := p.load(src)
 	if err != nil {
 		return nil, aliases, problems, err
@@ -218,7 +213,7 @@ func (p *Probe) load(src *Source) ([]AliasProblem, []Problem, error) {
 
 	// The names the workflow gives to external actions are replaced before
 	// anything reads a uses, the defaults included.
-	aliases := p.workflow.aliasProblems(p.Config.Actions, p.Config.Replaceable)
+	aliases := p.workflow.aliasProblems(p.Config.Actions)
 	p.workflow.named = p.workflow.namedActions(aliases)
 	aliases = append(aliases, p.workflow.resolveAliases(aliases)...)
 

@@ -21,9 +21,8 @@ import (
 // no release to follow one of the action.
 //
 //go:embed docs/content/reference/*.md docs/content/guide/concepts/*.md
-//go:embed docs/content/reference/actions/db.md docs/content/reference/actions/dns.md
+//go:embed docs/content/reference/actions/dns.md
 //go:embed docs/content/reference/actions/embedded.md docs/content/reference/actions/file.md
-//go:embed docs/content/reference/actions/grpc.md
 //go:embed docs/content/reference/actions/hello.md docs/content/reference/actions/http.md
 //go:embed docs/content/reference/actions/imap.md docs/content/reference/actions/shell.md
 //go:embed docs/content/reference/actions/smtp.md docs/content/reference/actions/ssh.md

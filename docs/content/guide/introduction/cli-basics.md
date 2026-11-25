@@ -260,6 +260,8 @@ A step cannot read the environment itself. The templates of the workflow's `vars
 
 ```yaml
 name: Database Test
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 
 vars:
   db_host: "{{DB_HOST ?? 'localhost'}}"
