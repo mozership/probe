@@ -1,4 +1,4 @@
-package probe_test
+package docs_test
 
 import (
 	"bytes"
@@ -11,9 +11,90 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goccy/go-yaml"
 	"github.com/mozership/probe"
 	"github.com/mozership/probe/internal/actions"
 )
+
+// docsYAMLBlock matches a fenced yaml code block in a page, capturing the
+// words after the language, as in ```yaml fragment, and the body.
+var docsYAMLBlock = regexp.MustCompile("(?s)```ya?ml([^\n]*)\n(.*?)```")
+
+// TestDocsYAMLBlocks parses every yaml code block in the docs, so that an
+// example a reader copies is not one Probe cannot load: a plain value holding
+// ": ", as an unquoted a ? b : c does, or one that starts with a quote and
+// goes on after it, is a YAML error.
+//
+// A value written without quotes ends at " #", which YAML takes for a
+// comment, so an expression such as all(res.body.items, #.active) loses its
+// predicate and is left with an open parenthesis; such a value is reported.
+//
+// A block may repeat a key, as one that shows several ways to write a test
+// does, and Probe itself loads a workflow that does. An alias whose anchor is
+// defined in another file is an example of merging files, and is skipped.
+func TestDocsYAMLBlocks(t *testing.T) {
+	root := "content"
+	count := 0
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range docsYAMLBlock.FindAllSubmatchIndex(data, -1) {
+			count++
+			line := strings.Count(string(data[:m[4]]), "\n") + 1
+			var v any
+			err := yaml.UnmarshalWithOptions(data[m[4]:m[5]], &v, yaml.AllowDuplicateMapKey())
+			if err != nil && !strings.Contains(err.Error(), "alias") {
+				t.Errorf("%s:%d: %s", path, line, strings.SplitN(err.Error(), "\n", 2)[0])
+			}
+			for _, s := range cutShort(v) {
+				t.Errorf("%s:%d: a value cut short by a comment, quote it: %q", path, line, s)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count == 0 {
+		t.Fatalf("no yaml block found under %s", root)
+	}
+}
+
+// cutShort returns the strings in v, at any depth, that open more
+// parentheses than they close, as an expression does when YAML has cut it at
+// " #".
+func cutShort(v any) []string {
+	var found []string
+	switch v := v.(type) {
+	case string:
+		if strings.Count(v, "(") > strings.Count(v, ")") {
+			found = append(found, v)
+		}
+	case map[string]any:
+		for _, e := range v {
+			found = append(found, cutShort(e)...)
+		}
+	case []any:
+		for _, e := range v {
+			found = append(found, cutShort(e)...)
+		}
+	}
+	return found
+}
 
 // topName and topJobs match the keys at the top level of a block that make
 // it a workflow: jobs, and the name a block that shows jobs alone is given to
@@ -79,7 +160,7 @@ const (
 // The with of an external action is not checked, as nothing is read from the
 // network.
 func TestDocsWorkflowsCheck(t *testing.T) {
-	root := filepath.Join("docs", "content")
+	root := "content"
 	dir := t.TempDir()
 	name := filepath.Join(dir, "name.yml")
 	if err := os.WriteFile(name, []byte("name: docs\n"), 0o600); err != nil {
@@ -107,7 +188,7 @@ func TestDocsWorkflowsCheck(t *testing.T) {
 		}
 		groups := map[string][]docsBlock{}
 		var order []string
-		for n, m := range probe.DocsYAMLBlock.FindAllSubmatchIndex(data, -1) {
+		for n, m := range docsYAMLBlock.FindAllSubmatchIndex(data, -1) {
 			meta := strings.Fields(string(data[m[2]:m[3]]))
 			body := data[m[4]:m[5]]
 			line := strings.Count(string(data[:m[4]]), "\n") + 1
@@ -336,7 +417,7 @@ func TestMergeSets(t *testing.T) {
 // <commit SHA>, and probe guide prints the pin of the latest.
 func TestDocs_NoCommitPinned(t *testing.T) {
 	pinned := regexp.MustCompile(`mozership/probe-[a-z0-9-]+@[0-9a-f]{40}`)
-	err := filepath.WalkDir(filepath.Join("docs", "content"), func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir("content", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
