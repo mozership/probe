@@ -44,6 +44,9 @@ type workflowRun struct {
 	// concurrently, so it is atomic; exitStatus is derived from it once
 	// every job is done.
 	failed atomic.Bool
+	// given are the values of the outputs of the workflow, by name, once
+	// every job is over.
+	given map[string]any
 
 	// What execute leaves for the report files.
 	outcome    *outcome.Run
@@ -174,10 +177,48 @@ func (r *workflowRun) execute() error {
 	}
 
 	reporter.Finish(ctx.Outcome)
+	r.given = r.evalOutputs(vars, ctx.Outcome)
 	r.finishedAt = time.Now()
 	r.outcome = ctx.Outcome
 	r.exitStatus = runExitCode(ctx.Outcome, r.failed.Load())
 	return nil
+}
+
+// evalOutputs evaluates the outputs of the workflow once every job is over,
+// with vars, and warns of each that is not given as it cannot be evaluated.
+// One that reads what no step published is not warned of when a job did not
+// run to its end, as rs tells, as that may be why.
+func (r *workflowRun) evalOutputs(vars map[string]any, rs *outcome.Run) map[string]any {
+	published := r.outputs.GetAll()
+	given, errs := evalWorkflowOutputs(r.w.Outputs, WorkflowOutputEnv{Vars: vars, Outputs: published})
+	if len(errs) == 0 {
+		return given
+	}
+	leftOut := r.someJobLeftOut(rs)
+	for _, err := range errs {
+		if leftOut && readsUnpublished(r.w.Outputs[err.name], published) {
+			continue
+		}
+		r.printer().LogWarn("%v", err)
+	}
+	return given
+}
+
+// someJobLeftOut reports whether a job of the workflow did not run to its
+// end: one the run was not narrowed to, or one that failed or was skipped.
+func (r *workflowRun) someJobLeftOut(rs *outcome.Run) bool {
+	if r.selection != nil || r.failed.Load() {
+		return true
+	}
+	for _, jr := range rs.Jobs {
+		jr.Mu.Lock()
+		skipped := jr.Status == outcome.StatusSkipped
+		jr.Mu.Unlock()
+		if skipped {
+			return true
+		}
+	}
+	return false
 }
 
 // printer returns the printer of the workflow, which the run prints with.
@@ -351,11 +392,15 @@ func (r *workflowRun) writeReports() error {
 
 	rep := buildReport(r.w.Name, r.w.Description, r.outcome, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
+	rep.Outputs = r.given
 	if r.selection != nil {
 		rep.Selection = r.selection.report()
 	}
 	rep.Compare(r.config.Baseline)
 	rep.Mask(r.printer().Masker())
+	// Made safe for JSON once masked, so that a value turned into its text
+	// is not one the masker could no longer see the secrets in.
+	rep.Outputs = jsonSafeMap(rep.Outputs)
 
 	var errs []error
 	for _, t := range r.config.Reports {

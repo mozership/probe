@@ -18,6 +18,8 @@ defaults:                     # 任意: すべてのジョブに効く、アク�
     url: string
 actions:                      # 任意: 外部アクションに付ける名前
   name: string
+outputs:                      # 任意: 実行した側に渡す値
+  name: expression
 jobs:                         # 必須: ジョブのリスト
   - name: string              # 必須: ジョブ名
     id: string                # 任意: ジョブID。needsから参照する
@@ -236,6 +238,45 @@ jobs:
 Probeはワークフローを読み込む時点で名前をアクションに置き換えるので、それ以降の処理はすべて完全な形のアクションを扱います。特に`--allow-action`には、名前ではなくアクションを指定します。名前で許可すると、その名前が指すアクションをワークフローの側で変えられてしまうためです。
 
 [embedded](/ja/reference/actions/embedded)アクションで実行するジョブファイルは、埋め込む側のワークフローの名前で読まれるので、そのステップと`defaults`でも名前を使えます。[名前を付けた外部アクション](/ja/reference/actions/embedded#名前を付けた外部アクション)を参照してください。
+
+### `outputs`
+
+**型:** 式のオブジェクト（任意）  
+**説明:** 実行が、実行した側に渡す値を名前ごとに書きます。ワークフローを実行してレポートを読むプログラムなどに値を渡すためのものです。
+
+値はステップの[`outputs`](#outputs-1)と同じく式で、すべてのジョブが終わってから評価されます。読めるのは、実行の変数である`vars`と、すべてのジョブのステップが公開した`outputs`だけです。
+
+```yaml
+name: Messages
+vars:
+  api_url: "{{API_URL}}"
+  cursor: "0"
+
+jobs:
+  - name: Receive
+    steps:
+      - id: receive
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /messages?after={{vars.cursor}}
+        test: res.code == 200
+        outputs:
+          messages: res.body.messages
+          next: res.body.next
+
+outputs:
+  messages: outputs.receive.messages
+  cursor: outputs.receive?.next ?? vars.cursor
+```
+
+- 実行がどう終わったかにかかわらず評価されます。ステップは`test`が成り立ったかどうかにかかわらず出力を公開します。実行の成否は終了ステータスが示します。
+- 値がnilになる出力は渡されません。公開しなかったステップから`?.`で読んだ場合などです。
+- 評価できない出力も渡されません。公開しなかったステップのフィールドを読んだ場合などです。その理由を警告しますが、どのステップも公開しなかった値を読む出力で、失敗やスキップ、[`--job`](/ja/reference/cli-reference#--job)での絞り込みにより最後まで実行されなかったジョブがある場合は、それが理由でありうるので警告しません。どちらも実行の結果は変えません。
+- 式のない出力や、解析できない式の出力があると、最初のジョブの前に終了ステータス2で実行が止まります。
+- 値は`json`レポートの`outputs`に書き出されます。レポートのほかの部分と同じく、[`secrets`](#secrets)の値とURLのパスワードは伏せられますが、`password`のような名前だけを理由に伏せられる値はありません。NaNのようにJSONで表せない値は、そのテキストとして書き出されます。[`--report`](/ja/reference/cli-reference#--report)を参照してください。
+
+ステップの`outputs`はそのままで、ここに書いたものだけが実行の外に渡されます。
 
 ## ジョブ
 
@@ -793,7 +834,7 @@ jobs:
 | `notes` | Array | 先行ステップのアクションが人に向けて残したもの。[`notes`](#notes)を参照 |
 | `job` | Object | ジョブのこの回のここまでの様子。`job.failed`はこのステップより前のステップが失敗したかどうか。[失敗したとき](#失敗したとき)を参照 |
 
-このコンテキストに`env`、`jobs`、`steps`はありません。
+このコンテキストに`env`、`jobs`、`steps`はありません。ワークフローの[`outputs`](#outputs)が読めるのは`vars`と`outputs`だけです。
 
 ### 失敗したとき
 
@@ -1005,8 +1046,9 @@ headers:
 - `actions`の名前はProbeのアクションの名前であってはならず、コミットで固定した外部アクションかローカルのパスを指す必要があります
 - `needs`は存在するジョブIDを指し、依存関係は循環していない必要があります
 - `repeat.count`と`repeat.warmup`は0以上、`retry.max_attempts`は1以上である必要があります
+- ワークフローの各出力には式が必要です
 
-`probe check`は、受け付けないキー、解析できない式、公開される前に読む出力とあわせて、これらをワークフローを実行せずに報告します。[CLIリファレンス](/ja/reference/cli-reference#check)を参照してください。
+`probe check`は、受け付けないキー、解析できない式、公開される前に読む出力、どのステップも公開しない値を読むワークフローの出力とあわせて、これらをワークフローを実行せずに報告します。[CLIリファレンス](/ja/reference/cli-reference#check)を参照してください。
 
 ## ファイルのマージ
 

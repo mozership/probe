@@ -150,6 +150,9 @@ type Report struct {
 	// Selection is the jobs the run was narrowed to with --job; nil when
 	// every job of the workflow ran.
 	Selection *Selection `json:"selection,omitempty"`
+	// Outputs are what the run gives whoever ran it, as the outputs of the
+	// workflow name them; nil when it gives nothing.
+	Outputs map[string]any `json:"outputs,omitempty"`
 }
 
 // Selection is the jobs a run was narrowed to. The jobs that ran are those
@@ -347,6 +350,9 @@ func (c *Count) add(status string) {
 func (r *Report) Mask(m *mask.Masker) {
 	r.Name = m.String(r.Name)
 	r.Description = m.String(r.Description)
+	if r.Outputs != nil {
+		r.Outputs = m.Data(r.Outputs).(map[string]any)
+	}
 	for i := range r.Jobs {
 		job := &r.Jobs[i]
 		job.Name = m.String(job.Name)

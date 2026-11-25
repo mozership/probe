@@ -175,7 +175,7 @@ PROBE_OUTPUT=stream probe workflow.yml
 
 | 形式 | 既定のファイル | 内容 |
 |---|---|---|
-| `json` | `probe-report.json` | 実行全体。状態、所要時間、ジョブとステップの状態ごとの集計、そして各ステップの`id`、`test`、OpenAPIドキュメントでレスポンスを対応付けた先（`contract`）、失敗した場合はその理由とリクエスト・レスポンス |
+| `json` | `probe-report.json` | 実行全体。状態、所要時間、ジョブとステップの状態ごとの集計、そして各ステップの`id`、`test`、OpenAPIドキュメントでレスポンスを対応付けた先（`contract`）、失敗した場合はその理由とリクエスト・レスポンス。ワークフローに[`outputs`](/ja/reference/yaml-configuration#outputs)があればその値も |
 | `junit` | `probe-junit.xml` | ジョブごとに`testsuite`、ステップ、`repeat.test`、`repeat.baseline_test`ごとに`testcase`を持つJUnit XML。テスト結果を読めるCI向け |
 | `markdown` | `probe-report.md` | 要約の1行、ジョブの表、繰り返したステップの応答時間の表、[`--baseline`](#--baseline)からの変化の表、失敗したステップ、失敗した`repeat.test`、失敗した`repeat.baseline_test`ごとの節 |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | `markdown`と同じページを、GitHub Actionsのジョブサマリーに追記 |
