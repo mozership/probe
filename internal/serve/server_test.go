@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -573,5 +574,128 @@ func TestServer_ForEachSkipsItems(t *testing.T) {
 	}
 	if w := byWorkflow(log.runs(t)); len(w["verify"]) != 1 {
 		t.Errorf("verify ran %d times, want once", len(w["verify"]))
+	}
+}
+
+// stateServer returns a server whose loop source, with the state cursor,
+// gives the outputs of the fake, and items handled by verify and ack, each
+// run of which exits with its var exit; and the path of its state.
+func stateServer(t *testing.T, outputs string) (*Server, *logBuffer, string) {
+	t.Helper()
+	exe := fakeProbeExe(t, 0, 0)
+	t.Setenv(fakeOutputsEnv, outputs)
+	s, log := newTestServer(t, exe, map[string]*Workflow{
+		"source": {Files: []string{"/source.yml"}, Loop: true, Interval: Duration{Duration: 50 * time.Millisecond}, State: []string{"cursor", "seen"},
+			ForEach: &ForEach{Items: "messages", Workflow: "verify", Concurrency: 1, OnSuccess: "ack"}},
+		"verify": {Files: []string{"/verify.yml"}},
+		"ack":    {Files: []string{"/ack.yml"}},
+	}, 10*time.Second)
+	return s, log, s.statePath("source")
+}
+
+// serveUntil serves s until cond holds of its log.
+func serveUntil(t *testing.T, s *Server, what string, cond func() bool) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.Serve(ctx)
+		close(done)
+	}()
+	eventually(t, what, cond)
+	cancel()
+	<-done
+}
+
+func sourceRuns(t *testing.T, log *logBuffer) []map[string]any {
+	t.Helper()
+	return byWorkflow(log.runs(t))["source"]
+}
+
+func logged(t *testing.T, log *logBuffer, msg string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, l := range log.lines(t) {
+		if l["msg"] == msg {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// The state a run gives is saved once its items are handled, and the next
+// run is given it as vars; the first run, with none yet, is given nothing.
+func TestServer_State(t *testing.T) {
+	s, log, path := stateServer(t, `{"cursor": 7, "messages": [{"id": "a"}]}`)
+	serveUntil(t, s, "two runs of the source", func() bool { return len(sourceRuns(t, log)) >= 2 })
+
+	runs := sourceRuns(t, log)
+	first := fakeReportAt(t, runs[0]["report"].(string))
+	if _, ok := first.Vars["cursor"]; ok {
+		t.Errorf("the first run was given a cursor: %v", first.Vars)
+	}
+	second := fakeReportAt(t, runs[1]["report"].(string))
+	if second.Vars["cursor"] != "7" {
+		t.Errorf("the second run was given %v, want cursor 7", second.Vars)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(data, &state); err != nil || !reflect.DeepEqual(state, map[string]any{"cursor": float64(7)}) {
+		t.Errorf("state = %s, %v", data, err)
+	}
+	if saved := logged(t, log, "state saved"); len(saved) == 0 || !reflect.DeepEqual(saved[0]["state"], []any{"cursor"}) {
+		t.Errorf("state saved = %v", saved)
+	}
+}
+
+// The state is left as it was when a run does not pass, when an item of it
+// is not handled, and when what it gives is masked; an output the run does
+// not give keeps its value.
+func TestServer_StateKept(t *testing.T) {
+	tests := []struct {
+		name, outputs, msg string
+		exit               int
+		want               map[string]any
+	}{
+		{"a run that fails", `{"cursor": 8, "messages": []}`, "state kept: the run did not pass", 1, map[string]any{"cursor": float64(1), "seen": "x"}},
+		{"an item not handled", `{"cursor": 8, "messages": [{"id": "a", "exit": 1}]}`, "state kept: not every item of the run was handled", 0, map[string]any{"cursor": float64(1), "seen": "x"}},
+		{"a masked output", `{"cursor": "<secret:K>", "messages": []}`, "state kept: output cursor holds a secret or a credential, which the report masks", 0, map[string]any{"cursor": float64(1), "seen": "x"}},
+		{"an output not given", `{"cursor": 8, "messages": []}`, "state saved", 0, map[string]any{"cursor": float64(8), "seen": "x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, log, path := stateServer(t, tt.outputs)
+			t.Setenv(fakeExitEnv, strconv.Itoa(tt.exit))
+			if err := writeState(path, map[string]any{"cursor": 1, "seen": "x"}); err != nil {
+				t.Fatal(err)
+			}
+			serveUntil(t, s, tt.msg, func() bool { return len(logged(t, log, tt.msg)) > 0 })
+			state, err := readState(path)
+			if err != nil || !reflect.DeepEqual(state, tt.want) {
+				t.Errorf("state = %v, %v; want %v", state, err, tt.want)
+			}
+			if fr := fakeReportAt(t, sourceRuns(t, log)[0]["report"].(string)); fr.Vars["cursor"] != "1" || fr.Vars["seen"] != "x" {
+				t.Errorf("the run was given %v, want the state", fr.Vars)
+			}
+		})
+	}
+}
+
+// A state that cannot be read keeps the workflow from running, as the log
+// says, rather than start it from none.
+func TestServer_StateUnreadable(t *testing.T) {
+	s, log, path := stateServer(t, `{"messages": []}`)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	serveUntil(t, s, "the run to be skipped", func() bool { return len(logged(t, log, "run skipped: the state cannot be read")) > 0 })
+	if runs := sourceRuns(t, log); len(runs) != 0 {
+		t.Errorf("the source ran: %v", runs)
 	}
 }
