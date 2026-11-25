@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mozership/probe/internal/mask"
 )
 
 // pruneEvery is how often the runs older than Results.Keep are removed.
@@ -141,7 +143,7 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		if done, ok := s.trigger(name, w); ok {
 			select {
 			case o := <-done:
-				if o.run.Status != StatusPassed || !o.handled {
+				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -161,10 +163,10 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 }
 
 // outcome is how a run of a workflow started by its schedule or loop went:
-// the run, and whether every item it gave was handled.
+// the run, how many items it gave, and how many of them were handled.
 type outcome struct {
-	run     Run
-	handled bool
+	run            Run
+	items, handled int
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
@@ -182,12 +184,16 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 	}
 	done := make(chan outcome, 1)
 	s.wg.Go(func() {
-		defer s.busy[name].Store(false)
 		r, items, ok := s.runSource(name, w)
 		if !ok {
+			s.busy[name].Store(false)
 			return
 		}
-		done <- outcome{run: r, handled: s.forEach(w.ForEach, r, items)}
+		o := outcome{run: r, items: len(items), handled: s.forEach(w.ForEach, r, items)}
+		// No longer busy before the loop is told, so that the run it starts
+		// next is not skipped.
+		s.busy[name].Store(false)
+		done <- o
 	})
 	return done, true
 }
@@ -212,34 +218,32 @@ func (s *Server) runSource(name string, w *Workflow) (Run, []map[string]any, boo
 // forEach handles each of items, the items r gave, as f says: at most
 // f.Concurrency at once, each by a run of f.Workflow and then of
 // f.OnSuccess or f.OnFailure, with the item as its vars. It returns once
-// each item started is handled, and reports whether every item was; once
-// serve is stopped, no item starts.
-func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) bool {
+// each item started is handled, with how many were; once serve is stopped,
+// no item starts.
+func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) int {
 	if f == nil || len(items) == 0 {
-		return true
+		return 0
 	}
 	slots := make(chan struct{}, f.Concurrency)
 	var wg sync.WaitGroup
-	var all atomic.Bool
-	all.Store(true)
+	var handled atomic.Int64
 	for i, item := range items {
 		select {
 		case slots <- struct{}{}:
 		case <-s.stopping:
 		}
 		if s.isStopping() {
-			all.Store(false)
 			break
 		}
 		wg.Go(func() {
 			defer func() { <-slots }()
-			if !s.handle(f, r, i, item) {
-				all.Store(false)
+			if s.handle(f, r, i, item) {
+				handled.Add(1)
 			}
 		})
 	}
 	wg.Wait()
-	return all.Load()
+	return int(handled.Load())
 }
 
 // handle runs f.Workflow for item, the item of index i that r gave, and
@@ -269,8 +273,8 @@ func (s *Server) handle(f *ForEach, from Run, i int, item map[string]any) bool {
 }
 
 // checkItem returns why the vars of item cannot be given to its runs as it
-// holds them: a key that --vars-file refuses, or a value the report masked,
-// as it holds a secret.
+// holds them: a key that --vars-file refuses, or a key or a value the report
+// masked, as it holds a secret or a credential.
 func checkItem(item map[string]any) error {
 	seen := map[string]bool{}
 	for key, v := range item {
@@ -282,19 +286,19 @@ func checkItem(item map[string]any) error {
 			return fmt.Errorf("the item has the key %s twice, once the white space around them is left out", name)
 		}
 		seen[name] = true
-		if masked(v) {
-			return fmt.Errorf("the value of %s holds a secret, which the report masks, so it would reach the run as <secret:...>", key)
+		if masked(key) || masked(v) {
+			return fmt.Errorf("%s holds a secret or a credential, which the report masks, so the run would be given what hides it", key)
 		}
 	}
 	return nil
 }
 
-// masked reports whether v, a value read from a report, holds a secret the
-// report masked.
+// masked reports whether v, a value read from a report, holds a secret or
+// a credential the report masked.
 func masked(v any) bool {
 	switch val := v.(type) {
 	case string:
-		return strings.Contains(val, "<secret:")
+		return mask.Hides(val)
 	case map[string]any:
 		for k, e := range val {
 			if masked(k) || masked(e) {
@@ -302,9 +306,7 @@ func masked(v any) bool {
 			}
 		}
 	case []any:
-		if slices.ContainsFunc(val, masked) {
-			return true
-		}
+		return slices.ContainsFunc(val, masked)
 	}
 	return false
 }

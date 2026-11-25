@@ -112,7 +112,7 @@ func New(secrets []string, env map[string]string) *Masker {
 			m.tooShort = append(m.tooShort, name)
 		}
 		seen[name] = true
-		m.addLocked(value, "<secret:"+name+">")
+		m.addLocked(value, secretPrefix+name+">")
 	}
 	m.rebuildLocked()
 	return m
@@ -497,7 +497,7 @@ func labelAt(t string) int {
 	if strings.HasPrefix(t, redactedValue) {
 		return len(redactedValue)
 	}
-	if strings.HasPrefix(t, "<secret:") {
+	if strings.HasPrefix(t, secretPrefix) {
 		if j := strings.IndexByte(t, '>'); j > 0 {
 			return j + 1
 		}
@@ -844,6 +844,15 @@ func (m *Masker) Map(data map[string]any) map[string]any {
 		out[k] = m.value(v)
 	}
 	return out
+}
+
+// secretPrefix starts what a secret value is replaced by, <secret:NAME>.
+const secretPrefix = "<secret:"
+
+// Hides reports whether s holds what a masker writes in place of a value it
+// hides: a secret's label, or what a credential is shown as.
+func Hides(s string) bool {
+	return strings.Contains(s, secretPrefix) || strings.Contains(s, redactedValue)
 }
 
 // Data returns v, a value a workflow gives on, with secret values and the

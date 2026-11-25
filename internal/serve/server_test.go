@@ -516,22 +516,41 @@ func at(t *testing.T, line map[string]any, key string) time.Time {
 	return v
 }
 
-// A loop backs off when the items of its runs are not handled, as their
-// on_failure fails too, though the runs that gave them passed.
+// A loop backs off when none of the items of its runs is handled, as their
+// on_failure fails too, though the runs that gave them passed; an item that
+// fails alone among others that are handled does not slow the loop.
 func TestServer_ForEachBacksOffItemsNotHandled(t *testing.T) {
-	log, stop := forEachServerWith(t, `{"messages": [{"id": "a", "exit": 1}]}`, 1, 0, 0)
-	time.Sleep(2500 * time.Millisecond)
-	stop()
-	w := byWorkflow(log.runs(t))
-	if n := len(w["source"]); n < 2 || n > 3 {
-		t.Errorf("the source ran %d times in 2.5s, want 2 or 3 with a wait of 1s and then 2s", n)
+	tests := []struct {
+		name, outputs string
+		backoff       bool
+	}{
+		{"no item handled", `{"messages": [{"id": "a", "exit": 1}]}`, true},
+		{"an item handled", `{"messages": [{"id": "a", "exit": 1}, {"id": "b"}]}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log, stop := forEachServerWith(t, tt.outputs, 1, 0, 0)
+			eventually(t, "the source to run again", func() bool { return len(byWorkflow(log.runs(t))["source"]) >= 2 })
+			stop()
+			w := byWorkflow(log.runs(t))
+			second := at(t, w["source"][1], "started_at")
+			var last time.Time
+			for _, r := range append(w["ack"], w["dlq"]...) {
+				if end := at(t, r, "finished_at"); end.Before(second) && end.After(last) {
+					last = end
+				}
+			}
+			if gap := second.Sub(last); (gap >= firstBackoff-50*time.Millisecond) != tt.backoff {
+				t.Errorf("the source waited %s after its items, want a backoff: %v", gap, tt.backoff)
+			}
+		})
 	}
 }
 
 // An item whose vars cannot be given as it holds them is skipped, and
 // logged as an error; the other items are handled.
 func TestServer_ForEachSkipsItems(t *testing.T) {
-	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {" id": "b", "id": "c"}, {"": "d"}, {"receipt": "x-<secret:PIN>"}, {"n": {"k": ["<secret:PIN>"]}}]}`, 1)
+	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {" id": "b", "id": "c"}, {"": "d"}, {"receipt": "x-<secret:PIN>"}, {"n": {"k": ["<secret:PIN>"]}}, {"token": "<redacted>"}, {"<secret:K>": "v"}]}`, 1)
 	eventually(t, "the items to be handled", func() bool { return len(byWorkflow(log.runs(t))["ack"]) == 1 })
 	stop()
 	var skipped []string
@@ -544,8 +563,10 @@ func TestServer_ForEachSkipsItems(t *testing.T) {
 	want := []string{
 		"1: the item has the key id twice, once the white space around them is left out",
 		"2: a key of the item is empty, which no var can be named",
-		"3: the value of receipt holds a secret, which the report masks, so it would reach the run as <secret:...>",
-		"4: the value of n holds a secret, which the report masks, so it would reach the run as <secret:...>",
+		"3: receipt holds a secret or a credential, which the report masks, so the run would be given what hides it",
+		"4: n holds a secret or a credential, which the report masks, so the run would be given what hides it",
+		"5: token holds a secret or a credential, which the report masks, so the run would be given what hides it",
+		"6: <secret:K> holds a secret or a credential, which the report masks, so the run would be given what hides it",
 	}
 	if !reflect.DeepEqual(skipped, want) {
 		t.Errorf("skipped =\n%q\nwant\n%q", skipped, want)
