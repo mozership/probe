@@ -227,7 +227,7 @@ jobs:
 The commit an action is pinned to is written once, so a newer release is a change to one line.
 
 - A name is letters, digits, `_` and `-`, and starts with a letter or a digit.
-- A name cannot be that of an action of Probe, such as `http` or `shell`: what `uses: http` runs does not depend on the workflow. A workflow that gives such a name fails to load.
+- A name cannot be that of an action of Probe, such as `http` or `shell`: what `uses: http` runs does not depend on the workflow. A workflow that gives such a name fails to load. The exception is `db`, which is being replaced by the external action [probe-db](https://github.com/mozership/probe-db): a workflow can give `db` to it, as `db: github.com/mozership/probe-db@<commit SHA>`, and its steps that use `db` then run probe-db as they are.
 - The value names an external action as `uses` does: `github.com/<owner>/<repo>[/<dir>]@<commit>` with a full 40-character commit SHA, or a local path starting with `./`, `../` or `/`. It is not a template, and it cannot be another name.
 - A step can still name an action in full, and the `defaults` written by the name apply to it too. One `defaults` cannot hold both the name and the action it stands for.
 

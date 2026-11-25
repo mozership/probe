@@ -38,8 +38,9 @@ func (a AliasProblem) Error() string {
 
 // aliasProblems returns what is wrong with the names the workflow's actions
 // give, in the order of the names. builtin are the names of the actions of
-// Probe, which a name must not be; when it is empty, that is not checked.
-func (w *Workflow) aliasProblems(builtin []string) []AliasProblem {
+// Probe, which a name must not be unless it is one of replaceable; when
+// builtin is empty, that is not checked.
+func (w *Workflow) aliasProblems(builtin, replaceable []string) []AliasProblem {
 	var problems []AliasProblem
 	for _, name := range slices.Sorted(maps.Keys(w.Actions)) {
 		ref := w.Actions[name]
@@ -47,7 +48,7 @@ func (w *Workflow) aliasProblems(builtin []string) []AliasProblem {
 		switch {
 		case !aliasName.MatchString(name):
 			msg = fmt.Sprintf("actions: the name %q must be letters, digits, '_' and '-', starting with a letter or a digit", name)
-		case slices.Contains(builtin, name):
+		case slices.Contains(builtin, name) && !slices.Contains(replaceable, name):
 			msg = fmt.Sprintf("actions: the name %q is that of an action of Probe, which a workflow cannot give to another", name)
 		case !actionref.IsExternal(ref):
 			msg = fmt.Sprintf("actions: %s must name an external action, as github.com/<owner>/<repo>@<commit SHA> or a local path starting with ./, not %q", name, ref)

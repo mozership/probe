@@ -73,7 +73,8 @@ func serve() {
 
 // Spec declares the db action. It keeps to every kind of guard: it runs
 // only a statement that reads under read-only, and connects only to a host
-// the guard allows. It cannot run without dsn and query.
+// the guard allows. It cannot run without dsn and query. It is being
+// replaced by github.com/mozership/probe-db, which a workflow can name db.
 func Spec() actionspec.Spec {
 	return actionspec.Spec{
 		Serve:     serve,
@@ -86,5 +87,7 @@ func Spec() actionspec.Spec {
 		ResTypes:  kind.Fields(Res{}),
 		Required:  [][]string{{"dsn"}, {"query"}},
 		Choices:   actionspec.NoChoices(),
+
+		Replaceable: true,
 	}
 }
