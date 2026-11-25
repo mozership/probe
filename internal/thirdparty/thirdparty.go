@@ -42,8 +42,13 @@ var noticeFile = regexp.MustCompile(`(?i)^(licen[sc]e|copying|unlicense|notice|p
 // Platforms are those probe and its external actions are released for.
 var Platforms = []string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"}
 
+// majorVersion is the last element of the path of a module of major version
+// 2 or above, which go build leaves out of the name of an executable.
+var majorVersion = regexp.MustCompile(`^v[0-9]+$`)
+
 // Executable returns the name of the executable that the package at pattern
-// builds, which go build gives it: the last element of its import path.
+// builds, which go build gives it: the last element of its import path, or
+// the one before it when that is a major version such as v2.
 func Executable(dir, pattern string) (string, error) {
 	cmd := exec.Command("go", "list", "-f", "{{.Name}}\t{{.ImportPath}}", pattern)
 	cmd.Dir = dir
@@ -61,21 +66,48 @@ func Executable(dir, pattern string) (string, error) {
 	if name != "main" {
 		return "", fmt.Errorf("%s is package %s, not a command", importPath, name)
 	}
-	return path.Base(importPath), nil
+	name = path.Base(importPath)
+	if parent := path.Dir(importPath); majorVersion.MatchString(name) && parent != "." {
+		name = path.Base(parent)
+	}
+	return name, nil
+}
+
+// ownModule returns the path of the module the package at pattern is in,
+// and its directory.
+func ownModule(dir, pattern string) (string, string, error) {
+	cmd := exec.Command("go", "list", "-f", "{{with .Module}}{{.Path}}\t{{.Dir}}{{end}}", pattern)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("go list: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	modPath, modDir, _ := strings.Cut(strings.TrimSpace(string(out)), "\t")
+	if modPath == "" {
+		return "", "", fmt.Errorf("%s is in no module", pattern)
+	}
+	return modPath, modDir, nil
 }
 
 // Modules returns the modules that the package at pattern links when it is
-// built for each of the platforms, given as os/arch, apart from the main
-// module, and the Go standard library, which every build links. They are
-// sorted by path.
+// built for each of the platforms, given as os/arch, apart from the module
+// it is in, and the Go standard library, which every build links. The
+// other modules of a workspace are among them, and a vendored module is
+// read from the vendor directory. They are sorted by path.
 func Modules(dir, pattern string, platforms []string) ([]Module, error) {
+	own, ownDir, err := ownModule(dir, pattern)
+	if err != nil {
+		return nil, err
+	}
 	seen := map[string]Module{}
 	for _, platform := range platforms {
 		goos, goarch, ok := strings.Cut(platform, "/")
 		if !ok {
 			return nil, fmt.Errorf("platform must be os/arch, not %q", platform)
 		}
-		cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}{{end}}", pattern)
+		cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}", pattern)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
 		var stderr bytes.Buffer
@@ -87,15 +119,20 @@ func Modules(dir, pattern string, platforms []string) ([]Module, error) {
 		sc := bufio.NewScanner(bytes.NewReader(out))
 		for sc.Scan() {
 			fields := strings.Split(sc.Text(), "\t")
-			if len(fields) != 3 {
+			if len(fields) != 3 || fields[0] == own {
 				continue
 			}
-			seen[fields[0]] = Module{
-				Path:    fields[0],
-				Version: fields[1],
-				Dir:     fields[2],
-				Source:  "https://pkg.go.dev/" + fields[0] + "@" + fields[1],
+			m := Module{Path: fields[0], Version: fields[1], Dir: fields[2], Source: "https://pkg.go.dev/" + fields[0]}
+			if m.Version != "" {
+				m.Source += "@" + m.Version
 			}
+			// go list gives no directory for a module in vendor mode.
+			if m.Dir == "" {
+				if vendored := filepath.Join(ownDir, "vendor", filepath.FromSlash(m.Path)); isDir(vendored) {
+					m.Dir = vendored
+				}
+			}
+			seen[m.Path] = m
 		}
 	}
 
@@ -109,6 +146,11 @@ func Modules(dir, pattern string, platforms []string) ([]Module, error) {
 	}
 	sort.Slice(modules, func(i, j int) bool { return modules[i].Path < modules[j].Path })
 	return modules, nil
+}
+
+func isDir(name string) bool {
+	info, err := os.Stat(name)
+	return err == nil && info.IsDir()
 }
 
 // standardLibrary is the Go distribution that builds the executable, whose

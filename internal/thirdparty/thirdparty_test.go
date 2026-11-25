@@ -3,6 +3,7 @@ package thirdparty
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,7 +152,7 @@ func TestModules_Error(t *testing.T) {
 		errContain string
 	}{
 		{"a platform that is not os/arch", "./cmd/probe", []string{"linux"}, `platform must be os/arch, not "linux"`},
-		{"a package that does not exist", "./cmd/none", []string{"linux/amd64"}, "go list for linux/amd64"},
+		{"a package that does not exist", "./cmd/none", []string{"linux/amd64"}, "go list"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,5 +227,112 @@ func TestExecutable(t *testing.T) {
 				t.Errorf("Executable = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// writeFiles writes files under dir, by their slash-separated names.
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// goCmd runs go in dir, offline.
+func goCmd(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go %v: %v: %s", args, err, out)
+	}
+}
+
+// app writes a command, example.com/app, that imports example.com/dep from
+// the directory next to it.
+func app(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"dep/go.mod":  "module example.com/dep\n\ngo 1.21\n",
+		"dep/dep.go":  "package dep\n\nconst Name = \"dep\"\n",
+		"dep/LICENSE": "License of dep\n",
+		"app/go.mod":  "module example.com/app\n\ngo 1.21\n\nrequire example.com/dep v1.0.0\n\nreplace example.com/dep => ../dep\n",
+		"app/main.go": "package main\n\nimport \"example.com/dep\"\n\nfunc main() { println(dep.Name) }\n",
+		"app/LICENSE": "License of app\n",
+	})
+	return filepath.Join(root, "app"), filepath.Join(root, "dep")
+}
+
+func paths(modules []Module) map[string]Module {
+	m := map[string]Module{}
+	for _, mod := range modules {
+		m[mod.Path] = mod
+	}
+	return m
+}
+
+func TestModules_Vendor(t *testing.T) {
+	appDir, _ := app(t)
+	goCmd(t, appDir, "mod", "vendor")
+	t.Setenv("GOFLAGS", "")
+	t.Setenv("GOWORK", "off")
+	modules, err := Modules(appDir, ".", []string{"linux/amd64"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep, ok := paths(modules)["example.com/dep"]
+	if !ok {
+		t.Fatalf("modules = %v, want example.com/dep", modules)
+	}
+	if files, err := Files(dep); err != nil || len(files) != 1 || files[0].Name != "LICENSE" {
+		t.Errorf("Files(%+v) = %v, %v, want the LICENSE of the vendor directory", dep, files, err)
+	}
+	if _, ok := paths(modules)["example.com/app"]; ok {
+		t.Error("the module of the command is not a third party")
+	}
+}
+
+func TestModules_Workspace(t *testing.T) {
+	appDir, depDir := app(t)
+	writeFiles(t, appDir, map[string]string{"go.work": "go 1.21\n\nuse (\n\t.\n\t../dep\n)\n"})
+	t.Setenv("GOFLAGS", "")
+	t.Setenv("GOWORK", "")
+	modules, err := Modules(appDir, ".", []string{"linux/amd64"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep, ok := paths(modules)["example.com/dep"]
+	if !ok {
+		t.Fatalf("modules = %v, want example.com/dep, which the workspace uses", modules)
+	}
+	if want, _ := filepath.EvalSymlinks(depDir); dep.Dir != want || dep.Source != "https://pkg.go.dev/example.com/dep" {
+		t.Errorf("dep = %+v", dep)
+	}
+	if _, ok := paths(modules)["example.com/app"]; ok {
+		t.Error("the module of the command is not a third party")
+	}
+}
+
+func TestExecutable_MajorVersion(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"go.mod":  "module example.com/app/v2\n\ngo 1.21\n",
+		"main.go": "package main\n\nfunc main() {}\n",
+	})
+	t.Setenv("GOWORK", "off")
+	got, err := Executable(dir, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "app" {
+		t.Errorf("Executable = %q, want app", got)
 	}
 }
