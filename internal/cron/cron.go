@@ -17,6 +17,10 @@ type Schedule struct {
 	// matches by both fields when either does, and by either when neither
 	// does, as cron has it.
 	domAny, dowAny bool
+	// hourAny is whether the hour field starts with *, as the schedule then
+	// runs by the time that passes, also through an hour the clock shows
+	// twice.
+	hourAny bool
 }
 
 type field struct {
@@ -57,6 +61,7 @@ func Parse(expr string) (*Schedule, error) {
 	return &Schedule{
 		minute: sets[0], hour: sets[1], dom: sets[2], month: sets[3], dow: sets[4],
 		domAny: strings.HasPrefix(parts[2], "*"), dowAny: strings.HasPrefix(parts[4], "*"),
+		hourAny: strings.HasPrefix(parts[1], "*"),
 	}, nil
 }
 
@@ -131,9 +136,36 @@ const searchYears = 5
 // Next returns the first time after t that s matches, to the minute, on the
 // wall clock of the location of t, and false when there is none in the five
 // years after t. A time the clock skips, as it does when daylight saving
-// time starts, is not matched; a time it shows twice, as it does when it
-// ends, is matched once.
+// time starts, is not matched. A time it shows twice, as it does when it
+// ends, is matched once, unless the hour field starts with *: such a
+// schedule is matched in both, as cron runs it.
 func (s *Schedule) Next(t time.Time) (time.Time, bool) {
+	next, ok := s.nextOnWall(t)
+	if !s.hourAny {
+		return next, ok
+	}
+	// An hour the clock shows again is skipped by the walk of the wall
+	// clock; the minutes that pass before the time it found are matched
+	// one by one, which finds the time in it.
+	limit := t.Add(repeatedHours)
+	if ok && next.Before(limit) {
+		limit = next
+	}
+	for m := t.Truncate(time.Minute).Add(time.Minute); m.Before(limit); m = m.Add(time.Minute) {
+		if s.matches(m) {
+			return m, true
+		}
+	}
+	return next, ok
+}
+
+// repeatedHours is the longest the clock is set back at once, in any time
+// zone.
+const repeatedHours = 3 * time.Hour
+
+// nextOnWall returns the first time after t that the wall clock of the
+// location of t shows as s matches, a time shown twice as the first of them.
+func (s *Schedule) nextOnWall(t time.Time) (time.Time, bool) {
 	loc := t.Location()
 	// The clock is walked as UTC, which skips and repeats nothing, so that
 	// the walk only goes forward.
@@ -158,6 +190,11 @@ func (s *Schedule) Next(t time.Time) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// matches reports whether s matches t, a whole minute, on its wall clock.
+func (s *Schedule) matches(t time.Time) bool {
+	return has(s.month, int(t.Month())) && s.dayMatches(t) && has(s.hour, t.Hour()) && has(s.minute, t.Minute())
 }
 
 func (s *Schedule) dayMatches(t time.Time) bool {

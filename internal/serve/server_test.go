@@ -302,7 +302,8 @@ func TestServer_StopStartsNoWaitingRun(t *testing.T) {
 	}
 }
 
-// A loop whose runs cannot run its workflow waits longer after each.
+// A loop whose runs do not pass waits longer after each: one that cannot
+// run its workflow, and one whose target is down.
 func TestServer_LoopBacksOffRunsInError(t *testing.T) {
 	s, log := newTestServer(t, "/nonexistent/probe", map[string]*Workflow{
 		"w": {Files: []string{"/w.yml"}, Loop: true},
@@ -320,6 +321,25 @@ func TestServer_LoopBacksOffRunsInError(t *testing.T) {
 		}
 		if _, ok := r["report"]; ok {
 			t.Errorf("a run without a report is told with one: %v", r)
+		}
+	}
+}
+
+func TestServer_LoopBacksOffFailedRuns(t *testing.T) {
+	exe := fakeProbeExe(t, 0, 3)
+	s, log := newTestServer(t, exe, map[string]*Workflow{
+		"w": {Files: []string{"/w.yml"}, Loop: true},
+	}, time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+	s.Serve(ctx)
+	runs := log.runs(t)
+	if len(runs) < 2 || len(runs) > 3 {
+		t.Errorf("runs = %d in 2.5s, want 2 or 3 with a wait of 1s and then 2s", len(runs))
+	}
+	for _, r := range runs {
+		if r["status"] != StatusFailed {
+			t.Errorf("run = %v", r)
 		}
 	}
 }

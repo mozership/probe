@@ -794,7 +794,7 @@ Each workflow takes:
 | `env_files` | As [`--env-file`](#--env-file) |
 | `jobs` | As [`--job`](#--job) |
 | `read_only`, `allow_hosts`, `allow_actions` | The guard of the run, as [`--read-only`](#--read-only), [`--allow-host`](#--allow-host) and [`--allow-action`](#--allow-action). It is given to every run in full, so the environment of serve, such as `PROBE_READ_ONLY`, neither loosens nor tightens it |
-| `schedule` | A cron expression of the times the workflow runs at, on the clock of the local time zone: minute, hour, day of the month, month and day of the week, each `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a list of them. A month and a day of the week can be named, as `jan` and `mon`. As in cron, a day matches by either day field when neither starts with `*`, and by both otherwise. A time the clock skips as daylight saving time starts is not run, and one it shows twice as it ends is run once |
+| `schedule` | A cron expression of the times the workflow runs at, on the clock of the local time zone: minute, hour, day of the month, month and day of the week, each `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a list of them. A month and a day of the week can be named, as `jan` and `mon`. As in cron, a day matches by either day field when neither starts with `*`, and by both otherwise. A time the clock skips as daylight saving time starts is not run, and one it shows twice as it ends is run once, unless the hour field starts with `*`, as a schedule then runs on through the hour shown twice |
 | `loop` | Run the workflow again as soon as the run before it is over |
 | `interval` | With `loop`, how long to wait between the runs |
 | `timeout` | End a run that goes on longer, with SIGTERM, as a person stops Probe, and kill it if it is still going 10 seconds later |
@@ -811,11 +811,11 @@ Each run is a directory under `results.dir/<workflow>/`, named by when it starte
 |---|---|
 | `passed` | Exited with 0 |
 | `failed` | A test or an action failed, as exit status 1 or 3 tells |
-| `error` | Could not run its workflow, as exit status 2 tells, or could not be started; `error` says why. A `loop` waits longer after each such run in a row, from 1 second up to a minute |
+| `error` | Could not run its workflow, as exit status 2 tells, or could not be started; `error` says why |
 | `timeout` | Was ended by `timeout` |
 | `stopped` | Was ended as serve was stopped |
 
-A run that is not `passed` is logged at the level `ERROR`. Notifying anyone of a failed run is left to the workflow, as an `always` job with an action that posts, such as Slack's.
+A run that is not `passed` is logged at the level `ERROR`, and a `loop` waits longer after each such run in a row, from 1 second up to a minute, past its `interval`, so that a workflow whose target is down is not run again and again at once. Notifying anyone of a failed run is left to the workflow, as an `always` job with an action that posts, such as Slack's.
 
 SIGINT or SIGTERM stops serve: it starts no run, not even one waiting for a worker, waits `grace` for the runs going, and then ends them with SIGTERM, killing those still going 10 seconds later. Another signal kills them at once. A serve file that cannot be read exits with status 2 before any run.
 

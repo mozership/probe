@@ -121,9 +121,9 @@ func (s *Server) onSchedule(ctx context.Context, name string, w *Workflow) {
 	}
 }
 
-// Waits of a loop whose runs could not run its workflow, doubled from the
-// first up to the last for each such run in a row, so that a workflow that
-// cannot run is not started again and again at once.
+// Waits of a loop whose runs did not pass, doubled from the first up to the
+// last for each such run in a row, so that a workflow whose target is down,
+// or that cannot run, is not started again and again at once.
 const (
 	firstBackoff = time.Second
 	lastBackoff  = time.Minute
@@ -138,7 +138,7 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		if done, ok := s.trigger(name, w); ok {
 			select {
 			case r := <-done:
-				if r.Status == StatusError {
+				if r.Status != StatusPassed {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {

@@ -71,6 +71,14 @@ func TestNext_DaylightSavingTime(t *testing.T) {
 		{"30 2 * * *", time.Date(2026, 3, 7, 12, 0, 0, 0, ny), []time.Time{time.Date(2026, 3, 9, 2, 30, 0, 0, ny)}},
 		{"*/30 * * * *", time.Date(2026, 3, 8, 1, 15, 0, 0, ny), []time.Time{time.Date(2026, 3, 8, 1, 30, 0, 0, ny), time.Date(2026, 3, 8, 3, 0, 0, 0, ny)}},
 		{"30 1 * * *", time.Date(2026, 10, 31, 12, 0, 0, 0, ny), []time.Time{time.Date(2026, 11, 1, 1, 30, 0, 0, ny), time.Date(2026, 11, 2, 1, 30, 0, 0, ny)}},
+		// Every five minutes runs on through the hour shown twice: 01:55
+		// EDT, then 01:00 EST an hour of time later, not 02:00 EST.
+		{"*/5 * * * *", time.Date(2026, 11, 1, 1, 50, 0, 0, ny), []time.Time{
+			time.Date(2026, 11, 1, 1, 55, 0, 0, ny),
+			time.Date(2026, 11, 1, 1, 55, 0, 0, ny).Add(5 * time.Minute),
+			time.Date(2026, 11, 1, 1, 55, 0, 0, ny).Add(10 * time.Minute),
+		}},
+		{"* * * * *", time.Date(2026, 11, 1, 1, 10, 0, 0, ny).Add(time.Hour), []time.Time{time.Date(2026, 11, 1, 1, 10, 0, 0, ny).Add(time.Hour + time.Minute)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
