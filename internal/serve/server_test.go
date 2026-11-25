@@ -552,7 +552,9 @@ func TestServer_ForEachBacksOffItemsNotHandled(t *testing.T) {
 // logged as an error; the other items are handled.
 func TestServer_ForEachSkipsItems(t *testing.T) {
 	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {" id": "b", "id": "c"}, {"": "d"}, {"receipt": "x-<secret:PIN>"}, {"n": {"k": ["<secret:PIN>"]}}, {"token": "<redacted>"}, {"<secret:K>": "v"}]}`, 1)
-	eventually(t, "the items to be handled", func() bool { return len(byWorkflow(log.runs(t))["ack"]) == 1 })
+	eventually(t, "the items to be handled", func() bool {
+		return len(byWorkflow(log.runs(t))["ack"]) == 1 && len(logged(t, log, "item skipped")) == 6
+	})
 	stop()
 	var skipped []string
 	for _, l := range log.lines(t) {
@@ -646,41 +648,98 @@ func TestServer_State(t *testing.T) {
 	if err := json.Unmarshal(data, &state); err != nil || !reflect.DeepEqual(state, map[string]any{"cursor": float64(7)}) {
 		t.Errorf("state = %s, %v", data, err)
 	}
+
 	if saved := logged(t, log, "state saved"); len(saved) == 0 || !reflect.DeepEqual(saved[0]["state"], []any{"cursor"}) {
 		t.Errorf("state saved = %v", saved)
 	}
 }
 
 // The state is left as it was when a run does not pass, when an item of it
-// is not handled, and when what it gives is masked; an output the run does
-// not give keeps its value.
+// is not handled, when what it gives is masked, and when it gives none of
+// it; an output the run does not give keeps its value.
 func TestServer_StateKept(t *testing.T) {
 	tests := []struct {
-		name, outputs, msg string
-		exit               int
-		want               map[string]any
+		name, outputs, msg, reason string
+		exit                       int
+		want                       map[string]any
 	}{
-		{"a run that fails", `{"cursor": 8, "messages": []}`, "state kept: the run did not pass", 1, map[string]any{"cursor": float64(1), "seen": "x"}},
-		{"an item not handled", `{"cursor": 8, "messages": [{"id": "a", "exit": 1}]}`, "state kept: not every item of the run was handled", 0, map[string]any{"cursor": float64(1), "seen": "x"}},
-		{"a masked output", `{"cursor": "<secret:K>", "messages": []}`, "state kept: output cursor holds a secret or a credential, which the report masks", 0, map[string]any{"cursor": float64(1), "seen": "x"}},
-		{"an output not given", `{"cursor": 8, "messages": []}`, "state saved", 0, map[string]any{"cursor": float64(8), "seen": "x"}},
+		{"a run that fails", `{"cursor": 8, "messages": []}`, "state kept", "the run did not pass", 1, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"an item not handled", `{"cursor": 8, "messages": [{"id": "a", "exit": 1}]}`, "state kept", "not every item of the run was handled", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"a masked output", `{"cursor": "<secret:K>", "messages": []}`, "state kept", "an output of the state holds a secret or a credential, which the report masks", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"none of the state", `{"messages": []}`, "state kept", "the run gave none of the outputs of the state", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"an output not given", `{"cursor": 8, "messages": []}`, "state saved", "", 0, map[string]any{"cursor": json.Number("8"), "seen": "x"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, log, path := stateServer(t, tt.outputs)
 			t.Setenv(fakeExitEnv, strconv.Itoa(tt.exit))
-			if err := writeState(path, map[string]any{"cursor": 1, "seen": "x"}); err != nil {
+			if err := writeState(path, map[string]any{"cursor": 1, "seen": "x", "dropped": "y"}); err != nil {
 				t.Fatal(err)
 			}
-			serveUntil(t, s, tt.msg, func() bool { return len(logged(t, log, tt.msg)) > 0 })
-			state, err := readState(path)
+			serveUntil(t, s, tt.msg, func() bool {
+				for _, l := range logged(t, log, tt.msg) {
+					if tt.reason == "" || l["reason"] == tt.reason {
+						return true
+					}
+				}
+				return false
+			})
+			state, err := readState(path, []string{"cursor", "seen"})
 			if err != nil || !reflect.DeepEqual(state, tt.want) {
 				t.Errorf("state = %v, %v; want %v", state, err, tt.want)
 			}
-			if fr := fakeReportAt(t, sourceRuns(t, log)[0]["report"].(string)); fr.Vars["cursor"] != "1" || fr.Vars["seen"] != "x" {
+			fr := fakeReportAt(t, sourceRuns(t, log)[0]["report"].(string))
+			if fr.Vars["cursor"] != "1" || fr.Vars["seen"] != "x" {
 				t.Errorf("the run was given %v, want the state", fr.Vars)
 			}
+			if _, ok := fr.Vars["dropped"]; ok {
+				t.Errorf("the run was given what the state no longer names: %v", fr.Vars)
+			}
 		})
+	}
+}
+
+// A large integer, as the ID a cursor holds, is saved and given as it is
+// written, not rounded.
+func TestServer_StateKeepsLargeIntegers(t *testing.T) {
+	s, log, path := stateServer(t, `{"cursor": 9007199254740995, "messages": [{"id": 9007199254740993}]}`)
+	serveUntil(t, s, "two runs of the source", func() bool { return len(sourceRuns(t, log)) >= 2 })
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), "9007199254740995") {
+		t.Errorf("state = %s, %v", data, err)
+	}
+	if second := fakeReportAt(t, sourceRuns(t, log)[1]["report"].(string)); !strings.Contains(second.Stdin, `"cursor":9007199254740995`) {
+		t.Errorf("the second run was given %s", second.Stdin)
+	}
+	verify := fakeReportAt(t, byWorkflow(log.runs(t))["verify"][0]["report"].(string))
+	if !strings.Contains(verify.Stdin, `"id":9007199254740993`) {
+		t.Errorf("the item was given as %s", verify.Stdin)
+	}
+}
+
+// The state of a run is saved from the outputs read as the run was over,
+// though its report is gone by the time its items are handled.
+func TestServer_KeepStateFromOutputsRead(t *testing.T) {
+	s, _, path := stateServer(t, `{}`)
+	w := s.config.Workflows["source"]
+	r := Run{ID: "20261126T000000.000000Z-1", Status: StatusPassed, Dir: filepath.Join(t.TempDir(), "gone")}
+	s.keepState("source", w, outcome{run: r, outputs: map[string]any{"cursor": json.Number("12345678901234567890")}})
+	state, err := readState(path, w.State)
+	if err != nil || !reflect.DeepEqual(state, map[string]any{"cursor": json.Number("12345678901234567890")}) {
+		t.Errorf("state = %v, %v", state, err)
+	}
+}
+
+// A source with a state backs off while not every item of its runs is
+// handled, as each run gives the same items again until they are.
+func TestServer_StateBacksOffItemsNotHandled(t *testing.T) {
+	s, log, _ := stateServer(t, `{"cursor": 8, "messages": [{"id": "a"}, {"": "skipped"}]}`)
+	serveUntil(t, s, "two runs of the source", func() bool { return len(sourceRuns(t, log)) >= 2 })
+	w := byWorkflow(log.runs(t))
+	second := at(t, w["source"][1], "started_at")
+	last := at(t, w["ack"][0], "finished_at")
+	if gap := second.Sub(last); gap < firstBackoff-50*time.Millisecond {
+		t.Errorf("the source waited %s after its items, want a backoff", gap)
 	}
 }
 
