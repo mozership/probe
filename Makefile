@@ -32,19 +32,5 @@ http_server_tls:
 		-https-key-file ./e2e/certs/server.key
 
 
-grpc_server:
-	go run internal/actions/grpc/testserver/*.go
-
-grpc_server_tls:
-	go run internal/actions/grpc/testserver/*.go \
-		-tls \
-		-cert="./e2e/certs/server.crt" \
-		-key="./e2e/certs/server.key" \
-		-port=50052
-
 gen_server_keys:
 	e2e/gen.sh
-
-gen_grpc_server:
-	@cd internal/actions/grpc/testserver && \
-		protoc --go_out=. --go-grpc_out=. ./pb/user_service.proto

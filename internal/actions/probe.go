@@ -6,12 +6,11 @@ import (
 )
 
 // Configure tells c what the engine is to know of the built-in actions: their
-// names, which a workflow cannot give to an external action unless the
-// action is replaceable, and those whose steps pass without a test. The kinds of guard each keeps to are given with
+// names, which a workflow cannot give to an external action, and those whose
+// steps pass without a test. The kinds of guard each keeps to are given with
 // the guard, from Keeps.
 func Configure(c *engine.Config) {
 	c.Actions = Names()
-	c.Replaceable = Replaceable()
 	c.NeedsNoCheck = NeedsNoCheck()
 }
 
@@ -22,7 +21,6 @@ func Configure(c *engine.Config) {
 func CheckOptions() check.CheckOptions {
 	return check.CheckOptions{
 		Actions:      Names(),
-		Replaceable:  Replaceable(),
 		Params:       AllParams(),
 		Contracts:    Contracts(),
 		ReqFields:    AllReqFields(),

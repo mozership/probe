@@ -56,12 +56,12 @@ The guard is not a sandbox. It keeps a workflow from writing to, or reaching, wh
 | Action | `--read-only` | `--allow-host` |
 |---|---|---|
 | `http` | Sends only `GET`, `HEAD` and `OPTIONS` | The host of the URL, and of each redirect; a URL without a port is taken at the port of its scheme |
-| `db` | Runs one statement that starts with `SELECT`, `SHOW`, `DESCRIBE`, `DESC`, `EXPLAIN` or `WITH` and holds no semicolon but at its end, over a DSN that runs no statement on connecting, in a read-only transaction, or on a SQLite connection that only queries, so that the database refuses a write the statement hides | Each server the driver may connect to, as the driver reads the DSN: for MySQL the address go-sql-driver dials; for PostgreSQL those lib/pq resolves the DSN to, with its parameters, a service file and `PGHOST`, `PGHOSTADDR`, `PGPORT` and the like, every host of a list, and the address of `hostaddr` when it is given; the driver's port when none is named; a SQLite file names no host |
 | `embedded` | Runs the job under the guard | Runs the job under the guard |
-| `grpc` | Calls only a method that every definition at hand, the server's reflection and the `.proto` files of `proto`, declares `idempotency_level = NO_SIDE_EFFECTS`; a Connect call without `proto` has none, and is refused | The host and port of `addr`, port 443 when none is named, and the DNS server of a `dns://server/` target, port 53 when none is named, or with `protocol: connect` the host of the URL at the port of its scheme; a target that names no host, such as a Unix socket, is refused |
 | `dns` | Nothing to refuse: a query writes nothing | The server the query is sent to, at port 53 when `server` names none, or 853 with `protocol: tls`; without `server`, every resolver of the machine |
 | `file` | Only reads: `write`, `append` and `delete` are refused | Nothing to reach |
 | `hello` | Nothing to refuse | Nothing to reach |
+
+The external [db](/reference/actions/db) and [grpc](/reference/actions/grpc) actions declare both kinds, and their pages say what each refuses.
 
 The built-in `shell`, `ssh`, `smtp` and `imap` cannot tell what a command or a script will do, and declare no guard, nor does the external [browser](/reference/actions/browser) action, which cannot tell what a page will do. A step using one is refused under a guard unless `--allow-action` names it, and it then runs as it is, without the guard.
 

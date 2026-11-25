@@ -2,13 +2,20 @@
 
 The `db` action executes SQL queries on MySQL, PostgreSQL, and SQLite databases, providing comprehensive result handling and error reporting.
 
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-db](https://github.com/mozership/probe-db). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.42.0 or later; until v1.42.0 it was built into Probe. The examples write `<commit SHA>` for the commit to pin: `probe guide db` prints the `uses` line of the latest release, and so do the notes of each release.
+
 ## Basic Syntax
 
-A database step gives the connection string and the statement to run.
+A workflow pins the action by a full commit SHA, and gives it the name `db` once, under [`actions`](/reference/yaml-configuration#actions). Its steps then write `uses: db`, and its `defaults` `db:`. A database step gives the connection string and the statement to run.
 
 ```yaml
-steps:
-  - name: "Database Query"
+name: Users
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
+jobs:
+- name: users
+  steps:
+  - name: Database Query
     uses: db
     with:
       dsn: "mysql://user:password@localhost:3306/database"
@@ -16,6 +23,8 @@ steps:
       params: [true]
     test: res.code == 0 && res.rows_affected > 0
 ```
+
+The examples below show the steps alone.
 
 ## Parameters
 

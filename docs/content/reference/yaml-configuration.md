@@ -162,6 +162,8 @@ The password of any URL in what Probe shows or writes is shown as `<redacted>` a
 A connection that every job uses, such as a base URL or a DSN, is written once here rather than in each job:
 
 ```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   user: "{{DB_USER}}"
   host: "{{DB_HOST}}"
@@ -227,7 +229,7 @@ jobs:
 The commit an action is pinned to is written once, so a newer release is a change to one line.
 
 - A name is letters, digits, `_` and `-`, and starts with a letter or a digit.
-- A name cannot be that of an action of Probe, such as `http` or `shell`: what `uses: http` runs does not depend on the workflow. A workflow that gives such a name fails to load. The exceptions are `db` and `grpc`, which are being replaced by the external actions [probe-db](https://github.com/mozership/probe-db) and [probe-grpc](https://github.com/mozership/probe-grpc): a workflow can give the name to its replacement, as `db: github.com/mozership/probe-db@<commit SHA>`, and its steps that use the name then run the external action as they are.
+- A name cannot be that of an action of Probe, such as `http` or `shell`: what `uses: http` runs does not depend on the workflow. A workflow that gives such a name fails to load.
 - The value names an external action as `uses` does: `github.com/<owner>/<repo>[/<dir>]@<commit>` with a full 40-character commit SHA, or a local path starting with `./`, `../` or `/`. It is not a template, and it cannot be another name.
 - A step can still name an action in full, and the `defaults` written by the name apply to it too. One `defaults` cannot hold both the name and the action it stands for.
 
@@ -310,6 +312,8 @@ jobs:
 A job is skipped when a job it `needs` failed or was skipped for the same reason. With `always: true`, it runs once every job in `needs` is over, however each ended. That is what a job that removes what the others made needs: left without it, a failed run leaves its test database or its files behind, and the next run finds them.
 
 ```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   admin_dsn: "{{ADMIN_DSN}}"
   test_dsn: "{{TEST_DSN}}"
@@ -380,6 +384,8 @@ jobs:
 The steps of a job run one after another, and a step runs whether or not the one before it failed. That suits steps that check separate things, each of which is worth its own line in the report. When the later steps work on what an earlier one made, they fail because it did, and the one failure that matters is buried under those that follow from it. With `fail_fast: true`, the steps after a failed one are not run, and are reported as skipped:
 
 ```yaml
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 jobs:
   - name: Orders
     fail_fast: true
@@ -974,7 +980,7 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 - `name` is required at the workflow level, and `jobs` must be a non-empty list.
 - Every job needs a `name` and at least one step.
 - Every step needs a `uses`, and it must name an action: one of Probe, an external action, or a name given under `actions`. One that names none stops the run before its first job, with exit status 2, even in a step that would be skipped.
-- A name under `actions` must not be that of an action of Probe, apart from `db` and `grpc`, and must stand for an external action pinned to a commit or at a local path.
+- A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
 - `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.
 

@@ -12,11 +12,9 @@ import (
 
 	"github.com/mozership/probe/internal/check"
 
-	"github.com/mozership/probe/internal/actions/db"
 	"github.com/mozership/probe/internal/actions/dns"
 	"github.com/mozership/probe/internal/actions/embedded"
 	"github.com/mozership/probe/internal/actions/file"
-	"github.com/mozership/probe/internal/actions/grpc"
 	"github.com/mozership/probe/internal/actions/hello"
 	"github.com/mozership/probe/internal/actions/http"
 	"github.com/mozership/probe/internal/actions/imap"
@@ -31,11 +29,9 @@ import (
 // what each function of this package returns is held by nothing else. The
 // embedded action is declared by what init gives it.
 var specs = map[string]func() actionspec.Spec{
-	"db":       db.Spec,
 	"dns":      dns.Spec,
 	"embedded": embedded.Spec,
 	"file":     file.Spec,
-	"grpc":     grpc.Spec,
 	"hello":    hello.Spec,
 	"http":     http.Spec,
 	"imap":     imap.Spec,
@@ -176,20 +172,6 @@ func AllChoices() map[string]map[string]check.Choices {
 		}
 		return out, len(out) > 0
 	})
-}
-
-// Replaceable returns, in alphabetical order, the names of the built-in
-// actions that a workflow can give to an external action under actions, as
-// they are being replaced by one, such as db by probe-db and grpc by
-// probe-grpc.
-func Replaceable() []string {
-	var names []string
-	for _, name := range Names() {
-		if specs[name]().Replaceable {
-			names = append(names, name)
-		}
-	}
-	return names
 }
 
 // Lookup returns the serve function of a built-in action.

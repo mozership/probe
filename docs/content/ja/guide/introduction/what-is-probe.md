@@ -41,7 +41,7 @@ Probeは、その確認を変更のたびに繰り返せるように、そして
 ほかのツールを選んだほうがよい場合は、[類似ソフトウェアとの比較](/ja/guide/introduction/comparison)で説明しています。
 
 ### 複数のプロトコルを1回の実行で
-HTTP、gRPC、MySQL、PostgreSQL、SQLite、SMTP、IMAP、DNS、SSH、シェルが組み込みです。ジョブは`needs`で順序を決めない限り並行して動きます。
+HTTP、SMTP、IMAP、DNS、SSH、シェルが組み込みで、gRPCやMySQL、PostgreSQL、SQLiteなどは外部アクションで扱えます。ジョブは`needs`で順序を決めない限り並行して動きます。
 
 ### 読みやすい
 ワークフローは、`jobs`、`steps`、`uses`、`with`で構成する、GitHub Actionsに近いYAMLです。AIエージェントが書いたものを人がレビューできます。
@@ -124,8 +124,6 @@ jobs:
 | アクション | 用途 |
 |---|---|
 | [`http`](/ja/reference/actions/http) | HTTPリクエストとその応答 |
-| [`grpc`](/ja/reference/actions/grpc) | gRPCとConnectの呼び出し（ストリーミングを含む） |
-| [`db`](/ja/reference/actions/db) | MySQL、PostgreSQL、SQLiteへのクエリ |
 | [`smtp`](/ja/reference/actions/smtp) | メールの送信 |
 | [`imap`](/ja/reference/actions/imap) | メールボックスの読み取り |
 | [`dns`](/ja/reference/actions/dns) | 名前に対してDNSサーバーが返すレコード |
@@ -136,7 +134,7 @@ jobs:
 | [`hello`](/ja/reference/actions/hello) | レポートへの出力 |
 
 外部アクションはそれぞれ独立したリポジトリにあり、ステップからコミットを指定して使います。
-[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[websocket](/ja/reference/actions/websocket)があります。
+[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[db](/ja/reference/actions/db)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[grpc](/ja/reference/actions/grpc)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[websocket](/ja/reference/actions/websocket)があります。
 
 ### カスタムアクション
 

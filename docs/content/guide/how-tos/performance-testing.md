@@ -215,6 +215,8 @@ When an endpoint is slow, the query it runs is a common cause. The `db` action r
 
 ```yaml
 name: Order History
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   api_url: "{{API_URL ?? 'http://localhost:8080'}}"
   db_dsn: "{{DB_DSN}}"

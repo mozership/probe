@@ -9,14 +9,14 @@ import (
 	"github.com/mozership/probe/internal/engine"
 )
 
-// TestConfigure checks that a run is told the names of the built-in actions,
-// which of them a workflow can give to an external action and which need no
-// test, and that the rest of its configuration is left as it was.
+// TestConfigure checks that a run is told the names of the built-in actions
+// and which of them need no test, and that the rest of its configuration is
+// left as it was.
 func TestConfigure(t *testing.T) {
 	c := engine.Config{Verbose: true, Jobs: []string{"j"}}
 	Configure(&c)
-	if !slices.Equal(c.Actions, Names()) || !slices.Equal(c.Replaceable, Replaceable()) || !slices.Equal(c.NeedsNoCheck, NeedsNoCheck()) {
-		t.Errorf("Actions, Replaceable, NeedsNoCheck = %v, %v, %v, want %v, %v, %v", c.Actions, c.Replaceable, c.NeedsNoCheck, Names(), Replaceable(), NeedsNoCheck())
+	if !slices.Equal(c.Actions, Names()) || !slices.Equal(c.NeedsNoCheck, NeedsNoCheck()) {
+		t.Errorf("Actions, NeedsNoCheck = %v, %v, want %v, %v", c.Actions, c.NeedsNoCheck, Names(), NeedsNoCheck())
 	}
 	if !c.Verbose || !slices.Equal(c.Jobs, []string{"j"}) {
 		t.Errorf("Configure changed what it does not set: %+v", c)
@@ -32,7 +32,6 @@ func TestCheckOptions(t *testing.T) {
 	}
 	want := check.CheckOptions{
 		Actions:      Names(),
-		Replaceable:  Replaceable(),
 		Params:       AllParams(),
 		Contracts:    Contracts(),
 		ReqFields:    AllReqFields(),

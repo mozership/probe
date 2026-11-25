@@ -18,7 +18,7 @@ func testBook() *Book {
 		"reference/actions-reference.md":              page("# Actions Reference\n"),
 		"reference/index.mdx":                         page("# Not a page\n"),
 		"reference/actions/http.md":                   page("# HTTP Action\n"),
-		"reference/actions/db.md":                     page("# DB Action\n"),
+		"reference/actions/dns.md":                    page("# DNS Action\n"),
 		"reference/actions/_meta.ts":                  page("export default {}\n"),
 		"guide/concepts/actions.md":                   page("# Actions\n"),
 		"guide/concepts/testing-and-assertions.md":    page("# Testing and Assertions\n"),
@@ -37,7 +37,7 @@ func TestTopics(t *testing.T) {
 		"Reference functions reference/built-in-functions.md Built-in Functions",
 		"Reference env reference/environment-variables.md Environment Variables",
 		"Reference actions reference/actions-reference.md Actions Reference",
-		"Actions db reference/actions/db.md DB Action",
+		"Actions dns reference/actions/dns.md DNS Action",
 		"Actions http reference/actions/http.md HTTP Action",
 		"Concepts concepts/actions guide/concepts/actions.md Actions",
 		"Concepts concepts/expressions guide/concepts/expressions-and-templates.md Expressions and Templates",
@@ -98,7 +98,7 @@ Reference:
   actions               Actions Reference
 
 Actions:
-  db                    DB Action
+  dns                   DNS Action
   http                  HTTP Action
 
 External actions, read from GitHub:

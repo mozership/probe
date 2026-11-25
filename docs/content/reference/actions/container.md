@@ -12,6 +12,7 @@ A workflow pins the action by a full commit SHA. The notes of each [release](htt
 name: Orders
 actions:
   container: github.com/mozership/probe-container@<commit SHA>
+  db: github.com/mozership/probe-db@<commit SHA>
 vars:
   pg_password: "{{PG_PASSWORD}}"
 jobs:

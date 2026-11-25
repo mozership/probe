@@ -2,13 +2,20 @@
 
 `db`アクションはMySQL、PostgreSQL、SQLiteデータベースでSQLクエリを実行し、包括的な結果処理とエラーレポートを提供します。
 
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-db](https://github.com/mozership/probe-db)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.42.0以降が必要です。v1.42.0より前はProbeに組み込まれていました。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide db`が表示し、各リリースのノートにもあります。
+
 ## 基本的な構文
 
-データベースのステップでは、接続文字列と実行する文を指定します。
+ワークフローでは40文字のコミットSHAでアクションを固定し、[`actions`](/ja/reference/yaml-configuration#actions)で一度だけ`db`という名前を付けます。ステップは`uses: db`と、`defaults`は`db:`と書けます。データベースのステップでは、接続文字列と実行する文を指定します。
 
 ```yaml
-steps:
-  - name: "Database Query"
+name: Users
+actions:
+  db: github.com/mozership/probe-db@<commit SHA>
+jobs:
+- name: users
+  steps:
+  - name: Database Query
     uses: db
     with:
       dsn: "mysql://user:password@localhost:3306/database"
@@ -16,6 +23,8 @@ steps:
       params: [true]
     test: res.code == 0 && res.rows_affected > 0
 ```
+
+以下の例では、ステップだけを示します。
 
 ## パラメータ
 
