@@ -2,6 +2,8 @@ package serve
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"maps"
 	"os"
@@ -158,9 +160,9 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
-// as the log then says. It returns what has the run once it is over, and
-// whether it started one. A run waiting for a worker when serve is stopped
-// is not run, and nothing is sent.
+// as the log then says. It returns what has the run once it is over, with
+// the items it gave handled, and whether it started one. A run waiting for
+// a worker when serve is stopped is not run, and nothing is sent.
 func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
 	if s.isStopping() {
 		return nil, false
@@ -172,20 +174,97 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
 	done := make(chan Run, 1)
 	s.wg.Go(func() {
 		defer s.busy[name].Store(false)
-		select {
-		case s.workers <- struct{}{}:
-		case <-s.stopping:
+		r, items, ok := s.runSource(name, w)
+		if !ok {
 			return
 		}
-		defer func() { <-s.workers }()
-		if s.isStopping() {
-			return
-		}
-		r := s.runOnce(name, w, nil)
-		s.logRun(r)
+		s.forEach(w.ForEach, r, items)
 		done <- r
 	})
 	return done, true
+}
+
+// runSource runs w, and returns the run with the items it gave, as its
+// for_each reads them, once the run is logged. A run that passed but gave
+// no list of items is logged as an error.
+func (s *Server) runSource(name string, w *Workflow) (Run, []map[string]any, bool) {
+	var items []map[string]any
+	r, ok := s.run(name, w, nil, func(r *Run) {
+		if w.ForEach == nil || r.Status != StatusPassed {
+			return
+		}
+		var err error
+		if items, err = readItems(r.ReportPath(), w.ForEach.Items); err != nil {
+			r.Status, r.Err = StatusError, err
+		}
+	})
+	return r, items, ok
+}
+
+// forEach handles each of items, the items r gave, as f says: at most
+// f.Concurrency at once, each by a run of f.Workflow and then of
+// f.OnSuccess or f.OnFailure, with the item as its vars. It returns once
+// each item started is handled; once serve is stopped, no item starts.
+func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) {
+	if f == nil || len(items) == 0 {
+		return
+	}
+	slots := make(chan struct{}, f.Concurrency)
+	var wg sync.WaitGroup
+	for i, item := range items {
+		select {
+		case slots <- struct{}{}:
+		case <-s.stopping:
+		}
+		if s.isStopping() {
+			break
+		}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			s.handle(f, r, i, item)
+		})
+	}
+	wg.Wait()
+}
+
+// handle runs f.Workflow for item, the item of index i that r gave, and
+// then f.OnSuccess or f.OnFailure as it passed or not.
+func (s *Server) handle(f *ForEach, from Run, i int, item map[string]any) {
+	tag := []any{"from", from.ID, "item", i}
+	r, ok := s.run(f.Workflow, s.config.Workflows[f.Workflow], item, nil, tag...)
+	if !ok {
+		return
+	}
+	next := f.OnFailure
+	if r.Status == StatusPassed {
+		next = f.OnSuccess
+	}
+	if next == "" {
+		return
+	}
+	s.run(next, s.config.Workflows[next], item, nil, append(tag, "for", r.ID)...)
+}
+
+// run runs w with vars once a worker is free, within its timeout, and logs
+// the run with tag, after check has had its say on it. It reports whether
+// the run started, which it does not once serve is stopped.
+func (s *Server) run(name string, w *Workflow, vars map[string]any, check func(*Run), tag ...any) (Run, bool) {
+	select {
+	case s.workers <- struct{}{}:
+	case <-s.stopping:
+		return Run{}, false
+	}
+	if s.isStopping() {
+		<-s.workers
+		return Run{}, false
+	}
+	r := s.runOnce(name, w, vars)
+	<-s.workers
+	if check != nil {
+		check(&r)
+	}
+	s.logRun(r, tag...)
+	return r, true
 }
 
 func (s *Server) isStopping() bool {
@@ -208,18 +287,53 @@ func (s *Server) runOnce(name string, w *Workflow, vars map[string]any) Run {
 	return s.runner.start(ctx, name, w, vars)
 }
 
-// logRun writes a line of the log for r. The report is told only when the
-// run wrote one, which a run ended before its jobs were over did not.
-func (s *Server) logRun(r Run) {
-	attrs := []any{
+// readItems reads the items of a run from its json report at path: the
+// output key, a list of objects.
+func readItems(path, key string) ([]map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("the items are not read: %w", err)
+	}
+	var report struct {
+		Outputs map[string]any `json:"outputs"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, fmt.Errorf("the items are not read: %s: %w", path, err)
+	}
+	v, ok := report.Outputs[key]
+	if !ok {
+		return nil, fmt.Errorf("the run gives no output %s, which for_each reads the items from", key)
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("output %s is to be a list of objects, the items, not %T", key, v)
+	}
+	items := make([]map[string]any, len(list))
+	for i, e := range list {
+		item, ok := e.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("item %d of output %s is to be an object, whose keys are the vars of its runs, not %T", i, key, e)
+		}
+		items[i] = item
+	}
+	return items, nil
+}
+
+// logRun writes a line of the log for r, with tag, which tells the item a
+// run was for. The report is told only when the run wrote one, which a run
+// ended before its jobs were over did not.
+func (s *Server) logRun(r Run, tag ...any) {
+	attrs := append([]any{
 		"workflow", r.Workflow,
 		"run", r.ID,
+	}, tag...)
+	attrs = append(attrs,
 		"status", r.Status,
 		"exit_status", r.ExitStatus,
 		"started_at", r.StartedAt,
 		"finished_at", r.FinishedAt,
 		"duration_ms", r.FinishedAt.Sub(r.StartedAt).Milliseconds(),
-	}
+	)
 	if _, err := os.Stat(r.ReportPath()); err == nil {
 		attrs = append(attrs, "report", r.ReportPath())
 	}

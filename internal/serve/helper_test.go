@@ -14,7 +14,7 @@ import (
 
 // The test binary stands in for probe when fakeEnv is set: it writes as its
 // json report what it was given, its arguments and its vars, then waits
-// fakeSleepEnv and exits with fakeExitEnv.
+// fakeSleepEnv and exits with fakeExitEnv, or with its var exit.
 const (
 	fakeEnv      = "PROBE_SERVE_TEST_FAKE"
 	fakeSleepEnv = "PROBE_SERVE_TEST_SLEEP"
@@ -22,6 +22,8 @@ const (
 	// fakeSpawnEnv has the fake start a process that outlives it unless
 	// its group is ended, and write its pid as child.
 	fakeSpawnEnv = "PROBE_SERVE_TEST_SPAWN"
+	// fakeOutputsEnv is JSON the fake writes as the outputs of its report.
+	fakeOutputsEnv = "PROBE_SERVE_TEST_OUTPUTS"
 )
 
 // fakeReport is what the fake probe writes as its report.
@@ -31,7 +33,8 @@ type fakeReport struct {
 	Env  []string          `json:"env"`
 	Dir  string            `json:"dir"`
 	// Child is the process the fake started, with fakeSpawnEnv.
-	Child int `json:"child"`
+	Child   int             `json:"child"`
+	Outputs json.RawMessage `json:"outputs,omitempty"`
 }
 
 func TestMain(m *testing.M) {
@@ -57,6 +60,9 @@ func fakeProbe() int {
 	}
 	dir, _ := os.Getwd()
 	fr := fakeReport{Args: os.Args[1:], Vars: text, Env: os.Environ(), Dir: dir}
+	if outputs := os.Getenv(fakeOutputsEnv); outputs != "" {
+		fr.Outputs = json.RawMessage(outputs)
+	}
 	if os.Getenv(fakeSpawnEnv) == "1" {
 		child := exec.Command("sleep", "60")
 		if child.Start() == nil {
@@ -70,6 +76,9 @@ func fakeProbe() int {
 		time.Sleep(d)
 	}
 	code, _ := strconv.Atoi(os.Getenv(fakeExitEnv))
+	if exit, ok := text["exit"]; ok {
+		code, _ = strconv.Atoi(exit)
+	}
 	return code
 }
 

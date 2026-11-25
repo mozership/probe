@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -341,5 +342,157 @@ func TestServer_LoopBacksOffFailedRuns(t *testing.T) {
 		if r["status"] != StatusFailed {
 			t.Errorf("run = %v", r)
 		}
+	}
+}
+
+// forEachServer returns a server whose workflow source gives items, each
+// handled by verify and then by ack or dlq, and starts it.
+func forEachServer(t *testing.T, outputs string, concurrency int) (*logBuffer, func()) {
+	t.Helper()
+	exe := fakeProbeExe(t, 100*time.Millisecond, 0)
+	t.Setenv(fakeOutputsEnv, outputs)
+	s, log := newTestServer(t, exe, map[string]*Workflow{
+		"source": {Files: []string{"/source.yml"}, Loop: true, Interval: Duration{Duration: time.Hour},
+			ForEach: &ForEach{Items: "messages", Workflow: "verify", Concurrency: concurrency, OnSuccess: "ack", OnFailure: "dlq"}},
+		"verify": {Files: []string{"/verify.yml"}, Vars: map[string]any{"queue": "orders"}},
+		"ack":    {Files: []string{"/ack.yml"}},
+		"dlq":    {Files: []string{"/dlq.yml"}},
+	}, 10*time.Second)
+	s.config.Workers = 1
+	s.workers = make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.Serve(ctx)
+		close(done)
+	}()
+	return log, func() {
+		cancel()
+		<-done
+	}
+}
+
+func byWorkflow(runs []map[string]any) map[string][]map[string]any {
+	out := map[string][]map[string]any{}
+	for _, r := range runs {
+		w := r["workflow"].(string)
+		out[w] = append(out[w], r)
+	}
+	return out
+}
+
+// Each item a run gives is handled by a run of the workflow of for_each,
+// with the item as its vars over those of the serve file, and then by a run
+// of on_success or on_failure as it passed or not, each logged with the run
+// and the item it came from. One worker does: a run holds it only while it
+// goes.
+func TestServer_ForEach(t *testing.T) {
+	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {"id": "b", "exit": 1}, {"id": "c", "body": {"n": 1}}]}`, 2)
+	eventually(t, "the items to be handled", func() bool {
+		w := byWorkflow(log.runs(t))
+		return len(w["ack"]) == 2 && len(w["dlq"]) == 1
+	})
+	stop()
+
+	w := byWorkflow(log.runs(t))
+	if len(w["source"]) != 1 || len(w["verify"]) != 3 {
+		t.Fatalf("runs = %v", w)
+	}
+	source := w["source"][0]["run"]
+	verified := map[float64]map[string]any{}
+	for _, r := range w["verify"] {
+		if r["from"] != source {
+			t.Errorf("verify = %v, want it from %s", r, source)
+		}
+		verified[r["item"].(float64)] = r
+	}
+	if verified[1]["status"] != StatusFailed || verified[0]["status"] != StatusPassed {
+		t.Errorf("verify = %v", verified)
+	}
+	for _, r := range append(w["ack"], w["dlq"]...) {
+		item := r["item"].(float64)
+		if r["from"] != source || r["for"] != verified[item]["run"] {
+			t.Errorf("%s = %v, want it for the run of item %v", r["workflow"], r, item)
+		}
+	}
+	if w["dlq"][0]["item"] != float64(1) {
+		t.Errorf("dlq = %v, want item 1", w["dlq"][0])
+	}
+
+	fr := fakeReportAt(t, verified[2]["report"].(string))
+	if fr.Vars["id"] != "c" || fr.Vars["queue"] != "orders" || fr.Vars["body"] != "map[n:1]" {
+		t.Errorf("vars of item 2 = %v", fr.Vars)
+	}
+}
+
+// A run is over once the items it gave are, so a loop takes no more than it
+// handles.
+func TestServer_ForEachHoldsTheSource(t *testing.T) {
+	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {"id": "b"}]}`, 1)
+	eventually(t, "the items to be handled", func() bool { return len(byWorkflow(log.runs(t))["ack"]) == 2 })
+	stop()
+	w := byWorkflow(log.runs(t))
+	if len(w["source"]) != 1 {
+		t.Errorf("source ran %d times", len(w["source"]))
+	}
+	// With a concurrency of 1, an item starts once the one before it is
+	// handled.
+	if w["verify"][1]["started_at"].(string) < w["ack"][0]["finished_at"].(string) {
+		t.Errorf("item 1 started before item 0 was acknowledged: %v", w)
+	}
+}
+
+// A run that passed but gave no list of objects is logged as an error, and
+// gives no items.
+func TestServer_ForEachWithoutItems(t *testing.T) {
+	tests := []struct{ outputs, want string }{
+		{`{"other": []}`, "the run gives no output messages"},
+		{`{"messages": "a"}`, "output messages is to be a list of objects, the items, not string"},
+		{`{"messages": ["a"]}`, "item 0 of output messages is to be an object"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			log, stop := forEachServer(t, tt.outputs, 1)
+			eventually(t, "the source to run", func() bool { return len(log.runs(t)) > 0 })
+			stop()
+			runs := log.runs(t)
+			if len(runs) != 1 || runs[0]["status"] != StatusError || !strings.Contains(runs[0]["error"].(string), tt.want) {
+				t.Errorf("runs = %v", runs)
+			}
+		})
+	}
+}
+
+// An empty list is no items, and a passed run.
+func TestServer_ForEachOfNoItems(t *testing.T) {
+	log, stop := forEachServer(t, `{"messages": []}`, 1)
+	eventually(t, "the source to run", func() bool { return len(log.runs(t)) > 0 })
+	stop()
+	if runs := log.runs(t); len(runs) != 1 || runs[0]["status"] != StatusPassed {
+		t.Errorf("runs = %v", runs)
+	}
+}
+
+func fakeReportAt(t *testing.T, path string) fakeReport {
+	t.Helper()
+	return readFakeReport(t, Run{Dir: filepath.Dir(path)})
+}
+
+// Once serve is stopped, no item starts and nothing more is run for one
+// handled: those left are given again by the queue.
+func TestServer_ForEachStopped(t *testing.T) {
+	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}`, 1)
+	eventually(t, "the first item to start", func() bool {
+		for _, l := range log.lines(t) {
+			if l["msg"] == "run" && l["workflow"] == "source" {
+				return true
+			}
+		}
+		return false
+	})
+	stop()
+	w := byWorkflow(log.runs(t))
+	if len(w["verify"]) > 1 || len(w["ack"]) != 0 {
+		t.Errorf("runs after the stop = %v", w)
 	}
 }
