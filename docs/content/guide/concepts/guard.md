@@ -38,7 +38,7 @@ description: Say hello over HTTP
 guard: [read-only, allow-host]
 runs:
   using: binary
-  url: https://github.com/<owner>/probe-greet/releases/download/v0.1.0/probe-greet_{os}_{arch}
+  url: https://github.com/<owner>/probe-greet/releases/download/<tag>/probe-greet_{os}_{arch}
   checksums:
     linux_amd64: <SHA-256 of probe-greet_linux_amd64>
 ```

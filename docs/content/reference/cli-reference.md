@@ -695,9 +695,11 @@ It reads `action-file` and prints it with two changes:
 
 **Example:**
 ```bash
-probe manifest v0.2.0 dist/checksums.txt > "$RUNNER_TEMP/action.yml"
+probe manifest "$GITHUB_REF_NAME" dist/checksums.txt > "$RUNNER_TEMP/action.yml"
 cp "$RUNNER_TEMP/action.yml" action.yml
 ```
+
+In a GitHub Actions run started by a tag, `GITHUB_REF_NAME` is that tag.
 
 Do not redirect the output straight to the file it reads: the shell empties `action.yml` before Probe reads it.
 
