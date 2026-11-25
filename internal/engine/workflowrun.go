@@ -177,7 +177,7 @@ func (r *workflowRun) execute() error {
 	}
 
 	reporter.Finish(ctx.Outcome)
-	r.given = r.evalOutputs(vars)
+	r.given = r.evalOutputs(vars, ctx.Outcome)
 	r.finishedAt = time.Now()
 	r.outcome = ctx.Outcome
 	r.exitStatus = runExitCode(ctx.Outcome, r.failed.Load())
@@ -185,13 +185,35 @@ func (r *workflowRun) execute() error {
 }
 
 // evalOutputs evaluates the outputs of the workflow once every job is over,
-// with vars, and warns of each that is not given as it cannot be evaluated.
-func (r *workflowRun) evalOutputs(vars map[string]any) map[string]any {
+// with vars, and warns of each that is not given as it cannot be evaluated,
+// unless a job of the workflow did not run to its end, as rs tells, which
+// may be why: what the output reads was then not published.
+func (r *workflowRun) evalOutputs(vars map[string]any, rs *outcome.Run) map[string]any {
 	given, errs := evalWorkflowOutputs(r.w.Outputs, WorkflowOutputEnv{Vars: vars, Outputs: r.outputs.GetAll()})
+	if r.someJobLeftOut(rs) {
+		return given
+	}
 	for _, err := range errs {
 		r.printer().LogWarn("%v", err)
 	}
 	return given
+}
+
+// someJobLeftOut reports whether a job of the workflow did not run to its
+// end: one the run was not narrowed to, or one that failed or was skipped.
+func (r *workflowRun) someJobLeftOut(rs *outcome.Run) bool {
+	if r.selection != nil || r.failed.Load() {
+		return true
+	}
+	for _, jr := range rs.Jobs {
+		jr.Mu.Lock()
+		skipped := jr.Status == outcome.StatusSkipped
+		jr.Mu.Unlock()
+		if skipped {
+			return true
+		}
+	}
+	return false
 }
 
 // printer returns the printer of the workflow, which the run prints with.
@@ -365,12 +387,15 @@ func (r *workflowRun) writeReports() error {
 
 	rep := buildReport(r.w.Name, r.w.Description, r.outcome, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
-	rep.Outputs = jsonSafeMap(r.given)
+	rep.Outputs = r.given
 	if r.selection != nil {
 		rep.Selection = r.selection.report()
 	}
 	rep.Compare(r.config.Baseline)
 	rep.Mask(r.printer().Masker())
+	// Made safe for JSON once masked, so that a value turned into its text
+	// is not one the masker could no longer see the secrets in.
+	rep.Outputs = jsonSafeMap(rep.Outputs)
 
 	var errs []error
 	for _, t := range r.config.Reports {

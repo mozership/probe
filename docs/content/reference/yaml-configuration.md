@@ -270,10 +270,11 @@ outputs:
   cursor: outputs.receive?.next ?? vars.cursor
 ```
 
+- They are evaluated however the run went: a step publishes its outputs whether its test passed or not, and the exit status tells how the run ended.
 - An output that comes to nil is not given, such as one read with `?.` from a step that did not publish it.
-- An output that cannot be evaluated, such as one that reads a field of a step that did not publish, is not given either, and a warning says why. Neither changes how the run ends.
+- An output that cannot be evaluated, such as one that reads a field of a step that did not publish, is not given either. A warning says why, unless a job did not run to its end, as when it failed or was skipped or the run was narrowed with [`--job`](/reference/cli-reference#--job), which may be why. Neither changes how the run ends.
 - An output without an expression, or with one that does not parse, stops the workflow before its first job, with exit status 2.
-- They are written to the `json` report as `outputs`, with the secrets in them masked, as in the rest of the report. See [`--report`](/reference/cli-reference#--report).
+- They are written to the `json` report as `outputs`. The values of the [`secrets`](#secrets) and the passwords of URLs in them are masked, as in the rest of the report, but no value is hidden by the name it is given, such as `password`. A value JSON cannot hold, such as NaN, is written as its text. See [`--report`](/reference/cli-reference#--report).
 
 The outputs of the steps stay as they are: only those named here leave the run.
 

@@ -846,6 +846,44 @@ func (m *Masker) Map(data map[string]any) map[string]any {
 	return out
 }
 
+// Data returns v, a value a workflow gives on, with secret values and the
+// credentials of URLs hidden in every string at any depth, keys too. Unlike
+// Map, it hides nothing by the name of a key: the keys are names the
+// workflow chose, not those of credential headers. The original is left
+// untouched.
+func (m *Masker) Data(v any) any {
+	switch val := v.(type) {
+	case string:
+		return m.leaf(val)
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, e := range val {
+			out[m.String(k)] = m.Data(e)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]any, len(val))
+		for k, e := range val {
+			out[m.String(k)] = m.leaf(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, e := range val {
+			out[i] = m.Data(e)
+		}
+		return out
+	case []string:
+		out := make([]any, len(val))
+		for i, e := range val {
+			out[i] = m.leaf(e)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
 // redacted returns what a credential v is shown as. A map, such as the
 // cookies of a request, keeps its keys, which name the credentials and help
 // to tell what was sent, and has its values hidden.

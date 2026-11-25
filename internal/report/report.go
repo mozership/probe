@@ -350,7 +350,9 @@ func (c *Count) add(status string) {
 func (r *Report) Mask(m *mask.Masker) {
 	r.Name = m.String(r.Name)
 	r.Description = m.String(r.Description)
-	r.Outputs = m.Map(r.Outputs)
+	if r.Outputs != nil {
+		r.Outputs = m.Data(r.Outputs).(map[string]any)
+	}
 	for i := range r.Jobs {
 		job := &r.Jobs[i]
 		job.Name = m.String(job.Name)
