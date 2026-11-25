@@ -144,7 +144,7 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		if done, ok := s.trigger(name, w); ok {
 			select {
 			case o := <-done:
-				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) || (len(w.State) > 0 && o.handled < o.items) {
+				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) || (len(w.State) > 0 && !o.stateSaved) {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -170,6 +170,8 @@ type outcome struct {
 	run            Run
 	outputs        map[string]any
 	items, handled int
+	// stateSaved is whether the state of the run was saved.
+	stateSaved bool
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
@@ -194,7 +196,7 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 		}
 		o := outcome{run: r, outputs: outputs, items: len(items), handled: s.forEach(w.ForEach, r, items)}
 		if len(w.State) > 0 && r.ID != "" {
-			s.keepState(name, w, o)
+			o.stateSaved = s.keepState(name, w, o)
 		}
 		// No longer busy before the loop is told, so that the run it starts
 		// next is not skipped.
@@ -240,20 +242,19 @@ func (s *Server) statePath(name string) string {
 
 // keepState saves the state of w that the run of o gave, once the run
 // passed and every item it gave was handled, over what the run did not
-// give. Otherwise the state is left as it was, for the next run to start
-// from it and to give the items again.
-func (s *Server) keepState(name string, w *Workflow, o outcome) {
+// give, and reports whether it did. Otherwise the state is left as it was,
+// for the next run to start from it and to give the items again.
+func (s *Server) keepState(name string, w *Workflow, o outcome) bool {
 	attrs := []any{"workflow", name, "run", o.run.ID}
-	kept := func(reason string, more ...any) {
-		s.log.Info("state kept", append(append(attrs, "reason", reason), more...)...)
+	kept := func(level slog.Level, reason string, more ...any) bool {
+		s.log.Log(context.Background(), level, "state kept", append(append(attrs, "reason", reason), more...)...)
+		return false
 	}
 	switch {
 	case o.run.Status != StatusPassed:
-		kept("the run did not pass")
-		return
+		return kept(slog.LevelInfo, "the run did not pass")
 	case o.handled < o.items:
-		kept("not every item of the run was handled", "items", o.items, "handled", o.handled)
-		return
+		return kept(slog.LevelInfo, "not every item of the run was handled", "items", o.items, "handled", o.handled)
 	}
 	var given []string
 	for _, key := range w.State {
@@ -262,20 +263,17 @@ func (s *Server) keepState(name string, w *Workflow, o outcome) {
 			continue
 		}
 		if masked(v) {
-			kept("an output of the state holds a secret or a credential, which the report masks", "output", key)
-			return
+			return kept(slog.LevelError, "an output of the state holds a secret or a credential, which the report masks", "output", key)
 		}
 		given = append(given, key)
 	}
 	if len(given) == 0 {
-		kept("the run gave none of the outputs of the state")
-		return
+		return kept(slog.LevelWarn, "the run gave none of the outputs of the state", "state", w.State)
 	}
 	path := s.statePath(name)
 	state, err := readState(path, w.State)
 	if err != nil {
-		s.log.Error("state kept", append(attrs, "reason", "the state cannot be read", "error", err.Error())...)
-		return
+		return kept(slog.LevelError, "the state cannot be read", "error", err.Error())
 	}
 	if state == nil {
 		state = map[string]any{}
@@ -284,10 +282,10 @@ func (s *Server) keepState(name string, w *Workflow, o outcome) {
 		state[key] = o.outputs[key]
 	}
 	if err := writeState(path, state); err != nil {
-		s.log.Error("state kept", append(attrs, "reason", "the state cannot be saved", "error", err.Error())...)
-		return
+		return kept(slog.LevelError, "the state cannot be saved", "error", err.Error())
 	}
 	s.log.Info("state saved", append(attrs, "state", given)...)
+	return true
 }
 
 // readState reads the state kept in the file at path, of the outputs names
@@ -316,7 +314,8 @@ func readState(path string, names []string) (map[string]any, error) {
 
 // writeState writes state to the file at path, synced before it replaces
 // the one there, so that neither a stop as it is written nor a power cut
-// after leaves anything but the state before or this one.
+// after leaves anything but the state before or this one. The file keeps
+// the mode it has; a new one is readable as the reports beside it are.
 func writeState(path string, state map[string]any) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -331,7 +330,14 @@ func writeState(path string, state map[string]any) error {
 		return err
 	}
 	tmp := f.Name()
-	_, err = f.Write(append(data, '\n'))
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	err = f.Chmod(mode)
+	if err == nil {
+		_, err = f.Write(append(data, '\n'))
+	}
 	if err == nil {
 		err = f.Sync()
 	}

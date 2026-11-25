@@ -699,6 +699,27 @@ func TestServer_StateKept(t *testing.T) {
 	}
 }
 
+// The state file keeps the mode it has, and a new one is readable as the
+// reports are.
+func TestWriteState_Mode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "w", "state.json")
+	if err := writeState(path, map[string]any{"cursor": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o644 {
+		t.Errorf("new state = %v, %v; want 0644", fi.Mode(), err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeState(path, map[string]any{"cursor": 2}); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("state = %v, %v; want the 0600 it had", fi.Mode(), err)
+	}
+}
+
 // A large integer, as the ID a cursor holds, is saved and given as it is
 // written, not rounded.
 func TestServer_StateKeepsLargeIntegers(t *testing.T) {
@@ -730,10 +751,21 @@ func TestServer_KeepStateFromOutputsRead(t *testing.T) {
 	}
 }
 
-// A source with a state backs off while not every item of its runs is
-// handled, as each run gives the same items again until they are.
-func TestServer_StateBacksOffItemsNotHandled(t *testing.T) {
-	s, log, _ := stateServer(t, `{"cursor": 8, "messages": [{"id": "a"}, {"": "skipped"}]}`)
+// A source with a state backs off while it is not saved: as not every item
+// of its runs is handled, and each run gives the same items again until
+// they are, or as the run gives none of its state, or gives it masked.
+func TestServer_StateBacksOffWhileNotSaved(t *testing.T) {
+	for _, outputs := range []string{
+		`{"cursor": 8, "messages": [{"id": "a"}, {"": "skipped"}]}`,
+		`{"messages": [{"id": "a"}]}`,
+		`{"cursor": "<secret:K>", "messages": [{"id": "a"}]}`,
+	} {
+		t.Run(outputs, func(t *testing.T) { testStateBacksOff(t, outputs) })
+	}
+}
+
+func testStateBacksOff(t *testing.T, outputs string) {
+	s, log, _ := stateServer(t, outputs)
 	serveUntil(t, s, "two runs of the source", func() bool { return len(sourceRuns(t, log)) >= 2 })
 	w := byWorkflow(log.runs(t))
 	second := at(t, w["source"][1], "started_at")
