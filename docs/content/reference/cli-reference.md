@@ -175,7 +175,7 @@ A format without a path is written to its default file in the current directory.
 
 | Format | Default file | Contents |
 |---|---|---|
-| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its `id`, its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
+| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its `id`, its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response; and the [`outputs`](/reference/yaml-configuration#outputs) of the workflow, when it has any |
 | `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step, per `repeat.test` and per `repeat.baseline_test`, for CI systems that read test results |
 | `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, a table of how they changed from the [`--baseline`](#--baseline), and a section per failed step, per failed `repeat.test` and per failed `repeat.baseline_test` |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | The `markdown` page, appended to the GitHub Actions job summary |

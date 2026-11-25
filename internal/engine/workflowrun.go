@@ -44,6 +44,9 @@ type workflowRun struct {
 	// concurrently, so it is atomic; exitStatus is derived from it once
 	// every job is done.
 	failed atomic.Bool
+	// given are the values of the outputs of the workflow, by name, once
+	// every job is over.
+	given map[string]any
 
 	// What execute leaves for the report files.
 	outcome    *outcome.Run
@@ -174,10 +177,21 @@ func (r *workflowRun) execute() error {
 	}
 
 	reporter.Finish(ctx.Outcome)
+	r.given = r.evalOutputs(vars)
 	r.finishedAt = time.Now()
 	r.outcome = ctx.Outcome
 	r.exitStatus = runExitCode(ctx.Outcome, r.failed.Load())
 	return nil
+}
+
+// evalOutputs evaluates the outputs of the workflow once every job is over,
+// with vars, and warns of each that is not given as it cannot be evaluated.
+func (r *workflowRun) evalOutputs(vars map[string]any) map[string]any {
+	given, errs := evalWorkflowOutputs(r.w.Outputs, WorkflowOutputEnv{Vars: vars, Outputs: r.outputs.GetAll()})
+	for _, err := range errs {
+		r.printer().LogWarn("%v", err)
+	}
+	return given
 }
 
 // printer returns the printer of the workflow, which the run prints with.
@@ -351,6 +365,7 @@ func (r *workflowRun) writeReports() error {
 
 	rep := buildReport(r.w.Name, r.w.Description, r.outcome, r.jobIDs(), r.startedAt, r.finishedAt, r.printer().Masker())
 	rep.RunID = r.id
+	rep.Outputs = jsonSafeMap(r.given)
 	if r.selection != nil {
 		rep.Selection = r.selection.report()
 	}

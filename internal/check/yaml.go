@@ -76,7 +76,7 @@ func join(path, key string) string {
 
 func (c *checker) walkWorkflow(body ast.Node) {
 	c.keys(body, "", "", workflowKeys, func(key string, value ast.Node) {
-		if key == "vars" || key == "actions" || key == "defaults" {
+		if key == "vars" || key == "actions" || key == "defaults" || key == "outputs" {
 			c.noteLines(key, value)
 		}
 		if key != "jobs" {

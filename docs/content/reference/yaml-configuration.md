@@ -18,6 +18,8 @@ defaults:                     # Optional: default `with` values per action, for 
     url: string
 actions:                      # Optional: names for external actions
   name: string
+outputs:                      # Optional: values a run gives whoever ran it
+  name: expression
 jobs:                         # Required: a list of jobs
   - name: string              # Required: job name
     id: string                # Optional: job id, used by needs
@@ -236,6 +238,44 @@ The commit an action is pinned to is written once, so a newer release is a chang
 Probe replaces each name by its action as it loads the workflow, so everything else sees the action in full. In particular, `--allow-action` takes the action, not the name: a workflow cannot choose what a name the person running Probe has allowed stands for.
 
 A job file run by the [embedded](/reference/actions/embedded) action is read by the names of the workflow that embeds it, so its steps and its `defaults` can use them too. See [Named External Actions](/reference/actions/embedded#named-external-actions).
+
+### `outputs`
+
+**Type:** Object of expressions (optional)  
+**Description:** Values a run gives whoever ran it, by name, such as a program that runs the workflow and reads its report.
+
+Each value is an expression, as the [`outputs`](#outputs-1) of a step are, and is evaluated once every job is over. It reads `vars`, the vars of the run, and `outputs`, what the steps of every job published, and nothing else.
+
+```yaml
+name: Messages
+vars:
+  api_url: "{{API_URL}}"
+  cursor: "0"
+
+jobs:
+  - name: Receive
+    steps:
+      - id: receive
+        uses: http
+        with:
+          url: "{{vars.api_url}}"
+          get: /messages?after={{vars.cursor}}
+        test: res.code == 200
+        outputs:
+          messages: res.body.messages
+          next: res.body.next
+
+outputs:
+  messages: outputs.receive.messages
+  cursor: outputs.receive?.next ?? vars.cursor
+```
+
+- An output that comes to nil is not given, such as one read with `?.` from a step that did not publish it.
+- An output that cannot be evaluated, such as one that reads a field of a step that did not publish, is not given either, and a warning says why. Neither changes how the run ends.
+- An output without an expression, or with one that does not parse, stops the workflow before its first job, with exit status 2.
+- They are written to the `json` report as `outputs`, with the secrets in them masked, as in the rest of the report. See [`--report`](/reference/cli-reference#--report).
+
+The outputs of the steps stay as they are: only those named here leave the run.
 
 ## Jobs
 
@@ -793,7 +833,7 @@ Inside a step, an expression sees exactly these names:
 | `notes` | Array | What the actions of earlier steps left for people; see [Notes](#notes) |
 | `job` | Object | The run of the job so far: `job.failed` is whether a step before this one failed; see [After a Failure](#after-a-failure) |
 
-There is no `env`, `jobs` or `steps` in this context.
+There is no `env`, `jobs` or `steps` in this context. The [`outputs`](#outputs) of the workflow read only `vars` and `outputs`.
 
 ### After a Failure
 
@@ -983,8 +1023,9 @@ See [Built-in Functions](/reference/built-in-functions) for what can be called i
 - A name under `actions` must not be that of an action of Probe, and must stand for an external action pinned to a commit or at a local path.
 - A job's `needs` must refer to ids that exist, and the dependency graph must be acyclic.
 - `repeat.count` and `repeat.warmup` must be zero or greater, and `retry.max_attempts` at least 1.
+- Every output of the workflow needs an expression.
 
-`probe check` reports these without running the workflow, together with keys a workflow does not take, expressions that do not parse and outputs read before they are published. See the [CLI Reference](/reference/cli-reference#check).
+`probe check` reports these without running the workflow, together with keys a workflow does not take, expressions that do not parse, outputs read before they are published and outputs of the workflow that read what no step publishes. See the [CLI Reference](/reference/cli-reference#check).
 
 ## File Merging
 

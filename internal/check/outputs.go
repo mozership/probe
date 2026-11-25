@@ -53,26 +53,51 @@ func (c *checker) checkOutputs() {
 		}
 		// outputs.auth.token also reads outputs.auth, which is not reported
 		// on its own.
-		deeper := map[string]bool{}
-		for _, chain := range chains {
-			if len(chain) > 1 {
-				deeper[chain[0]] = true
-			}
-		}
-		seen := map[string]bool{}
-		for _, chain := range chains {
-			key := strings.Join(chain[:min(2, len(chain))], ".")
-			if seen[key] || (len(chain) == 1 && deeper[chain[0]]) {
-				continue
-			}
-			seen[key] = true
+		for _, chain := range outputChains(chains) {
 			msg, severity := c.outputRead(chain, byID, byKey, needs, e.job, e.step, e.late)
 			if msg != "" {
-				c.add(severity, c.line(e.path), e.where, "%s: outputs.%s %s", e.field, key, msg)
+				c.add(severity, c.line(e.path), e.where, "%s: outputs.%s %s", e.field, strings.Join(chain, "."), msg)
 			}
 		}
 	})
+	// The outputs of the workflow are read once every job is over, so a
+	// step of any job publishes before them.
+	for _, name := range slices.Sorted(maps.Keys(c.wf.Outputs)) {
+		path := "outputs." + name
+		for _, chain := range outputChains(expr.Reads(c.wf.Outputs[name], "outputs")) {
+			if len(byID[chain[0]]) == 0 {
+				flat[chain[0]] = true
+			}
+			if _, msg := publishersOf(chain, byID, byKey); msg != "" {
+				c.add(SeverityError, c.line(path), "", "%s: outputs.%s %s", path, strings.Join(chain, "."), msg)
+			}
+		}
+	}
 	c.checkOutputNames(byID, byKey, flat, needs)
+}
+
+// outputChains returns what chains read from outputs, each as a name, or as
+// a step's id and a name, once, in the order they are read. A step's id
+// read alone, where a name under it is read too, is left out.
+func outputChains(chains [][]string) [][]string {
+	deeper := map[string]bool{}
+	for _, chain := range chains {
+		if len(chain) > 1 {
+			deeper[chain[0]] = true
+		}
+	}
+	var out [][]string
+	seen := map[string]bool{}
+	for _, chain := range chains {
+		chain = chain[:min(2, len(chain))]
+		key := strings.Join(chain, "\x00")
+		if seen[key] || (len(chain) == 1 && deeper[chain[0]]) {
+			continue
+		}
+		seen[key] = true
+		out = append(out, chain)
+	}
+	return out
 }
 
 // checkOutputNames warns of an output name that more than one step
@@ -132,32 +157,38 @@ func publishedBefore(p publisher, pubs []publisher, needs []map[int]bool) (publi
 // outputRead returns what is wrong with reading chain from outputs at job i
 // and step j, and how bad it is; an empty message when nothing is.
 func (c *checker) outputRead(chain []string, byID, byKey map[string][]publisher, needs []map[int]bool, i, j int, late bool) (string, string) {
-	if pubs := byID[chain[0]]; len(pubs) > 0 {
-		if len(chain) > 1 {
-			var with []publisher
-			var keys []string
-			for _, p := range pubs {
-				if slices.Contains(p.keys, chain[1]) {
-					with = append(with, p)
-				}
-				keys = append(keys, p.keys...)
-			}
-			if len(with) == 0 {
-				slices.Sort(keys)
-				return fmt.Sprintf("is not published: step %q publishes %s", chain[0], strings.Join(slices.Compact(keys), ", ")), SeverityError
-			}
-			pubs = with
-		}
-		return c.ordered(pubs, needs, i, j, late)
-	}
-
-	pubs := byKey[chain[0]]
-	if len(pubs) == 0 {
-		msg := "is not published by any step"
-		msg += suggest.Hint(chain[0], publishedNames(byID, byKey))
+	pubs, msg := publishersOf(chain, byID, byKey)
+	if msg != "" {
 		return msg, SeverityError
 	}
 	return c.ordered(pubs, needs, i, j, late)
+}
+
+// publishersOf returns the steps that publish what chain reads from
+// outputs, or why none does.
+func publishersOf(chain []string, byID, byKey map[string][]publisher) ([]publisher, string) {
+	if pubs := byID[chain[0]]; len(pubs) > 0 {
+		if len(chain) == 1 {
+			return pubs, ""
+		}
+		var with []publisher
+		var keys []string
+		for _, p := range pubs {
+			if slices.Contains(p.keys, chain[1]) {
+				with = append(with, p)
+			}
+			keys = append(keys, p.keys...)
+		}
+		if len(with) == 0 {
+			slices.Sort(keys)
+			return nil, fmt.Sprintf("is not published: step %q publishes %s", chain[0], strings.Join(slices.Compact(keys), ", "))
+		}
+		return with, ""
+	}
+	if pubs := byKey[chain[0]]; len(pubs) > 0 {
+		return pubs, ""
+	}
+	return nil, "is not published by any step" + suggest.Hint(chain[0], publishedNames(byID, byKey))
 }
 
 // ordered returns what is wrong with reading what pubs publish at job i and
