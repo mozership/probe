@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -66,15 +67,28 @@ func (r Run) OutputPath() string {
 	return filepath.Join(r.Dir, "output.log")
 }
 
-// runner starts the runs of workflows as processes of probe.
+// killDelay is how long a run sent SIGTERM, as it timed out or serve is
+// stopped, has to stop its actions before it is killed.
+const killDelay = 10 * time.Second
+
+// runner starts the runs of workflows as processes of probe, each the
+// leader of a process group of its own, so that what its actions start is
+// stopped with it, and a signal to the terminal or the group of serve does
+// not reach it.
 type runner struct {
 	// exe is the probe the runs are processes of.
 	exe     string
 	results string
-	// grace is how long a run sent SIGTERM has to stop before it is
-	// killed.
-	grace time.Duration
+	// dir is the directory the runs run in, that of the serve file.
+	dir   string
 	count atomic.Uint64
+
+	mu sync.Mutex
+	// active are the process groups of the runs going, by the directory of
+	// each run.
+	active map[string]int
+	// killing is set once the runs are to be killed at once.
+	killing bool
 }
 
 // start runs w, named name, with vars, and returns how the run went once it
@@ -106,13 +120,19 @@ func (rn *runner) exec(ctx context.Context, w *Workflow, vars map[string]any, r 
 	defer func() { _ = out.Close() }()
 
 	cmd := exec.CommandContext(ctx, rn.exe, args(w, r.ReportPath())...)
+	cmd.Dir = rn.dir
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	cmd.Env = childEnv(os.Environ())
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = rn.grace
-	err = cmd.Run()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return rn.signal(cmd.Process.Pid, syscall.SIGTERM) }
+	cmd.WaitDelay = killDelay
+	if err := rn.track(r.Dir, cmd); err != nil {
+		return err
+	}
+	err = cmd.Wait()
+	rn.untrack(r.Dir, cmd.Process.Pid)
 	if cmd.ProcessState != nil {
 		r.ExitStatus = cmd.ProcessState.ExitCode()
 	}
@@ -121,6 +141,62 @@ func (rn *runner) exec(ctx context.Context, w *Workflow, vars map[string]any, r 
 		return nil
 	}
 	return err
+}
+
+// track starts cmd and records its group as that of the run in dir. A run
+// started once the runs are being killed is killed as it starts.
+func (rn *runner) track(dir string, cmd *exec.Cmd) error {
+	rn.mu.Lock()
+	defer rn.mu.Unlock()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if rn.active == nil {
+		rn.active = map[string]int{}
+	}
+	rn.active[dir] = cmd.Process.Pid
+	if rn.killing {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	return nil
+}
+
+// untrack forgets the run in dir, and kills what is left of its group, such
+// as an action its probe left behind as it was ended by a signal.
+func (rn *runner) untrack(dir string, pgid int) {
+	rn.mu.Lock()
+	delete(rn.active, dir)
+	rn.mu.Unlock()
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+}
+
+// signal sends sig to the group of the run whose probe is pid, or SIGKILL
+// once the runs are being killed.
+func (rn *runner) signal(pid int, sig syscall.Signal) error {
+	rn.mu.Lock()
+	if rn.killing {
+		sig = syscall.SIGKILL
+	}
+	rn.mu.Unlock()
+	return syscall.Kill(-pid, sig)
+}
+
+// killAll kills the runs going, and those that start from now on.
+func (rn *runner) killAll() {
+	rn.mu.Lock()
+	defer rn.mu.Unlock()
+	rn.killing = true
+	for _, pgid := range rn.active {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	}
+}
+
+// running reports whether the run in dir is going.
+func (rn *runner) running(dir string) bool {
+	rn.mu.Lock()
+	defer rn.mu.Unlock()
+	_, ok := rn.active[dir]
+	return ok
 }
 
 // args returns the arguments of the probe that runs w and writes its json
@@ -154,13 +230,14 @@ func varsJSON(own, given map[string]any) ([]byte, error) {
 }
 
 // childEnv returns env without the variables that would change where a run
-// writes its reports or how it prints, which serve decides.
+// writes its reports or how it prints, which serve decides: output.log is
+// not a terminal, whatever serve was started from.
 func childEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		name, _, _ := strings.Cut(kv, "=")
 		switch name {
-		case "PROBE_REPORT", "PROBE_BASELINE", "PROBE_OUTPUT":
+		case "PROBE_REPORT", "PROBE_BASELINE", "PROBE_OUTPUT", "PROBE_TTY":
 			continue
 		}
 		out = append(out, kv)

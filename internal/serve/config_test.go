@@ -106,6 +106,7 @@ func TestLoad_Refuses(t *testing.T) {
 		{"a bad schedule", "workflows:\n  w:\n    files: [w.yml]\n    schedule: '61 * * * *'\n", "schedule: minute of"},
 		{"negative workers", "workers: -1\nworkflows:\n  w:\n    files: [w.yml]\n", "workers must be 1 or more"},
 		{"a bad duration", "workflows:\n  w:\n    files: [w.yml]\n    timeout: soon\n", "soon: use a duration"},
+		{"a schedule that never comes", "workflows:\n  w:\n    files: [w.yml]\n    schedule: '0 0 31 2 *'\n", "matches no time"},
 		{"a negative duration", "workflows:\n  w:\n    files: [w.yml]\n    timeout: -1s\n", "-1s: a duration cannot be below zero"},
 	}
 	for _, tt := range tests {
@@ -119,5 +120,18 @@ func TestLoad_Refuses(t *testing.T) {
 				t.Errorf("Load = %v, want the file named", err)
 			}
 		})
+	}
+}
+
+func TestLoad_GraceOfNone(t *testing.T) {
+	c, _, err := Load(writeServeFile(t, "grace: 0s\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Grace.Duration != 0 {
+		t.Errorf("grace = %s, want none", c.Grace)
+	}
+	if c.dir == "" {
+		t.Error("the directory of the serve file is not kept")
 	}
 }

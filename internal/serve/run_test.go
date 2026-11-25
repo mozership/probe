@@ -3,9 +3,11 @@ package serve
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -77,8 +79,9 @@ func TestRunner_Start(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			rn := &runner{exe: fakeProbeExe(t, 0, tt.exit), results: t.TempDir(), grace: time.Second}
+			rn := &runner{exe: fakeProbeExe(t, 0, tt.exit), results: t.TempDir(), dir: t.TempDir()}
 			t.Setenv("PROBE_REPORT", "markdown")
+			t.Setenv("PROBE_TTY", "1")
 			w := &Workflow{Files: []string{"/w.yml"}, Vars: map[string]any{"env": "prod"}}
 			r := rn.start(context.Background(), "health", w, map[string]any{"cursor": "7"})
 			if r.Status != tt.want || r.ExitStatus != tt.exit || r.Err != nil {
@@ -91,8 +94,11 @@ func TestRunner_Start(t *testing.T) {
 			if want := map[string]string{"env": "prod", "cursor": "7"}; !reflect.DeepEqual(fr.Vars, want) {
 				t.Errorf("vars = %v, want %v", fr.Vars, want)
 			}
-			if slices.Contains(fr.Env, "PROBE_REPORT=markdown") {
-				t.Error("the run was given PROBE_REPORT")
+			if slices.Contains(fr.Env, "PROBE_REPORT=markdown") || slices.Contains(fr.Env, "PROBE_TTY=1") {
+				t.Error("the run was given PROBE_REPORT or PROBE_TTY")
+			}
+			if want, _ := filepath.EvalSymlinks(rn.dir); fr.Dir != want {
+				t.Errorf("the run ran in %s, want %s", fr.Dir, rn.dir)
 			}
 			out, err := os.ReadFile(r.OutputPath())
 			if err != nil || string(out) != "fake probe ran\n" {
@@ -105,7 +111,7 @@ func TestRunner_Start(t *testing.T) {
 // A run that goes on past its context is sent SIGTERM, and told as timed out
 // or stopped by why the context ended.
 func TestRunner_StartEndsRun(t *testing.T) {
-	rn := &runner{exe: fakeProbeExe(t, time.Minute, 0), results: t.TempDir(), grace: time.Second}
+	rn := &runner{exe: fakeProbeExe(t, time.Minute, 0), results: t.TempDir()}
 	w := &Workflow{Files: []string{"/w.yml"}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -123,9 +129,60 @@ func TestRunner_StartEndsRun(t *testing.T) {
 }
 
 func TestRunner_StartWithoutProbe(t *testing.T) {
-	rn := &runner{exe: "/nonexistent/probe", results: t.TempDir(), grace: time.Second}
+	rn := &runner{exe: "/nonexistent/probe", results: t.TempDir()}
 	r := rn.start(context.Background(), "w", &Workflow{Files: []string{"/w.yml"}}, nil)
 	if r.Status != StatusError || r.Err == nil || r.ExitStatus != -1 {
 		t.Errorf("run = %+v, want an error", r)
+	}
+}
+
+// What a run started is ended with it, as the run is the leader of a group
+// of its own.
+func TestRunner_StartEndsTheGroupOfTheRun(t *testing.T) {
+	exe := fakeProbeExe(t, time.Minute, 0)
+	t.Setenv(fakeSpawnEnv, "1")
+	rn := &runner{exe: exe, results: t.TempDir()}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	r := rn.start(ctx, "w", &Workflow{Files: []string{"/w.yml"}}, nil)
+	if r.Status != StatusTimeout {
+		t.Fatalf("run = %+v", r)
+	}
+	pid := readFakeReport(t, r).Child
+	if pid == 0 {
+		t.Fatal("the fake probe started no process")
+	}
+	eventually(t, "the process the run started to end", func() bool {
+		return syscall.Kill(pid, 0) != nil
+	})
+	if rn.running(r.Dir) {
+		t.Error("the run is still told as going")
+	}
+}
+
+// killAll kills the runs going without waiting for them to stop, and a run
+// that starts after it.
+func TestRunner_KillAll(t *testing.T) {
+	rn := &runner{exe: fakeProbeExe(t, time.Minute, 0), results: t.TempDir()}
+	done := make(chan Run)
+	go func() { done <- rn.start(context.Background(), "w", &Workflow{Files: []string{"/w.yml"}}, nil) }()
+	eventually(t, "the run to start", func() bool {
+		rn.mu.Lock()
+		defer rn.mu.Unlock()
+		return len(rn.active) == 1
+	})
+	rn.killAll()
+	select {
+	case r := <-done:
+		if r.ExitStatus != -1 {
+			t.Errorf("run = %+v, want it killed", r)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run was not killed")
+	}
+	start := time.Now()
+	rn.start(context.Background(), "w", &Workflow{Files: []string{"/w.yml"}}, nil)
+	if time.Since(start) > 5*time.Second {
+		t.Error("a run started after killAll was not killed")
 	}
 }

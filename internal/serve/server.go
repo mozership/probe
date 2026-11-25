@@ -26,25 +26,28 @@ type Server struct {
 	// busy is whether each workflow has a run going, or waiting for a
 	// worker, by its name.
 	busy map[string]*atomic.Bool
-	// runs ends the runs going, as Abort does.
-	runs   context.Context
-	abort  context.CancelFunc
-	wg     sync.WaitGroup
-	closed atomic.Bool
+	// stopping is closed once serve is stopped, as no run starts from then.
+	stopping chan struct{}
+	stopOnce sync.Once
+	// runs ends the runs going, once serve has waited the grace for them.
+	runs    context.Context
+	endRuns context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 // New returns a Server of c, whose runs are processes of exe, the probe
 // command, and which logs each run to log.
 func New(c *Config, exe string, log *slog.Logger) *Server {
-	runs, abort := context.WithCancel(context.Background())
+	runs, endRuns := context.WithCancel(context.Background())
 	s := &Server{
-		config:  c,
-		runner:  &runner{exe: exe, results: c.Results.Dir, grace: c.Grace.Duration},
-		log:     log,
-		workers: make(chan struct{}, c.Workers),
-		busy:    make(map[string]*atomic.Bool, len(c.Workflows)),
-		runs:    runs,
-		abort:   abort,
+		config:   c,
+		runner:   &runner{exe: exe, results: c.Results.Dir, dir: c.dir},
+		log:      log,
+		workers:  make(chan struct{}, c.Workers),
+		busy:     make(map[string]*atomic.Bool, len(c.Workflows)),
+		stopping: make(chan struct{}),
+		runs:     runs,
+		endRuns:  endRuns,
 	}
 	for name := range c.Workflows {
 		s.busy[name] = new(atomic.Bool)
@@ -54,7 +57,8 @@ func New(c *Config, exe string, log *slog.Logger) *Server {
 
 // Serve starts the workflows that have a schedule or loop, and runs them
 // until ctx is done. It then starts no run, waits Config.Grace for those
-// going, stops those still going, and returns once each is over.
+// going, ends those still going with SIGTERM, and returns once each is
+// over.
 func (s *Server) Serve(ctx context.Context) {
 	s.log.Info("serving", "workflows", slices.Sorted(maps.Keys(s.config.Workflows)), "workers", s.config.Workers, "results", s.config.Results.Dir)
 	var triggers sync.WaitGroup
@@ -72,7 +76,7 @@ func (s *Server) Serve(ctx context.Context) {
 	}
 
 	<-ctx.Done()
-	s.closed.Store(true)
+	s.stopOnce.Do(func() { close(s.stopping) })
 	triggers.Wait()
 	s.log.Info("stopping", "grace", s.config.Grace.String())
 	done := make(chan struct{})
@@ -83,16 +87,18 @@ func (s *Server) Serve(ctx context.Context) {
 	select {
 	case <-done:
 	case <-time.After(s.config.Grace.Duration):
-		s.abort()
+		s.endRuns()
 		<-done
 	}
-	s.abort()
+	s.endRuns()
 	s.log.Info("stopped")
 }
 
-// Abort stops the runs going at once, as a second signal to serve does.
+// Abort kills the runs going at once, and any that would start, as a second
+// signal to serve does.
 func (s *Server) Abort() {
-	s.abort()
+	s.runner.killAll()
+	s.endRuns()
 }
 
 // onSchedule starts a run of w at each time its schedule matches, until ctx
@@ -115,19 +121,34 @@ func (s *Server) onSchedule(ctx context.Context, name string, w *Workflow) {
 	}
 }
 
+// Waits of a loop whose runs could not run its workflow, doubled from the
+// first up to the last for each such run in a row, so that a workflow that
+// cannot run is not started again and again at once.
+const (
+	firstBackoff = time.Second
+	lastBackoff  = time.Minute
+)
+
 // loop runs w, and again once the run is over and Interval has passed,
 // until ctx is done.
 func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
+	var backoff time.Duration
 	for ctx.Err() == nil {
 		wait := w.Interval.Duration
 		if done, ok := s.trigger(name, w); ok {
 			select {
-			case <-done:
+			case r := <-done:
+				if r.Status == StatusError {
+					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
+					wait = max(wait, backoff)
+				} else {
+					backoff = 0
+				}
 			case <-ctx.Done():
 				return
 			}
 		} else {
-			wait = max(wait, time.Second)
+			wait = max(wait, firstBackoff)
 		}
 		select {
 		case <-ctx.Done():
@@ -137,29 +158,43 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
-// as the log then says. It returns what is closed once the run is over, and
-// whether it started one.
-func (s *Server) trigger(name string, w *Workflow) (<-chan struct{}, bool) {
-	if s.closed.Load() {
+// as the log then says. It returns what has the run once it is over, and
+// whether it started one. A run waiting for a worker when serve is stopped
+// is not run, and nothing is sent.
+func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
+	if s.isStopping() {
 		return nil, false
 	}
 	if !s.busy[name].CompareAndSwap(false, true) {
 		s.log.Warn("run skipped: the run before it is still going", "workflow", name)
 		return nil, false
 	}
-	done := make(chan struct{})
+	done := make(chan Run, 1)
 	s.wg.Go(func() {
-		defer close(done)
 		defer s.busy[name].Store(false)
 		select {
 		case s.workers <- struct{}{}:
-		case <-s.runs.Done():
+		case <-s.stopping:
 			return
 		}
 		defer func() { <-s.workers }()
-		s.logRun(s.runOnce(name, w, nil))
+		if s.isStopping() {
+			return
+		}
+		r := s.runOnce(name, w, nil)
+		s.logRun(r)
+		done <- r
 	})
 	return done, true
+}
+
+func (s *Server) isStopping() bool {
+	select {
+	case <-s.stopping:
+		return true
+	default:
+		return false
+	}
 }
 
 // runOnce runs w with vars, within its timeout, and returns how it went.
@@ -173,6 +208,8 @@ func (s *Server) runOnce(name string, w *Workflow, vars map[string]any) Run {
 	return s.runner.start(ctx, name, w, vars)
 }
 
+// logRun writes a line of the log for r. The report is told only when the
+// run wrote one, which a run ended before its jobs were over did not.
 func (s *Server) logRun(r Run) {
 	attrs := []any{
 		"workflow", r.Workflow,
@@ -182,9 +219,11 @@ func (s *Server) logRun(r Run) {
 		"started_at", r.StartedAt,
 		"finished_at", r.FinishedAt,
 		"duration_ms", r.FinishedAt.Sub(r.StartedAt).Milliseconds(),
-		"report", r.ReportPath(),
-		"output", r.OutputPath(),
 	}
+	if _, err := os.Stat(r.ReportPath()); err == nil {
+		attrs = append(attrs, "report", r.ReportPath())
+	}
+	attrs = append(attrs, "output", r.OutputPath())
 	if r.Err != nil {
 		attrs = append(attrs, "error", r.Err.Error())
 	}
@@ -206,8 +245,8 @@ func (s *Server) pruneLoop(ctx context.Context) {
 	}
 }
 
-// prune removes the runs that ended Keep before now: those whose report and
-// output were last written before then. A directory whose name is not that
+// prune removes the runs that ended Keep before now: those not going whose
+// report and output were last written before then. A directory whose name is not that
 // of a run is left as it is.
 func (s *Server) prune(now time.Time) {
 	for name := range s.config.Workflows {
@@ -221,7 +260,7 @@ func (s *Server) prune(now time.Time) {
 				continue
 			}
 			run := filepath.Join(dir, e.Name())
-			if now.Sub(lastWritten(run)) < s.config.Results.Keep.Duration {
+			if s.runner.running(run) || now.Sub(lastWritten(run)) < s.config.Results.Keep.Duration {
 				continue
 			}
 			if err := os.RemoveAll(run); err != nil {

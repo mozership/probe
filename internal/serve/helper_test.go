@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,6 +19,9 @@ const (
 	fakeEnv      = "PROBE_SERVE_TEST_FAKE"
 	fakeSleepEnv = "PROBE_SERVE_TEST_SLEEP"
 	fakeExitEnv  = "PROBE_SERVE_TEST_EXIT"
+	// fakeSpawnEnv has the fake start a process that outlives it unless
+	// its group is ended, and write its pid as child.
+	fakeSpawnEnv = "PROBE_SERVE_TEST_SPAWN"
 )
 
 // fakeReport is what the fake probe writes as its report.
@@ -25,6 +29,9 @@ type fakeReport struct {
 	Args []string          `json:"args"`
 	Vars map[string]string `json:"vars"`
 	Env  []string          `json:"env"`
+	Dir  string            `json:"dir"`
+	// Child is the process the fake started, with fakeSpawnEnv.
+	Child int `json:"child"`
 }
 
 func TestMain(m *testing.M) {
@@ -48,7 +55,15 @@ func fakeProbe() int {
 	for k, v := range vars {
 		text[k] = fmt.Sprint(v)
 	}
-	data, _ := json.Marshal(fakeReport{Args: os.Args[1:], Vars: text, Env: os.Environ()})
+	dir, _ := os.Getwd()
+	fr := fakeReport{Args: os.Args[1:], Vars: text, Env: os.Environ(), Dir: dir}
+	if os.Getenv(fakeSpawnEnv) == "1" {
+		child := exec.Command("sleep", "60")
+		if child.Start() == nil {
+			fr.Child = child.Process.Pid
+		}
+	}
+	data, _ := json.Marshal(fr)
 	_ = os.WriteFile(report, data, 0o644)
 	fmt.Println("fake probe ran")
 	if d, err := time.ParseDuration(os.Getenv(fakeSleepEnv)); err == nil {

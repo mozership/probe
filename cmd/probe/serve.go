@@ -15,8 +15,8 @@ const serveUsage = "Usage: probe serve <serve-file>\n"
 
 // runServe keeps running the workflows of the serve file given, until probe
 // is interrupted or terminated. A first signal stops it starting runs and
-// waits for those going, up to the grace of the file; a second stops them
-// at once.
+// waits for those going, up to the grace of the file; another kills them at
+// once.
 func (c *Cmd) runServe() int {
 	if len(c.SubCommandArgs) != 1 {
 		c.usageError(serveUsage, "serve takes one serve file, not %d", len(c.SubCommandArgs))
@@ -50,8 +50,9 @@ func (c *Cmd) runServe() int {
 	go func() {
 		<-signals
 		stop()
-		<-signals
-		s.Abort()
+		for range signals {
+			s.Abort()
+		}
 	}()
 	s.Serve(ctx)
 	return probe.ExitOK

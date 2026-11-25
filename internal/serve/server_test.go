@@ -58,7 +58,7 @@ func (b *logBuffer) runs(t *testing.T) []map[string]any {
 
 func newTestServer(t *testing.T, exe string, workflows map[string]*Workflow, grace time.Duration) (*Server, *logBuffer) {
 	t.Helper()
-	c := &Config{Workers: 2, Results: Results{Dir: t.TempDir()}, Grace: Duration{grace}, Workflows: workflows}
+	c := &Config{Workers: 2, Results: Results{Dir: t.TempDir()}, Grace: Duration{Duration: grace}, Workflows: workflows}
 	log := new(logBuffer)
 	return New(c, exe, slog.New(slog.NewJSONHandler(log, nil))), log
 }
@@ -80,7 +80,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 func TestServer_Loop(t *testing.T) {
 	exe := fakeProbeExe(t, 0, 0)
 	s, log := newTestServer(t, exe, map[string]*Workflow{
-		"intake": {Files: []string{"/w.yml"}, Loop: true, Interval: Duration{50 * time.Millisecond}},
+		"intake": {Files: []string{"/w.yml"}, Loop: true, Interval: Duration{Duration: 50 * time.Millisecond}},
 	}, time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -156,7 +156,7 @@ func TestServer_StopWaitsForRunsWithinGrace(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			exe := fakeProbeExe(t, tt.sleep, 0)
 			s, log := newTestServer(t, exe, map[string]*Workflow{
-				"w": {Files: []string{"/w.yml"}, Loop: true, Interval: Duration{time.Hour}},
+				"w": {Files: []string{"/w.yml"}, Loop: true, Interval: Duration{Duration: time.Hour}},
 			}, tt.grace)
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan struct{})
@@ -237,7 +237,7 @@ func TestServer_Schedule(t *testing.T) {
 // what is not a run.
 func TestServer_Prune(t *testing.T) {
 	s, _ := newTestServer(t, "", map[string]*Workflow{"w": {Files: []string{"/w.yml"}}}, time.Second)
-	s.config.Results.Keep = Duration{time.Hour}
+	s.config.Results.Keep = Duration{Duration: time.Hour}
 	dir := filepath.Join(s.config.Results.Dir, "w")
 	old := filepath.Join(dir, "20261101T000000.000000Z-1")
 	recent := filepath.Join(dir, "20261126T000000.000000Z-2")
@@ -258,10 +258,68 @@ func TestServer_Prune(t *testing.T) {
 			}
 		}
 	}
+	going := filepath.Join(dir, "20261102T000000.000000Z-3")
+	if err := os.MkdirAll(going, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(going, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	s.runner.active = map[string]int{going: 0}
 	s.prune(now)
-	for d, kept := range map[string]bool{old: false, recent: true, other: true} {
+	for d, kept := range map[string]bool{old: false, recent: true, other: true, going: true} {
 		if _, err := os.Stat(d); (err == nil) != kept {
 			t.Errorf("%s kept = %v, want %v", filepath.Base(d), err == nil, kept)
+		}
+	}
+}
+
+// A run waiting for a worker when serve is stopped is not run.
+func TestServer_StopStartsNoWaitingRun(t *testing.T) {
+	exe := fakeProbeExe(t, 500*time.Millisecond, 0)
+	a, b := &Workflow{Files: []string{"/a.yml"}}, &Workflow{Files: []string{"/b.yml"}}
+	s, log := newTestServer(t, exe, map[string]*Workflow{"a": a, "b": b}, 10*time.Second)
+	s.config.Workers = 1
+	s.workers = make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.Serve(ctx)
+		close(done)
+	}()
+	if _, ok := s.trigger("a", a); !ok {
+		t.Fatal("a did not start")
+	}
+	eventually(t, "a to take the worker", func() bool { return len(s.workers) == 1 })
+	if _, ok := s.trigger("b", b); !ok {
+		t.Fatal("b was not triggered")
+	}
+	cancel()
+	<-done
+	runs := log.runs(t)
+	if len(runs) != 1 || runs[0]["workflow"] != "a" {
+		t.Errorf("runs = %v, want a alone", runs)
+	}
+}
+
+// A loop whose runs cannot run its workflow waits longer after each.
+func TestServer_LoopBacksOffRunsInError(t *testing.T) {
+	s, log := newTestServer(t, "/nonexistent/probe", map[string]*Workflow{
+		"w": {Files: []string{"/w.yml"}, Loop: true},
+	}, time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+	s.Serve(ctx)
+	runs := log.runs(t)
+	if len(runs) < 2 || len(runs) > 3 {
+		t.Errorf("runs = %d in 2.5s, want 2 or 3 with a wait of 1s and then 2s", len(runs))
+	}
+	for _, r := range runs {
+		if r["status"] != StatusError || r["error"] == nil {
+			t.Errorf("run = %v", r)
+		}
+		if _, ok := r["report"]; ok {
+			t.Errorf("a run without a report is told with one: %v", r)
 		}
 	}
 }

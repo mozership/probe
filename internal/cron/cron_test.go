@@ -32,6 +32,9 @@ func TestNext(t *testing.T) {
 		// Both days restricted: a day matches by either, the 1st or a Monday.
 		{"0 0 1 * mon", "2026-11-26 10:00:00", []string{"2026-11-30 00:00:00", "2026-12-01 00:00:00", "2026-12-07 00:00:00"}},
 		{"0 12 5/10 * *", "2026-11-26 10:00:00", []string{"2026-12-05 12:00:00", "2026-12-15 12:00:00", "2026-12-25 12:00:00", "2027-01-05 12:00:00"}},
+		// A day field that starts with * is no restriction, as in cron: the
+		// odd days that are Mondays, not the odd days and the Mondays.
+		{"0 0 */2 * mon", "2026-11-26 10:00:00", []string{"2026-12-07 00:00:00", "2026-12-21 00:00:00"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
@@ -43,6 +46,53 @@ func TestNext(t *testing.T) {
 			for _, w := range tt.want {
 				next, ok := s.Next(from)
 				if !ok || !next.Equal(at(w)) {
+					t.Fatalf("Next(%s) = %s, %v; want %s", from, next, ok, w)
+				}
+				from = next
+			}
+		})
+	}
+}
+
+// The day daylight saving time starts, a time the clock skips is not
+// matched, and a time after it is; the day it ends, a time the clock shows
+// twice is matched once.
+func TestNext_DaylightSavingTime(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no time zone database")
+	}
+	tests := []struct {
+		expr string
+		from time.Time
+		want []time.Time
+	}{
+		{"0 9 * * *", time.Date(2026, 3, 8, 0, 59, 0, 0, ny), []time.Time{time.Date(2026, 3, 8, 9, 0, 0, 0, ny), time.Date(2026, 3, 9, 9, 0, 0, 0, ny)}},
+		{"30 2 * * *", time.Date(2026, 3, 7, 12, 0, 0, 0, ny), []time.Time{time.Date(2026, 3, 9, 2, 30, 0, 0, ny)}},
+		{"*/30 * * * *", time.Date(2026, 3, 8, 1, 15, 0, 0, ny), []time.Time{time.Date(2026, 3, 8, 1, 30, 0, 0, ny), time.Date(2026, 3, 8, 3, 0, 0, 0, ny)}},
+		{"30 1 * * *", time.Date(2026, 10, 31, 12, 0, 0, 0, ny), []time.Time{time.Date(2026, 11, 1, 1, 30, 0, 0, ny), time.Date(2026, 11, 2, 1, 30, 0, 0, ny)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			s, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			from := tt.from
+			for _, w := range tt.want {
+				done := make(chan struct{})
+				var next time.Time
+				var ok bool
+				go func() {
+					next, ok = s.Next(from)
+					close(done)
+				}()
+				select {
+				case <-done:
+				case <-time.After(5 * time.Second):
+					t.Fatalf("Next(%s) does not return", from)
+				}
+				if !ok || !next.Equal(w) {
 					t.Fatalf("Next(%s) = %s, %v; want %s", from, next, ok, w)
 				}
 				from = next

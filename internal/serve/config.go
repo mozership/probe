@@ -28,6 +28,9 @@ type Config struct {
 	// for before they are stopped too.
 	Grace     Duration             `yaml:"grace"`
 	Workflows map[string]*Workflow `yaml:"workflows"`
+
+	// dir is the directory of the serve file, which the runs run in.
+	dir string
 }
 
 // Results is where what the runs leave is kept.
@@ -61,6 +64,8 @@ type Workflow struct {
 // Duration is a duration as a workflow writes one, such as 30s or 1m30s.
 type Duration struct {
 	time.Duration
+	// given is whether the file gives it, as 0s does.
+	given bool
 }
 
 // UnmarshalYAML reads a duration as duration.Parse does.
@@ -74,6 +79,7 @@ func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
 		return fmt.Errorf("%v: %w", raw, err)
 	}
 	d.Duration = v
+	d.given = true
 	return nil
 }
 
@@ -111,6 +117,7 @@ func Load(path string) (*Config, []string, error) {
 // prepare checks c, fills in what it leaves out, and makes the paths it
 // names absolute, from dir.
 func (c *Config) prepare(dir string) ([]string, error) {
+	c.dir = dir
 	if c.Workers == 0 {
 		c.Workers = defaultWorkers
 	}
@@ -121,7 +128,7 @@ func (c *Config) prepare(dir string) ([]string, error) {
 		c.Results.Dir = defaultResultsDir
 	}
 	c.Results.Dir = from(dir, c.Results.Dir)
-	if c.Grace.Duration == 0 {
+	if !c.Grace.given {
 		c.Grace.Duration = defaultGrace
 	}
 	if len(c.Workflows) == 0 {
@@ -167,6 +174,9 @@ func (w *Workflow) prepare(name, dir string) error {
 		s, err := cron.Parse(w.Schedule)
 		if err != nil {
 			return fmt.Errorf("schedule: %w", err)
+		}
+		if _, ok := s.Next(time.Now()); !ok {
+			return fmt.Errorf("schedule: %q matches no time in the years to come", w.Schedule)
 		}
 		w.schedule = s
 	}
