@@ -3,6 +3,11 @@
 version: 2
 updates:
   - package-ecosystem: "gomod"
-    directory: "/"
+    # The demo servers are modules of their own, so that the SQLite they
+    # keep their users in is no dependency of probe.
+    directories:
+      - "/"
+      - "/misc/demo/server"
+      - "/docs/hero/stub"
     schedule:
       interval: "weekly"

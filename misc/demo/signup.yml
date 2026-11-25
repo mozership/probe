@@ -1,5 +1,8 @@
 name: Sign-up
 
+actions:
+  db: github.com/mozership/probe-db@47be79a26c62a4790015c9fc2680bce4dba210b6 # v0.1.0
+
 vars:
   api: "{{API_URL ?? 'http://127.0.0.1:8080'}}"
 

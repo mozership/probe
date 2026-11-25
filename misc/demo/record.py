@@ -332,7 +332,7 @@ def record(work):
     probe = os.path.join(work, "probe")
     server = os.path.join(work, "server")
     subprocess.run(["go", "build", "-o", probe, "./cmd/probe"], cwd=ROOT, check=True)
-    subprocess.run(["go", "build", "-o", server, "./misc/demo/server"], cwd=ROOT, check=True)
+    subprocess.run(["go", "-C", "misc/demo/server", "build", "-o", server, "."], cwd=ROOT, check=True)
 
     fixed = open(os.path.join(HERE, "signup.yml")).read()
     draft = fixed
