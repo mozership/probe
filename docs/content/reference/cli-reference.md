@@ -281,6 +281,26 @@ probe --var url=https://staging.example.com --var retries=5 workflow.yml
 
 A value given this way is not hidden from the report as one named under [`secrets`](/reference/yaml-configuration#secrets) is, and a command line can be read by other users of the machine. Give a credential through the environment or `--env-file`.
 
+### `--vars-file`
+
+**Type:** String  
+**Values:** the path of a file, or `-` for the standard input  
+**Description:** Give vars of the workflow as a JSON object of them by name, read from a file or from the standard input, as a program that runs Probe gives them without putting them on the command line.
+
+```bash
+probe --vars-file vars.json workflow.yml
+echo '{"body": "{\"order\": 42}", "receipt": "AQEB..."}' | probe --vars-file - workflow.yml
+```
+
+- Each var is given as one given with [`--var`](#--var) is. A string is the value as it is; a number, a boolean, an object or a list is its JSON, which a step reads back with `parse_json`, and a number is as it is written, so that `1.50` stays `1.50`.
+- A var whose value is `null` is not given, and the workflow's own value is used.
+- A name is taken without the white space around it, as `--var` takes it.
+- What is read must be a single JSON object, which may start with the byte order mark some editors write, and every var in it needs a name of its own. Anything else, such as a name given twice, stops Probe with status 2 before any job runs.
+- A name given with `--var` too has the value of `--var`.
+- `--vars-file` can be given once.
+
+As with `--var`, a value given this way is not hidden from the report as one named under [`secrets`](/reference/yaml-configuration#secrets) is.
+
 ### `--env-file`
 
 **Type:** String, can be repeated  

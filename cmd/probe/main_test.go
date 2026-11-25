@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -141,7 +142,7 @@ func TestCmd_verboseLevels(t *testing.T) {
 }
 
 func TestCmd_start(t *testing.T) {
-	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/mozership/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>...\n       probe gen <openapi-file>\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n       probe check <workflow-file>...\n       probe fmt [--check] <workflow-file>...\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe guide <action> [workflow-file]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n       probe licenses [package]\n\nArguments:\n  workflow-file    Path to a YAML workflow file, a directory or a glob.\n                   Several are merged in their order into one workflow,\n                   given apart or with commas: \"base.yml override.yml\" or\n                   \"base.yml,override.yml\".\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>...    Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format, and --job to\n                   show only the jobs a run with it runs\n  check <file>...  Find what is wrong or weak in a workflow without running it\n  fmt <file>...    Format workflow files in place, and print those it changed\n                   A directory is every YAML file under it, and - is the\n                   standard input, formatted to the standard output\n                   Use --check to change nothing, and exit with 1 when a\n                   file is not formatted\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  guide <action> [workflow-file]\n                   Print the description of an external action: ./dir,\n                   github.com/<owner>/<repo>[@<commit SHA>], or a name the\n                   workflow gives under actions\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n  licenses [package]\n                   Print the licenses of the modules that the command package\n                   (.) is built from, for its release to carry\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show each step's request, response and test; -vv also how actions are run\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --baseline     Compare the response times to those of a --report json file (env: PROBE_BASELINE)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n      --job          Run only these jobs, by id or name, as job,..., with the jobs they need and the always jobs after them; can be repeated\n"
+	help := " __  __  __  __  __\n|  ||  ||  ||  || _|\n|  ||  /| |||  /|  |\n| | |  \\| |||  \\| _|\n|_| |_\\_|__||__||__|\n\nProbe - A YAML-based workflow automation tool.\nhttps://github.com/mozership/probe (ver: dev, rev: unknown)\n\nUsage: probe [options] <workflow-file>...\n       probe gen <openapi-file>\n       probe dag [--mermaid] [--job <job>] <workflow-file>...\n       probe check <workflow-file>...\n       probe fmt [--check] <workflow-file>...\n       probe coverage <openapi-file|proto-file> <report-file>\n       probe guide [topic]\n       probe guide <action> [workflow-file]\n       probe skill [install [dir]]\n       probe manifest init <owner>/<repo>\n       probe manifest <tag> <checksums-file> [action-file]\n       probe licenses [package]\n\nArguments:\n  workflow-file    Path to a YAML workflow file, a directory or a glob.\n                   Several are merged in their order into one workflow,\n                   given apart or with commas: \"base.yml override.yml\" or\n                   \"base.yml,override.yml\".\n\nSubcommands:\n  gen <file>       Generate probe workflow YAML from OpenAPI specification\n  dag <file>...    Show job dependency graph as ASCII art (default)\n                   Use --mermaid to output in Mermaid format, and --job to\n                   show only the jobs a run with it runs\n  check <file>...  Find what is wrong or weak in a workflow without running it\n  fmt <file>...    Format workflow files in place, and print those it changed\n                   A directory is every YAML file under it, and - is the\n                   standard input, formatted to the standard output\n                   Use --check to change nothing, and exit with 1 when a\n                   file is not formatted\n  coverage <openapi-file|proto-file> <report-file>\n                   Show which operations of an OpenAPI document, or methods of\n                   a .proto file, the steps of a run checked, from its\n                   --report json file\n  guide [topic]    Print a page of the documentation as Markdown\n                   Without a topic, list the topics\n  guide <action> [workflow-file]\n                   Print the description of an external action: ./dir,\n                   github.com/<owner>/<repo>[@<commit SHA>], or a name the\n                   workflow gives under actions\n  skill            Print the skill that teaches coding agents to use Probe\n                   install [dir] writes it to dir (.claude/skills/probe)\n  manifest init <owner>/<repo>\n                   Print an action.yml to start a new external action from,\n                   published in that GitHub repository\n  manifest <tag> <checksums-file> [action-file]\n                   Print the action.yml of a release of an external action:\n                   action-file (action.yml) with the tag in runs.url and the\n                   digests of checksums-file in runs.checksums\n  licenses [package]\n                   Print the licenses of the modules that the command package\n                   (.) is built from, for its release to carry\n\nOptions:\n  -h, --help         Show command usage\n      --version      Show version information\n      --timing       Show timing (start time, response time)\n  -v, --verbose      Show each step's request, response and test; -vv also how actions are run\n      --output       Report output: auto, spinner or stream (env: PROBE_OUTPUT)\n      --report       Write reports: json, junit, markdown, github-summary as format[=path],... (env: PROBE_REPORT)\n      --baseline     Compare the response times to those of a --report json file (env: PROBE_BASELINE)\n      --read-only    Refuse what writes, such as an HTTP POST or an UPDATE (env: PROBE_READ_ONLY)\n      --allow-host   Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)\n      --allow-action Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)\n      --var          Give a var of the workflow as name=value, in place of what it writes; can be repeated\n      --vars-file    Give vars of the workflow as a JSON object read from a file, or from the standard input as -\n      --env-file     Read variables for the vars from files of NAME=value lines, as file,...; can be repeated\n      --job          Run only these jobs, by id or name, as job,..., with the jobs they need and the always jobs after them; can be repeated\n"
 
 	tests := []struct {
 		name           string
@@ -325,7 +326,7 @@ func TestCmd_start(t *testing.T) {
 			}
 
 			// Check validFlags
-			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"}
+			expectedFlags := []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "vars-file", "env-file", "job"}
 			if len(c.validFlags) != len(expectedFlags) {
 				t.Errorf("start(%v) validFlags length = %d, want %d", tt.args, len(c.validFlags), len(expectedFlags))
 			}
@@ -1364,7 +1365,7 @@ func TestCmd_readOnlyTakesABoolean(t *testing.T) {
 }
 
 func TestCmd_flagsNeedAnArgument(t *testing.T) {
-	flags := []string{"--output", "--report", "--baseline", "--allow-host", "--allow-action", "--var", "--env-file", "--job"}
+	flags := []string{"--output", "--report", "--baseline", "--allow-host", "--allow-action", "--var", "--vars-file", "--env-file", "--job"}
 	for _, flag := range flags {
 		for _, args := range [][]string{{"w.yml", flag}, {flag, "--verbose", "w.yml"}} {
 			c := newBufferCmd()
@@ -1453,11 +1454,11 @@ func TestCmd_parseArgs_var(t *testing.T) {
 		t.Errorf("WorkflowPath = %q, want w.yml", c.WorkflowPath)
 	}
 	want := map[string]string{"url": "http://other", "token": "a=b", "empty": ""}
-	if got := c.vars(); !reflect.DeepEqual(got, want) {
-		t.Errorf("vars() = %#v, want %#v", got, want)
+	if got, err := c.vars(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("vars() = %#v, %v, want %#v", got, err, want)
 	}
-	if got := newBufferCmd().vars(); got != nil {
-		t.Errorf("vars() = %#v, want nil when no --var is given", got)
+	if got, err := newBufferCmd().vars(); got != nil || err != nil {
+		t.Errorf("vars() = %#v, %v, want nil when no --var is given", got, err)
 	}
 
 	for _, args := range [][]string{
@@ -1644,6 +1645,82 @@ func TestCmd_parseArgs_envFile(t *testing.T) {
 		if err := newBufferCmd().parseArgs(args); err == nil {
 			t.Errorf("parseArgs(%q) = nil, want --env-file to need a file", args)
 		}
+	}
+}
+
+// - alone is a value only of --vars-file, the one flag that reads the
+// standard input; any other flag is told it needs one.
+func TestCmd_dashIsAValueOfVarsFileAlone(t *testing.T) {
+	for _, flag := range []string{"--env-file", "--baseline", "--report", "--var", "--job"} {
+		err := newBufferCmd().parseArgs([]string{flag, "-", "w.yml"})
+		if want := "flag needs an argument: " + flag; err == nil || err.Error() != want {
+			t.Errorf("parseArgs(%s -) = %v, want %q", flag, err, want)
+		}
+	}
+}
+
+func TestCmd_parseArgs_varsFile(t *testing.T) {
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"--vars-file", "-", "w.yml"}); err != nil {
+		t.Fatal(err)
+	}
+	if c.VarsFile != "-" {
+		t.Errorf("VarsFile = %q, want -", c.VarsFile)
+	}
+	for _, args := range [][]string{
+		{"--vars-file=", "w.yml"},
+		{"--vars-file", " ", "w.yml"},
+		{"--vars-file", "a.json", "--vars-file=b.json", "w.yml"},
+	} {
+		if err := newBufferCmd().parseArgs(args); err == nil {
+			t.Errorf("parseArgs(%q) = nil, want an error", args)
+		}
+	}
+}
+
+// The vars of --vars-file are given with those of --var, which win over
+// them, and are read from the standard input for -.
+func TestCmd_varsFromVarsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vars.json")
+	if err := os.WriteFile(path, []byte(`{"url": "http://file", "id": 7, "skip": null}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := newBufferCmd()
+	if err := c.parseArgs([]string{"--vars-file", path, "--var", "url=http://flag", "w.yml"}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"url": "http://flag", "id": "7"}
+	if got, err := c.vars(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("vars() = %#v, %v, want %#v", got, err, want)
+	}
+
+	c = newBufferCmd()
+	c.inReader = strings.NewReader(`{"body": {"order": 42}}`)
+	if err := c.parseArgs([]string{"--vars-file", "-", "w.yml"}); err != nil {
+		t.Fatal(err)
+	}
+	want = map[string]string{"body": `{"order":42}`}
+	if got, err := c.vars(); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("vars() from the standard input = %#v, %v, want %#v", got, err, want)
+	}
+}
+
+// A file of vars that cannot be read stops the run before it starts, with
+// the status of a mistake in how Probe was run.
+func TestCmd_startRefusesVarsFile(t *testing.T) {
+	dir := t.TempDir()
+	workflow := filepath.Join(dir, "w.yml")
+	if err := os.WriteFile(workflow, []byte("name: w\njobs:\n- name: j\n  steps:\n  - uses: hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := newBufferCmd()
+	c.mocking = false
+	c.inReader = strings.NewReader(`["not", "an", "object"]`)
+	if got := c.start([]string{"probe", "--vars-file", "-", workflow}); got != probe.ExitConfigError {
+		t.Errorf("start = %d, want %d", got, probe.ExitConfigError)
+	}
+	if msg := c.errWriter.(*bytes.Buffer).String(); !strings.Contains(msg, "--vars-file: the standard input: a JSON object of vars by name is needed, not a list") {
+		t.Errorf("error = %q", msg)
 	}
 }
 

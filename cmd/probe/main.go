@@ -20,6 +20,7 @@ import (
 	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/suggest"
 	"github.com/mozership/probe/internal/thirdparty"
+	"github.com/mozership/probe/internal/varsfile"
 	"github.com/mozership/probe/sdk"
 )
 
@@ -84,6 +85,8 @@ type Cmd struct {
 	Vars []string
 	// EnvFiles are the files the --env-file flags name, in their order.
 	EnvFiles []string
+	// VarsFile is the file --vars-file names, or - for the standard input.
+	VarsFile string
 	// Jobs are the ids or names of the jobs the --job flags select, in
 	// their order.
 	Jobs []string
@@ -106,7 +109,7 @@ func newCmd() *Cmd {
 	info, ok := debug.ReadBuildInfo()
 	ver, rev := resolveVersion(version, commit, info, ok)
 	return &Cmd{
-		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "env-file", "job"},
+		validFlags: []string{"help", "h", "version", "timing", "verbose", "v", "vv", "mermaid", "check", "output", "report", "baseline", "read-only", "allow-host", "allow-action", "var", "vars-file", "env-file", "job"},
 		ver:        ver,
 		rev:        rev,
 		inReader:   os.Stdin,
@@ -167,7 +170,12 @@ func (c *Cmd) parseArgs(args []string) error {
 			// A flag that takes a value has it after =, as --report=junit,
 			// or as the next argument, as --report junit.
 			if takesValue(flagName) && !hasValue {
-				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				// - alone is the standard input, which only --vars-file reads.
+				next := ""
+				if i+1 < len(args) {
+					next = args[i+1]
+				}
+				if i+1 >= len(args) || strings.HasPrefix(next, "-") && (next != "-" || flagName != "vars-file") {
 					return fmt.Errorf("flag needs an argument: %s", arg)
 				}
 				flagValue = args[i+1]
@@ -239,6 +247,14 @@ func (c *Cmd) parseArgs(args []string) error {
 					return err
 				}
 				c.Vars = append(c.Vars, flagValue)
+			case "vars-file":
+				if strings.TrimSpace(flagValue) == "" {
+					return fmt.Errorf("flag needs an argument: %s", arg)
+				}
+				if c.VarsFile != "" {
+					return fmt.Errorf("--vars-file can be given once")
+				}
+				c.VarsFile = flagValue
 			case "report":
 				if _, err := report.ParseTargets(flagValue); err != nil {
 					return err
@@ -271,7 +287,7 @@ func (c *Cmd) parseArgs(args []string) error {
 // takesValue reports whether the flag of name takes a value.
 func takesValue(name string) bool {
 	switch name {
-	case "output", "report", "baseline", "allow-host", "allow-action", "var", "env-file", "job":
+	case "output", "report", "baseline", "allow-host", "allow-action", "var", "vars-file", "env-file", "job":
 		return true
 	}
 	return false
@@ -406,6 +422,7 @@ func (c *Cmd) printOptions() {
 		{"", "--allow-host", "Refuse connecting to hosts but these, as host[:port] or *.domain,... (env: PROBE_ALLOW_HOSTS)"},
 		{"", "--allow-action", "Run these actions under --read-only or --allow-host although they do not keep to them (env: PROBE_ALLOW_ACTIONS)"},
 		{"", "--var", "Give a var of the workflow as name=value, in place of what it writes; can be repeated"},
+		{"", "--vars-file", "Give vars of the workflow as a JSON object read from a file, or from the standard input as -"},
 		{"", "--env-file", "Read variables for the vars from files of NAME=value lines, as file,...; can be repeated"},
 		{"", "--job", "Run only these jobs, by id or name, as job,..., with the jobs they need and the always jobs after them; can be repeated"},
 	}
@@ -610,7 +627,12 @@ func (c *Cmd) runProbe() int {
 		return probe.ExitConfigError
 	}
 	p.Config.Env = env
-	p.Config.Vars = c.vars()
+	vars, err := c.vars()
+	if err != nil {
+		c.errorf("--vars-file: %v", err)
+		return probe.ExitConfigError
+	}
+	p.Config.Vars = vars
 
 	if err := p.Do(); err != nil {
 		c.errorf("%v", err)
@@ -667,19 +689,28 @@ func parseVar(s string) (name, value string, err error) {
 	return name, value, nil
 }
 
-// vars returns the vars the --var flags give, by name. A name given more
-// than once has the value given last.
-func (c *Cmd) vars() map[string]string {
-	if len(c.Vars) == 0 {
-		return nil
+// vars returns the vars the run is given, by name: those of --vars-file,
+// and over them those of the --var flags, the one given last of a name.
+func (c *Cmd) vars() (map[string]string, error) {
+	var vars map[string]string
+	if c.VarsFile != "" {
+		var err error
+		if vars, err = varsfile.Read(c.VarsFile, c.inReader); err != nil {
+			return nil, err
+		}
 	}
-	vars := make(map[string]string, len(c.Vars))
+	if len(c.Vars) == 0 {
+		return vars, nil
+	}
+	if vars == nil {
+		vars = make(map[string]string, len(c.Vars))
+	}
 	for _, v := range c.Vars {
 		// Each was checked as it was parsed.
 		name, value, _ := parseVar(v)
 		vars[name] = value
 	}
-	return vars
+	return vars, nil
 }
 
 // loadEnvFiles reads the variables the files at paths give, by name, for
