@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -139,8 +140,8 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		wait := w.Interval.Duration
 		if done, ok := s.trigger(name, w); ok {
 			select {
-			case r := <-done:
-				if r.Status != StatusPassed {
+			case o := <-done:
+				if o.run.Status != StatusPassed || !o.handled {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -159,11 +160,19 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 	}
 }
 
+// outcome is how a run of a workflow started by its schedule or loop went:
+// the run, and whether every item it gave was handled.
+type outcome struct {
+	run     Run
+	handled bool
+}
+
 // trigger starts a run of w unless one is going or waiting for a worker,
-// as the log then says. It returns what has the run once it is over, with
-// the items it gave handled, and whether it started one. A run waiting for
-// a worker when serve is stopped is not run, and nothing is sent.
-func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
+// as the log then says. It returns what has the outcome once the run is
+// over, with the items it gave handled, and whether it started one. A run
+// waiting for a worker when serve is stopped is not run, and nothing is
+// sent.
+func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 	if s.isStopping() {
 		return nil, false
 	}
@@ -171,15 +180,14 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
 		s.log.Warn("run skipped: the run before it is still going", "workflow", name)
 		return nil, false
 	}
-	done := make(chan Run, 1)
+	done := make(chan outcome, 1)
 	s.wg.Go(func() {
 		defer s.busy[name].Store(false)
 		r, items, ok := s.runSource(name, w)
 		if !ok {
 			return
 		}
-		s.forEach(w.ForEach, r, items)
-		done <- r
+		done <- outcome{run: r, handled: s.forEach(w.ForEach, r, items)}
 	})
 	return done, true
 }
@@ -204,45 +212,101 @@ func (s *Server) runSource(name string, w *Workflow) (Run, []map[string]any, boo
 // forEach handles each of items, the items r gave, as f says: at most
 // f.Concurrency at once, each by a run of f.Workflow and then of
 // f.OnSuccess or f.OnFailure, with the item as its vars. It returns once
-// each item started is handled; once serve is stopped, no item starts.
-func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) {
+// each item started is handled, and reports whether every item was; once
+// serve is stopped, no item starts.
+func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) bool {
 	if f == nil || len(items) == 0 {
-		return
+		return true
 	}
 	slots := make(chan struct{}, f.Concurrency)
 	var wg sync.WaitGroup
+	var all atomic.Bool
+	all.Store(true)
 	for i, item := range items {
 		select {
 		case slots <- struct{}{}:
 		case <-s.stopping:
 		}
 		if s.isStopping() {
+			all.Store(false)
 			break
 		}
 		wg.Go(func() {
 			defer func() { <-slots }()
-			s.handle(f, r, i, item)
+			if !s.handle(f, r, i, item) {
+				all.Store(false)
+			}
 		})
 	}
 	wg.Wait()
+	return all.Load()
 }
 
 // handle runs f.Workflow for item, the item of index i that r gave, and
-// then f.OnSuccess or f.OnFailure as it passed or not.
-func (s *Server) handle(f *ForEach, from Run, i int, item map[string]any) {
+// then f.OnSuccess or f.OnFailure as it passed or not. It reports whether
+// the item was handled: its run passed and so did its OnSuccess, or it
+// failed and its OnFailure passed. An item whose vars cannot be given as
+// they are is not run, and is logged as an error.
+func (s *Server) handle(f *ForEach, from Run, i int, item map[string]any) bool {
 	tag := []any{"from", from.ID, "item", i}
+	if err := checkItem(item); err != nil {
+		s.log.Error("item skipped", append(tag, "workflow", f.Workflow, "error", err.Error())...)
+		return false
+	}
 	r, ok := s.run(f.Workflow, s.config.Workflows[f.Workflow], item, nil, tag...)
 	if !ok {
-		return
+		return false
 	}
 	next := f.OnFailure
 	if r.Status == StatusPassed {
 		next = f.OnSuccess
 	}
 	if next == "" {
-		return
+		return r.Status == StatusPassed
 	}
-	s.run(next, s.config.Workflows[next], item, nil, append(tag, "for", r.ID)...)
+	after, ok := s.run(next, s.config.Workflows[next], item, nil, append(tag, "for", r.ID)...)
+	return ok && after.Status == StatusPassed
+}
+
+// checkItem returns why the vars of item cannot be given to its runs as it
+// holds them: a key that --vars-file refuses, or a value the report masked,
+// as it holds a secret.
+func checkItem(item map[string]any) error {
+	seen := map[string]bool{}
+	for key, v := range item {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			return errors.New("a key of the item is empty, which no var can be named")
+		}
+		if seen[name] {
+			return fmt.Errorf("the item has the key %s twice, once the white space around them is left out", name)
+		}
+		seen[name] = true
+		if masked(v) {
+			return fmt.Errorf("the value of %s holds a secret, which the report masks, so it would reach the run as <secret:...>", key)
+		}
+	}
+	return nil
+}
+
+// masked reports whether v, a value read from a report, holds a secret the
+// report masked.
+func masked(v any) bool {
+	switch val := v.(type) {
+	case string:
+		return strings.Contains(val, "<secret:")
+	case map[string]any:
+		for k, e := range val {
+			if masked(k) || masked(e) {
+				return true
+			}
+		}
+	case []any:
+		if slices.ContainsFunc(val, masked) {
+			return true
+		}
+	}
+	return false
 }
 
 // run runs w with vars once a worker is free, within its timeout, and logs

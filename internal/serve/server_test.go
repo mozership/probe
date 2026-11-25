@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -349,10 +352,17 @@ func TestServer_LoopBacksOffFailedRuns(t *testing.T) {
 // handled by verify and then by ack or dlq, and starts it.
 func forEachServer(t *testing.T, outputs string, concurrency int) (*logBuffer, func()) {
 	t.Helper()
-	exe := fakeProbeExe(t, 100*time.Millisecond, 0)
+	return forEachServerWith(t, outputs, concurrency, 100*time.Millisecond, time.Hour)
+}
+
+// forEachServerWith is forEachServer with each run taking sleep, and the
+// loop of the source waiting interval between its runs.
+func forEachServerWith(t *testing.T, outputs string, concurrency int, sleep, interval time.Duration) (*logBuffer, func()) {
+	t.Helper()
+	exe := fakeProbeExe(t, sleep, 0)
 	t.Setenv(fakeOutputsEnv, outputs)
 	s, log := newTestServer(t, exe, map[string]*Workflow{
-		"source": {Files: []string{"/source.yml"}, Loop: true, Interval: Duration{Duration: time.Hour},
+		"source": {Files: []string{"/source.yml"}, Loop: true, Interval: Duration{Duration: interval},
 			ForEach: &ForEach{Items: "messages", Workflow: "verify", Concurrency: concurrency, OnSuccess: "ack", OnFailure: "dlq"}},
 		"verify": {Files: []string{"/verify.yml"}, Vars: map[string]any{"queue": "orders"}},
 		"ack":    {Files: []string{"/ack.yml"}},
@@ -437,7 +447,7 @@ func TestServer_ForEachHoldsTheSource(t *testing.T) {
 	}
 	// With a concurrency of 1, an item starts once the one before it is
 	// handled.
-	if w["verify"][1]["started_at"].(string) < w["ack"][0]["finished_at"].(string) {
+	if at(t, w["verify"][1], "started_at").Before(at(t, w["ack"][0], "finished_at")) {
 		t.Errorf("item 1 started before item 0 was acknowledged: %v", w)
 	}
 }
@@ -481,7 +491,7 @@ func fakeReportAt(t *testing.T, path string) fakeReport {
 // Once serve is stopped, no item starts and nothing more is run for one
 // handled: those left are given again by the queue.
 func TestServer_ForEachStopped(t *testing.T) {
-	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}`, 1)
+	log, stop := forEachServerWith(t, `{"messages": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}`, 1, time.Second, time.Hour)
 	eventually(t, "the first item to start", func() bool {
 		for _, l := range log.lines(t) {
 			if l["msg"] == "run" && l["workflow"] == "source" {
@@ -494,5 +504,53 @@ func TestServer_ForEachStopped(t *testing.T) {
 	w := byWorkflow(log.runs(t))
 	if len(w["verify"]) > 1 || len(w["ack"]) != 0 {
 		t.Errorf("runs after the stop = %v", w)
+	}
+}
+
+func at(t *testing.T, line map[string]any, key string) time.Time {
+	t.Helper()
+	v, err := time.Parse(time.RFC3339Nano, line[key].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+// A loop backs off when the items of its runs are not handled, as their
+// on_failure fails too, though the runs that gave them passed.
+func TestServer_ForEachBacksOffItemsNotHandled(t *testing.T) {
+	log, stop := forEachServerWith(t, `{"messages": [{"id": "a", "exit": 1}]}`, 1, 0, 0)
+	time.Sleep(2500 * time.Millisecond)
+	stop()
+	w := byWorkflow(log.runs(t))
+	if n := len(w["source"]); n < 2 || n > 3 {
+		t.Errorf("the source ran %d times in 2.5s, want 2 or 3 with a wait of 1s and then 2s", n)
+	}
+}
+
+// An item whose vars cannot be given as it holds them is skipped, and
+// logged as an error; the other items are handled.
+func TestServer_ForEachSkipsItems(t *testing.T) {
+	log, stop := forEachServer(t, `{"messages": [{"id": "a"}, {" id": "b", "id": "c"}, {"": "d"}, {"receipt": "x-<secret:PIN>"}, {"n": {"k": ["<secret:PIN>"]}}]}`, 1)
+	eventually(t, "the items to be handled", func() bool { return len(byWorkflow(log.runs(t))["ack"]) == 1 })
+	stop()
+	var skipped []string
+	for _, l := range log.lines(t) {
+		if l["msg"] == "item skipped" {
+			skipped = append(skipped, fmt.Sprint(l["item"], ": ", l["error"]))
+		}
+	}
+	slices.Sort(skipped)
+	want := []string{
+		"1: the item has the key id twice, once the white space around them is left out",
+		"2: a key of the item is empty, which no var can be named",
+		"3: the value of receipt holds a secret, which the report masks, so it would reach the run as <secret:...>",
+		"4: the value of n holds a secret, which the report masks, so it would reach the run as <secret:...>",
+	}
+	if !reflect.DeepEqual(skipped, want) {
+		t.Errorf("skipped =\n%q\nwant\n%q", skipped, want)
+	}
+	if w := byWorkflow(log.runs(t)); len(w["verify"]) != 1 {
+		t.Errorf("verify ran %d times, want once", len(w["verify"]))
 	}
 }
