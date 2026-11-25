@@ -51,6 +51,9 @@ func Parse(r io.Reader) (map[string]string, error) {
 	dec.UseNumber()
 	vars, err := parseObject(dec)
 	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return nil, errors.New("the JSON object ends before it is closed")
+		}
 		var syntax *json.SyntaxError
 		if errors.As(err, &syntax) {
 			return nil, fmt.Errorf("%w, at byte %d", err, syntax.Offset+int64(skipped))
