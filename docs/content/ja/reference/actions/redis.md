@@ -173,4 +173,4 @@ steps:
 
 - **[外部アクション](/ja/guide/concepts/actions#外部アクション)** - Probeが外部アクションを解決し、照合する仕組み
 - **[Database](/ja/reference/actions/db)** - MySQL、PostgreSQL、SQLiteへのクエリ
-- **[S3](/ja/reference/actions/s3)** - S3とS3互換ストレージのオブジェクト
+- **[AWS](/ja/reference/actions/aws)** - S3のオブジェクト、SQSのメッセージ、AWSの任意のAPI

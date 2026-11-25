@@ -31,6 +31,7 @@ func (a OfficialAction) Repository() string {
 var officialActions = []OfficialAction{
 	{"agent", "Test a web application from a task written in natural language, with a model that drives a browser"},
 	{"android", "Drive an app on an Android emulator or device through adb"},
+	{"aws", "Call AWS services, such as S3 and SQS, and any API of AWS, signed with Signature Version 4"},
 	{"browser", "Drive a browser with chromedp"},
 	{"container", "Start a container, and remove it once the run is over"},
 	{"github-notes", "Put the notes of a run on GitHub, in a pull request comment, the job summary or an issue"},
@@ -39,7 +40,7 @@ var officialActions = []OfficialAction{
 	{"jmap", "Call JMAP methods"},
 	{"mail-latency", "Measure mail delivery latency from a Maildir"},
 	{"redis", "Run commands on a Redis or Valkey server"},
-	{"s3", "Read and write objects in S3 and S3-compatible storage"},
+	{"s3", "Read and write objects in S3 and S3-compatible storage; replaced by aws"},
 	{"slack", "Post a message to a Slack channel, of the notes of a run or a text"},
 	{"websocket", "Exchange messages with a WebSocket server"},
 }

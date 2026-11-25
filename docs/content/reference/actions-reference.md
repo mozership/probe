@@ -24,6 +24,7 @@ These are published alongside Probe, each in a repository of its own. A step nam
 
 - **[agent](/reference/actions/agent)** - Test a web application from a task written in natural language, with a model that uses it through a real Chrome
 - **[android](/reference/actions/android)** - Drive an app on an Android emulator or device through adb
+- **[aws](/reference/actions/aws)** - Call AWS services, such as S3 and SQS, and any API of AWS, signed with Signature Version 4
 - **[browser](/reference/actions/browser)** - Drive a real Chrome with chromedp
 - **[container](/reference/actions/container)** - Start a container for the steps of a run, and remove it once the run is over
 - **[github-notes](/reference/actions/github-notes)** - Put the notes of a run on GitHub: a pull request comment, the job summary or an issue
@@ -32,7 +33,6 @@ These are published alongside Probe, each in a repository of its own. A step nam
 - **[jmap](/reference/actions/jmap)** - Call JMAP methods
 - **[mail-latency](/reference/actions/mail-latency)** - Measure delivery latency from a Maildir
 - **[redis](/reference/actions/redis)** - Run commands on a Redis or Valkey server
-- **[s3](/reference/actions/s3)** - Read and write objects in S3 and S3-compatible storage
 - **[slack](/reference/actions/slack)** - Post the notes of a run, or a text, to a Slack channel
 - **[websocket](/reference/actions/websocket)** - Send and receive messages over a WebSocket connection
 

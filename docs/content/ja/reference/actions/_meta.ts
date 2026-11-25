@@ -17,6 +17,7 @@ export default {
   '-- external': { type: 'separator', title: '外部' },
   agent: 'AGENT',
   android: 'ANDROID',
+  aws: 'AWS',
   browser: 'BROWSER',
   container: 'CONTAINER',
   'github-notes': 'GITHUB-NOTES',
@@ -25,7 +26,9 @@ export default {
   jmap: 'JMAP',
   'mail-latency': 'MAIL-LATENCY',
   redis: 'REDIS',
-  s3: 'S3',
+  s3: {
+    display: 'hidden',
+  },
   slack: 'SLACK',
   websocket: 'WEBSOCKET',
   '-- other': { type: 'separator', title: 'その他' },

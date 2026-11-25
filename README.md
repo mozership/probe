@@ -136,6 +136,7 @@ These are external actions, each in a repository of its own, which a step pins b
 |---|---|
 | [agent](https://probe.linyo.ws/reference/actions/agent) | Testing a web application from a task written in natural language, with a model |
 | [android](https://probe.linyo.ws/reference/actions/android) | Driving an app on an Android emulator or device |
+| [aws](https://probe.linyo.ws/reference/actions/aws) | Objects in S3, messages in SQS, and any API of AWS, signed with Signature Version 4 |
 | [browser](https://probe.linyo.ws/reference/actions/browser) | Driving a real browser |
 | [container](https://probe.linyo.ws/reference/actions/container) | Containers started for a run, and removed after it |
 | [github-notes](https://probe.linyo.ws/reference/actions/github-notes) | Putting the notes of a run on GitHub |
@@ -144,7 +145,6 @@ These are external actions, each in a repository of its own, which a step pins b
 | [jmap](https://probe.linyo.ws/reference/actions/jmap) | JMAP methods |
 | [mail-latency](https://probe.linyo.ws/reference/actions/mail-latency) | Measuring delivery latency from received messages |
 | [redis](https://probe.linyo.ws/reference/actions/redis) | Commands on a Redis or Valkey server |
-| [s3](https://probe.linyo.ws/reference/actions/s3) | Objects in S3 and S3-compatible storage |
 | [slack](https://probe.linyo.ws/reference/actions/slack) | Posting the notes of a run, or a text, to Slack |
 | [websocket](https://probe.linyo.ws/reference/actions/websocket) | Sending and receiving messages over WebSocket |
 

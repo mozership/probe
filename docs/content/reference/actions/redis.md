@@ -173,4 +173,4 @@ See [Guard](/guide/concepts/guard).
 
 - **[External Actions](/guide/concepts/actions#external-actions)** - How Probe resolves and checks an external action
 - **[Database](/reference/actions/db)** - Queries on MySQL, PostgreSQL and SQLite
-- **[S3](/reference/actions/s3)** - Objects in S3 and S3-compatible storage
+- **[AWS](/reference/actions/aws)** - Objects in S3, messages in SQS, and any API of AWS
