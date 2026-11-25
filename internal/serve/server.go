@@ -3,6 +3,8 @@ package serve
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -144,7 +146,7 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		if done, ok := s.trigger(name, w); ok {
 			select {
 			case o := <-done:
-				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) || (len(w.State) > 0 && !o.stateSaved) {
+				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) || (len(w.State) > 0 && !o.stateSettled) {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -170,8 +172,9 @@ type outcome struct {
 	run            Run
 	outputs        map[string]any
 	items, handled int
-	// stateSaved is whether the state of the run was saved.
-	stateSaved bool
+	// stateSettled is whether the state of the run was saved, or the run
+	// had nothing to save and no item to move past.
+	stateSettled bool
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
@@ -196,7 +199,7 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 		}
 		o := outcome{run: r, outputs: outputs, items: len(items), handled: s.forEach(w.ForEach, r, items)}
 		if len(w.State) > 0 && r.ID != "" {
-			o.stateSaved = s.keepState(name, w, o)
+			o.stateSettled = s.keepState(name, w, o)
 		}
 		// No longer busy before the loop is told, so that the run it starts
 		// next is not skipped.
@@ -242,8 +245,10 @@ func (s *Server) statePath(name string) string {
 
 // keepState saves the state of w that the run of o gave, once the run
 // passed and every item it gave was handled, over what the run did not
-// give, and reports whether it did. Otherwise the state is left as it was,
-// for the next run to start from it and to give the items again.
+// give. Otherwise the state is left as it was, for the next run to start
+// from it and to give the items again. It reports whether the state is
+// settled: saved, or left as it was by a run that gave neither the state
+// nor items, as a source with nothing new does.
 func (s *Server) keepState(name string, w *Workflow, o outcome) bool {
 	attrs := []any{"workflow", name, "run", o.run.ID}
 	kept := func(level slog.Level, reason string, more ...any) bool {
@@ -268,7 +273,11 @@ func (s *Server) keepState(name string, w *Workflow, o outcome) bool {
 		given = append(given, key)
 	}
 	if len(given) == 0 {
-		return kept(slog.LevelWarn, "the run gave none of the outputs of the state", "state", w.State)
+		if o.items == 0 {
+			kept(slog.LevelInfo, "the run gave none of the outputs of the state, nor items")
+			return true
+		}
+		return kept(slog.LevelWarn, "the run gave items, but none of the outputs of the state", "state", w.State)
 	}
 	path := s.statePath(name)
 	state, err := readState(path, w.State)
@@ -315,7 +324,8 @@ func readState(path string, names []string) (map[string]any, error) {
 // writeState writes state to the file at path, synced before it replaces
 // the one there, so that neither a stop as it is written nor a power cut
 // after leaves anything but the state before or this one. The file keeps
-// the mode it has; a new one is readable as the reports beside it are.
+// the mode it has; a new one gets what the umask allows, as the reports
+// beside it do.
 func writeState(path string, state map[string]any) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -325,16 +335,18 @@ func writeState(path string, state map[string]any) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".state-*.json")
+	suffix := make([]byte, 6)
+	if _, err := rand.Read(suffix); err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir, ".state.json.tmp"+hex.EncodeToString(suffix))
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
 	if err != nil {
 		return err
 	}
-	tmp := f.Name()
-	mode := os.FileMode(0o644)
-	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
+	if info, serr := os.Stat(path); serr == nil {
+		err = f.Chmod(info.Mode().Perm())
 	}
-	err = f.Chmod(mode)
 	if err == nil {
 		_, err = f.Write(append(data, '\n'))
 	}

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -666,7 +667,8 @@ func TestServer_StateKept(t *testing.T) {
 		{"a run that fails", `{"cursor": 8, "messages": []}`, "state kept", "the run did not pass", 1, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
 		{"an item not handled", `{"cursor": 8, "messages": [{"id": "a", "exit": 1}]}`, "state kept", "not every item of the run was handled", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
 		{"a masked output", `{"cursor": "<secret:K>", "messages": []}`, "state kept", "an output of the state holds a secret or a credential, which the report masks", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
-		{"none of the state", `{"messages": []}`, "state kept", "the run gave none of the outputs of the state", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"none of the state", `{"messages": []}`, "state kept", "the run gave none of the outputs of the state, nor items", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
+		{"items but none of the state", `{"messages": [{"id": "a"}]}`, "state kept", "the run gave items, but none of the outputs of the state", 0, map[string]any{"cursor": json.Number("1"), "seen": "x"}},
 		{"an output not given", `{"cursor": 8, "messages": []}`, "state saved", "", 0, map[string]any{"cursor": json.Number("8"), "seen": "x"}},
 	}
 	for _, tt := range tests {
@@ -699,15 +701,17 @@ func TestServer_StateKept(t *testing.T) {
 	}
 }
 
-// The state file keeps the mode it has, and a new one is readable as the
-// reports are.
+// The state file keeps the mode it has, and a new one gets what the umask
+// allows, as the reports do.
 func TestWriteState_Mode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "w", "state.json")
+	old := syscall.Umask(0o027)
+	defer syscall.Umask(old)
 	if err := writeState(path, map[string]any{"cursor": 1}); err != nil {
 		t.Fatal(err)
 	}
-	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o644 {
-		t.Errorf("new state = %v, %v; want 0644", fi.Mode(), err)
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o640 {
+		t.Errorf("new state = %v, %v; want 0640, as the umask allows", fi.Mode(), err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
@@ -717,6 +721,24 @@ func TestWriteState_Mode(t *testing.T) {
 	}
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("state = %v, %v; want the 0600 it had", fi.Mode(), err)
+	}
+}
+
+// A source that gives neither its state nor items, as one with nothing new
+// does, keeps its state without backing off.
+func TestServer_StateIdle(t *testing.T) {
+	s, log, _ := stateServer(t, `{"messages": []}`)
+	serveUntil(t, s, "three runs of the source", func() bool { return len(sourceRuns(t, log)) >= 3 })
+	runs := sourceRuns(t, log)
+	for i := 1; i < len(runs); i++ {
+		if gap := at(t, runs[i], "started_at").Sub(at(t, runs[i-1], "finished_at")); gap >= firstBackoff-50*time.Millisecond {
+			t.Errorf("the source waited %s between runs %d and %d, want no backoff", gap, i-1, i)
+		}
+	}
+	for _, l := range logged(t, log, "state kept") {
+		if l["level"] != "INFO" {
+			t.Errorf("state kept = %v, want INFO", l)
+		}
 	}
 }
 
