@@ -5,7 +5,7 @@ go 1.26.11
 require (
 	github.com/briandowns/spinner v1.23.2
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/emersion/go-imap/v2 v2.0.0-beta.8
+	github.com/emersion/go-imap/v2 v2.0.0-beta.9
 	github.com/emersion/go-message v0.18.2
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
