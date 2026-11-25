@@ -19,6 +19,7 @@ import (
 	"github.com/mozership/probe/internal/protocoverage"
 	"github.com/mozership/probe/internal/report"
 	"github.com/mozership/probe/internal/suggest"
+	"github.com/mozership/probe/internal/thirdparty"
 	"github.com/mozership/probe/sdk"
 )
 
@@ -276,7 +277,7 @@ func takesValue(name string) bool {
 	return false
 }
 
-var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest"}
+var subCommands = []string{"gen", "dag", "check", "fmt", "coverage", "guide", "skill", "manifest", "licenses"}
 
 func isSubCommand(name string) bool {
 	return slices.Contains(subCommands, name)
@@ -337,6 +338,7 @@ Usage: probe [options] <workflow-file>...
        probe skill [install [dir]]
        probe manifest init <owner>/<repo>
        probe manifest <tag> <checksums-file> [action-file]
+       probe licenses [package]
 
 Arguments:
   workflow-file    Path to a YAML workflow file, a directory or a glob.
@@ -374,6 +376,9 @@ Subcommands:
                    Print the action.yml of a release of an external action:
                    action-file (action.yml) with the tag in runs.url and the
                    digests of checksums-file in runs.checksums
+  licenses [package]
+                   Print the licenses of the modules that the command package
+                   (.) is built from, for its release to carry
 
 Options:`
 
@@ -427,6 +432,7 @@ const (
 	skillUsage        = "Usage: probe skill [install [dir]]\n"
 	manifestInitUsage = "Usage: probe manifest init <owner>/<repo>\n"
 	manifestUsage     = manifestInitUsage + "       probe manifest <tag> <checksums-file> [action-file]\n"
+	licensesUsage     = "Usage: probe licenses [package]\n"
 )
 
 // errorf writes an error to the error writer, as a line that starts with
@@ -515,6 +521,8 @@ func (c *Cmd) runSubCommand() int {
 		return c.runSkill()
 	case "manifest":
 		return c.runManifest()
+	case "licenses":
+		return c.runLicenses()
 	default:
 		c.errorf("unknown subcommand: %s", c.SubCommand)
 		return probe.ExitConfigError
@@ -958,6 +966,35 @@ func (c *Cmd) runManifest() int {
 		return probe.ExitConfigError
 	}
 	_, _ = c.outWriter.Write(out)
+	return 0
+}
+
+// runLicenses prints the licenses of the modules that a command package is
+// built from, on every platform it is released for, and of the Go standard
+// library. Nothing is printed when a module has no license file.
+func (c *Cmd) runLicenses() int {
+	if len(c.SubCommandArgs) > 1 {
+		c.usageError(licensesUsage, "licenses takes one package, not %d", len(c.SubCommandArgs))
+		return probe.ExitConfigError
+	}
+	pkg := "."
+	if len(c.SubCommandArgs) == 1 {
+		pkg = c.SubCommandArgs[0]
+	}
+	name, err := thirdparty.Executable(".", pkg)
+	if err != nil {
+		c.errorf("%v", err)
+		return probe.ExitConfigError
+	}
+	modules, err := thirdparty.Modules(".", pkg, thirdparty.Platforms)
+	if err != nil {
+		c.errorf("%v", err)
+		return probe.ExitConfigError
+	}
+	if err := thirdparty.Write(c.outWriter, name, modules); err != nil {
+		c.errorf("%v", err)
+		return probe.ExitConfigError
+	}
 	return 0
 }
 

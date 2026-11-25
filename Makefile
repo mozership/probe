@@ -12,7 +12,7 @@ lint:
 	golangci-lint run ./...
 
 licenses:
-	go run ./internal/thirdparty/gen -o THIRD_PARTY_LICENSES
+	go run ./cmd/probe licenses ./cmd/probe > THIRD_PARTY_LICENSES
 
 key:
 	@rm -rf keys/*.pem

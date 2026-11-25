@@ -5,7 +5,7 @@ before:
     # The licenses of what the executable is built from, which most of them
     # ask to go with a copy in binary form. It fails the release when a
     # module has no license file to pass on.
-    - go run ./internal/thirdparty/gen -o THIRD_PARTY_LICENSES
+    - sh -c "go run ./cmd/probe licenses ./cmd/probe > THIRD_PARTY_LICENSES"
 builds:
   - id: probe
     main: ./cmd/probe

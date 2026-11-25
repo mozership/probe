@@ -336,7 +336,7 @@ There is no environment variable for it, as there is for `--report`: a run set t
 
 ## Subcommands
 
-A subcommand replaces the run with something else: `gen` writes a starting workflow, `dag` prints the dependency graph a workflow describes, `check` finds what is wrong or weak in a workflow without running it, `coverage` tells how much of an OpenAPI document a run checked, `guide` prints this documentation, `skill` sets up a coding agent to use Probe, and `manifest` writes the `action.yml` of a release of an external action.
+A subcommand replaces the run with something else: `gen` writes a starting workflow, `dag` prints the dependency graph a workflow describes, `check` finds what is wrong or weak in a workflow without running it, `coverage` tells how much of an OpenAPI document a run checked, `guide` prints this documentation, `skill` sets up a coding agent to use Probe, `manifest` writes the `action.yml` of a release of an external action, and `licenses` prints the licenses a release has to carry.
 
 ### `gen`
 
@@ -704,6 +704,26 @@ In a GitHub Actions run started by a tag, `GITHUB_REF_NAME` is that tag.
 Do not redirect the output straight to the file it reads: the shell empties `action.yml` before Probe reads it.
 
 An `action.yml` that cannot be released, or a checksums file with no digest for the asset, exits with status 2 and prints nothing to standard output. A release tagged `init` cannot be given, as that names `manifest init`.
+
+### `licenses`
+
+Print the licenses of the software a command is built from, for its release to carry. Most licenses ask that the copyright notice and the license go with a copy in binary form, which a release is.
+
+**Usage:**
+```bash
+probe licenses [package]
+```
+
+`package` is the command, a `main` package, and defaults to `.`, the package in the working directory. Probe runs `go list` on it for each platform Probe and its external actions are released for, Linux and macOS on amd64 and arm64, and takes every module it links, built without cgo or build tags, as Probe and its actions are, apart from the module the command is in, and the Go distribution that builds it, whose runtime and standard library are in the executable. For each, it prints the files at the top of the module that hold its license, its copyright notices or what its license asks to be passed on with them, such as `LICENSE`, `COPYING` and the `NOTICE` of the Apache License, after a list of them all with their versions and where their source is published. The other modules of a [workspace](https://go.dev/ref/mod#workspaces) count as any other, and a module in `vendor` is read from there. `go` has to be on `PATH`, with the modules downloaded or downloadable.
+
+**Example:**
+```bash
+probe licenses > THIRD_PARTY_LICENSES
+```
+
+A module with no such file exits with status 2 and prints nothing to standard output, with the error naming every such module: its license cannot be passed on, and has to be looked at by hand. A package that is not a command exits with status 2 as well.
+
+The releases of Probe carry the file this prints for Probe in their archives, and an external action can publish one beside its executables, as [Writing an External Action](/guide/concepts/actions#writing-an-external-action) shows.
 
 ## Environment Variables
 
