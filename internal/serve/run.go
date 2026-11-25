@@ -221,11 +221,16 @@ func args(w *Workflow, report string) []string {
 }
 
 // varsJSON returns the vars of a run as --vars-file reads them: those the
-// serve file gives the workflow, and over them those of the run.
+// serve file gives the workflow, and over them those of the run, apart from
+// a null, which leaves the var to the serve file.
 func varsJSON(own, given map[string]any) ([]byte, error) {
 	vars := make(map[string]any, len(own)+len(given))
 	maps.Copy(vars, own)
-	maps.Copy(vars, given)
+	for k, v := range given {
+		if v != nil {
+			vars[k] = v
+		}
+	}
 	return json.Marshal(vars)
 }
 

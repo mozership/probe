@@ -2,6 +2,9 @@ package serve
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"os"
@@ -11,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mozership/probe/internal/mask"
 )
 
 // pruneEvery is how often the runs older than Results.Keep are removed.
@@ -137,8 +142,8 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		wait := w.Interval.Duration
 		if done, ok := s.trigger(name, w); ok {
 			select {
-			case r := <-done:
-				if r.Status != StatusPassed {
+			case o := <-done:
+				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -157,11 +162,19 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 	}
 }
 
+// outcome is how a run of a workflow started by its schedule or loop went:
+// the run, how many items it gave, and how many of them were handled.
+type outcome struct {
+	run            Run
+	items, handled int
+}
+
 // trigger starts a run of w unless one is going or waiting for a worker,
-// as the log then says. It returns what has the run once it is over, and
-// whether it started one. A run waiting for a worker when serve is stopped
-// is not run, and nothing is sent.
-func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
+// as the log then says. It returns what has the outcome once the run is
+// over, with the items it gave handled, and whether it started one. A run
+// waiting for a worker when serve is stopped is not run, and nothing is
+// sent.
+func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 	if s.isStopping() {
 		return nil, false
 	}
@@ -169,23 +182,155 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan Run, bool) {
 		s.log.Warn("run skipped: the run before it is still going", "workflow", name)
 		return nil, false
 	}
-	done := make(chan Run, 1)
+	done := make(chan outcome, 1)
 	s.wg.Go(func() {
-		defer s.busy[name].Store(false)
-		select {
-		case s.workers <- struct{}{}:
-		case <-s.stopping:
+		r, items, ok := s.runSource(name, w)
+		if !ok {
+			s.busy[name].Store(false)
 			return
 		}
-		defer func() { <-s.workers }()
-		if s.isStopping() {
-			return
-		}
-		r := s.runOnce(name, w, nil)
-		s.logRun(r)
-		done <- r
+		o := outcome{run: r, items: len(items), handled: s.forEach(w.ForEach, r, items)}
+		// No longer busy before the loop is told, so that the run it starts
+		// next is not skipped.
+		s.busy[name].Store(false)
+		done <- o
 	})
 	return done, true
+}
+
+// runSource runs w, and returns the run with the items it gave, as its
+// for_each reads them, once the run is logged. A run that passed but gave
+// no list of items is logged as an error.
+func (s *Server) runSource(name string, w *Workflow) (Run, []map[string]any, bool) {
+	var items []map[string]any
+	r, ok := s.run(name, w, nil, func(r *Run) {
+		if w.ForEach == nil || r.Status != StatusPassed {
+			return
+		}
+		var err error
+		if items, err = readItems(r.ReportPath(), w.ForEach.Items); err != nil {
+			r.Status, r.Err = StatusError, err
+		}
+	})
+	return r, items, ok
+}
+
+// forEach handles each of items, the items r gave, as f says: at most
+// f.Concurrency at once, each by a run of f.Workflow and then of
+// f.OnSuccess or f.OnFailure, with the item as its vars. It returns once
+// each item started is handled, with how many were; once serve is stopped,
+// no item starts.
+func (s *Server) forEach(f *ForEach, r Run, items []map[string]any) int {
+	if f == nil || len(items) == 0 {
+		return 0
+	}
+	slots := make(chan struct{}, f.Concurrency)
+	var wg sync.WaitGroup
+	var handled atomic.Int64
+	for i, item := range items {
+		select {
+		case slots <- struct{}{}:
+		case <-s.stopping:
+		}
+		if s.isStopping() {
+			break
+		}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			if s.handle(f, r, i, item) {
+				handled.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	return int(handled.Load())
+}
+
+// handle runs f.Workflow for item, the item of index i that r gave, and
+// then f.OnSuccess or f.OnFailure as it passed or not. It reports whether
+// the item was handled: its run passed and so did its OnSuccess, or it
+// failed and its OnFailure passed. An item whose vars cannot be given as
+// they are is not run, and is logged as an error.
+func (s *Server) handle(f *ForEach, from Run, i int, item map[string]any) bool {
+	tag := []any{"from", from.ID, "item", i}
+	if err := checkItem(item); err != nil {
+		s.log.Error("item skipped", append(tag, "workflow", f.Workflow, "error", err.Error())...)
+		return false
+	}
+	r, ok := s.run(f.Workflow, s.config.Workflows[f.Workflow], item, nil, tag...)
+	if !ok {
+		return false
+	}
+	next := f.OnFailure
+	if r.Status == StatusPassed {
+		next = f.OnSuccess
+	}
+	if next == "" {
+		return r.Status == StatusPassed
+	}
+	after, ok := s.run(next, s.config.Workflows[next], item, nil, append(tag, "for", r.ID)...)
+	return ok && after.Status == StatusPassed
+}
+
+// checkItem returns why the vars of item cannot be given to its runs as it
+// holds them: a key that --vars-file refuses, or a key or a value the report
+// masked, as it holds a secret or a credential.
+func checkItem(item map[string]any) error {
+	seen := map[string]bool{}
+	for key, v := range item {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			return errors.New("a key of the item is empty, which no var can be named")
+		}
+		if seen[name] {
+			return fmt.Errorf("the item has the key %s twice, once the white space around them is left out", name)
+		}
+		seen[name] = true
+		if masked(key) || masked(v) {
+			return fmt.Errorf("%s holds a secret or a credential, which the report masks, so the run would be given what hides it", key)
+		}
+	}
+	return nil
+}
+
+// masked reports whether v, a value read from a report, holds a secret or
+// a credential the report masked.
+func masked(v any) bool {
+	switch val := v.(type) {
+	case string:
+		return mask.Hides(val)
+	case map[string]any:
+		for k, e := range val {
+			if masked(k) || masked(e) {
+				return true
+			}
+		}
+	case []any:
+		return slices.ContainsFunc(val, masked)
+	}
+	return false
+}
+
+// run runs w with vars once a worker is free, within its timeout, and logs
+// the run with tag, after check has had its say on it. It reports whether
+// the run started, which it does not once serve is stopped.
+func (s *Server) run(name string, w *Workflow, vars map[string]any, check func(*Run), tag ...any) (Run, bool) {
+	select {
+	case s.workers <- struct{}{}:
+	case <-s.stopping:
+		return Run{}, false
+	}
+	if s.isStopping() {
+		<-s.workers
+		return Run{}, false
+	}
+	r := s.runOnce(name, w, vars)
+	<-s.workers
+	if check != nil {
+		check(&r)
+	}
+	s.logRun(r, tag...)
+	return r, true
 }
 
 func (s *Server) isStopping() bool {
@@ -208,18 +353,53 @@ func (s *Server) runOnce(name string, w *Workflow, vars map[string]any) Run {
 	return s.runner.start(ctx, name, w, vars)
 }
 
-// logRun writes a line of the log for r. The report is told only when the
-// run wrote one, which a run ended before its jobs were over did not.
-func (s *Server) logRun(r Run) {
-	attrs := []any{
+// readItems reads the items of a run from its json report at path: the
+// output key, a list of objects.
+func readItems(path, key string) ([]map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("the items are not read: %w", err)
+	}
+	var report struct {
+		Outputs map[string]any `json:"outputs"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		return nil, fmt.Errorf("the items are not read: %s: %w", path, err)
+	}
+	v, ok := report.Outputs[key]
+	if !ok {
+		return nil, fmt.Errorf("the run gives no output %s, which for_each reads the items from", key)
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("output %s is to be a list of objects, the items, not %T", key, v)
+	}
+	items := make([]map[string]any, len(list))
+	for i, e := range list {
+		item, ok := e.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("item %d of output %s is to be an object, whose keys are the vars of its runs, not %T", i, key, e)
+		}
+		items[i] = item
+	}
+	return items, nil
+}
+
+// logRun writes a line of the log for r, with tag, which tells the item a
+// run was for. The report is told only when the run wrote one, which a run
+// ended before its jobs were over did not.
+func (s *Server) logRun(r Run, tag ...any) {
+	attrs := append([]any{
 		"workflow", r.Workflow,
 		"run", r.ID,
+	}, tag...)
+	attrs = append(attrs,
 		"status", r.Status,
 		"exit_status", r.ExitStatus,
 		"started_at", r.StartedAt,
 		"finished_at", r.FinishedAt,
 		"duration_ms", r.FinishedAt.Sub(r.StartedAt).Milliseconds(),
-	}
+	)
 	if _, err := os.Stat(r.ReportPath()); err == nil {
 		attrs = append(attrs, "report", r.ReportPath())
 	}

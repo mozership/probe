@@ -62,6 +62,13 @@ func TestVarsJSON(t *testing.T) {
 	if want := `{"env":"prod","item":{"id":"m1"},"n":2}`; string(got) != want {
 		t.Errorf("varsJSON = %s, want %s", got, want)
 	}
+	got, err = varsJSON(map[string]any{"queue": "orders"}, map[string]any{"queue": nil, "cursor": nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"queue":"orders"}`; string(got) != want {
+		t.Errorf("varsJSON with nulls = %s, want %s", got, want)
+	}
 	if got, _ := varsJSON(nil, nil); string(got) != "{}" {
 		t.Errorf("varsJSON of none = %s, want {}", got)
 	}

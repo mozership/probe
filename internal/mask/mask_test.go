@@ -1102,3 +1102,17 @@ func TestMasker_Data(t *testing.T) {
 		t.Errorf("nil Data = %v", got)
 	}
 }
+
+func TestHides(t *testing.T) {
+	m := New([]string{"S"}, map[string]string{"S": "sekret"})
+	for _, s := range []string{m.String("a sekret"), redactedValue, "x" + redactedValue, m.String("https://u:p@h/")} {
+		if !Hides(s) {
+			t.Errorf("Hides(%q) = false", s)
+		}
+	}
+	for _, s := range []string{"", "plain", "<secret", "redacted"} {
+		if Hides(s) {
+			t.Errorf("Hides(%q) = true", s)
+		}
+	}
+}

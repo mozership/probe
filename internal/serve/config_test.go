@@ -88,7 +88,7 @@ func TestLoad_WarnsOfWorkflowNeverStarted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"workflow idle is never started: it has neither schedule nor loop"}; !reflect.DeepEqual(warnings, want) {
+	if want := []string{"workflow idle is never started: it has neither schedule nor loop, and no for_each runs it"}; !reflect.DeepEqual(warnings, want) {
 		t.Errorf("warnings = %q, want %q", warnings, want)
 	}
 }
@@ -133,5 +133,78 @@ func TestLoad_GraceOfNone(t *testing.T) {
 	}
 	if c.dir == "" {
 		t.Error("the directory of the serve file is not kept")
+	}
+}
+
+func TestLoad_ForEach(t *testing.T) {
+	c, warnings, err := Load(writeServeFile(t, `workflows:
+  intake:
+    files: [receive.yml]
+    loop: true
+    for_each:
+      items: messages
+      workflow: verify
+      on_success: ack
+      on_failure: none
+  verify:
+    files: [verify.yml]
+  ack:
+    files: [ack.yml]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %q", warnings)
+	}
+	f := c.Workflows["intake"].ForEach
+	if f.Concurrency != 1 || f.OnSuccess != "ack" || f.OnFailure != "" {
+		t.Errorf("for_each = %+v", f)
+	}
+}
+
+func TestLoad_ForEachWarnsWithoutOnSuccess(t *testing.T) {
+	c, warnings, err := Load(writeServeFile(t, "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b}\n  b:\n    files: [b.yml]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "workflow a: for_each: has no on_success") {
+		t.Errorf("warnings = %q", warnings)
+	}
+	if c.Workflows["a"].ForEach.OnSuccess != "" {
+		t.Error("on_success is not empty")
+	}
+
+	_, warnings, err = Load(writeServeFile(t, "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b, on_success: none}\n  b:\n    files: [b.yml]\n"))
+	if err != nil || len(warnings) != 0 {
+		t.Errorf("on_success: none = %q, %v", warnings, err)
+	}
+}
+
+func TestLoad_ForEachRefuses(t *testing.T) {
+	base := "  b:\n    files: [b.yml]\n"
+	tests := []struct{ name, forEach, more, want string }{
+		{"no items", "{workflow: b, on_success: none}", "", "items names no output"},
+		{"no workflow", "{items: x, on_success: none}", "", "workflow names none"},
+		{"an unknown workflow", "{items: x, workflow: c, on_success: none}", "", "workflow: no workflow is named c"},
+		{"an unknown on_success", "{items: x, workflow: b, on_success: c}", "", "on_success: no workflow is named c"},
+		{"an unknown on_failure", "{items: x, workflow: b, on_success: none, on_failure: c}", "", "on_failure: no workflow is named c"},
+		{"a workflow of none", "{items: x, workflow: none, on_success: none}", "", "workflow: no workflow is named none"},
+		{"negative concurrency", "{items: x, workflow: b, on_success: none, concurrency: -1}", "", "concurrency must be 1 or more"},
+		{"a for_each of its own", "{items: x, workflow: c, on_success: none}", "  c:\n    files: [c.yml]\n    for_each: {items: y, workflow: b, on_success: none}\n", "workflow: c has a for_each of its own"},
+		{"an unknown key", "{items: x, workflow: b, on_succes: none}", "", "on_succes"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: " + tt.forEach + "\n" + base + tt.more
+			_, _, err := Load(writeServeFile(t, content))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("Load = %v, want an error saying %q", err, tt.want)
+			}
+		})
+	}
+	_, _, err := Load(writeServeFile(t, "workflows:\n  none:\n    files: [a.yml]\n    loop: true\n"))
+	if err == nil || !strings.Contains(err.Error(), "the name none is what on_success says to do nothing with") {
+		t.Errorf("Load of a workflow named none = %v", err)
 	}
 }

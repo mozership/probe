@@ -798,8 +798,54 @@ Each workflow takes:
 | `loop` | Run the workflow again as soon as the run before it is over |
 | `interval` | With `loop`, how long to wait between the runs |
 | `timeout` | End a run that goes on longer, with SIGTERM, as a person stops Probe, and kill it if it is still going 10 seconds later |
+| `for_each` | Run another workflow for each item a run gives; see [For each item](#for-each-item) |
 
-The paths are taken from the directory of the serve file, which the runs run in too, so that a step reads the files beside the workflow as it does when a person runs it there. A workflow has `schedule` or `loop`, not both; one with neither is warned of, as nothing starts it. A workflow is not started while a run of it is going, and the log says so.
+The paths are taken from the directory of the serve file, which the runs run in too, so that a step reads the files beside the workflow as it does when a person runs it there. A workflow has `schedule` or `loop`, not both; one with neither, and that no `for_each` runs, is warned of, as nothing starts it. A workflow is not started by its `schedule` or `loop` while a run of it is going, and the log says so.
+
+#### For each item
+
+`for_each` takes from a queue, or anything else that holds work to do, by a workflow of its own: the workflow reads what is waiting, as messages from a queue or rows from a table, and gives them as an [output](/reference/yaml-configuration#outputs). Serve then runs another workflow for each, and one more as that run passed or not, such as one that acknowledges the message:
+
+```yaml
+workflows:
+  intake:
+    files: [workflows/receive.yml]
+    loop: true
+    for_each:
+      items: messages
+      workflow: verify
+      concurrency: 4
+      on_success: ack
+      on_failure: dead-letter
+  verify:
+    files: [workflows/verify.yml]
+    timeout: 10m
+  ack:
+    files: [workflows/queue.yml]
+    jobs: [delete]
+  dead-letter:
+    files: [workflows/queue.yml]
+    jobs: [move]
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `items` | (required) | The output of the run that holds the items, a list of objects |
+| `workflow` | (required) | The workflow run for each item |
+| `concurrency` | `1` | How many items are handled at once, within `workers` |
+| `on_success` | — | The workflow run for an item whose `workflow` passed, such as one that acknowledges it; `none` for nothing |
+| `on_failure` | — | The workflow run for an item whose `workflow` did not pass, such as one that moves it to a dead letter queue |
+
+- The keys of an item are the vars of the runs for it, over the `vars` the serve file gives those workflows; a `null` leaves the var to them. A value that is not a string is given as its JSON, which a step reads back with `parse_json`, as [`--vars-file`](#--vars-file) gives it.
+- The items are read from the report of the run, where the values of the [`secrets`](/reference/yaml-configuration#secrets) are masked, as are credentials such as a password an action was given or the password of a URL. An item that holds one, or whose keys cannot name vars, such as an empty one, is not run: the log has `item skipped` with why, and the queue gives it again. The workflow that handles an item knows nothing of the queue, and can be run by itself as any other.
+- A run that fails gives no items. One that passes but whose output is not a list of objects is logged as an `error`.
+- A run is over once the items it gave are, so a `loop` takes no more than it handles. An item is handled when its `workflow` passed and so did its `on_success`, or it failed and its `on_failure` passed; a `loop` backs off after a run none of whose items was handled, as after a run that did not pass. An item that fails alone does not slow the others. A worker is held only while a process of `probe` goes, so the items wait for workers as the run that gave them does not.
+- Items are handled at least once: an item that is neither acknowledged by `on_success` nor taken away by `on_failure`, as its runs failed or serve was stopped, is given again by the queue, once its visibility timeout is over. Write the workflows that handle items so that handling one twice does no harm.
+- Once serve is stopped, no item starts, and nothing more is run for one handled.
+- A `for_each` without `on_success` is warned of, as a queue whose messages are never acknowledged gives them again; `on_success: none` says that nothing is to be done.
+- The workflows `for_each` runs cannot have a `for_each` of their own.
+
+The line of the log of a run for an item has `from`, the run that gave it, and `item`, its index; that of `on_success` or `on_failure` has `for` too, the run of `workflow` it follows.
 
 Each run is a directory under `results.dir/<workflow>/`, named by when it started, with `report.json`, the [`json` report](#--report) of the run, and `output.log`, what it printed. A run ended before its jobs were over writes no report, and its line in the log has none. Serve writes a line to the standard error for each run, as JSON:
 

@@ -57,9 +57,30 @@ type Workflow struct {
 	Interval Duration `yaml:"interval"`
 	// Timeout ends a run that goes on longer; zero for none.
 	Timeout Duration `yaml:"timeout"`
+	// ForEach runs another workflow for each item a run of this one gives.
+	ForEach *ForEach `yaml:"for_each"`
 
 	schedule *cron.Schedule
 }
+
+// ForEach is how the items a run gives are handled: each by a run of a
+// workflow, and then by one of another as that run passed or not.
+type ForEach struct {
+	// Items is the output of the run that holds the items, a list of
+	// objects, whose keys are the vars of the runs for each.
+	Items string `yaml:"items"`
+	// Workflow is run for each item.
+	Workflow string `yaml:"workflow"`
+	// Concurrency is how many items are handled at once.
+	Concurrency int `yaml:"concurrency"`
+	// OnSuccess is run for an item whose Workflow passed, and OnFailure for
+	// one whose Workflow did not; none or empty for nothing.
+	OnSuccess string `yaml:"on_success"`
+	OnFailure string `yaml:"on_failure"`
+}
+
+// none is what on_success says to do nothing with.
+const none = "none"
 
 // Duration is a duration as a workflow writes one, such as 30s or 1m30s.
 type Duration struct {
@@ -147,16 +168,83 @@ func (c *Config) prepare(dir string) ([]string, error) {
 			errs = append(errs, fmt.Errorf("workflow %s: %w", name, err))
 			continue
 		}
-		if w.schedule == nil && !w.Loop {
-			warnings = append(warnings, fmt.Sprintf("workflow %s is never started: it has neither schedule nor loop", name))
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	handled := map[string]bool{}
+	for _, name := range slices.Sorted(maps.Keys(c.Workflows)) {
+		f := c.Workflows[name].ForEach
+		if f == nil {
+			continue
+		}
+		warning, err := c.prepareForEach(name, f)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("workflow %s: for_each: %w", name, err))
+			continue
+		}
+		if warning != "" {
+			warnings = append(warnings, fmt.Sprintf("workflow %s: for_each: %s", name, warning))
+		}
+		for _, h := range []string{f.Workflow, f.OnSuccess, f.OnFailure} {
+			handled[h] = true
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Workflows)) {
+		w := c.Workflows[name]
+		if w.schedule == nil && !w.Loop && !handled[name] {
+			warnings = append(warnings, fmt.Sprintf("workflow %s is never started: it has neither schedule nor loop, and no for_each runs it", name))
 		}
 	}
 	return warnings, errors.Join(errs...)
 }
 
+// prepareForEach checks f, the for_each of the workflow name, and returns a
+// warning of what is likely a mistake.
+func (c *Config) prepareForEach(name string, f *ForEach) (string, error) {
+	if f.Items == "" {
+		return "", errors.New("items names no output")
+	}
+	if f.Concurrency == 0 {
+		f.Concurrency = 1
+	}
+	if f.Concurrency < 0 {
+		return "", fmt.Errorf("concurrency must be 1 or more, not %d", f.Concurrency)
+	}
+	if f.Workflow == "" {
+		return "", errors.New("workflow names none")
+	}
+	for _, ref := range []struct{ key, name string }{{"workflow", f.Workflow}, {"on_success", f.OnSuccess}, {"on_failure", f.OnFailure}} {
+		if ref.name == "" || ref.name == none && ref.key != "workflow" {
+			continue
+		}
+		target, ok := c.Workflows[ref.name]
+		if !ok {
+			return "", fmt.Errorf("%s: no workflow is named %s", ref.key, ref.name)
+		}
+		if target.ForEach != nil {
+			return "", fmt.Errorf("%s: %s has a for_each of its own, which only a workflow started by schedule or loop can have", ref.key, ref.name)
+		}
+	}
+	if f.OnFailure == none {
+		f.OnFailure = ""
+	}
+	switch f.OnSuccess {
+	case none:
+		f.OnSuccess = ""
+	case "":
+		return "has no on_success, where an item is acknowledged so that the queue does not give it again; write on_success: none when nothing is to be done", nil
+	}
+	return "", nil
+}
+
 func (w *Workflow) prepare(name, dir string) error {
 	if !workflowName.MatchString(name) {
 		return errors.New("the name is to be letters, digits, _ and -, starting with a letter or a digit")
+	}
+	if name == none {
+		return fmt.Errorf("the name %s is what on_success says to do nothing with", none)
 	}
 	if len(w.Files) == 0 {
 		return errors.New("names no files")
