@@ -745,6 +745,82 @@ A module with no such file exits with status 2 and prints nothing to standard ou
 
 The releases of Probe carry the file this prints for Probe in their archives, and an external action can publish one beside its executables, as [Writing an External Action](/guide/concepts/actions#writing-an-external-action) shows.
 
+### `serve`
+
+Keep running workflows: on a schedule, as monitoring, or again and again, as a worker that takes what a queue holds. Each run is a process of `probe` of its own, the run a person gets with the same files and vars, and writes its `json` report where the log of serve says.
+
+**Usage:**
+```bash
+probe serve <serve-file>
+```
+
+The serve file names each workflow, the files a run of it merges and what a run is started with:
+
+```yaml
+workers: 4
+results:
+  dir: runs
+  keep: 720h
+grace: 30s
+workflows:
+  health:
+    files: [workflows/health.yml]
+    schedule: "*/5 * * * *"
+    read_only: true
+    allow_hosts: [api.example.com]
+    timeout: 2m
+  intake:
+    files: [workflows/receive.yml]
+    vars:
+      queue: orders
+    loop: true
+    interval: 10s
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `workers` | `4` | How many runs go at once, across every workflow. A run waits for a worker once that many go |
+| `results.dir` | `runs` | Where the runs leave what they report |
+| `results.keep` | none | How long a run is kept once it is over, such as `720h`; without it, every run is kept |
+| `grace` | `30s` | How long the runs going when serve is stopped are waited for, before they are ended |
+| `workflows` | (required) | The workflows, by name: letters, digits, `_` and `-` |
+
+Each workflow takes:
+
+| Key | Description |
+|---|---|
+| `files` | The workflow files a run merges, in their order (required) |
+| `vars` | Vars for the run, as [`--vars-file`](#--vars-file) gives them |
+| `env_files` | As [`--env-file`](#--env-file) |
+| `jobs` | As [`--job`](#--job) |
+| `read_only`, `allow_hosts`, `allow_actions` | The guard of the run, as [`--read-only`](#--read-only), [`--allow-host`](#--allow-host) and [`--allow-action`](#--allow-action). It is given to every run in full, so the environment of serve, such as `PROBE_READ_ONLY`, neither loosens nor tightens it |
+| `schedule` | A cron expression of the times the workflow runs at, on the clock of the local time zone: minute, hour, day of the month, month and day of the week, each `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a list of them. A month and a day of the week can be named, as `jan` and `mon`. As in cron, a day matches by either day field when neither starts with `*`, and by both otherwise. A time the clock skips as daylight saving time starts is not run, and one it shows twice as it ends is run once, unless the hour field starts with `*`, as a schedule then runs on through the hour shown twice |
+| `loop` | Run the workflow again as soon as the run before it is over |
+| `interval` | With `loop`, how long to wait between the runs |
+| `timeout` | End a run that goes on longer, with SIGTERM, as a person stops Probe, and kill it if it is still going 10 seconds later |
+
+The paths are taken from the directory of the serve file, which the runs run in too, so that a step reads the files beside the workflow as it does when a person runs it there. A workflow has `schedule` or `loop`, not both; one with neither is warned of, as nothing starts it. A workflow is not started while a run of it is going, and the log says so.
+
+Each run is a directory under `results.dir/<workflow>/`, named by when it started, with `report.json`, the [`json` report](#--report) of the run, and `output.log`, what it printed. A run ended before its jobs were over writes no report, and its line in the log has none. Serve writes a line to the standard error for each run, as JSON:
+
+```json
+{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
+```
+
+| `status` | The run |
+|---|---|
+| `passed` | Exited with 0 |
+| `failed` | A test or an action failed, as exit status 1 or 3 tells |
+| `error` | Could not run its workflow, as exit status 2 tells, or could not be started; `error` says why |
+| `timeout` | Was ended by `timeout` |
+| `stopped` | Was ended as serve was stopped |
+
+A run that is not `passed` is logged at the level `ERROR`, and a `loop` waits longer after each such run in a row, from 1 second up to a minute, past its `interval`, so that a workflow whose target is down is not run again and again at once. Notifying anyone of a failed run is left to the workflow, as an `always` job with an action that posts, such as Slack's.
+
+SIGINT or SIGTERM stops serve: it starts no run, not even one waiting for a worker, waits `grace` for the runs going, and then ends them with SIGTERM, killing those still going 10 seconds later. Another signal kills them at once. A serve file that cannot be read exits with status 2 before any run.
+
+Each run is the leader of a process group of its own, which is killed once the run is over, so that nothing the run started outlives it, and a Ctrl-C to the terminal reaches serve alone. Under systemd, give the unit `KillMode=mixed`, so that stopping it signals serve, which ends the runs as above, rather than every process of the unit at once.
+
 ## Environment Variables
 
 The following environment variables affect Probe's behavior:
