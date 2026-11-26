@@ -146,6 +146,7 @@ These are external actions, each in a repository of its own, which a step pins b
 | [mail-latency](https://probe.linyo.ws/reference/actions/mail-latency) | Measuring delivery latency from received messages |
 | [redis](https://probe.linyo.ws/reference/actions/redis) | Commands on a Redis or Valkey server |
 | [slack](https://probe.linyo.ws/reference/actions/slack) | Posting the notes of a run, or a text, to Slack |
+| [slurm](https://probe.linyo.ws/reference/actions/slurm) | Jobs on Slurm, and the state of its partitions and nodes, over SSH |
 | [websocket](https://probe.linyo.ws/reference/actions/websocket) | Sending and receiving messages over WebSocket |
 
 Documentation

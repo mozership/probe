@@ -29,5 +29,6 @@ export default {
     display: 'hidden',
   },
   slack: 'SLACK',
+  slurm: 'SLURM',
   websocket: 'WEBSOCKET',
 } satisfies MetaRecord

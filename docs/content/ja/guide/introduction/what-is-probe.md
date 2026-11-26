@@ -134,7 +134,7 @@ jobs:
 | [`hello`](/ja/reference/actions/hello) | レポートへの出力 |
 
 外部アクションはそれぞれ独立したリポジトリにあり、ステップからコミットを指定して使います。
-[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[db](/ja/reference/actions/db)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[grpc](/ja/reference/actions/grpc)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[websocket](/ja/reference/actions/websocket)があります。
+[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[db](/ja/reference/actions/db)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[grpc](/ja/reference/actions/grpc)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[slurm](/ja/reference/actions/slurm)、[websocket](/ja/reference/actions/websocket)があります。
 
 ### カスタムアクション
 
