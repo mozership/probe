@@ -40,14 +40,15 @@ func problemsError(problems []Problem) error {
 }
 
 // problems returns what keeps the jobs of w from running as they are
-// written, in the order they are written. The vars of the workflow are left
-// out: a var the person running it gives replaces what it writes.
+// written, in the order they are written, and then what keeps its outputs
+// from being evaluated. The vars of the workflow are left out: a var the
+// person running it gives replaces what it writes.
 func (w *Workflow) problems() []Problem {
 	var out []Problem
 	for i := range w.Jobs {
 		out = append(out, w.Jobs[i].problems(fmt.Sprintf("jobs[%d]", i), JobWhere(w.Jobs, i))...)
 	}
-	return out
+	return append(out, w.outputProblems()...)
 }
 
 // problems returns what keeps j from running as it is written, with each

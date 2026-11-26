@@ -175,7 +175,7 @@ A format without a path is written to its default file in the current directory.
 
 | Format | Default file | Contents |
 |---|---|---|
-| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its `id`, its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response |
+| `json` | `probe-report.json` | The whole run: status, timings, a summary of jobs and steps by status, and every step with its `id`, its test, what its response was matched to in an OpenAPI document as `contract`, and, when it failed, the reason and the request and response; and the [`outputs`](/reference/yaml-configuration#outputs) of the workflow, when it has any |
 | `junit` | `probe-junit.xml` | JUnit XML with a `testsuite` per job and a `testcase` per step, per `repeat.test` and per `repeat.baseline_test`, for CI systems that read test results |
 | `markdown` | `probe-report.md` | A summary line, a table of jobs, a table of the response times of repeated steps, a table of how they changed from the [`--baseline`](#--baseline), and a section per failed step, per failed `repeat.test` and per failed `repeat.baseline_test` |
 | `github-summary` | `$GITHUB_STEP_SUMMARY` | The `markdown` page, appended to the GitHub Actions job summary |
@@ -280,6 +280,26 @@ probe --var url=https://staging.example.com --var retries=5 workflow.yml
 - A name given more than once has the value given last. The name is that of a top-level var: `--var auth.user=x` gives a var named `auth.user`, not the `user` of `auth`.
 
 A value given this way is not hidden from the report as one named under [`secrets`](/reference/yaml-configuration#secrets) is, and a command line can be read by other users of the machine. Give a credential through the environment or `--env-file`.
+
+### `--vars-file`
+
+**Type:** String  
+**Values:** the path of a file, or `-` for the standard input  
+**Description:** Give vars of the workflow as a JSON object of them by name, read from a file or from the standard input, as a program that runs Probe gives them without putting them on the command line.
+
+```bash
+probe --vars-file vars.json workflow.yml
+echo '{"body": "{\"order\": 42}", "receipt": "AQEB..."}' | probe --vars-file - workflow.yml
+```
+
+- Each var is given as one given with [`--var`](#--var) is. A string is the value as it is; a number, a boolean, an object or a list is its JSON, which a step reads back with `parse_json`, and a number is as it is written, so that `1.50` stays `1.50`.
+- A var whose value is `null` is not given, and the workflow's own value is used.
+- A name is taken without the white space around it, as `--var` takes it.
+- What is read must be a single JSON object, which may start with the byte order mark some editors write, and every var in it needs a name of its own. Anything else, such as a name given twice, stops Probe with status 2 before any job runs.
+- A name given with `--var` too has the value of `--var`.
+- `--vars-file` can be given once.
+
+As with `--var`, a value given this way is not hidden from the report as one named under [`secrets`](/reference/yaml-configuration#secrets) is.
 
 ### `--env-file`
 
@@ -724,6 +744,162 @@ probe licenses > THIRD_PARTY_LICENSES
 A module with no such file exits with status 2 and prints nothing to standard output, with the error naming every such module: its license cannot be passed on, and has to be looked at by hand. A package that is not a command exits with status 2 as well.
 
 The releases of Probe carry the file this prints for Probe in their archives, and an external action can publish one beside its executables, as [Writing an External Action](/guide/concepts/actions#writing-an-external-action) shows.
+
+### `serve`
+
+Keep running workflows: on a schedule, as monitoring, or again and again, as a worker that takes what a queue holds. Each run is a process of `probe` of its own, the run a person gets with the same files and vars, and writes its `json` report where the log of serve says. [Serve](/guide/concepts/serve) shows how the parts fit together, with the workflows of a queue worker.
+
+**Usage:**
+```bash
+probe serve <serve-file>
+```
+
+The serve file names each workflow, the files a run of it merges and what a run is started with:
+
+```yaml
+name: shop
+description: Watch the API, and verify the orders a queue holds
+workers: 4
+results:
+  dir: runs
+  keep: 720h
+grace: 30s
+workflows:
+  health:
+    files: [workflows/health.yml]
+    schedule: "*/5 * * * *"
+    read_only: true
+    allow_hosts: [api.example.com]
+    timeout: 2m
+  intake:
+    files: [workflows/receive.yml]
+    vars:
+      queue: orders
+    loop: true
+    interval: 10s
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `name` | (required) | The name of this serve, which every line of its log has as `serve`, so that the lines of one serve are told from those of another |
+| `description` | — | What this serve is for, which the line serve starts with has |
+| `workers` | `4` | How many runs go at once, across every workflow. A run waits for a worker once that many go |
+| `results.dir` | `runs` | Where the runs leave what they report |
+| `results.keep` | none | How long a run is kept once it is over, such as `720h`; without it, every run is kept |
+| `grace` | `30s` | How long the runs going when serve is stopped are waited for, before they are ended |
+| `workflows` | (required) | The workflows, by name: letters, digits, `_` and `-` |
+
+Each workflow takes:
+
+| Key | Description |
+|---|---|
+| `files` | The workflow files a run merges, in their order (required) |
+| `vars` | Vars for the run, as [`--vars-file`](#--vars-file) gives them |
+| `env_files` | As [`--env-file`](#--env-file) |
+| `jobs` | As [`--job`](#--job) |
+| `read_only`, `allow_hosts`, `allow_actions` | The guard of the run, as [`--read-only`](#--read-only), [`--allow-host`](#--allow-host) and [`--allow-action`](#--allow-action). It is given to every run in full, so the environment of serve, such as `PROBE_READ_ONLY`, neither loosens nor tightens it |
+| `schedule` | A cron expression of the times the workflow runs at, on the clock of the local time zone: minute, hour, day of the month, month and day of the week, each `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a list of them. A month and a day of the week can be named, as `jan` and `mon`. As in cron, a day matches by either day field when neither starts with `*`, and by both otherwise. A time the clock skips as daylight saving time starts is not run, and one it shows twice as it ends is run once, unless the hour field starts with `*`, as a schedule then runs on through the hour shown twice |
+| `loop` | Run the workflow again as soon as the run before it is over |
+| `interval` | With `loop`, how long to wait between the runs |
+| `timeout` | End a run that goes on longer, with SIGTERM, as a person stops Probe, and kill it if it is still going 10 seconds later |
+| `for_each` | Run another workflow for each item a run gives; see [For each item](#for-each-item) |
+| `state` | Outputs of the workflow kept between its runs; see [State across runs](#state-across-runs) |
+
+The paths are taken from the directory of the serve file, which the runs run in too, so that a step reads the files beside the workflow as it does when a person runs it there. A workflow has `schedule` or `loop`, not both; one with neither, and that no `for_each` runs, is warned of, as nothing starts it. A workflow is not started by its `schedule` or `loop` while a run of it is going, and the log says so.
+
+#### For each item
+
+`for_each` takes from a queue, or anything else that holds work to do, by a workflow of its own: the workflow reads what is waiting, as messages from a queue or rows from a table, and gives them as an [output](/reference/yaml-configuration#outputs). Serve then runs another workflow for each, and one more as that run passed or not, such as one that acknowledges the message:
+
+```yaml
+name: shop
+workflows:
+  intake:
+    files: [workflows/receive.yml]
+    loop: true
+    for_each:
+      items: messages
+      workflow: verify
+      concurrency: 4
+      on_success: ack
+      on_failure: dead-letter
+  verify:
+    files: [workflows/verify.yml]
+    timeout: 10m
+  ack:
+    files: [workflows/queue.yml]
+    jobs: [delete]
+  dead-letter:
+    files: [workflows/queue.yml]
+    jobs: [move]
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `items` | (required) | The output of the run that holds the items, a list of objects |
+| `workflow` | (required) | The workflow run for each item |
+| `concurrency` | `1` | How many items are handled at once, within `workers` |
+| `on_success` | — | The workflow run for an item whose `workflow` passed, such as one that acknowledges it; `none` for nothing |
+| `on_failure` | — | The workflow run for an item whose `workflow` did not pass, such as one that moves it to a dead letter queue |
+
+- The keys of an item are the vars of the runs for it, over the `vars` the serve file gives those workflows; a `null` leaves the var to them. A value that is not a string is given as its JSON, which a step reads back with `parse_json`, as [`--vars-file`](#--vars-file) gives it.
+- The items are read from the report of the run, where the values of the [`secrets`](/reference/yaml-configuration#secrets) are masked, as are credentials such as a password an action was given or the password of a URL. An item that holds one, or whose keys cannot name vars, such as an empty one, is not run: the log has `item skipped` with why, and the queue gives it again. The workflow that handles an item knows nothing of the queue, and can be run by itself as any other.
+- A run that fails gives no items. One that passes but whose output is not a list of objects is logged as an `error`.
+- A run is over once the items it gave are, so a `loop` takes no more than it handles. An item is handled when its `workflow` passed and so did its `on_success`, or it failed and its `on_failure` passed; a `loop` backs off after a run none of whose items was handled, as after a run that did not pass. An item that fails alone does not slow the others. A worker is held only while a process of `probe` goes, so the items wait for workers as the run that gave them does not.
+- Items are handled at least once: an item that is neither acknowledged by `on_success` nor taken away by `on_failure`, as its runs failed or serve was stopped, is given again by the queue, once its visibility timeout is over. Write the workflows that handle items so that handling one twice does no harm.
+- Once serve is stopped, no item starts, and nothing more is run for one handled.
+- A `for_each` without `on_success` is warned of, as a queue whose messages are never acknowledged gives them again; `on_success: none` says that nothing is to be done.
+- The workflows `for_each` runs cannot have a `for_each` of their own.
+
+The line of the log of a run for an item has `from`, the run that gave it, and `item`, its index; that of `on_success` or `on_failure` has `for` too, the run of `workflow` it follows.
+
+#### State across runs
+
+Some sources have no queue that remembers what was taken, such as the rows of a table after an ID, or the messages of a mailbox after a UID. The workflow that reads them keeps where it is as state, which serve keeps between its runs:
+
+```yaml
+name: shop
+workflows:
+  orders:
+    files: [workflows/new-orders.yml]
+    schedule: "* * * * *"
+    state: [cursor]
+    for_each:
+      items: orders
+      workflow: verify-order
+      on_success: none
+  verify-order:
+    files: [workflows/verify-order.yml]
+```
+
+- `state` names [outputs](/reference/yaml-configuration#outputs) of the workflow. Once a run is over, they are saved, and the next run is given them as vars of the same names, over the `vars` of the serve file. Before the first run there is none, and the var has the value the serve file or the workflow gives it, such as `cursor: "0"` under the `vars` of the workflow. A name taken out of `state` is no longer given nor saved.
+- They are saved only once the run passed and every item it gave was handled. Otherwise the next run starts from the state before, and gives the items again. An item that fails holds the source where it is until it is fixed, or until an `on_failure` records it and lets the source move on; one that is skipped, which no `on_failure` is run for, holds it until it is fixed. A source whose state is not saved, as its items are not all handled or as follows, backs off as a `loop` does after a run that did not pass.
+- An output the run does not give keeps the value it had. A run that gives none of them keeps the state: without a warning or a backoff when it gives no items either, as a source with nothing new does, and with a warning when it gives items, as a `state` that names an output the workflow does not give does. One that holds a secret or a credential, which the report masks, keeps the state as it was, as an error.
+- Numbers are kept as they are written, so that a large ID is not rounded.
+- The state is kept in `results.dir/<workflow>/state.json`, written and synced to disk before it replaces the state before, so that neither a stop nor a power cut leaves it half written, and is not removed with the runs. A state that cannot be read keeps the workflow from running, as the log says.
+- Only a workflow started by `schedule` or `loop` can have a state, and serve is to be the only one running it: two serving one source would each start from the state they read.
+
+The log says `state saved`, with the outputs saved, or `state kept`, with why as `reason`.
+
+Each run is a directory under `results.dir/<workflow>/`, named by when it started, with `report.json`, the [`json` report](#--report) of the run, and `output.log`, what it printed. A run ended before its jobs were over writes no report, and its line in the log has none. Serve writes a line to the standard error for each run, as JSON:
+
+```json
+{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","serve":"shop","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
+```
+
+| `status` | The run |
+|---|---|
+| `passed` | Exited with 0 |
+| `failed` | A test or an action failed, as exit status 1 or 3 tells |
+| `error` | Could not run its workflow, as exit status 2 tells, or could not be started; `error` says why |
+| `timeout` | Was ended by `timeout` |
+| `stopped` | Was ended as serve was stopped |
+
+A run that is not `passed` is logged at the level `ERROR`, and a `loop` waits longer after each such run in a row, from 1 second up to a minute, past its `interval`, so that a workflow whose target is down is not run again and again at once. Notifying anyone of a failed run is left to the workflow, as an `always` job with an action that posts, such as Slack's.
+
+SIGINT or SIGTERM stops serve: it starts no run, not even one waiting for a worker, waits `grace` for the runs going, and then ends them with SIGTERM, killing those still going 10 seconds later. Another signal kills them at once. A serve file that cannot be read exits with status 2 before any run.
+
+Each run is the leader of a process group of its own, which is killed once the run is over, so that nothing the run started outlives it, and a Ctrl-C to the terminal reaches serve alone. Under systemd, give the unit `KillMode=mixed`, so that stopping it signals serve, which ends the runs as above, rather than every process of the unit at once.
 
 ## Environment Variables
 

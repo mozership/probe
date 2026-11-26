@@ -32,6 +32,10 @@ type Workflow struct {
 	// Secrets names environment variables whose values must not appear in
 	// anything Probe prints or writes.
 	Secrets []string `yaml:"secrets,omitempty"`
+	// Outputs are what a run gives whoever ran it, by name: expressions
+	// evaluated once every job is over, against the vars and the outputs
+	// the jobs published.
+	Outputs map[string]string `yaml:"outputs,omitempty"`
 	// exitStatus is that of the last run Start finished, for ExitStatus.
 	exitStatus int
 	// env is the workflow's own environment, which the vars of every run

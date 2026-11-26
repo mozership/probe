@@ -1,0 +1,42 @@
+name: Mailbox
+description: Mark a test mail read, as handled, or read and flagged, as dead
+vars:
+  host: "{{MAIL_HOST}}"
+  port: "{{MAIL_PORT}}"
+  user: "{{MAIL_USER}}"
+  pass: "{{MAIL_PASS}}"
+  uid: ""
+defaults:
+  imap:
+    host: "{{vars.host}}"
+    port: "{{vars.port}}"
+    username: "{{vars.user}}"
+    password: "{{vars.pass}}"
+    tls: false
+jobs:
+- id: seen
+  name: Mark the mail read
+  steps:
+  - uses: imap
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid store
+        sequence: "{{vars.uid}}"
+        dataitem: +FLAGS
+        value: \Seen
+    test: res.code == 0
+- id: flagged
+  name: Mark the mail read and flagged
+  steps:
+  - uses: imap
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid store
+        sequence: "{{vars.uid}}"
+        dataitem: +FLAGS
+        value: \Seen \Flagged
+    test: res.code == 0

@@ -1,0 +1,12 @@
+name: Verify a test mail
+description: Pass for a test mail whose subject does not say it fails
+vars:
+  uid: ""
+  subject: ""
+jobs:
+- name: Verify
+  steps:
+  - uses: hello
+    with:
+      name: "{{vars.uid}}"
+    test: vars.uid != "" && !(vars.subject contains "fail")

@@ -1066,3 +1066,53 @@ func TestGeneration(t *testing.T) {
 		t.Errorf("Generation() after learning a short credential = %d, want another than %d", got, g)
 	}
 }
+
+func TestMasker_Data(t *testing.T) {
+	m := New([]string{"S", "PIN"}, map[string]string{"S": "sekret", "PIN": "123"})
+	original := map[string]any{
+		"pin":      123,
+		"password": "plain",
+		"cookies":  map[string]any{"sid": "1"},
+		"url":      "https://user:pass@example.com/sekret",
+		"sekret":   []any{"sekret", map[string]string{"authorization": "sekret"}},
+		"names":    []string{"x sekret"},
+		"number":   3,
+	}
+	snapshot := fmt.Sprintf("%#v", original)
+
+	got := m.Data(original)
+
+	want := map[string]any{
+		"pin":        "<secret:PIN>",
+		"password":   "plain",
+		"cookies":    map[string]any{"sid": "1"},
+		"url":        "https://user:<redacted>@example.com/<secret:S>",
+		"<secret:S>": []any{"<secret:S>", map[string]any{"authorization": "<secret:S>"}},
+		"names":      []any{"x <secret:S>"},
+		"number":     3,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Data = %#v, want %#v", got, want)
+	}
+	if fmt.Sprintf("%#v", original) != snapshot {
+		t.Error("Data changed the original")
+	}
+	var none *Masker
+	if got := none.Data("sekret"); got != "sekret" {
+		t.Errorf("nil Data = %v", got)
+	}
+}
+
+func TestHides(t *testing.T) {
+	m := New([]string{"S"}, map[string]string{"S": "sekret"})
+	for _, s := range []string{m.String("a sekret"), redactedValue, "x" + redactedValue, m.String("https://u:p@h/")} {
+		if !Hides(s) {
+			t.Errorf("Hides(%q) = false", s)
+		}
+	}
+	for _, s := range []string{"", "plain", "<secret", "redacted"} {
+		if Hides(s) {
+			t.Errorf("Hides(%q) = true", s)
+		}
+	}
+}

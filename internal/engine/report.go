@@ -166,18 +166,29 @@ func jsonSafeMap(m map[string]any) map[string]any {
 	if _, err := json.Marshal(m); err == nil {
 		return m
 	}
+	return jsonSafe(m).(map[string]any)
+}
 
-	safe := make(map[string]any, len(m))
-	for k, v := range m {
-		if _, err := json.Marshal(v); err != nil {
-			if nested, ok := v.(map[string]any); ok {
-				safe[k] = jsonSafeMap(nested)
-				continue
-			}
-			safe[k] = fmt.Sprintf("%v", v)
-			continue
-		}
-		safe[k] = v
+// jsonSafe returns v with each value under it that cannot be encoded as
+// JSON, such as NaN, replaced by its text, and the rest as it is.
+func jsonSafe(v any) any {
+	if _, err := json.Marshal(v); err == nil {
+		return v
 	}
-	return safe
+	switch val := v.(type) {
+	case map[string]any:
+		safe := make(map[string]any, len(val))
+		for k, e := range val {
+			safe[k] = jsonSafe(e)
+		}
+		return safe
+	case []any:
+		safe := make([]any, len(val))
+		for i, e := range val {
+			safe[i] = jsonSafe(e)
+		}
+		return safe
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

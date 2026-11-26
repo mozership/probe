@@ -15,11 +15,12 @@ import (
 )
 
 // The names an expression of a step, or the skipif of a job, reads from,
-// and those the tests of a repeated job read from, from the fields of what
-// they are evaluated against.
+// those the tests of a repeated job read from, and those the outputs of the
+// workflow read from, from the fields of what they are evaluated against.
 var (
 	stepNames   = exprKeys(reflect.TypeFor[engine.StepContext]())
 	repeatNames = exprKeys(reflect.TypeFor[engine.RepeatTestEnv]())
+	outputNames = exprKeys(reflect.TypeFor[engine.WorkflowOutputEnv]())
 )
 
 func exprKeys(t reflect.Type) []string {
@@ -106,6 +107,10 @@ func (c *checker) checkNames() {
 		for _, t := range job.Repeat.Tests() {
 			read(fmt.Sprintf("jobs[%d].repeat.%s", i, t.Key), c.jobWhere(i), "repeat."+t.Key, t.Test, repeatNames, workflowVars, nil)
 		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.wf.Outputs)) {
+		path := "outputs." + name
+		read(path, "", path, c.wf.Outputs[name], outputNames, workflowVars, nil)
 	}
 }
 

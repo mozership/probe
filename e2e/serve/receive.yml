@@ -1,0 +1,35 @@
+name: Receive the test mail
+description: Give the unread test mail of the mailbox, each as its UID and subject
+vars:
+  host: "{{MAIL_HOST}}"
+  port: "{{MAIL_PORT}}"
+  user: "{{MAIL_USER}}"
+  pass: "{{MAIL_PASS}}"
+jobs:
+- name: Receive
+  steps:
+  # The whole mailbox is fetched, and the unread test mail picked from it,
+  # as a uid fetch after a search that finds nothing fails.
+  - id: receive
+    uses: imap
+    with:
+      host: "{{vars.host}}"
+      port: "{{vars.port}}"
+      username: "{{vars.user}}"
+      password: "{{vars.pass}}"
+      tls: false
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid fetch
+        sequence: "1:*"
+        dataitem: (UID FLAGS ENVELOPE)
+    test: res.code == 0
+    outputs:
+      messages: res.data.fetch.messages
+outputs:
+  messages: |
+    map(
+      filter(outputs.receive?.messages ?? [], #.subject contains "serve-e2e" && !("\\Seen" in #.flags)),
+      { {"uid": #.uid, "subject": #.subject} }
+    )
