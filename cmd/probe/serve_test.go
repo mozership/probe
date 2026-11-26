@@ -12,7 +12,7 @@ import (
 
 func TestCmd_runServeRefuses(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "serve.yml")
-	if err := os.WriteFile(bad, []byte("workflows:\n  w:\n    loop: true\n"), 0o600); err != nil {
+	if err := os.WriteFile(bad, []byte("name: t\nworkflows:\n  w:\n    loop: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	tests := []struct {
@@ -37,7 +37,7 @@ func TestCmd_runServeRefuses(t *testing.T) {
 
 func TestCmd_runServeLoads(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "serve.yml")
-	if err := os.WriteFile(path, []byte("workflows:\n  w:\n    files: [w.yml]\n    loop: true\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("name: t\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := newBufferCmd().start([]string{"probe", "serve", path}); got != probe.ExitOK {

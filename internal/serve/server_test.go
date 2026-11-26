@@ -64,7 +64,7 @@ func (b *logBuffer) runs(t *testing.T) []map[string]any {
 
 func newTestServer(t *testing.T, exe string, workflows map[string]*Workflow, grace time.Duration) (*Server, *logBuffer) {
 	t.Helper()
-	c := &Config{Workers: 2, Results: Results{Dir: t.TempDir()}, Grace: Duration{Duration: grace}, Workflows: workflows}
+	c := &Config{Name: "test", Workers: 2, Results: Results{Dir: t.TempDir()}, Grace: Duration{Duration: grace}, Workflows: workflows}
 	log := new(logBuffer)
 	return New(c, exe, slog.New(slog.NewJSONHandler(log, nil))), log
 }
@@ -98,6 +98,11 @@ func TestServer_Loop(t *testing.T) {
 	cancel()
 	<-done
 
+	for _, l := range log.lines(t) {
+		if l["serve"] != "test" {
+			t.Errorf("a line of the log is not told as of serve test: %v", l)
+		}
+	}
 	for _, r := range log.runs(t) {
 		if r["workflow"] != "intake" || r["status"] != StatusPassed || r["exit_status"] != float64(0) || r["level"] != "INFO" {
 			t.Errorf("run = %v", r)
@@ -810,5 +815,37 @@ func TestServer_StateUnreadable(t *testing.T) {
 	serveUntil(t, s, "the run to be skipped", func() bool { return len(logged(t, log, "run skipped: the state cannot be read")) > 0 })
 	if runs := sourceRuns(t, log); len(runs) != 0 {
 		t.Errorf("the source ran: %v", runs)
+	}
+}
+
+// The line serve starts with tells its description, when the serve file
+// gives one.
+func TestServer_LogsDescription(t *testing.T) {
+	for _, description := range []string{"Verify the orders", ""} {
+		s, log := newTestServer(t, fakeProbeExe(t, 0, 0), map[string]*Workflow{
+			"w": {Files: []string{"/w.yml"}},
+		}, time.Second)
+		s.config.Description = description
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		s.Serve(ctx)
+		lines := log.lines(t)
+		if len(lines) == 0 || lines[0]["msg"] != "serving" {
+			t.Fatalf("lines = %v", lines)
+		}
+		got, ok := lines[0]["description"]
+		if description == "" && ok || description != "" && got != description {
+			t.Errorf("serving = %v, want the description %q", lines[0], description)
+		}
+	}
+}
+
+// Warnings are lines of the log of the server, told as of its serve too.
+func TestServer_Warn(t *testing.T) {
+	s, log := newTestServer(t, fakeProbeExe(t, 0, 0), map[string]*Workflow{"w": {Files: []string{"/w.yml"}}}, time.Second)
+	s.Warn("workflow w is never started")
+	lines := log.lines(t)
+	if len(lines) != 1 || lines[0]["level"] != "WARN" || lines[0]["msg"] != "workflow w is never started" || lines[0]["serve"] != "test" {
+		t.Errorf("lines = %v", lines)
 	}
 }

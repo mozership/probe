@@ -36,11 +36,8 @@ func (c *Cmd) runServe() int {
 		return probe.ExitConfigError
 	}
 
-	log := slog.New(slog.NewJSONHandler(c.errWriter, nil))
-	for _, w := range warnings {
-		log.Warn(w)
-	}
-	s := serve.New(config, exe, log)
+	s := serve.New(config, exe, slog.New(slog.NewJSONHandler(c.errWriter, nil)))
+	s.Warn(warnings...)
 
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)

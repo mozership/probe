@@ -19,7 +19,10 @@ func writeServeFile(t *testing.T, content string) string {
 }
 
 func TestLoad(t *testing.T) {
-	path := writeServeFile(t, `workers: 2
+	path := writeServeFile(t, `name: " orders "
+description: |
+  Verify the orders a queue holds
+workers: 2
 results:
   dir: out
   keep: 720h
@@ -49,6 +52,9 @@ workflows:
 	if len(warnings) != 0 {
 		t.Errorf("warnings = %q", warnings)
 	}
+	if c.Name != "orders" || c.Description != "Verify the orders a queue holds" {
+		t.Errorf("name = %q, description = %q", c.Name, c.Description)
+	}
 	dir := filepath.Dir(path)
 	if c.Workers != 2 || c.Results.Dir != filepath.Join(dir, "out") || c.Results.Keep.Duration != 720*time.Hour || c.Grace.Duration != 5*time.Second {
 		t.Errorf("config = %+v", c)
@@ -69,7 +75,8 @@ workflows:
 }
 
 func TestLoad_Defaults(t *testing.T) {
-	path := writeServeFile(t, `workflows:
+	path := writeServeFile(t, `name: t
+workflows:
   w:
     files: [w.yml]
     loop: true
@@ -84,7 +91,7 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_WarnsOfWorkflowNeverStarted(t *testing.T) {
-	_, warnings, err := Load(writeServeFile(t, "workflows:\n  idle:\n    files: [w.yml]\n"))
+	_, warnings, err := Load(writeServeFile(t, "name: t\nworkflows:\n  idle:\n    files: [w.yml]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,19 +102,21 @@ func TestLoad_WarnsOfWorkflowNeverStarted(t *testing.T) {
 
 func TestLoad_Refuses(t *testing.T) {
 	tests := []struct{ name, content, want string }{
-		{"no workflows", "workers: 1\n", "workflows names none"},
-		{"an unknown key", "workflows:\n  w:\n    files: [w.yml]\n    shedule: '* * * * *'\n", "shedule"},
-		{"an unknown top key", "worker: 1\nworkflows:\n  w:\n    files: [w.yml]\n", "worker"},
-		{"no files", "workflows:\n  w:\n    loop: true\n", "workflow w: names no files"},
-		{"nothing", "workflows:\n  w:\n", "workflow w: names no files"},
-		{"a bad name", "workflows:\n  'a b':\n    files: [w.yml]\n", "workflow a b: the name is to be"},
-		{"both", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n    schedule: '* * * * *'\n", "has both schedule and loop"},
-		{"interval without loop", "workflows:\n  w:\n    files: [w.yml]\n    interval: 1s\n", "without loop"},
-		{"a bad schedule", "workflows:\n  w:\n    files: [w.yml]\n    schedule: '61 * * * *'\n", "schedule: minute of"},
-		{"negative workers", "workers: -1\nworkflows:\n  w:\n    files: [w.yml]\n", "workers must be 1 or more"},
-		{"a bad duration", "workflows:\n  w:\n    files: [w.yml]\n    timeout: soon\n", "soon: use a duration"},
-		{"a schedule that never comes", "workflows:\n  w:\n    files: [w.yml]\n    schedule: '0 0 31 2 *'\n", "matches no time"},
-		{"a negative duration", "workflows:\n  w:\n    files: [w.yml]\n    timeout: -1s\n", "-1s: a duration cannot be below zero"},
+		{"no workflows", "name: t\nworkers: 1\n", "workflows names none"},
+		{"no name", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
+		{"a blank name", "name: ' '\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
+		{"an unknown key", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    shedule: '* * * * *'\n", "shedule"},
+		{"an unknown top key", "name: t\nworker: 1\nworkflows:\n  w:\n    files: [w.yml]\n", "worker"},
+		{"no files", "name: t\nworkflows:\n  w:\n    loop: true\n", "workflow w: names no files"},
+		{"nothing", "name: t\nworkflows:\n  w:\n", "workflow w: names no files"},
+		{"a bad name", "name: t\nworkflows:\n  'a b':\n    files: [w.yml]\n", "workflow a b: the name is to be"},
+		{"both", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n    schedule: '* * * * *'\n", "has both schedule and loop"},
+		{"interval without loop", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    interval: 1s\n", "without loop"},
+		{"a bad schedule", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    schedule: '61 * * * *'\n", "schedule: minute of"},
+		{"negative workers", "name: t\nworkers: -1\nworkflows:\n  w:\n    files: [w.yml]\n", "workers must be 1 or more"},
+		{"a bad duration", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    timeout: soon\n", "soon: use a duration"},
+		{"a schedule that never comes", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    schedule: '0 0 31 2 *'\n", "matches no time"},
+		{"a negative duration", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    timeout: -1s\n", "-1s: a duration cannot be below zero"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,7 +133,7 @@ func TestLoad_Refuses(t *testing.T) {
 }
 
 func TestLoad_GraceOfNone(t *testing.T) {
-	c, _, err := Load(writeServeFile(t, "grace: 0s\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n"))
+	c, _, err := Load(writeServeFile(t, "name: t\ngrace: 0s\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +146,8 @@ func TestLoad_GraceOfNone(t *testing.T) {
 }
 
 func TestLoad_ForEach(t *testing.T) {
-	c, warnings, err := Load(writeServeFile(t, `workflows:
+	c, warnings, err := Load(writeServeFile(t, `name: t
+workflows:
   intake:
     files: [receive.yml]
     loop: true
@@ -164,7 +174,7 @@ func TestLoad_ForEach(t *testing.T) {
 }
 
 func TestLoad_ForEachWarnsWithoutOnSuccess(t *testing.T) {
-	c, warnings, err := Load(writeServeFile(t, "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b}\n  b:\n    files: [b.yml]\n"))
+	c, warnings, err := Load(writeServeFile(t, "name: t\nworkflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b}\n  b:\n    files: [b.yml]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +185,7 @@ func TestLoad_ForEachWarnsWithoutOnSuccess(t *testing.T) {
 		t.Error("on_success is not empty")
 	}
 
-	_, warnings, err = Load(writeServeFile(t, "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b, on_success: none}\n  b:\n    files: [b.yml]\n"))
+	_, warnings, err = Load(writeServeFile(t, "name: t\nworkflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: {items: x, workflow: b, on_success: none}\n  b:\n    files: [b.yml]\n"))
 	if err != nil || len(warnings) != 0 {
 		t.Errorf("on_success: none = %q, %v", warnings, err)
 	}
@@ -196,21 +206,21 @@ func TestLoad_ForEachRefuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			content := "workflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: " + tt.forEach + "\n" + base + tt.more
+			content := "name: t\nworkflows:\n  a:\n    files: [a.yml]\n    loop: true\n    for_each: " + tt.forEach + "\n" + base + tt.more
 			_, _, err := Load(writeServeFile(t, content))
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("Load = %v, want an error saying %q", err, tt.want)
 			}
 		})
 	}
-	_, _, err := Load(writeServeFile(t, "workflows:\n  none:\n    files: [a.yml]\n    loop: true\n"))
+	_, _, err := Load(writeServeFile(t, "name: t\nworkflows:\n  none:\n    files: [a.yml]\n    loop: true\n"))
 	if err == nil || !strings.Contains(err.Error(), "the name none is what on_success says to do nothing with") {
 		t.Errorf("Load of a workflow named none = %v", err)
 	}
 }
 
 func TestLoad_State(t *testing.T) {
-	c, _, err := Load(writeServeFile(t, "workflows:\n  w:\n    files: [w.yml]\n    schedule: '* * * * *'\n    state: [cursor, seen]\n"))
+	c, _, err := Load(writeServeFile(t, "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    schedule: '* * * * *'\n    state: [cursor, seen]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,9 +228,9 @@ func TestLoad_State(t *testing.T) {
 		t.Errorf("state = %q", c.Workflows["w"].State)
 	}
 	tests := []struct{ name, content, want string }{
-		{"without a schedule or a loop", "workflows:\n  w:\n    files: [w.yml]\n    state: [cursor]\n", "has a state, which is kept between the runs of a schedule or a loop, without either"},
-		{"a name twice", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [cursor, cursor]\n", "state names cursor twice"},
-		{"no name", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [' ']\n", "state names an output with no name"},
+		{"without a schedule or a loop", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    state: [cursor]\n", "has a state, which is kept between the runs of a schedule or a loop, without either"},
+		{"a name twice", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [cursor, cursor]\n", "state names cursor twice"},
+		{"no name", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [' ']\n", "state names an output with no name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,5 +238,15 @@ func TestLoad_State(t *testing.T) {
 				t.Errorf("Load = %v, want an error saying %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// A serve file that lacks more than one thing is told of each.
+func TestLoad_RefusesWithEveryError(t *testing.T) {
+	_, _, err := Load(writeServeFile(t, "workers: -1\n"))
+	for _, want := range []string{"name is required", "workers must be 1 or more", "workflows names none"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Load = %v, want an error saying %q", err, want)
+		}
 	}
 }
