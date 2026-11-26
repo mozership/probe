@@ -43,6 +43,13 @@ type Server struct {
 	wg      sync.WaitGroup
 }
 
+// Warn logs warnings, such as those Load returns, as lines of the log of s.
+func (s *Server) Warn(warnings ...string) {
+	for _, w := range warnings {
+		s.log.Warn(w)
+	}
+}
+
 // New returns a Server of c, whose runs are processes of exe, the probe
 // command, and which logs each run to log, each line with the name of c as
 // serve.

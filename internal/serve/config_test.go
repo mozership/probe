@@ -20,7 +20,8 @@ func writeServeFile(t *testing.T, content string) string {
 
 func TestLoad(t *testing.T) {
 	path := writeServeFile(t, `name: " orders "
-description: Verify the orders a queue holds
+description: |
+  Verify the orders a queue holds
 workers: 2
 results:
   dir: out
@@ -103,6 +104,7 @@ func TestLoad_Refuses(t *testing.T) {
 	tests := []struct{ name, content, want string }{
 		{"no workflows", "name: t\nworkers: 1\n", "workflows names none"},
 		{"no name", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
+		{"neither name nor workflows", "workers: 1\n", "name is required"},
 		{"a blank name", "name: ' '\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
 		{"an unknown key", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    shedule: '* * * * *'\n", "shedule"},
 		{"an unknown top key", "name: t\nworker: 1\nworkflows:\n  w:\n    files: [w.yml]\n", "worker"},

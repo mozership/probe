@@ -839,3 +839,13 @@ func TestServer_LogsDescription(t *testing.T) {
 		}
 	}
 }
+
+// Warnings are lines of the log of the server, told as of its serve too.
+func TestServer_Warn(t *testing.T) {
+	s, log := newTestServer(t, fakeProbeExe(t, 0, 0), map[string]*Workflow{"w": {Files: []string{"/w.yml"}}}, time.Second)
+	s.Warn("workflow w is never started")
+	lines := log.lines(t)
+	if len(lines) != 1 || lines[0]["level"] != "WARN" || lines[0]["msg"] != "workflow w is never started" || lines[0]["serve"] != "test" {
+		t.Errorf("lines = %v", lines)
+	}
+}
