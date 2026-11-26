@@ -44,6 +44,7 @@ var officialActions = []OfficialAction{
 	{"redis", "Run commands on a Redis or Valkey server"},
 	{"s3", "Read and write objects in S3 and S3-compatible storage; replaced by aws"},
 	{"slack", "Post a message to a Slack channel, of the notes of a run or a text"},
+	{"slurm", "Submit, watch and cancel jobs of Slurm, and read the state of its partitions and nodes, on a login node over SSH or on the host Probe runs on"},
 	{"websocket", "Exchange messages with a WebSocket server"},
 }
 

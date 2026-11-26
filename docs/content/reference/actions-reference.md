@@ -34,6 +34,7 @@ These are published alongside Probe, each in a repository of its own. A step nam
 - **[mail-latency](/reference/actions/mail-latency)** - Measure delivery latency from a Maildir
 - **[redis](/reference/actions/redis)** - Run commands on a Redis or Valkey server
 - **[slack](/reference/actions/slack)** - Post the notes of a run, or a text, to a Slack channel
+- **[slurm](/reference/actions/slurm)** - Submit, wait for and cancel Slurm jobs, and read the state of partitions and nodes
 - **[websocket](/reference/actions/websocket)** - Send and receive messages over a WebSocket connection
 
 ## Action Error Handling

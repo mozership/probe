@@ -30,6 +30,7 @@ export default {
     display: 'hidden',
   },
   slack: 'SLACK',
+  slurm: 'SLURM',
   websocket: 'WEBSOCKET',
   '-- other': { type: 'separator', title: 'その他' },
   'error-handring': 'エラーハンドリング',

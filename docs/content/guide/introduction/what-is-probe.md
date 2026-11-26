@@ -130,7 +130,7 @@ These actions are built in. Each has a page in the [reference](/reference/action
 | [`embedded`](/reference/actions/embedded) | Running another job file from a step |
 | [`hello`](/reference/actions/hello) | Printing a report line |
 
-External actions live in repositories of their own, and a step pins one by commit: [agent](/reference/actions/agent), [android](/reference/actions/android), [aws](/reference/actions/aws), [browser](/reference/actions/browser), [container](/reference/actions/container), [db](/reference/actions/db), [github-notes](/reference/actions/github-notes), [graphql](/reference/actions/graphql), [grpc](/reference/actions/grpc), [ios](/reference/actions/ios), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [slack](/reference/actions/slack) and [websocket](/reference/actions/websocket).
+External actions live in repositories of their own, and a step pins one by commit: [agent](/reference/actions/agent), [android](/reference/actions/android), [aws](/reference/actions/aws), [browser](/reference/actions/browser), [container](/reference/actions/container), [db](/reference/actions/db), [github-notes](/reference/actions/github-notes), [graphql](/reference/actions/graphql), [grpc](/reference/actions/grpc), [ios](/reference/actions/ios), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [slack](/reference/actions/slack), [slurm](/reference/actions/slurm) and [websocket](/reference/actions/websocket).
 
 ### Custom Actions
 
