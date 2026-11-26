@@ -902,6 +902,88 @@ jobs:
           ./probe examples/imap.yml
     test: res.code == 0
     echo: "{{res.stdout}}"
+  - name: Send the test mail serve works through
+    uses: smtp
+    with:
+      addr: localhost:3025
+      from: sender@example.com
+      to: test@example.com
+      subject: serve-e2e ok
+      myhostname: probe-test.local
+      message: 2
+    test: res.code == 0 && res.sent == 2
+  - name: Send the test mail serve fails to verify
+    uses: smtp
+    with:
+      addr: localhost:3025
+      from: sender@example.com
+      to: test@example.com
+      subject: serve-e2e fail
+      myhostname: probe-test.local
+      message: 1
+    test: res.code == 0 && res.sent == 1
+  # The server puts the mail in the mailbox after it accepts it.
+  - name: Wait for the test mail
+    uses: hello
+    wait: 1s
+  # serve works through the unread test mail as a queue: verify each, mark
+  # one that passed read, as on_success, and one that failed read and
+  # flagged, as on_failure. It is stopped once the three are handled.
+  - name: serve works through a mailbox as a queue
+    uses: shell
+    with:
+      # The wait for the mail, up to a minute, and the stop of serve, up to
+      # its grace and 10 seconds more, are to end before the command does.
+      timeout: 2m
+      cmd: |
+        dir=$(mktemp -d)
+        cp e2e/serve/*.yml "$dir"
+        MAIL_HOST=localhost MAIL_PORT=3143 MAIL_USER=test MAIL_PASS=password \
+          ./probe serve "$dir/serve.yml" 2> "$dir/serve.log" &
+        pid=$!
+        for i in $(seq 1 120); do
+          [ "$(grep -cE '"workflow":"(ack|dead-letter)"' "$dir/serve.log")" -ge 3 ] && break
+          sleep 0.5
+        done
+        kill -TERM "$pid"
+        wait "$pid"
+        code=$?
+        cat "$dir/serve.log"
+        rm -rf "$dir"
+        exit $code
+    test: |
+      let logs = map(filter(split(res.stdout, "\n"), # startsWith "{"), parse_json(#));
+      let runs = filter(logs, #.msg == "run");
+      let handled = filter(runs, #.workflow in ["ack", "dead-letter"]);
+      res.code == 0 &&
+      len(logs) > 0 && all(logs, #.serve == "e2e-mail") &&
+      count(runs, #.workflow == "verify" && #.status == "passed") == 2 &&
+      count(runs, #.workflow == "verify" && #.status == "failed") == 1 &&
+      count(handled, #.workflow == "ack" && #.status == "passed") == 2 &&
+      count(handled, #.workflow == "dead-letter" && #.status == "passed") == 1 &&
+      all(handled, #.from != nil && #.item != nil && #["for"] != nil) &&
+      any(logs, #.msg == "stopped")
+    echo: "{{res.stdout}}"
+  - name: The test mail is read, and the one that failed flagged
+    uses: imap
+    with:
+      host: localhost
+      port: 3143
+      username: test
+      password: password
+      tls: false
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid fetch
+        sequence: "1:*"
+        dataitem: (UID FLAGS ENVELOPE)
+    test: |
+      let mail = filter(res.data.fetch.messages, #.subject contains "serve-e2e");
+      let flagged = filter(mail, "\\Flagged" in #.flags);
+      res.code == 0 && len(mail) == 3 &&
+      all(mail, "\\Seen" in #.flags) &&
+      len(flagged) == 1 && flagged[0].subject contains "fail"
   - name: Stop IMAP container
     uses: shell
     with:
