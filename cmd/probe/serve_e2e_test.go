@@ -269,7 +269,11 @@ workflows:
 	}
 	outputN := func(run map[string]any) float64 {
 		t.Helper()
-		data, err := os.ReadFile(run["report"].(string))
+		path, ok := run["report"].(string)
+		if !ok {
+			t.Fatalf("the run wrote no report: %v", run)
+		}
+		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}

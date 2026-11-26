@@ -932,6 +932,9 @@ jobs:
   - name: serve works through a mailbox as a queue
     uses: shell
     with:
+      # The wait for the mail, up to a minute, and the stop of serve, up to
+      # its grace and 10 seconds more, are to end before the command does.
+      timeout: 2m
       cmd: |
         dir=$(mktemp -d)
         cp e2e/serve/*.yml "$dir"
