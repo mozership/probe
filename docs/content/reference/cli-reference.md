@@ -757,6 +757,8 @@ probe serve <serve-file>
 The serve file names each workflow, the files a run of it merges and what a run is started with:
 
 ```yaml
+name: shop
+description: Watch the API, and verify the orders a queue holds
 workers: 4
 results:
   dir: runs
@@ -779,6 +781,8 @@ workflows:
 
 | Key | Default | Description |
 |---|---|---|
+| `name` | (required) | The name of this serve, which every line of its log has as `serve`, so that the lines of one serve are told from those of another |
+| `description` | — | What this serve is for, which the line serve starts with has |
 | `workers` | `4` | How many runs go at once, across every workflow. A run waits for a worker once that many go |
 | `results.dir` | `runs` | Where the runs leave what they report |
 | `results.keep` | none | How long a run is kept once it is over, such as `720h`; without it, every run is kept |
@@ -808,6 +812,7 @@ The paths are taken from the directory of the serve file, which the runs run in 
 `for_each` takes from a queue, or anything else that holds work to do, by a workflow of its own: the workflow reads what is waiting, as messages from a queue or rows from a table, and gives them as an [output](/reference/yaml-configuration#outputs). Serve then runs another workflow for each, and one more as that run passed or not, such as one that acknowledges the message:
 
 ```yaml
+name: shop
 workflows:
   intake:
     files: [workflows/receive.yml]
@@ -853,6 +858,7 @@ The line of the log of a run for an item has `from`, the run that gave it, and `
 Some sources have no queue that remembers what was taken, such as the rows of a table after an ID, or the messages of a mailbox after a UID. The workflow that reads them keeps where it is as state, which serve keeps between its runs:
 
 ```yaml
+name: shop
 workflows:
   orders:
     files: [workflows/new-orders.yml]
@@ -878,7 +884,7 @@ The log says `state saved`, with the outputs saved, or `state kept`, with why as
 Each run is a directory under `results.dir/<workflow>/`, named by when it started, with `report.json`, the [`json` report](#--report) of the run, and `output.log`, what it printed. A run ended before its jobs were over writes no report, and its line in the log has none. Serve writes a line to the standard error for each run, as JSON:
 
 ```json
-{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
+{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","serve":"shop","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
 ```
 
 | `status` | The run |

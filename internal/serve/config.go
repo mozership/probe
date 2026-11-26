@@ -22,6 +22,9 @@ import (
 
 // Config is what a serve file says.
 type Config struct {
+	// Name tells this serve from another in the log.
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
 	// Workers is how many runs go at once, across every workflow.
 	Workers int     `yaml:"workers"`
 	Results Results `yaml:"results"`
@@ -143,6 +146,10 @@ func Load(path string) (*Config, []string, error) {
 // names absolute, from dir.
 func (c *Config) prepare(dir string) ([]string, error) {
 	c.dir = dir
+	c.Name = strings.TrimSpace(c.Name)
+	if c.Name == "" {
+		return nil, errors.New("name is required, which tells this serve from another in the log")
+	}
 	if c.Workers == 0 {
 		c.Workers = defaultWorkers
 	}

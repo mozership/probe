@@ -44,13 +44,14 @@ type Server struct {
 }
 
 // New returns a Server of c, whose runs are processes of exe, the probe
-// command, and which logs each run to log.
+// command, and which logs each run to log, each line with the name of c as
+// serve.
 func New(c *Config, exe string, log *slog.Logger) *Server {
 	runs, endRuns := context.WithCancel(context.Background())
 	s := &Server{
 		config:   c,
 		runner:   &runner{exe: exe, results: c.Results.Dir, dir: c.dir},
-		log:      log,
+		log:      log.With("serve", c.Name),
 		workers:  make(chan struct{}, c.Workers),
 		busy:     make(map[string]*atomic.Bool, len(c.Workflows)),
 		stopping: make(chan struct{}),
@@ -68,7 +69,11 @@ func New(c *Config, exe string, log *slog.Logger) *Server {
 // going, ends those still going with SIGTERM, and returns once each is
 // over.
 func (s *Server) Serve(ctx context.Context) {
-	s.log.Info("serving", "workflows", slices.Sorted(maps.Keys(s.config.Workflows)), "workers", s.config.Workers, "results", s.config.Results.Dir)
+	attrs := []any{"workflows", slices.Sorted(maps.Keys(s.config.Workflows)), "workers", s.config.Workers, "results", s.config.Results.Dir}
+	if s.config.Description != "" {
+		attrs = append(attrs, "description", s.config.Description)
+	}
+	s.log.Info("serving", attrs...)
 	var triggers sync.WaitGroup
 	for _, name := range slices.Sorted(maps.Keys(s.config.Workflows)) {
 		w := s.config.Workflows[name]

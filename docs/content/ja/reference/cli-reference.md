@@ -757,6 +757,8 @@ probe serve <serve-file>
 serveファイルには、ワークフローごとに名前を付け、1回の実行がマージするファイルと、実行の始め方を書きます。
 
 ```yaml
+name: shop
+description: APIを監視し、キューにある注文を検証する
 workers: 4
 results:
   dir: runs
@@ -779,6 +781,8 @@ workflows:
 
 | キー | 既定値 | 説明 |
 |---|---|---|
+| `name` | （必須） | このserveの名前。ログのすべての行に`serve`として書き、別のserveの行と見分けられるようにします |
+| `description` | — | このserveの目的。serveが始めに書く行に書きます |
 | `workers` | `4` | すべてのワークフローを通して同時に動かす実行の数。この数が動いている間、次の実行は空くのを待ちます |
 | `results.dir` | `runs` | 実行が報告するものを置く場所 |
 | `results.keep` | なし | 終わった実行を残しておく期間。`720h`のように書きます。書かなければすべて残します |
@@ -808,6 +812,7 @@ workflows:
 `for_each`は、キューなど処理すべきものを持つ場所から、それ専用のワークフローで取り出します。そのワークフローは、キューのメッセージやテーブルの行など待っているものを読み、[出力](/ja/reference/yaml-configuration#outputs)として出します。serveはその要素ごとに別のワークフローを実行し、その実行が成功したかどうかに応じて、メッセージの確認応答をするワークフローなどをもう1つ実行します。
 
 ```yaml
+name: shop
 workflows:
   intake:
     files: [workflows/receive.yml]
@@ -853,6 +858,7 @@ workflows:
 テーブルのあるIDより後の行や、受信箱のあるUIDより後のメッセージのように、何を取り出したかを覚えておくキューがない取り出し元もあります。それを読むワークフローは、どこまで読んだかを状態として持ち、serveがそれを実行と実行の間で残します。
 
 ```yaml
+name: shop
 workflows:
   orders:
     files: [workflows/new-orders.yml]
@@ -878,7 +884,7 @@ workflows:
 各実行は`results.dir/<workflow>/`の下の、開始時刻を名前にしたディレクトリで、実行の[`json`レポート](#--report)である`report.json`と、実行が出力した`output.log`があります。ジョブが終わる前に終わらせた実行はレポートを書かず、そのログの行にもレポートはありません。serveは実行ごとに1行を、JSONとして標準エラーに書きます。
 
 ```json
-{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
+{"time":"2026-11-26T10:15:02Z","level":"INFO","msg":"run","serve":"shop","workflow":"health","run":"20261126T101500.004211Z-3","status":"passed","exit_status":0,"started_at":"2026-11-26T10:15:00Z","finished_at":"2026-11-26T10:15:02Z","duration_ms":2104,"report":"/srv/runs/health/20261126T101500.004211Z-3/report.json","output":"/srv/runs/health/20261126T101500.004211Z-3/output.log"}
 ```
 
 | `status` | 実行 |

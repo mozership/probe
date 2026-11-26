@@ -45,7 +45,8 @@ jobs:
 outputs:
   who: vars.who
 `)
-	write("serve.yml", `results:
+	write("serve.yml", `name: e2e
+results:
   dir: runs
 workflows:
   hello:
@@ -133,7 +134,8 @@ jobs:
     test: vars.ok == "true"
 `,
 		"ack.yml": "name: Ack\njobs:\n- name: Ack\n  steps:\n  - uses: hello\n    with:\n      name: \"{{vars.id}}\"\n",
-		"serve.yml": `workflows:
+		"serve.yml": `name: e2e
+workflows:
   receive:
     files: [receive.yml]
     loop: true
