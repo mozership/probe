@@ -1,0 +1,23 @@
+name: e2e-mail
+description: Verify the test mail of an IMAP mailbox, its unread mail as a queue
+grace: 10s
+workflows:
+  receive:
+    files: [receive.yml]
+    loop: true
+    interval: 500ms
+    for_each:
+      items: messages
+      workflow: verify
+      concurrency: 2
+      on_success: ack
+      on_failure: dead-letter
+  verify:
+    files: [verify.yml]
+    timeout: 30s
+  ack:
+    files: [mailbox.yml]
+    jobs: [seen]
+  dead-letter:
+    files: [mailbox.yml]
+    jobs: [flagged]

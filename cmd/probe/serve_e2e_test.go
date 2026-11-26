@@ -196,6 +196,108 @@ workflows:
 	}
 }
 
+// probe serve keeps the state of a workflow between its runs, and across
+// a stop and a start of serve: each run counts one more than the run before.
+func TestServe_StateE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds probe")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "probe")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	files := map[string]string{
+		"count.yml": `name: Count
+vars:
+  n: "0"
+jobs:
+- name: Count
+  steps:
+  - uses: hello
+outputs:
+  n: int(vars.n) + 1
+`,
+		"serve.yml": `name: e2e
+workflows:
+  count:
+    files: [count.yml]
+    loop: true
+    interval: 50ms
+    state: [n]
+`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	serveUntil := func(runs int) []map[string]any {
+		t.Helper()
+		var stderr syncBuffer
+		cmd := exec.Command(bin, "serve", filepath.Join(dir, "serve.yml"))
+		cmd.Stderr = &stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for len(logged(t, stderr.String(), "run")) < runs {
+			if time.Now().After(deadline) {
+				_ = cmd.Process.Kill()
+				t.Fatalf("no %d runs in the log:\n%s", runs, stderr.String())
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("serve ended with %v:\n%s", err, stderr.String())
+		}
+		return logged(t, stderr.String(), "run")
+	}
+	saved := func() float64 {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(dir, "runs", "count", "state.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var state map[string]float64
+		if err := json.Unmarshal(data, &state); err != nil {
+			t.Fatalf("state.json: %v\n%s", err, data)
+		}
+		return state["n"]
+	}
+	outputN := func(run map[string]any) float64 {
+		t.Helper()
+		data, err := os.ReadFile(run["report"].(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var r report.Report
+		if err := json.Unmarshal(data, &r); err != nil {
+			t.Fatal(err)
+		}
+		n, _ := r.Outputs["n"].(float64)
+		return n
+	}
+
+	first := serveUntil(3)
+	for i, run := range first {
+		if got := outputN(run); got != float64(i+1) {
+			t.Errorf("run %d gave n = %v, want %d", i, got, i+1)
+		}
+	}
+	n := saved()
+	if n != float64(len(first)) {
+		t.Errorf("state n = %v after %d runs", n, len(first))
+	}
+
+	again := serveUntil(1)
+	if got := outputN(again[0]); got != n+1 {
+		t.Errorf("the first run after serve started again gave n = %v, want %v", got, n+1)
+	}
+}
+
 // logged returns the lines of the JSON log whose msg is msg.
 func logged(t *testing.T, log, msg string) []map[string]any {
 	t.Helper()
