@@ -104,7 +104,6 @@ func TestLoad_Refuses(t *testing.T) {
 	tests := []struct{ name, content, want string }{
 		{"no workflows", "name: t\nworkers: 1\n", "workflows names none"},
 		{"no name", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
-		{"neither name nor workflows", "workers: 1\n", "name is required"},
 		{"a blank name", "name: ' '\nworkflows:\n  w:\n    files: [w.yml]\n    loop: true\n", "name is required"},
 		{"an unknown key", "name: t\nworkflows:\n  w:\n    files: [w.yml]\n    shedule: '* * * * *'\n", "shedule"},
 		{"an unknown top key", "name: t\nworker: 1\nworkflows:\n  w:\n    files: [w.yml]\n", "worker"},
@@ -239,5 +238,15 @@ func TestLoad_State(t *testing.T) {
 				t.Errorf("Load = %v, want an error saying %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// A serve file that lacks more than one thing is told of each.
+func TestLoad_RefusesWithEveryError(t *testing.T) {
+	_, _, err := Load(writeServeFile(t, "workers: -1\n"))
+	for _, want := range []string{"name is required", "workers must be 1 or more", "workflows names none"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Load = %v, want an error saying %q", err, want)
+		}
 	}
 }
