@@ -479,7 +479,7 @@ probe monitoring.yml,development.yml
 
 ## ステップ10: Cronで自動化
 
-cronで自動監視を設定します：
+cronで自動監視を設定します。[`probe serve`](/ja/guide/concepts/serve)を使うと、cronなしで同じスケジュールで実行でき、前の実行が動いている間は次を始めず、各実行が報告したものを残せます：
 
 ```bash
 # crontabを編集

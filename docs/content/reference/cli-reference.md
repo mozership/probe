@@ -747,7 +747,7 @@ The releases of Probe carry the file this prints for Probe in their archives, an
 
 ### `serve`
 
-Keep running workflows: on a schedule, as monitoring, or again and again, as a worker that takes what a queue holds. Each run is a process of `probe` of its own, the run a person gets with the same files and vars, and writes its `json` report where the log of serve says.
+Keep running workflows: on a schedule, as monitoring, or again and again, as a worker that takes what a queue holds. Each run is a process of `probe` of its own, the run a person gets with the same files and vars, and writes its `json` report where the log of serve says. [Serve](/guide/concepts/serve) shows how the parts fit together, with the workflows of a queue worker.
 
 **Usage:**
 ```bash
