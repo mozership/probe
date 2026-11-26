@@ -35,6 +35,8 @@ type fakeReport struct {
 	// Child is the process the fake started, with fakeSpawnEnv.
 	Child   int             `json:"child"`
 	Outputs json.RawMessage `json:"outputs,omitempty"`
+	// Stdin is the vars as the fake read them, as JSON.
+	Stdin string `json:"stdin"`
 }
 
 func TestMain(m *testing.M) {
@@ -59,7 +61,7 @@ func fakeProbe() int {
 		text[k] = fmt.Sprint(v)
 	}
 	dir, _ := os.Getwd()
-	fr := fakeReport{Args: os.Args[1:], Vars: text, Env: os.Environ(), Dir: dir}
+	fr := fakeReport{Args: os.Args[1:], Vars: text, Env: os.Environ(), Dir: dir, Stdin: string(stdin)}
 	if outputs := os.Getenv(fakeOutputsEnv); outputs != "" {
 		fr.Outputs = json.RawMessage(outputs)
 	}

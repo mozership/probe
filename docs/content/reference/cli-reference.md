@@ -799,6 +799,7 @@ Each workflow takes:
 | `interval` | With `loop`, how long to wait between the runs |
 | `timeout` | End a run that goes on longer, with SIGTERM, as a person stops Probe, and kill it if it is still going 10 seconds later |
 | `for_each` | Run another workflow for each item a run gives; see [For each item](#for-each-item) |
+| `state` | Outputs of the workflow kept between its runs; see [State across runs](#state-across-runs) |
 
 The paths are taken from the directory of the serve file, which the runs run in too, so that a step reads the files beside the workflow as it does when a person runs it there. A workflow has `schedule` or `loop`, not both; one with neither, and that no `for_each` runs, is warned of, as nothing starts it. A workflow is not started by its `schedule` or `loop` while a run of it is going, and the log says so.
 
@@ -846,6 +847,33 @@ workflows:
 - The workflows `for_each` runs cannot have a `for_each` of their own.
 
 The line of the log of a run for an item has `from`, the run that gave it, and `item`, its index; that of `on_success` or `on_failure` has `for` too, the run of `workflow` it follows.
+
+#### State across runs
+
+Some sources have no queue that remembers what was taken, such as the rows of a table after an ID, or the messages of a mailbox after a UID. The workflow that reads them keeps where it is as state, which serve keeps between its runs:
+
+```yaml
+workflows:
+  orders:
+    files: [workflows/new-orders.yml]
+    schedule: "* * * * *"
+    state: [cursor]
+    for_each:
+      items: orders
+      workflow: verify-order
+      on_success: none
+  verify-order:
+    files: [workflows/verify-order.yml]
+```
+
+- `state` names [outputs](/reference/yaml-configuration#outputs) of the workflow. Once a run is over, they are saved, and the next run is given them as vars of the same names, over the `vars` of the serve file. Before the first run there is none, and the var has the value the serve file or the workflow gives it, such as `cursor: "0"` under the `vars` of the workflow. A name taken out of `state` is no longer given nor saved.
+- They are saved only once the run passed and every item it gave was handled. Otherwise the next run starts from the state before, and gives the items again. An item that fails holds the source where it is until it is fixed, or until an `on_failure` records it and lets the source move on; one that is skipped, which no `on_failure` is run for, holds it until it is fixed. A source whose state is not saved, as its items are not all handled or as follows, backs off as a `loop` does after a run that did not pass.
+- An output the run does not give keeps the value it had. A run that gives none of them keeps the state: without a warning or a backoff when it gives no items either, as a source with nothing new does, and with a warning when it gives items, as a `state` that names an output the workflow does not give does. One that holds a secret or a credential, which the report masks, keeps the state as it was, as an error.
+- Numbers are kept as they are written, so that a large ID is not rounded.
+- The state is kept in `results.dir/<workflow>/state.json`, written and synced to disk before it replaces the state before, so that neither a stop nor a power cut leaves it half written, and is not removed with the runs. A state that cannot be read keeps the workflow from running, as the log says.
+- Only a workflow started by `schedule` or `loop` can have a state, and serve is to be the only one running it: two serving one source would each start from the state they read.
+
+The log says `state saved`, with the outputs saved, or `state kept`, with why as `reason`.
 
 Each run is a directory under `results.dir/<workflow>/`, named by when it started, with `report.json`, the [`json` report](#--report) of the run, and `output.log`, what it printed. A run ended before its jobs were over writes no report, and its line in the log has none. Serve writes a line to the standard error for each run, as JSON:
 

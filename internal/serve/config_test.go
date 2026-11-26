@@ -208,3 +208,25 @@ func TestLoad_ForEachRefuses(t *testing.T) {
 		t.Errorf("Load of a workflow named none = %v", err)
 	}
 }
+
+func TestLoad_State(t *testing.T) {
+	c, _, err := Load(writeServeFile(t, "workflows:\n  w:\n    files: [w.yml]\n    schedule: '* * * * *'\n    state: [cursor, seen]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.Workflows["w"].State, []string{"cursor", "seen"}) {
+		t.Errorf("state = %q", c.Workflows["w"].State)
+	}
+	tests := []struct{ name, content, want string }{
+		{"without a schedule or a loop", "workflows:\n  w:\n    files: [w.yml]\n    state: [cursor]\n", "has a state, which is kept between the runs of a schedule or a loop, without either"},
+		{"a name twice", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [cursor, cursor]\n", "state names cursor twice"},
+		{"no name", "workflows:\n  w:\n    files: [w.yml]\n    loop: true\n    state: [' ']\n", "state names an output with no name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := Load(writeServeFile(t, tt.content)); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("Load = %v, want an error saying %q", err, tt.want)
+			}
+		})
+	}
+}

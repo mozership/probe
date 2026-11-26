@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-yaml"
@@ -59,6 +60,9 @@ type Workflow struct {
 	Timeout Duration `yaml:"timeout"`
 	// ForEach runs another workflow for each item a run of this one gives.
 	ForEach *ForEach `yaml:"for_each"`
+	// State names outputs of the workflow kept between its runs: saved once
+	// a run is over, and given to the next run as vars of the same names.
+	State []string `yaml:"state"`
 
 	schedule *cron.Schedule
 }
@@ -270,6 +274,19 @@ func (w *Workflow) prepare(name, dir string) error {
 	}
 	if w.Interval.Duration > 0 && !w.Loop {
 		return errors.New("has an interval, which is the wait between the runs of a loop, without loop")
+	}
+	if len(w.State) > 0 && w.schedule == nil && !w.Loop {
+		return errors.New("has a state, which is kept between the runs of a schedule or a loop, without either")
+	}
+	seen := map[string]bool{}
+	for _, name := range w.State {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("state names an output with no name")
+		}
+		if seen[name] {
+			return fmt.Errorf("state names %s twice", name)
+		}
+		seen[name] = true
 	}
 	return nil
 }

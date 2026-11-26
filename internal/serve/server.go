@@ -1,7 +1,10 @@
 package serve
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -143,7 +146,7 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 		if done, ok := s.trigger(name, w); ok {
 			select {
 			case o := <-done:
-				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) {
+				if o.run.Status != StatusPassed || (o.items > 0 && o.handled == 0) || (len(w.State) > 0 && !o.stateSettled) {
 					backoff = min(max(2*backoff, firstBackoff), lastBackoff)
 					wait = max(wait, backoff)
 				} else {
@@ -163,10 +166,15 @@ func (s *Server) loop(ctx context.Context, name string, w *Workflow) {
 }
 
 // outcome is how a run of a workflow started by its schedule or loop went:
-// the run, how many items it gave, and how many of them were handled.
+// the run, the outputs it gave, how many items it gave, and how many of
+// them were handled.
 type outcome struct {
 	run            Run
+	outputs        map[string]any
 	items, handled int
+	// stateSettled is whether the state of the run was saved, or the run
+	// had nothing to save and no item to move past.
+	stateSettled bool
 }
 
 // trigger starts a run of w unless one is going or waiting for a worker,
@@ -184,12 +192,15 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 	}
 	done := make(chan outcome, 1)
 	s.wg.Go(func() {
-		r, items, ok := s.runSource(name, w)
+		r, outputs, items, ok := s.runSource(name, w)
 		if !ok {
 			s.busy[name].Store(false)
 			return
 		}
-		o := outcome{run: r, items: len(items), handled: s.forEach(w.ForEach, r, items)}
+		o := outcome{run: r, outputs: outputs, items: len(items), handled: s.forEach(w.ForEach, r, items)}
+		if len(w.State) > 0 && r.ID != "" {
+			o.stateSettled = s.keepState(name, w, o)
+		}
 		// No longer busy before the loop is told, so that the run it starts
 		// next is not skipped.
 		s.busy[name].Store(false)
@@ -198,21 +209,173 @@ func (s *Server) trigger(name string, w *Workflow) (<-chan outcome, bool) {
 	return done, true
 }
 
-// runSource runs w, and returns the run with the items it gave, as its
-// for_each reads them, once the run is logged. A run that passed but gave
-// no list of items is logged as an error.
-func (s *Server) runSource(name string, w *Workflow) (Run, []map[string]any, bool) {
+// runSource runs w, with the state it keeps as vars, and returns the run
+// with the outputs and the items it gave, read once it is over, as its
+// for_each and its state read them, once the run is logged. A run that
+// passed but gave no list of items is logged as an error; so is one whose
+// state cannot be read, which is not run.
+func (s *Server) runSource(name string, w *Workflow) (Run, map[string]any, []map[string]any, bool) {
+	state, err := readState(s.statePath(name), w.State)
+	if err != nil {
+		s.log.Error("run skipped: the state cannot be read", "workflow", name, "error", err.Error())
+		return Run{Status: StatusError}, nil, nil, true
+	}
+	var outputs map[string]any
 	var items []map[string]any
-	r, ok := s.run(name, w, nil, func(r *Run) {
-		if w.ForEach == nil || r.Status != StatusPassed {
+	r, ok := s.run(name, w, state, func(r *Run) {
+		if r.Status != StatusPassed || (w.ForEach == nil && len(w.State) == 0) {
 			return
 		}
 		var err error
-		if items, err = readItems(r.ReportPath(), w.ForEach.Items); err != nil {
+		if outputs, err = readOutputs(r.ReportPath()); err == nil && w.ForEach != nil {
+			items, err = itemsOf(outputs, w.ForEach.Items)
+		}
+		if err != nil {
 			r.Status, r.Err = StatusError, err
 		}
 	})
-	return r, items, ok
+	return r, outputs, items, ok
+}
+
+// statePath returns the path of the file that keeps the state of the
+// workflow name.
+func (s *Server) statePath(name string) string {
+	return filepath.Join(s.config.Results.Dir, name, "state.json")
+}
+
+// keepState saves the state of w that the run of o gave, once the run
+// passed and every item it gave was handled, over what the run did not
+// give. Otherwise the state is left as it was, for the next run to start
+// from it and to give the items again. It reports whether the state is
+// settled: saved, or left as it was by a run that gave neither the state
+// nor items, as a source with nothing new does.
+func (s *Server) keepState(name string, w *Workflow, o outcome) bool {
+	attrs := []any{"workflow", name, "run", o.run.ID}
+	kept := func(level slog.Level, reason string, more ...any) bool {
+		s.log.Log(context.Background(), level, "state kept", append(append(attrs, "reason", reason), more...)...)
+		return false
+	}
+	switch {
+	case o.run.Status != StatusPassed:
+		return kept(slog.LevelInfo, "the run did not pass")
+	case o.handled < o.items:
+		return kept(slog.LevelInfo, "not every item of the run was handled", "items", o.items, "handled", o.handled)
+	}
+	var given []string
+	for _, key := range w.State {
+		v, ok := o.outputs[key]
+		if !ok || v == nil {
+			continue
+		}
+		if masked(v) {
+			return kept(slog.LevelError, "an output of the state holds a secret or a credential, which the report masks", "output", key)
+		}
+		given = append(given, key)
+	}
+	if len(given) == 0 {
+		if o.items == 0 {
+			kept(slog.LevelInfo, "the run gave none of the outputs of the state, nor items")
+			return true
+		}
+		return kept(slog.LevelWarn, "the run gave items, but none of the outputs of the state", "state", w.State)
+	}
+	path := s.statePath(name)
+	state, err := readState(path, w.State)
+	if err != nil {
+		return kept(slog.LevelError, "the state cannot be read", "error", err.Error())
+	}
+	if state == nil {
+		state = map[string]any{}
+	}
+	for _, key := range given {
+		state[key] = o.outputs[key]
+	}
+	if err := writeState(path, state); err != nil {
+		return kept(slog.LevelError, "the state cannot be saved", "error", err.Error())
+	}
+	s.log.Info("state saved", append(attrs, "state", given)...)
+	return true
+}
+
+// readState reads the state kept in the file at path, of the outputs names
+// alone, as the state of a serve file that no longer names one leaves it
+// out; nil when there is none yet. Numbers are kept as they are written.
+func readState(path string, names []string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var all map[string]any
+	if err := decodeJSON(data, &all); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	state := make(map[string]any, len(names))
+	for _, name := range names {
+		if v, ok := all[name]; ok {
+			state[name] = v
+		}
+	}
+	return state, nil
+}
+
+// writeState writes state to the file at path, synced before it replaces
+// the one there, so that neither a stop as it is written nor a power cut
+// after leaves anything but the state before or this one. The file keeps
+// the mode it has; a new one gets what the umask allows, as the reports
+// beside it do.
+func writeState(path string, state map[string]any) error {
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	suffix := make([]byte, 6)
+	if _, err := rand.Read(suffix); err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir, ".state.json.tmp"+hex.EncodeToString(suffix))
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
+	if err != nil {
+		return err
+	}
+	if info, serr := os.Stat(path); serr == nil {
+		err = f.Chmod(info.Mode().Perm())
+	}
+	if err == nil {
+		_, err = f.Write(append(data, '\n'))
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
+}
+
+// decodeJSON decodes data into v, with numbers as they are written, so that
+// a large integer, such as the ID a cursor holds, is not rounded.
+func decodeJSON(data []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	return dec.Decode(v)
 }
 
 // forEach handles each of items, the items r gave, as f says: at most
@@ -353,20 +516,26 @@ func (s *Server) runOnce(name string, w *Workflow, vars map[string]any) Run {
 	return s.runner.start(ctx, name, w, vars)
 }
 
-// readItems reads the items of a run from its json report at path: the
-// output key, a list of objects.
-func readItems(path, key string) ([]map[string]any, error) {
+// readOutputs reads the outputs of a run from its json report at path,
+// with numbers as they are written.
+func readOutputs(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("the items are not read: %w", err)
+		return nil, fmt.Errorf("the outputs are not read: %w", err)
 	}
 	var report struct {
 		Outputs map[string]any `json:"outputs"`
 	}
-	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("the items are not read: %s: %w", path, err)
+	if err := decodeJSON(data, &report); err != nil {
+		return nil, fmt.Errorf("the outputs are not read: %s: %w", path, err)
 	}
-	v, ok := report.Outputs[key]
+	return report.Outputs, nil
+}
+
+// itemsOf returns the items of a run from its outputs: the output key, a
+// list of objects.
+func itemsOf(outputs map[string]any, key string) ([]map[string]any, error) {
+	v, ok := outputs[key]
 	if !ok {
 		return nil, fmt.Errorf("the run gives no output %s, which for_each reads the items from", key)
 	}
