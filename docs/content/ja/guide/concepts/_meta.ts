@@ -11,5 +11,5 @@ export default {
   'execution-model': '実行モデル',
   'testing-and-assertions': 'テストとアサーション',
   'error-handling': 'エラーハンドリング',
-  serve: '常駐実行',
+  serve: '定期実行とワーカー',
 } satisfies MetaRecord
