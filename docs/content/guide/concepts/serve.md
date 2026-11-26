@@ -154,12 +154,12 @@ The messages are read from the report of the run, where the values of the [`secr
 
 A workflow can also take the messages and check each by itself: an [`iteration`](/reference/yaml-configuration#iteration) runs a step once for each entry of what an earlier step found, as `iteration: "{{ outputs.receive.messages }}"`. One workflow is enough when what it takes needs no acknowledgement one by one, as when it checks what a source holds, or when a run that fails may have the queue give every message again. Split it into workflows run by `for_each` when:
 
-- **Each message is acknowledged as it passed or not.** The run of a workflow passes or fails as a whole, and an `iteration` stops at the first entry that fails, so a later step cannot tell which messages to acknowledge and which to move to a dead letter queue. `for_each` runs `on_success` or `on_failure` for each message by how its own run ended.
+- **Each message is acknowledged as it passed or not.** The run of a workflow passes or fails as a whole, and each entry of an `iteration` publishes its outputs over those of the entry before, so a later step cannot tell which messages to acknowledge and which to move to a dead letter queue. `for_each` runs `on_success` or `on_failure` for each message by how its own run ended.
 - **A message is not to hold up the others.** Each message is a run of its own, with its own `timeout`, report and `output.log`: one that hangs or fails leaves the others to go on, and is looked into by itself.
-- **The handling and the acknowledgement need another guard.** The guard is given to each workflow, so `verify` can run under `read_only` with `allow_hosts` naming the service it checks, while only `ack` writes to the queue.
+- **The handling and the acknowledgement need another guard.** The guard is given to each workflow, so `verify` can run under `read_only` with `allow_hosts` naming the service it checks, while only `ack` and `dead-letter` write to the queue.
 - **The handling is to be run without the queue.** `verify.yml` reads only its vars, so a person reproduces a message with `probe --var order_id=1042 workflows/verify.yml`, and CI can run the same check.
 
-The workflows are split by what they do, not by file: `ack` and `dead-letter` above are two jobs of one file.
+The workflows are split by what they do, not by file: `ack` and `dead-letter` above each run one job of `queue.yml`.
 
 ## Keeping a Cursor
 
