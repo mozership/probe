@@ -49,7 +49,7 @@ flowchart LR
   verify -->|失敗| dead["dead-letter"]
 ```
 
-受け取るワークフローは、メッセージを[ワークフローのoutputs](/ja/reference/yaml-configuration#outputs)として、オブジェクトのリストで渡します。
+受け取るワークフローは、メッセージを[ワークフローのoutputs](/ja/reference/yaml-configuration#outputs)として、オブジェクトのリストで渡します。キューが空のときも空のリストを渡します。成功したのにリストを渡さない実行はエラーとして記録されるので、メッセージを省いた応答には`?? []`で空のリストを渡します。
 
 ```yaml
 name: Receive orders
@@ -67,7 +67,7 @@ jobs:
         outputs:
           messages: res.body.messages
 outputs:
-  messages: outputs.receive.messages
+  messages: outputs.receive?.messages ?? []
 ```
 
 `{"receipt": "r-81", "order_id": "1042"}`のような各メッセージのキーが、そのメッセージのための実行のvarsになります。メッセージを処理するワークフローは`vars.order_id`を読むだけで、キューのことは知りません。そのため、`probe --var order_id=1042 workflows/verify.yml`のように単独でも実行できます。
@@ -146,7 +146,7 @@ workflows:
 
 `receive`は、渡したメッセージの処理が済んでから、`interval`だけ待って再び実行します。そのため、serveが処理できる以上には取り出しません。メッセージは同時に4件まで検証します。`verify`が成功したメッセージは`ack`が確認応答し、成功しなかったメッセージは`dead-letter`が移します。
 
-serveは、メッセージを少なくとも1回処理します。確認応答も移動もされなかったメッセージは、その実行が失敗したかserveが止められたためで、可視性タイムアウトが過ぎるとキューが再び渡します。メッセージを処理するワークフローは、同じメッセージを2回処理しても問題が起きないように書いてください。
+serveは、メッセージを少なくとも1回処理します。その実行が失敗したかserveが止められたために、確認応答も移動もされなかったメッセージは、可視性タイムアウトが過ぎるとキューが再び渡します。メッセージを処理するワークフローは、同じメッセージを2回処理しても問題が起きないように書いてください。
 
 メッセージは実行のレポートから読みます。レポートでは[`secrets`](/ja/reference/yaml-configuration#secrets)の値がマスクされています。シークレットを含むメッセージは次へ渡せないので、スキップしてログに書き、キューが再び渡します。メッセージにはシークレットそのものではなく、シークレットを引くためのIDを持たせてください。
 
@@ -172,7 +172,7 @@ jobs:
           orders: res.body.orders
           last: res.body.last_id
 outputs:
-  orders: outputs.list.orders
+  orders: outputs.list?.orders ?? []
   cursor: outputs.list?.last ?? vars.cursor
 ```
 
@@ -191,7 +191,7 @@ workflows:
     files: [workflows/verify.yml]
 ```
 
-最初の実行は、ワークフローが与える`cursor`、つまり`"0"`を読みます。実行が終わると、serveはその実行が渡した`cursor`を保存し、次の実行に`vars.cursor`として渡します。保存するのは、実行が成功し、渡したすべての注文の処理が済んだときだけです。そのため、処理の済んでいない注文をカーソルが追い越すことはありません。失敗した注文があると、直るまでカーソルはその場にとどまり、次の実行がその注文を再び渡します。`on_success: none`は、確認応答するものがないことを表します。
+最初の実行は、ワークフローが与える`cursor`、つまり`"0"`を読みます。実行が終わると、serveはその実行が渡した`cursor`を保存し、次の実行に`vars.cursor`として渡します。保存するのは、実行が成功し、渡したすべての注文の処理が済んだときだけです。そのため、処理の済んでいない注文をカーソルが追い越すことはありません。失敗した注文があると、直るまでカーソルはその場にとどまり、次の実行がその注文を、その後の成功した注文とあわせて再び渡します。そのため`verify`は、同じ注文を2回検証しても問題が起きないように書いてください。失敗した注文をどこかに記録する`on_failure`を書けば、カーソルはその注文を越えて進みます。`on_success: none`は、確認応答するものがないことを表します。
 
 ## ログを読む
 
@@ -204,7 +204,7 @@ serveは、実行ごとに1行のJSONを標準エラー出力に書きます。
 - `serve`はserveファイルの`name`で、あるserveの行を別のserveの行と見分けられます。
 - `status`は`passed`、`failed`、`error`、`timeout`、`stopped`のいずれかで、`passed`でない実行はレベル`ERROR`で書きます。
 - `report`は実行の[`json`レポート](/ja/reference/cli-reference#--report)、`output`は実行が出力したもので、人が端末で見るものと同じです。
-- `from`と`item`は、どの実行が渡した何番目の要素かを表します。
+- `from`と`item`は、どの実行が渡した何番目の要素かを表します。`on_success`や`on_failure`の行には、どの`workflow`の実行に続くものかを表す`for`もあります。
 
 実行が失敗した理由を調べるには、その`output.log`を開くか、同じファイルとvarsでワークフローをもう一度実行します。
 
@@ -229,6 +229,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-`TimeoutStopSec`は`grace`（既定は30秒）より長くしてください。serveが実行を待っている間に、systemdがserveを強制終了しないためです。
+`TimeoutStopSec`は、`grace`（既定は30秒）に、終わらせた実行を強制終了する前に待つ10秒を足したより長くしてください。serveが実行を止めている間に、systemdがserveを強制終了しないためです。
 
 `state`を持つserveファイルは、1つのserveだけで動かしてください。2つで動かすと、それぞれが自分の読んだカーソルから始めてしまいます。あるワーカーが持っている間メッセージを隠すキューであれば、複数のserveで処理できます。

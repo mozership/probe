@@ -49,7 +49,7 @@ flowchart LR
   verify -->|"did not pass"| dead["dead-letter"]
 ```
 
-The workflow that receives gives the messages as an [output of the workflow](/reference/yaml-configuration#outputs), a list of objects:
+The workflow that receives gives the messages as an [output of the workflow](/reference/yaml-configuration#outputs), a list of objects. It gives an empty list when the queue is empty, as `?? []` does for a response that leaves the messages out, since a run that passes without a list is logged as an error:
 
 ```yaml
 name: Receive orders
@@ -67,7 +67,7 @@ jobs:
         outputs:
           messages: res.body.messages
 outputs:
-  messages: outputs.receive.messages
+  messages: outputs.receive?.messages ?? []
 ```
 
 Each message, such as `{"receipt": "r-81", "order_id": "1042"}`, gives its keys as the vars of the runs for it. The workflow that handles a message reads `vars.order_id`, and knows nothing of the queue, so it can be run by itself, as `probe --var order_id=1042 workflows/verify.yml`:
@@ -172,7 +172,7 @@ jobs:
           orders: res.body.orders
           last: res.body.last_id
 outputs:
-  orders: outputs.list.orders
+  orders: outputs.list?.orders ?? []
   cursor: outputs.list?.last ?? vars.cursor
 ```
 
@@ -191,7 +191,7 @@ workflows:
     files: [workflows/verify.yml]
 ```
 
-The first run reads `cursor` as the workflow gives it, `"0"`. Once a run is over, serve saves the `cursor` it gave, and gives it to the next run as `vars.cursor`. It saves it only when the run passed and every order it gave was handled, so the cursor never moves past an order that was not. An order that fails holds the cursor where it is until it is fixed, and the next run gives it again. `on_success: none` says there is nothing to acknowledge.
+The first run reads `cursor` as the workflow gives it, `"0"`. Once a run is over, serve saves the `cursor` it gave, and gives it to the next run as `vars.cursor`. It saves it only when the run passed and every order it gave was handled, so the cursor never moves past an order that was not. An order that fails holds the cursor where it is until it is fixed, and the next run gives it again, with the orders after it that passed, so write `verify` so that verifying an order twice does no harm. An `on_failure` that records the order somewhere lets the cursor move on past it. `on_success: none` says there is nothing to acknowledge.
 
 ## Reading the Log
 
@@ -204,7 +204,7 @@ Serve writes a line of JSON to the standard error for each run:
 - `serve` is the `name` of the serve file, which tells the lines of one serve from those of another.
 - `status` is `passed`, `failed`, `error`, `timeout` or `stopped`, and a run that is not `passed` is logged at the level `ERROR`.
 - `report` is the [`json` report](/reference/cli-reference#--report) of the run, and `output` is what it printed, the same as a person sees in a terminal.
-- `from` and `item` tell which run gave the item and which item it is.
+- `from` and `item` tell which run gave the item and which item it is, and the line of `on_success` or `on_failure` has `for` too, the run of `workflow` it follows.
 
 To see why a run failed, open its `output.log`, or run the workflow again with the same files and vars.
 
@@ -229,6 +229,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-Give `TimeoutStopSec` more than `grace`, which is 30 seconds by default, so that systemd does not kill serve while it waits for the runs.
+Give `TimeoutStopSec` more than `grace`, which is 30 seconds by default, and the 10 seconds serve waits for a run it ended before it kills it, so that systemd does not kill serve while it stops the runs.
 
 A serve file that has `state` is to be served by one serve alone: two would each start from the cursor they read. A queue that hides a message while one worker has it can be served by many.
