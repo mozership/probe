@@ -30,7 +30,7 @@ A workflow is a file, so the one that checks a change is also the one that runs 
 
 - **End-to-end testing**: call an endpoint, query the row it wrote and read the mail it sent, in one run
 - **API testing**: check requests and responses against assertions and against an OpenAPI document
-- **Monitoring**: run the same workflow on an interval with `repeat`, and report a success rate
+- **Monitoring**: run the same workflow on an interval with `repeat` and report a success rate, or keep running it on a schedule with [`probe serve`](/guide/concepts/serve)
 - **Smoke tests and health checks**: stop a deployment with the exit status
 - **Reproducible experiments**: write down a procedure across many protocols, and run it again the same way
 

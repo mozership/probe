@@ -11,4 +11,5 @@ export default {
   'execution-model': 'Execution Model',
   'testing-and-assertions': 'Testing and Assertions',
   'error-handling': 'Error Handling',
+  serve: 'Serve',
 } satisfies MetaRecord

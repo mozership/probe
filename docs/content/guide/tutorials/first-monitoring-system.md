@@ -479,7 +479,7 @@ probe monitoring.yml,development.yml
 
 ## Step 10: Automating with Cron
 
-Set up automated monitoring with cron:
+Set up automated monitoring with cron. [`probe serve`](/guide/concepts/serve) runs the workflow on the same schedule without cron, does not start a run while the one before it is going, and keeps what each run reported:
 
 ```bash
 # Edit crontab
