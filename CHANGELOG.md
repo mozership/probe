@@ -21,10 +21,12 @@ actions:
 ```
 
 probe-imap keeps to `--allow-host`, which the built-in action did not: a
-step under `--allow-host` now runs without `--allow-action imap` when the
+step under `--allow-host` now runs without `--allow-action` when the
 server is one the run allows, and is refused otherwise. Under
-`--read-only` it is refused unless `--allow-action imap` names it, as
-before.
+`--read-only` it is refused, as before, unless `--allow-action` names it:
+as for any external action, in full, as
+`--allow-action github.com/mozership/probe-imap@<commit SHA>`, and not by
+the name `imap` the workflow gives it.
 
 `probe guide imap` prints the `uses` line of its latest release. Without
 the line under `actions`, a workflow that uses `imap` stops before its

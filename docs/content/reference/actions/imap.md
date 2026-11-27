@@ -419,6 +419,6 @@ steps:
 
 The action keeps to `--allow-host`, and its `action.yml` declares `guard: [allow-host]`: it connects only to a `host` the run allows, at `port`, which is `993` when it is not given. A step for another server is refused before it connects.
 
-It does not keep to `--read-only`, as its commands may change a mailbox: `store` flags messages, `copy`, `create`, `delete` and `rename` change mailboxes, and `fetch` of `BODY[...]` marks messages read. Under `--read-only`, a step that uses it is refused unless the run allows it by name with `--allow-action imap`.
+It does not keep to `--read-only`, as its commands may change a mailbox: `store` flags messages, `copy`, `create`, `delete` and `rename` change mailboxes, and `fetch` of `BODY[...]` marks messages read. Under `--read-only`, a step that uses it is refused unless `--allow-action` names it as it is written under `actions`, such as `--allow-action github.com/mozership/probe-imap@<commit SHA>`. The name `imap` that the workflow gives it is not enough, so that a workflow cannot give that name to another action to have it run.
 
 A refused step fails with the kind `refused`. See [Guard](/guide/concepts/guard).
