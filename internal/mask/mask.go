@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +24,8 @@ const redactedValue = "<redacted>"
 // a login step, is never declared as a secret, but it reaches the target
 // through one of these headers; a password written in a step's `with` need
 // not be declared either. Their values are hidden wherever they are shown.
-// cookies holds the cookies the http action sends and receives, by name.
+// cookies holds the cookies the http action sends and receives, by name, and
+// credentials what an embedded job hid, for the run that embeds it to hide.
 var sensitiveKeys = map[string]bool{
 	"authorization":       true,
 	"proxy-authorization": true,
@@ -34,6 +36,7 @@ var sensitiveKeys = map[string]bool{
 	"key_passphrase":      true,
 	"secret_access_key":   true,
 	"session_token":       true,
+	"credentials":         true,
 }
 
 // MinLength is the fewest characters a value must have to be masked inside
@@ -92,6 +95,7 @@ type Masker struct {
 	replacer *strings.Replacer
 	exact    map[string]string // short value -> its label, masked only whole
 	tooShort []string          // declared secrets too short to mask in text
+	learned  []string          // values Learn registered, once each
 	// gen counts the changes of the replacer and of exact, by which a
 	// caller that keeps text masked tells whether it would mask it
 	// otherwise now.
@@ -273,6 +277,9 @@ func (m *Masker) Learn(data map[string]any) {
 	defer m.mu.Unlock()
 	added := false
 	for _, v := range found {
+		if v != "" && !slices.Contains(m.learned, v) {
+			m.learned = append(m.learned, v)
+		}
 		if m.addLocked(v, redactedValue) {
 			added = true
 		}
@@ -280,6 +287,17 @@ func (m *Masker) Learn(data map[string]any) {
 	if added {
 		m.rebuildLocked()
 	}
+}
+
+// Learned returns the values Learn registered, in the order it found them,
+// so that the run an embedded job is part of can learn them too.
+func (m *Masker) Learned() []string {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return slices.Clone(m.learned)
 }
 
 func collectSensitive(v any, found *[]string) {

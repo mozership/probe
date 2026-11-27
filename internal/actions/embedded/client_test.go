@@ -262,3 +262,22 @@ func TestExecuteUnderAGuard(t *testing.T) {
 		t.Errorf("err = %v, want it to name the step refused", err)
 	}
 }
+
+func TestResultMap_Credentials(t *testing.T) {
+	hid := &Result{Res: Res{Credentials: []string{"e2e-password"}}}
+	m, err := resultMap(hid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m["res"].(map[string]any)["credentials"]; !reflect.DeepEqual(got, []string{"e2e-password"}) {
+		t.Errorf("res.credentials = %#v, want the password", got)
+	}
+
+	m, err = resultMap(&Result{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m["res"].(map[string]any)["credentials"]; ok {
+		t.Error("a job that hid nothing should have no res.credentials")
+	}
+}

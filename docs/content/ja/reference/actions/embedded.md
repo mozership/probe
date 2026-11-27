@@ -112,6 +112,7 @@ steps:
 | `res.report` | String | 埋め込みジョブのレポート。親のレポートにもネストして表示されます |
 | `res.error` | String | 失敗時のエラーメッセージ |
 | `res.dump` | Boolean | 常に`false` |
+| `res.credentials` | Array | 埋め込みジョブが伏せた資格情報。ステップに書いたパスワードなどです。実行全体でも伏せるので、ジョブがoutputsで返しても表示されません。表示は`<redacted>`で、何も伏せなかったジョブにはありません |
 | `status` | Integer | `res.code`と同じ値 |
 | `rt` | Object | 埋め込みジョブの実行時間 |
 

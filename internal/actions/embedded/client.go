@@ -23,6 +23,9 @@ type Res struct {
 	Report  string         `map:"report"`
 	Error   string         `map:"error"`
 	Dump    bool           `map:"dump"`
+	// Credentials are what the job hid, which the job runs in a process of
+	// its own to learn, for the run that embeds it to hide them too.
+	Credentials []string `map:"credentials"`
 }
 
 type Result struct {
@@ -118,11 +121,12 @@ func (r *Req) Do() (*Result, error) {
 	}
 
 	result.Res = Res{
-		Code:    code,
-		Outputs: run.Outputs,
-		Report:  run.Report,
-		Error:   errorMsg,
-		Dump:    false, // Don't dump request/response for embedded jobs
+		Code:        code,
+		Outputs:     run.Outputs,
+		Report:      run.Report,
+		Error:       errorMsg,
+		Dump:        false, // Don't dump request/response for embedded jobs
+		Credentials: printer.Masker().Learned(),
 	}
 	result.Status = code
 
@@ -162,7 +166,7 @@ func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 	if err != nil {
 		// Even on error, try to return a structured result if we have one
 		if result != nil {
-			mapResult, mapErr := mapping.StructToMapByTags(result)
+			mapResult, mapErr := resultMap(result)
 			if mapErr == nil {
 				return mapResult, err
 			}
@@ -170,12 +174,25 @@ func Execute(data map[string]any, opts ...Option) (map[string]any, error) {
 		return map[string]any{}, err
 	}
 
-	mapResult, err := mapping.StructToMapByTags(result)
+	mapResult, err := resultMap(result)
 	if err != nil {
 		return map[string]any{}, err
 	}
 
 	return mapResult, nil
+}
+
+// resultMap is the result as the step gets it. A job that hid nothing has no
+// credentials, which would show as hidden all the same.
+func resultMap(result *Result) (map[string]any, error) {
+	m, err := mapping.StructToMapByTags(result)
+	if err != nil {
+		return nil, err
+	}
+	if res, ok := m["res"].(map[string]any); ok && len(result.Res.Credentials) == 0 {
+		delete(res, "credentials")
+	}
+	return m, nil
 }
 
 func WithBefore(f func(path string, vars map[string]any)) Option {
