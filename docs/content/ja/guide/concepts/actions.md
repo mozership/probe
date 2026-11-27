@@ -1055,9 +1055,11 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | [aws](/ja/reference/actions/aws) | AWSのサービスと、それと互換のあるサービスを呼びます。リクエストの署名はアクション自身が行います。S3、MinIO、Cloudflare R2のオブジェクトを読み書きし、SQSのメッセージをロングポーリングで待って受信し、送信し、削除し、ほかのAWSのAPIには自分で書いたリクエストを送ります |
 | [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした |
 | [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます |
+| [db](/ja/reference/actions/db) | MySQL、PostgreSQL、SQLiteに対してSQLを実行し、読み取った行か、変更した行の数を返します。`--read-only`の下では、読み取るだけの文を読み取り専用のトランザクションで実行します。Probe v1.41.0までは組み込みアクションでした |
 | [github-notes](/ja/reference/actions/github-notes) | 実行の[ノート](/ja/reference/yaml-configuration#notes)をGitHubに投稿します。投稿先はプルリクエストのコメント、ジョブのサマリー、Issueのいずれかで、次の実行では同じものを編集します |
 | [graphql](/ja/reference/actions/graphql) | GraphQLのクエリをHTTPで送り、レスポンスの`data`と`errors`を分けて返します |
-| [imap](/ja/reference/actions/imap) | IMAPのコマンドを1つのセッションでメールサーバーに対して実行します。メッセージを検索し、取得し、フラグを付け、メールボックスを作成し、コピーし、削除します。`--allow-host`で許可されたサーバーにだけ接続します。Probe v1.43.0までは組み込みアクションでした |
+| [grpc](/ja/reference/actions/grpc) | gRPCとConnectのサービスを、ストリーミングも含めて、リフレクションか`.proto`ファイルから呼び出し、それに照らして呼び出しを確かめます。Probe v1.41.0までは組み込みアクションでした |
+| [imap](/ja/reference/actions/imap) | IMAPのコマンドを1つのセッションでメールサーバーに対して実行します。メッセージを検索し、取得し、フラグを付け、メールボックスを作成し、コピーし、削除します。`--allow-host`の下では、実行で許可されたサーバーにだけ接続します。Probe v1.43.0までは組み込みアクションでした |
 | [ios](/ja/reference/actions/ios) | XCUITestを通して、iOSシミュレーターでアプリを操作します。アプリを起動し、タップや入力をし、要素を待ち、そのテキストを読み、スクリーンショットを撮ります。XcodeのあるmacOSで動きます |
 | [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます |
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした |
