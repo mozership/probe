@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -186,6 +187,34 @@ func TestMasker_Learn(t *testing.T) {
 	d.Learn(map[string]any{"authorization": "Bearer tok"})
 	if got := d.String("Bearer tok"); got != "<secret:T>" {
 		t.Errorf("declared label should win, got %q", got)
+	}
+}
+
+func TestMasker_Learned(t *testing.T) {
+	var none *Masker
+	if got := none.Learned(); got != nil {
+		t.Errorf("Learned() of a nil Masker = %v, want nil", got)
+	}
+
+	m := New([]string{"T"}, map[string]string{"T": "declared-secret"})
+	m.Learn(map[string]any{"password": "e2e-password", "headers": map[string]any{"authorization": "Bearer e2e-token"}})
+	m.Learn(map[string]any{"password": "e2e-password", "user": "e2e"})
+	got := m.Learned()
+	slices.Sort(got)
+	want := []string{"Bearer e2e-token", "e2e-password", "e2e-token"}
+	if !slices.Equal(got, want) {
+		t.Errorf("Learned() = %v, want %v", got, want)
+	}
+
+	// What one masker learned, another learns from under credentials, as
+	// the run that embeds a job does from its result.
+	parent := New(nil, nil)
+	parent.Learn(map[string]any{"res": map[string]any{"credentials": []any{"e2e-password", "ab"}}})
+	if out := parent.String("e2e-password"); out != "<redacted>" {
+		t.Errorf("String() = %q, want <redacted>", out)
+	}
+	if out := parent.Value("ab"); out != "<redacted>" {
+		t.Errorf("Value() of a short credential = %v, want <redacted>", out)
 	}
 }
 
