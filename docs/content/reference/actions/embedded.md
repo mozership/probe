@@ -112,6 +112,7 @@ After the embedded job finishes, `res` carries its result and its outputs.
 | `res.report` | String | The embedded job's report, which is also nested into the parent report |
 | `res.error` | String | Error message, when the embedded job failed |
 | `res.dump` | Boolean | Always `false` |
+| `res.credentials` | Array | The credentials the embedded job hid, such as a password written in its steps, which the run hides as well, so that one the job returns in its outputs is not shown. It is shown as `<redacted>`, and is left out when the job hid none |
 | `status` | Integer | Same as `res.code` |
 | `rt` | Object | Time spent running the embedded job |
 

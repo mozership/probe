@@ -29,7 +29,7 @@ func TestKeeps(t *testing.T) {
 		}
 	}
 	// The actions that cannot tell what they are about to do keep to none.
-	for _, name := range []string{"imap", "shell", "smtp", "ssh"} {
+	for _, name := range []string{"shell", "smtp", "ssh"} {
 		if _, ok := Keeps()[name]; ok {
 			t.Errorf("%s should keep to no guard", name)
 		}
@@ -121,8 +121,6 @@ func TestParamsCoverTheDocs(t *testing.T) {
 	nested := map[string][]string{
 		// multipart's fields
 		"http": {"file", "content", "filename", "content_type"},
-		// the fields of commands
-		"imap": {"name", "mailbox", "oldmailbox", "reference", "criteria", "sequence", "dataitem", "value"},
 	}
 	row := regexp.MustCompile("(?m)^\\| `([a-z_]+)`")
 	for name, keys := range AllParams() {

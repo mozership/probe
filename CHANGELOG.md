@@ -4,6 +4,37 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## Unreleased
+
+### Breaking Changes
+
+The `imap` action is no longer built into Probe. It is the external action
+[probe-imap](https://github.com/mozership/probe-imap), with the same
+parameters and the same result, and it takes go-imap, go-message and
+go-sasl out of the probe executable. A workflow that uses it names it once
+under `actions`, and its steps, and the `defaults` written for it, stay as
+they are:
+
+```yaml
+actions:
+  imap: github.com/mozership/probe-imap@<commit SHA>
+```
+
+probe-imap keeps to `--allow-host`, which the built-in action did not: a
+step under `--allow-host` now runs without `--allow-action imap` when the
+server is one the run allows, and is refused otherwise. Under
+`--read-only` it is refused unless `--allow-action imap` names it, as
+before.
+
+`probe guide imap` prints the `uses` line of its latest release. Without
+the line under `actions`, a workflow that uses `imap` stops before its
+first job with exit status 2, as for any action that is not there. A
+workflow that `probe serve` runs, such as one that takes the messages of a
+mailbox as a queue, names it under `actions` in the same way.
+
+An action that calls `imap` with `sdk.Caller` calls what the workflow
+names so under `actions`.
+
 ## v1.42.0 (2026-11-25)
 
 ### Breaking Changes

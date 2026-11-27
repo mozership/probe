@@ -39,7 +39,7 @@ A workflow is a file, so the one that checks a change is also the one that runs 
 These are what set Probe apart from other tools of its kind; [Compared with similar tools](/guide/introduction/comparison) says where another one is the better answer.
 
 ### Many Protocols in One Run
-HTTP, SMTP, IMAP, DNS, SSH and shell are built in, external actions add gRPC and MySQL, PostgreSQL and SQLite among others, and jobs run in parallel unless `needs` orders them.
+HTTP, SMTP, DNS, SSH and shell are built in, external actions add IMAP, gRPC and MySQL, PostgreSQL and SQLite among others, and jobs run in parallel unless `needs` orders them.
 
 ### Readable
 A workflow is YAML close to GitHub Actions: `jobs`, `steps`, `uses` and `with`. A person can review what an agent wrote.
@@ -122,7 +122,6 @@ These actions are built in. Each has a page in the [reference](/reference/action
 |---|---|
 | [`http`](/reference/actions/http) | HTTP requests and their responses |
 | [`smtp`](/reference/actions/smtp) | Delivering mail |
-| [`imap`](/reference/actions/imap) | Reading a mailbox |
 | [`dns`](/reference/actions/dns) | The records a DNS server answers for a name |
 | [`file`](/reference/actions/file) | A log or another file on the machine running Probe, and files a workflow makes and removes |
 | [`ssh`](/reference/actions/ssh) | Commands on a remote host |
@@ -130,7 +129,7 @@ These actions are built in. Each has a page in the [reference](/reference/action
 | [`embedded`](/reference/actions/embedded) | Running another job file from a step |
 | [`hello`](/reference/actions/hello) | Printing a report line |
 
-External actions live in repositories of their own, and a step pins one by commit: [agent](/reference/actions/agent), [android](/reference/actions/android), [aws](/reference/actions/aws), [browser](/reference/actions/browser), [container](/reference/actions/container), [db](/reference/actions/db), [github-notes](/reference/actions/github-notes), [graphql](/reference/actions/graphql), [grpc](/reference/actions/grpc), [ios](/reference/actions/ios), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [slack](/reference/actions/slack), [slurm](/reference/actions/slurm) and [websocket](/reference/actions/websocket).
+External actions live in repositories of their own, and a step pins one by commit: [agent](/reference/actions/agent), [android](/reference/actions/android), [aws](/reference/actions/aws), [browser](/reference/actions/browser), [container](/reference/actions/container), [db](/reference/actions/db), [github-notes](/reference/actions/github-notes), [graphql](/reference/actions/graphql), [grpc](/reference/actions/grpc), [imap](/reference/actions/imap), [ios](/reference/actions/ios), [jmap](/reference/actions/jmap), [mail-latency](/reference/actions/mail-latency), [redis](/reference/actions/redis), [slack](/reference/actions/slack), [slurm](/reference/actions/slurm) and [websocket](/reference/actions/websocket).
 
 ### Custom Actions
 

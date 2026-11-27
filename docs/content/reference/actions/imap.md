@@ -2,32 +2,40 @@
 
 The `imap` action connects to IMAP servers to perform email operations such as reading messages, searching, and mailbox management.
 
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-imap](https://github.com/mozership/probe-imap). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.44.0 or later; until v1.44.0 it was built into Probe. The examples write `<commit SHA>` for the commit to pin: `probe guide imap` prints the `uses` line of the latest release, and so do the notes of each release.
+
 ## Basic Syntax
 
-An IMAP step opens a connection and then runs the commands listed in `commands`.
+A workflow pins the action by a full commit SHA, and gives it the name `imap` once, under [`actions`](/reference/yaml-configuration#actions). Its steps then write `uses: imap`, and its `defaults` `imap:`. An IMAP step opens a connection and then runs the commands listed in `commands`.
 
 ```yaml
+name: Mail
+actions:
+  imap: github.com/mozership/probe-imap@<commit SHA>
 vars:
   imap_username: "{{IMAP_USERNAME}}"
   imap_password: "{{IMAP_PASSWORD}}"
-
-steps:
-  - name: "Check Email"
+jobs:
+- name: mail
+  steps:
+  - name: Check Email
     uses: imap
     with:
-      host: "imap.example.com"
+      host: imap.example.com
       port: 993
       username: "{{vars.imap_username}}"
       password: "{{vars.imap_password}}"
       tls: true
       commands:
-      - name: "select"
-        mailbox: "INBOX"
-      - name: "search"
+      - name: select
+        mailbox: INBOX
+      - name: search
         criteria:
           not_flags: ["seen"]
     test: res.code == 0
 ```
+
+The examples below show the steps alone.
 
 ## Parameters
 
@@ -406,3 +414,11 @@ steps:
       unread_count: res.data.search.count
       latest_sender: res.data.fetch.messages[0].from
 ```
+
+## Under a Guard
+
+The action keeps to `--allow-host`, and its `action.yml` declares `guard: [allow-host]`: it connects only to a `host` the run allows, at `port`, which is `993` when it is not given. A step for another server is refused before it connects.
+
+It does not keep to `--read-only`, as its commands may change a mailbox: `store` flags messages, `copy`, `create`, `delete` and `rename` change mailboxes, and `fetch` of `BODY[...]` marks messages read. Under `--read-only`, a step that uses it is refused unless the run allows it by name with `--allow-action imap`.
+
+A refused step fails with the kind `refused`. See [Guard](/guide/concepts/guard).

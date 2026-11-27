@@ -32,6 +32,7 @@ actions:
   ios: github.com/mozership/probe-ios@aed5436143e9536754e2123b953831f60cd635eb # v0.2.0
   agent: github.com/mozership/probe-agent@4d0d6ccee6165624283b22fa0541b02d17e50ac5 # v0.2.0
   db: github.com/mozership/probe-db@47be79a26c62a4790015c9fc2680bce4dba210b6 # v0.1.0
+  imap: github.com/mozership/probe-imap@c64e6ad9559de7a1405976fdaa11e7091bc732ee # v0.1.0
 
 secrets:
 - ANTHROPIC_API_KEY

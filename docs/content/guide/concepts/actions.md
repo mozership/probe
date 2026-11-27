@@ -577,7 +577,7 @@ The built-in actions are part of the Probe binary. Probe runs each one by starti
 probe workflow.yml  # Starts the built-in actions its steps use
 
 # No separate installation needed for built-in actions:
-# http, shell, ssh, smtp, imap,
+# http, shell, ssh, smtp,
 # dns, file, embedded, hello
 ```
 
@@ -852,8 +852,11 @@ These external actions are published alongside Probe, each in a repository of it
 | [aws](/reference/actions/aws) | Calls AWS services and the services compatible with them, signing each request itself: reads and writes objects in S3, MinIO or Cloudflare R2, receives, sends and deletes messages in SQS, waiting for them with a long poll, and sends a request of your own to any other API of AWS |
 | [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 |
 | [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman |
+| [db](/reference/actions/db) | Runs SQL against MySQL, PostgreSQL and SQLite, and returns the rows it read or the count of rows it changed. Under `--read-only` it runs only a statement that reads, in a read-only transaction. It was built into Probe up to v1.41.0 |
 | [github-notes](/reference/actions/github-notes) | Puts the [notes](/reference/yaml-configuration#notes) of a run on GitHub: in a comment on the pull request, the summary of the job, or an issue, and edits the same one on the next run |
 | [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart |
+| [grpc](/reference/actions/grpc) | Calls gRPC and Connect services, streaming included, by reflection or from `.proto` files, and checks the calls against them. It was built into Probe up to v1.41.0 |
+| [imap](/reference/actions/imap) | Runs IMAP commands against a mail server in one session: searches, fetches and flags messages, and creates, copies into and deletes mailboxes. Under `--allow-host`, it connects only to a server the run allows. It was built into Probe up to v1.43.0 |
 | [ios](/reference/actions/ios) | Drives an app on an iOS simulator through XCUITest: launches it, taps and types into it, waits for elements, reads their text and takes screenshots. It runs on macOS, with Xcode |
 | [jmap](/reference/actions/jmap) | Calls [JMAP](https://jmap.io/) methods: fetches the session, fills in the account of each call, and gathers the method errors, which come with HTTP 200, in `res.errors` |
 | [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 |

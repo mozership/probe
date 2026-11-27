@@ -61,9 +61,9 @@ The guard is not a sandbox. It keeps a workflow from writing to, or reaching, wh
 | `file` | Only reads: `write`, `append` and `delete` are refused | Nothing to reach |
 | `hello` | Nothing to refuse | Nothing to reach |
 
-The external [db](/reference/actions/db) and [grpc](/reference/actions/grpc) actions declare both kinds, and their pages say what each refuses.
+The external [db](/reference/actions/db) and [grpc](/reference/actions/grpc) actions declare both kinds, and their pages say what each refuses. The external [imap](/reference/actions/imap) action declares `allow-host` alone, as its commands may change a mailbox.
 
-The built-in `shell`, `ssh`, `smtp` and `imap` cannot tell what a command or a script will do, and declare no guard, nor does the external [browser](/reference/actions/browser) action, which cannot tell what a page will do. A step using one is refused under a guard unless `--allow-action` names it, and it then runs as it is, without the guard.
+The built-in `shell`, `ssh` and `smtp` cannot tell what a command or a script will do, and declare no guard, nor does the external [browser](/reference/actions/browser) action, which cannot tell what a page will do. A step using one is refused under a guard unless `--allow-action` names it, and it then runs as it is, without the guard.
 
 ```bash
 probe --read-only --allow-action shell workflow.yml

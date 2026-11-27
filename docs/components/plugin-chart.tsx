@@ -10,12 +10,11 @@
 
 const BUILT_IN = [
   'http',
-  'db',
   'shell',
   'ssh',
   'smtp',
-  'imap',
-  'grpc',
+  'dns',
+  'file',
   'embedded',
 ]
 

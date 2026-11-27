@@ -13,6 +13,9 @@ func TestFieldsDeclareWhatItReturns(t *testing.T) {
 	for _, job := range []string{
 		"name: j\nsteps:\n- uses: hello\n  skipif: \"true\"\n",
 		"name: j\nsteps:\n- uses: hello\n  id: Not Valid\n",
+		// A template that cannot be evaluated stops the step before the
+		// action runs, once the password beside it is learned.
+		"name: j\nsteps:\n- uses: hello\n  with:\n    password: e2e-password\n    who: \"{{vars.nope.nope}}\"\n",
 	} {
 		with := map[string]any{"path": writeJob(t, job), "vars": map[string]any{"k": "v"}}
 		// A job that cannot run is an error, with a result that tells why

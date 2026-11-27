@@ -2,32 +2,40 @@
 
 IMAPアクションは、IMAPサーバーに接続してメールの読み取り、検索、メールボックス管理などのメール操作を実行します。
 
-## 基本構文
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-imap](https://github.com/mozership/probe-imap)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.44.0以降が必要です。v1.44.0より前はProbeに組み込まれていました。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide imap`が表示し、各リリースのノートにもあります。
 
-IMAPのステップでは接続を確立し、`commands`に並べたコマンドを順に実行します。
+## 基本的な構文
+
+ワークフローでは40文字のコミットSHAでアクションを固定し、[`actions`](/ja/reference/yaml-configuration#actions)で`imap`という名前を一度だけ付けます。ステップでは`uses: imap`、`defaults`では`imap:`と書きます。IMAPのステップでは接続を確立し、`commands`に並べたコマンドを順に実行します。
 
 ```yaml
+name: Mail
+actions:
+  imap: github.com/mozership/probe-imap@<commit SHA>
 vars:
   imap_username: "{{IMAP_USERNAME}}"
   imap_password: "{{IMAP_PASSWORD}}"
-
-steps:
-  - name: "メールチェック"
+jobs:
+- name: mail
+  steps:
+  - name: メールチェック
     uses: imap
     with:
-      host: "imap.example.com"
+      host: imap.example.com
       port: 993
       username: "{{vars.imap_username}}"
       password: "{{vars.imap_password}}"
       tls: true
       commands:
-      - name: "select"
-        mailbox: "INBOX"
-      - name: "search"
+      - name: select
+        mailbox: INBOX
+      - name: search
         criteria:
           not_flags: ["seen"]
     test: res.code == 0
 ```
+
+以降の例では、ステップだけを示します。
 
 ## パラメータ
 
@@ -392,6 +400,8 @@ steps:
 
 ```yaml
 name: メールアラート監視
+actions:
+  imap: github.com/mozership/probe-imap@<commit SHA>
 vars:
   monitor_email: "{{MONITOR_EMAIL}}"
   monitor_password: "{{MONITOR_PASSWORD}}"
@@ -423,6 +433,14 @@ jobs:
       critical_count: res.data.search.count
       has_critical: res.data.search.count > 0
 ```
+
+## ガードの下での動作
+
+このアクションは`--allow-host`に従い、`action.yml`で`guard: [allow-host]`を宣言しています。実行で許可されている`host`の`port`（指定がなければ`993`）にだけ接続し、それ以外のサーバーへのステップは接続する前に拒否します。
+
+`--read-only`には従いません。コマンドがメールボックスを変更することがあるためです。`store`はメッセージにフラグを付け、`copy`、`create`、`delete`、`rename`はメールボックスを変更し、`BODY[...]`の`fetch`はメッセージを既読にします。`--read-only`の下では、`--allow-action imap`で指定しない限り、このアクションを使うステップは拒否されます。
+
+拒否されたステップは、種別`refused`で失敗します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
 ## セキュリティに関する考慮事項
 

@@ -61,9 +61,9 @@ Probeは、アクションの宣言を検証せずにそのまま使います。
 | `file` | 読むだけ。`write`、`append`、`delete`は拒否します | 接続するものがない |
 | `hello` | 拒否するものがない | 接続するものがない |
 
-外部の[db](/ja/reference/actions/db)アクションと[grpc](/ja/reference/actions/grpc)アクションは両方の種類を宣言しています。それぞれが何を拒否するかは、各アクションのページにあります。
+外部の[db](/ja/reference/actions/db)アクションと[grpc](/ja/reference/actions/grpc)アクションは両方の種類を宣言しています。それぞれが何を拒否するかは、各アクションのページにあります。外部の[imap](/ja/reference/actions/imap)アクションは、コマンドがメールボックスを変更することがあるため、`allow-host`だけを宣言しています。
 
-組み込みの`shell`、`ssh`、`smtp`、`imap`は、コマンドやスクリプトが何をするかを判定できないため、ガードを宣言していません。ページが何をするかを判定できない外部の[browser](/ja/reference/actions/browser)アクションも、同じく宣言していません。これらを使うステップは、`--allow-action`で指定しない限り、ガードの下では拒否されます。指定した場合は、ガードがないときと同じように実行します。
+組み込みの`shell`、`ssh`、`smtp`は、コマンドやスクリプトが何をするかを判定できないため、ガードを宣言していません。ページが何をするかを判定できない外部の[browser](/ja/reference/actions/browser)アクションも、同じく宣言していません。これらを使うステップは、`--allow-action`で指定しない限り、ガードの下では拒否されます。指定した場合は、ガードがないときと同じように実行します。
 
 ```bash
 probe --read-only --allow-action shell workflow.yml

@@ -10,7 +10,6 @@ hold for all of them are at the end of this page.
 - **[shell](/reference/actions/shell)** - Execute shell commands and scripts securely
 - **[ssh](/reference/actions/ssh)** - Run commands on a remote host over SSH
 - **[smtp](/reference/actions/smtp)** - Send email notifications and alerts
-- **[imap](/reference/actions/imap)** - Connect to IMAP servers and manage email operations
 - **[dns](/reference/actions/dns)** - Ask a DNS server for the records of a name
 - **[file](/reference/actions/file)** - Read a file, or check that one has come or gone, and write, append to or delete one
 - **[embedded](/reference/actions/embedded)** - Run another workflow as a step
@@ -29,6 +28,7 @@ These are published alongside Probe, each in a repository of its own. A step nam
 - **[github-notes](/reference/actions/github-notes)** - Put the notes of a run on GitHub: a pull request comment, the job summary or an issue
 - **[graphql](/reference/actions/graphql)** - Send a GraphQL query over HTTP
 - **[grpc](/reference/actions/grpc)** - Call gRPC and Connect services, by reflection or from `.proto` files
+- **[imap](/reference/actions/imap)** - Run IMAP commands against a mail server, to search, fetch and flag messages and manage mailboxes
 - **[ios](/reference/actions/ios)** - Drive an app on an iOS simulator through XCUITest
 - **[jmap](/reference/actions/jmap)** - Call JMAP methods
 - **[mail-latency](/reference/actions/mail-latency)** - Measure delivery latency from a Maildir
