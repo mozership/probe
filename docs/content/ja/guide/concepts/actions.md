@@ -1062,7 +1062,7 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした |
 | [redis](/ja/reference/actions/redis) | RedisまたはValkeyのサーバーでコマンドを実行し、その応答を返します。サーバーが返したエラーは`res.errors`に集めます。`--read-only`の下では、読み取りだけと分かっているコマンドだけを実行します |
 | [slack](/ja/reference/actions/slack) | 実行の[ノート](/ja/reference/yaml-configuration#notes)やテキストをSlackのチャンネルに投稿します。Incoming Webhookかボットトークンで投稿します |
-| [slurm](/ja/reference/actions/slurm) | Slurmにジョブを投入し、終わるまで待って出力を読み、取り消します。パーティションとノードの状態も読みます。Slurmのコマンドを`--json`付きで、SSHでログインノードの上で、またはProbeを実行しているホストの上で実行し、実行が終わるとその実行のジョブを取り消します |
+| [slurm](/ja/reference/actions/slurm) | Slurmにジョブを投入し、終わるまで待って出力を読み、取り消します。パーティションとノードの状態も読みます。Slurmのコマンドを`--json`付きで、SSHでログインノードの上で、またはProbeを実行しているホストの上で実行するか、slurmrestdに問い合わせます。実行が終わるとその実行のジョブを取り消します |
 | [websocket](/ja/reference/actions/websocket) | WebSocketのサーバーに接続し、メッセージを順に送受信して、受け取ったものを返します。受信は次の1通、指定した数、サーバーが閉じるまでのすべての中から選べ、一致するものだけに絞ることもできます |
 
 #### action.yml

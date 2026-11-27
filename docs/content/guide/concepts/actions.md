@@ -859,7 +859,7 @@ These external actions are published alongside Probe, each in a repository of it
 | [mail-latency](/reference/actions/mail-latency) | Reads messages from a Maildir, computes the delivery latency of each one from its `Received` headers, and writes a CSV. It was built into Probe up to v1.21.0 |
 | [redis](/reference/actions/redis) | Runs commands on a Redis or Valkey server and returns their replies, with the errors the server answered gathered in `res.errors`. Under `--read-only` it runs only commands known to only read |
 | [slack](/reference/actions/slack) | Posts the [notes](/reference/yaml-configuration#notes) of a run, a text, or both to a Slack channel, by an Incoming Webhook or with a bot token |
-| [slurm](/reference/actions/slurm) | Submits jobs to Slurm, waits for them to end and reads what they printed, cancels them, and reads the state of the partitions and the nodes. It runs the commands of Slurm with `--json` on a login node over SSH, or on the host Probe runs on, and cancels the jobs of a run once the run is over |
+| [slurm](/reference/actions/slurm) | Submits jobs to Slurm, waits for them to end and reads what they printed, cancels them, and reads the state of the partitions and the nodes. It runs the commands of Slurm with `--json` on a login node over SSH or on the host Probe runs on, or asks slurmrestd, and cancels the jobs of a run once the run is over |
 | [websocket](/reference/actions/websocket) | Connects to a WebSocket server, sends and receives messages in order, and returns those it received. A receive takes the next message, a number of them, or every message until the server closes, optionally only those that match |
 
 #### action.yml

@@ -1,6 +1,6 @@
 # Slurmアクション
 
-Slurmアクションは、[Slurm](https://slurm.schedmd.com/)にジョブを投入し、終わるまで待って出力を読み、取り消します。クラスターのパーティションとノードの状態も読みます。Slurmのコマンド（`sbatch`、`squeue`、`sacct`、`scancel`、`scontrol`）を、SSHでログインノードの上で、またはProbeを実行しているホストの上で実行し、`--json`で出力された内容を読みます。
+Slurmアクションは、[Slurm](https://slurm.schedmd.com/)にジョブを投入し、終わるまで待って出力を読み、取り消します。クラスターのパーティションとノードの状態も読みます。Slurmのコマンド（`sbatch`、`squeue`、`sacct`、`scancel`、`scontrol`）を、SSHでログインノードの上で、またはProbeを実行しているホストの上で実行し、`--json`で出力された内容を読みます。クラスターが[slurmrestd](https://slurm.schedmd.com/rest.html)を提供していれば、代わりにそれに問い合わせ、同じ結果を返します。
 
 [外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-slurm](https://github.com/mozership/probe-slurm)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。Probe v1.40.0以降で試験しています。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide slurm`が表示し、各リリースのノートにもあります。
 
@@ -66,17 +66,19 @@ jobs:
 | [`partitions`](#partitions) | パーティションの状態を読み、そのノードを状態ごとに数えます | パーティションの名前。なければすべてのパーティション |
 | [`nodes`](#nodes) | ノードの状態を読みます | ノード。`c1`や`c[1-4]`など。なければすべてのノード |
 
-残りのパラメータは、コマンドを実行する場所を指定します。
+残りのパラメータは、Slurmへの問い合わせ方を指定します。ログインノードかこのホストでコマンドを実行するか、[slurmrestd](#slurmrestdで問い合わせる)に問い合わせます。
 
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |---|---|---|---|---|
 | `host` | String | No | - | コマンドをSSHで実行するログインノード。なければProbeを実行しているホストで実行します |
 | `port` | Integer | No | `22` | SSHのポート |
-| `user` | String | No | `USER` | ログインするユーザー |
+| `user` | String | No | `USER` | ログインするユーザー。`endpoint`では、`SlurmUser`やrootのトークンで代わりに操作するユーザー |
 | `key_file` | String | No | [ログイン](#ログイン)を参照 | ログインに使う秘密鍵。`~/`はホームディレクトリです |
 | `key_passphrase` | String | No | - | `key_file`のパスフレーズ |
 | `known_hosts` | String | No | `~/.ssh/known_hosts`と`/etc/ssh/ssh_known_hosts` | ログインノードのホスト鍵を照合するファイル |
 | `bin_dir` | String | No | `PATH` | Slurmのコマンドがあるディレクトリ。`/opt/slurm/bin`など。SSHで実行するコマンドの`PATH`で見つからない場合に指定します |
+| `endpoint` | String | No | - | slurmrestdのURL。`https://slurm.hpc.example.com:6820`など。指定すると、コマンドを実行する代わりにslurmrestdに問い合わせます |
+| `token` | String | No | `SLURM_JWT` | slurmrestdに渡すJSON Web Token。`scontrol token`が表示する形のままで構いません |
 | `timeout` | Duration | No | `30s`に`wait`を足した長さ | ステップ全体の制限時間。`10s`または秒数で指定します |
 
 これら以外のキーを`with`に書くと、何も実行せずにステップが失敗します。`action.yml`がこれらを`params`として、結果のフィールドを`res`として宣言しているので、`probe check`はそのようなキーと、アクションが返さない`res`のフィールドを行番号つきで報告します。
@@ -104,6 +106,27 @@ defaults:
 
 `key_passphrase`は結果にもアクション自身のログにも出ません。読み込む変数を[`secrets`](/ja/reference/yaml-configuration#secrets)に書けば、それ以外の箇所に現れる値も伏せられます。
 
+### slurmrestdで問い合わせる
+
+`endpoint`を指定すると、アクションは各リクエストを、トークンを`X-SLURM-USER-TOKEN`に入れてslurmrestdに送り、コマンドは実行しません。トークンはジョブを実行するユーザーのもので、ログインノードで`scontrol token lifespan=86400`のようにして作ります。`token`がなければ`SLURM_JWT`から読みます。`scontrol token`が表示する先頭の`SLURM_JWT=`は取り除きます。
+
+```yaml
+defaults:
+  slurm:
+    endpoint: https://slurm.hpc.example.com:6820
+    submit:
+      chdir: /home/probe
+```
+
+APIの版はSlurm 23.02から24.11の`v0.0.39`から`v0.0.42`に対応し、サーバーが提供するもののうち最も新しい版を使います。使った版は`req.api_version`で分かります。結果はコマンドの場合と同じですが、slurmrestdが`sbatch`と異なる点があります。
+
+- `submit`では`chdir`が必須です。投入したシェルのディレクトリがないためです。また、ジョブの環境変数はSlurmが設定するもののほかは`PATH=/usr/local/bin:/usr/bin:/bin`だけです。
+- slurmrestdはスクリプトの`#SBATCH`の行を読まないので、オプションは`with.submit`に書いてください。`sbatch`のオプションも受け付けないので、`options`を書くとステップが失敗し、`res.cluster`は常に空です。
+- `job`はジョブの出力を読めません。出力はクラスターの上のファイルだからです。`output`を指定するとステップが失敗します。
+- `slurmctld`が忘れたジョブは、slurmrestdが提供していればアカウンティングから読みます。
+
+トークンは結果にもアクション自身のログにも出ません。アクションはリダイレクトに従わないので、トークンが`endpoint`以外のホストに送られることはありません。
+
 ## Submit
 
 `submit`は、スクリプトを標準入力から`sbatch --parsable`に渡し、次のオプションを付けて投入します。`script`か`file`のどちらか一方を書きます。
@@ -122,13 +145,13 @@ defaults:
 | `cpus_per_task` | Integer | - | `--cpus-per-task` | |
 | `mem` | String | - | `--mem` | `4G`など |
 | `gres` | String | - | `--gres` | `gpu:1`など |
-| `chdir` | String | ホームディレクトリ | `--chdir` | クラスターの上での、ジョブの作業ディレクトリ |
+| `chdir` | String | ホームディレクトリ。`endpoint`では必須 | `--chdir` | クラスターの上での、ジョブの作業ディレクトリ |
 | `output` | String | `slurm-%j.out` | `--output` | クラスターの上で、ジョブが標準出力を書く場所 |
 | `error` | String | `output`と同じ | `--error` | クラスターの上で、ジョブが標準エラー出力を書く場所 |
-| `options` | Array | - | - | `sbatch`のそのほかのオプション。それぞれ`--exclusive`や`--constraint=a100`のように書きます |
+| `options` | Array | - | - | `sbatch`のそのほかのオプション。それぞれ`--exclusive`や`--constraint=a100`のように書きます。`endpoint`では使えません |
 | `keep` | Boolean | `false` | - | ジョブを実行の[後始末](#後始末)の対象から外します |
 
-`#SBATCH --partition=long`のようにスクリプトに書いたオプションも使います。`sbatch`がコマンドラインのオプションを優先するのと同じく、ここで指定したものが優先します。
+`#SBATCH --partition=long`のようにスクリプトに書いたオプションも使います。`sbatch`がコマンドラインのオプションを優先するのと同じく、ここで指定したものが優先します。slurmrestdが受け付けるのは、ここで指定したものだけです。
 
 ### レスポンスオブジェクト
 
@@ -137,7 +160,7 @@ defaults:
 | `res.job_id` | Integer | ジョブのID。`sbatch`が拒否した場合は`0` |
 | `res.cluster` | String | `sbatch`がクラスターの名前を示した場合、ジョブの投入先のクラスター。なければ空です |
 | `res.error` | String | `sbatch`がジョブを拒否したときのメッセージ。`sbatch: error: invalid partition specified: nope`など。なければ空です |
-| `req` | Object | 実行した内容。`operation`、`host`、`port`、`user`、`bin_dir`、`script`または`file`、`keep`と、実行した`command`です。`key_passphrase`は含みません |
+| `req` | Object | 実行した内容。`operation`、`host`、`port`、`user`、`bin_dir`、`script`または`file`、`keep`と、実行した`command`、または問い合わせた`endpoint`と`api_version`です。`key_passphrase`と`token`は含みません |
 | `rt` | Duration | ステップにかかった時間 |
 | `status` | Integer | ジョブを投入できたら`0`、そうでなければ`1` |
 
@@ -240,20 +263,20 @@ defaults:
 
 実行が終わると、成功、失敗、中断のどれでも、Probeは[実行の後始末](/ja/guide/concepts/actions#実行の後始末)のとおりにアクションを呼び、その実行のステップが投入したジョブのうち、まだ終わっていないものを取り消します。そのため、待つのをやめた実行がキューにジョブを残すことはありません。`keep: true`で投入したジョブは残します。
 
-ジョブは、投入先とあわせて一時ディレクトリの下のファイルに記録し、後始末の後にそのファイルを削除します。鍵のパスフレーズは記録しないので、`key_passphrase`で投入したジョブは、エージェントか既定の鍵でログインして取り消します。後始末でログインできなければ警告になり、警告には残ったジョブが示されます。
+ジョブは、投入先とあわせて一時ディレクトリの下のファイルに記録し、後始末の後にそのファイルを削除します。鍵のパスフレーズは記録しないので、`key_passphrase`で投入したジョブは、エージェントか既定の鍵でログインして取り消します。トークンも記録しないので、slurmrestdで投入したジョブは`SLURM_JWT`のトークンで取り消し、それがなければ残ります。後始末でログインできなければ警告になり、警告には残ったジョブが示されます。
 
 ## ガードの下での動作
 
 このアクションは実行のガードに従い、`action.yml`で`guard: [read-only, allow-host]`を宣言しています。そのため、`--read-only`と`--allow-host`の下でも`--allow-action`なしで実行されます。
 
 - `--read-only`の下では、`job`、`jobs`、`partitions`、`nodes`を実行し、`submit`と`cancel`は何も実行せずに拒否します。
-- `--allow-host`の下では、実行で許可されている`host`（`login.hpc.example.com`や`login.hpc.example.com:2222`など）でだけコマンドを実行します。`host`がなければ、Probeを実行しているホストに設定された`slurmctld`にコマンドが届きます。ガードではそれを確かめられないので、`host`のないステップは拒否します。
+- `--allow-host`の下では、実行で許可されている`host`（`login.hpc.example.com`や`login.hpc.example.com:2222`など）でだけコマンドを実行し、ホストが許可されている`endpoint`のslurmrestdにだけ問い合わせます。URLにポートがなければ、スキームの既定のポートとして扱います。どちらもなければ、Probeを実行しているホストに設定された`slurmctld`にコマンドが届きます。ガードではそれを確かめられないので、そのようなステップは拒否します。
 
 拒否されたステップは、種別`refused`で失敗します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
 ## Slurmの版
 
-アクションは、コマンドが`--json`で出力する内容を読みます。その内容はSlurmの版によって異なり、Slurm 23.02から24.11が出力するものに対して試験しています。[エンドツーエンドテスト](https://github.com/mozership/probe-slurm/blob/main/e2e/workflow.yml)では、コンテナの中のSlurm 24.11に対して実行しています。
+アクションは、コマンドが`--json`で出力する内容と、slurmrestdの応答を読みます。それらはSlurmの版によって異なり、Slurm 23.02から24.11が出力するものに対して試験しています。[エンドツーエンドテスト](https://github.com/mozership/probe-slurm/blob/main/e2e/workflow.yml)では、コンテナの中のSlurm 24.11に対して、SSH経由とslurmrestd経由で実行しています。
 
 ジョブ配列は区別しません。`job`と`cancel`はジョブのIDを受け取り、`jobs`は配列の各タスクを別々のジョブとして一覧します。
 
