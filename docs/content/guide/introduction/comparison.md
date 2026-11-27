@@ -8,7 +8,7 @@ The table places each tool by what it is, how it is written, what it can reach, 
 
 | | Kind | Written as | Operates on | Runs as |
 |---|---|---|---|---|
-| **Probe** | Workflow runner | YAML | HTTP, SMTP, IMAP, DNS, SSH, shell; DB, gRPC, a browser, WebSocket, Redis and S3 as external actions | A single Go binary |
+| **Probe** | Workflow runner | YAML | HTTP, SMTP, DNS, SSH, shell; IMAP, DB, gRPC, a browser, WebSocket, Redis and S3 as external actions | A single Go binary |
 | **k6** | Load testing | JavaScript | HTTP, gRPC, WebSocket | A single Go binary |
 | **Postman / Newman** | API testing | A GUI and its collections | HTTP | A GUI app and Node.js |
 | **Hurl** | HTTP testing | Its own plain-text format | HTTP | A single Rust binary |

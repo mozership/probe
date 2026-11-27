@@ -38,6 +38,7 @@ var officialActions = []OfficialAction{
 	{"github-notes", "Put the notes of a run on GitHub, in a pull request comment, the job summary or an issue"},
 	{"graphql", "Send a GraphQL query over HTTP"},
 	{"grpc", "Call gRPC and Connect services, and check the calls against .proto files"},
+	{"imap", "Run IMAP commands against a mail server, to search, fetch and flag messages and manage mailboxes"},
 	{"ios", "Drive an app on an iOS simulator through XCUITest"},
 	{"jmap", "Call JMAP methods"},
 	{"mail-latency", "Measure mail delivery latency from a Maildir"},

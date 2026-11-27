@@ -17,7 +17,6 @@ import (
 	"github.com/mozership/probe/internal/actions/file"
 	"github.com/mozership/probe/internal/actions/hello"
 	"github.com/mozership/probe/internal/actions/http"
-	"github.com/mozership/probe/internal/actions/imap"
 	"github.com/mozership/probe/internal/actions/shell"
 	"github.com/mozership/probe/internal/actions/smtp"
 	"github.com/mozership/probe/internal/actions/ssh"
@@ -34,7 +33,6 @@ var specs = map[string]func() actionspec.Spec{
 	"file":     file.Spec,
 	"hello":    hello.Spec,
 	"http":     http.Spec,
-	"imap":     imap.Spec,
 	"shell":    shell.Spec,
 	"smtp":     smtp.Spec,
 	"ssh":      ssh.Spec,

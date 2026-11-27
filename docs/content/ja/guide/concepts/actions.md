@@ -780,7 +780,7 @@ Probeはアクションとの通信にgRPCを使用し、以下を提供しま�
 probe workflow.yml  # Stepが使う組み込みアクションを起動します
 
 # 組み込みアクションに別途インストールは不要:
-# http, shell, ssh, smtp, imap,
+# http, shell, ssh, smtp,
 # dns, file, embedded, hello
 ```
 
@@ -1057,6 +1057,7 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます |
 | [github-notes](/ja/reference/actions/github-notes) | 実行の[ノート](/ja/reference/yaml-configuration#notes)をGitHubに投稿します。投稿先はプルリクエストのコメント、ジョブのサマリー、Issueのいずれかで、次の実行では同じものを編集します |
 | [graphql](/ja/reference/actions/graphql) | GraphQLのクエリをHTTPで送り、レスポンスの`data`と`errors`を分けて返します |
+| [imap](/ja/reference/actions/imap) | IMAPのコマンドを1つのセッションでメールサーバーに対して実行します。メッセージを検索し、取得し、フラグを付け、メールボックスを作成し、コピーし、削除します。`--allow-host`で許可されたサーバーにだけ接続します。Probe v1.43.0までは組み込みアクションでした |
 | [ios](/ja/reference/actions/ios) | XCUITestを通して、iOSシミュレーターでアプリを操作します。アプリを起動し、タップや入力をし、要素を待ち、そのテキストを読み、スクリーンショットを撮ります。XcodeのあるmacOSで動きます |
 | [jmap](/ja/reference/actions/jmap) | [JMAP](https://jmap.io/)のメソッドを呼びます。セッションを取得し、各呼び出しのアカウントを補い、HTTP 200で返るメソッドのエラーを`res.errors`にまとめます |
 | [mail-latency](/ja/reference/actions/mail-latency) | Maildirのメッセージを読み、`Received`ヘッダーから各メッセージの配送遅延を計算してCSVに書きます。Probe v1.21.0までは組み込みアクションでした |

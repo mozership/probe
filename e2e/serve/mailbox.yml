@@ -1,5 +1,7 @@
 name: Mailbox
 description: Mark a test mail read, as handled, or read and flagged, as dead
+actions:
+  imap: github.com/mozership/probe-imap@c64e6ad9559de7a1405976fdaa11e7091bc732ee # v0.1.0
 vars:
   host: "{{MAIL_HOST}}"
   port: "{{MAIL_PORT}}"
