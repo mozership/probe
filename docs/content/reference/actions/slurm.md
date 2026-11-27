@@ -1,6 +1,6 @@
 # Slurm Action
 
-The Slurm action submits jobs to [Slurm](https://slurm.schedmd.com/), waits for them to end and reads what they printed, cancels them, and reads the state of the partitions and the nodes of the cluster. It runs the commands of Slurm, `sbatch`, `squeue`, `sacct`, `scancel` and `scontrol`, on a login node over SSH, or on the host Probe runs on, and reads what they print with `--json`.
+The Slurm action submits jobs to [Slurm](https://slurm.schedmd.com/), waits for them to end and reads what they printed, cancels them, and reads the state of the partitions and the nodes of the cluster. It runs the commands of Slurm, `sbatch`, `squeue`, `sacct`, `scancel` and `scontrol`, on a login node over SSH, or on the host Probe runs on, and reads what they print with `--json`. Where the cluster serves [slurmrestd](https://slurm.schedmd.com/rest.html), it asks that instead, with the same result.
 
 It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-slurm](https://github.com/mozership/probe-slurm). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It is tested with Probe v1.40.0 and later. The examples write `<commit SHA>` for the commit to pin: `probe guide slurm` prints the `uses` line of the latest release, and so do the notes of each release.
 
@@ -66,17 +66,19 @@ A step does one thing, by one of these keys of `with`:
 | [`partitions`](#partitions) | Reads the state of a partition, and counts its nodes by their state | The name of a partition, or nothing for every one |
 | [`nodes`](#nodes) | Reads the state of nodes | Nodes, as `c1` or `c[1-4]`, or nothing for every one |
 
-The others say where the commands run:
+The others say how Slurm is asked: by its commands, on a login node or on this host, or by [slurmrestd](#by-slurmrestd):
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `host` | String | No | - | The login node to run the commands on, over SSH. Without it, they run on the host Probe runs on |
 | `port` | Integer | No | `22` | The port of SSH |
-| `user` | String | No | `USER` | The user to log in as |
+| `user` | String | No | `USER` | The user to log in as. With `endpoint`, the user to act as, for a token of `SlurmUser` or root |
 | `key_file` | String | No | See [Logging in](#logging-in) | The private key to log in with. `~/` is the home directory |
 | `key_passphrase` | String | No | - | The passphrase of `key_file` |
 | `known_hosts` | String | No | `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts` | The file the host key of the login node is checked against |
 | `bin_dir` | String | No | The `PATH` | The directory of the commands of Slurm, as `/opt/slurm/bin`, where the `PATH` of a command run over SSH does not find them |
+| `endpoint` | String | No | - | The URL of slurmrestd, as `https://slurm.hpc.example.com:6820`, to ask it rather than run the commands |
+| `token` | String | No | `SLURM_JWT` | The JSON Web Token slurmrestd takes, as `scontrol token` prints it |
 | `timeout` | Duration | No | `30s`, and as long as `wait` besides | Time limit for the whole step, as `10s` or a number of seconds |
 
 A key of `with` that is not one of these fails the step before anything is run. Its `action.yml` declares them as `params`, and the fields of the result as `res`, so `probe check` reports such a key, and a field of `res` the action does not return, with its line.
@@ -104,6 +106,27 @@ Each command runs as the line of a non-interactive shell of the user, as `ssh us
 
 `key_passphrase` is not shown in the result or in the action's own log. Declaring the variable it is read from under [`secrets`](/reference/yaml-configuration#secrets) hides its value anywhere else it could appear.
 
+### By slurmrestd
+
+With `endpoint`, the action sends each request to slurmrestd, with the token in `X-SLURM-USER-TOKEN`, and runs no command. The token is that of the user the jobs run as, as `scontrol token lifespan=86400` prints it on the login node, and is read from `SLURM_JWT` when `token` is not given. `SLURM_JWT=` before it, as `scontrol token` prints it, is taken off.
+
+```yaml
+defaults:
+  slurm:
+    endpoint: https://slurm.hpc.example.com:6820
+    submit:
+      chdir: /home/probe
+```
+
+The action speaks the versions `v0.0.39` to `v0.0.42` of the API, of Slurm 23.02 to 24.11, and takes the newest the server serves, which `req.api_version` tells. The results are those of the commands, but for what slurmrestd does otherwise than `sbatch`:
+
+- `submit` requires `chdir`, as the job has no directory of the shell it was submitted from, and runs with only `PATH=/usr/local/bin:/usr/bin:/bin` in its environment, besides what Slurm sets.
+- slurmrestd reads none of the `#SBATCH` lines of a script, so give the options in `with.submit`. It takes none of the options of `sbatch`, so `options` fails the step, and `res.cluster` is always empty.
+- `job` cannot read the output of a job, which is a file on the cluster, so `output` fails the step.
+- A job slurmctld has forgotten is read from the accounting, where slurmrestd serves it.
+
+The token is not shown in the result or in the action's own log. The action follows no redirect, so the token goes to no host but that of `endpoint`.
+
 ## Submit
 
 `submit` sends the script to `sbatch --parsable` on its standard input, with the options below. It has `script` or `file`, and not both.
@@ -122,13 +145,13 @@ Each command runs as the line of a non-interactive shell of the user, as `ssh us
 | `cpus_per_task` | Integer | - | `--cpus-per-task` | |
 | `mem` | String | - | `--mem` | As `4G` |
 | `gres` | String | - | `--gres` | As `gpu:1` |
-| `chdir` | String | The home directory | `--chdir` | The working directory of the job, on the cluster |
+| `chdir` | String | The home directory; required with `endpoint` | `--chdir` | The working directory of the job, on the cluster |
 | `output` | String | `slurm-%j.out` | `--output` | Where the job writes its standard output, on the cluster |
 | `error` | String | With `output` | `--error` | Where the job writes its standard error, on the cluster |
-| `options` | Array | - | - | Other options of `sbatch`, each as `--exclusive` or `--constraint=a100` |
+| `options` | Array | - | - | Other options of `sbatch`, each as `--exclusive` or `--constraint=a100`. Not with `endpoint` |
 | `keep` | Boolean | `false` | - | Keeps the job out of the [cleanup](#cleanup) of the run |
 
-Options in the script, as `#SBATCH --partition=long`, are taken too, and those given here win over them, as `sbatch` takes options on its command line.
+Options in the script, as `#SBATCH --partition=long`, are taken too, and those given here win over them, as `sbatch` takes options on its command line. slurmrestd takes only those given here.
 
 ### Response Object
 
@@ -137,7 +160,7 @@ Options in the script, as `#SBATCH --partition=long`, are taken too, and those g
 | `res.job_id` | Integer | The ID of the job, or `0` when `sbatch` refused it |
 | `res.cluster` | String | The cluster the job went to, when `sbatch` names one, or empty |
 | `res.error` | String | What `sbatch` said when it refused the job, as `sbatch: error: invalid partition specified: nope`, or empty |
-| `req` | Object | What was done: `operation`, `host`, `port`, `user`, `bin_dir`, the `script` or `file`, `keep`, and the `command` that was run. It never has `key_passphrase` |
+| `req` | Object | What was done: `operation`, `host`, `port`, `user`, `bin_dir`, the `script` or `file`, `keep`, and the `command` that was run, or the `endpoint` and the `api_version` it was asked by. It never has `key_passphrase` or `token` |
 | `rt` | Duration | Time the step took |
 | `status` | Integer | `0` when the job was submitted; `1` otherwise |
 
@@ -240,20 +263,20 @@ The output is read on the host the commands run on, from the path `squeue` or `s
 
 Once the run is over, whether it passed, failed or was interrupted, Probe calls the action, as [Cleaning Up After a Run](/guide/concepts/actions#cleaning-up-after-a-run) tells, to cancel the jobs its steps submitted, those that have ended aside, so a run that stops waiting leaves no job in the queue. A job submitted with `keep: true` is left.
 
-The jobs are noted, with where they were submitted, in a file under the temporary directory, which the cleanup removes. The passphrase of a key is not noted, so the jobs submitted with `key_passphrase` are cancelled by logging in with the agent or the default keys. A cleanup that cannot log in is told as a warning, which names the jobs left.
+The jobs are noted, with where they were submitted, in a file under the temporary directory, which the cleanup removes. The passphrase of a key is not noted, so the jobs submitted with `key_passphrase` are cancelled by logging in with the agent or the default keys. Nor is the token, so the jobs submitted by slurmrestd are cancelled with the token in `SLURM_JWT`, and are left when it gives none. A cleanup that cannot log in is told as a warning, which names the jobs left.
 
 ## Under a Guard
 
 The action keeps to the guard of the run, and its `action.yml` declares `guard: [read-only, allow-host]`, so Probe runs it under `--read-only` and `--allow-host` without `--allow-action`.
 
 - Under `--read-only`, `job`, `jobs`, `partitions` and `nodes` are run, and `submit` and `cancel` are refused before anything is run.
-- Under `--allow-host`, the commands run only on a `host` the run allows, as `login.hpc.example.com` or `login.hpc.example.com:2222`. Without `host`, the commands reach whatever `slurmctld` the host Probe runs on is set up for, which the guard cannot check, so a step without `host` is refused.
+- Under `--allow-host`, the commands run only on a `host` the run allows, as `login.hpc.example.com` or `login.hpc.example.com:2222`, and slurmrestd is asked only at an `endpoint` whose host the run allows, at the port of its scheme when the URL has none. Without either, the commands reach whatever `slurmctld` the host Probe runs on is set up for, which the guard cannot check, so such a step is refused.
 
 A refused step fails with the kind `refused`. See [Guard](/guide/concepts/guard).
 
 ## Slurm Versions
 
-The action reads what the commands print with `--json`, which differs between the versions of Slurm, and is tested against what Slurm 23.02 to 24.11 print. The [end-to-end tests](https://github.com/mozership/probe-slurm/blob/main/e2e/workflow.yml) run it against Slurm 24.11 in a container.
+The action reads what the commands print with `--json`, and what slurmrestd answers, which differ between the versions of Slurm, and is tested against what Slurm 23.02 to 24.11 print. The [end-to-end tests](https://github.com/mozership/probe-slurm/blob/main/e2e/workflow.yml) run it against Slurm 24.11 in a container, over SSH and by slurmrestd.
 
 Job arrays are not told apart: `job` and `cancel` take the ID of a job, and `jobs` lists each task of an array as a job of its own.
 
