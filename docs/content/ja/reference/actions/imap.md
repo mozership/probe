@@ -438,7 +438,7 @@ jobs:
 
 このアクションは`--allow-host`に従い、`action.yml`で`guard: [allow-host]`を宣言しています。実行で許可されている`host`の`port`（指定がなければ`993`）にだけ接続し、それ以外のサーバーへのステップは接続する前に拒否します。
 
-`--read-only`には従いません。コマンドがメールボックスを変更することがあるためです。`store`はメッセージにフラグを付け、`copy`、`create`、`delete`、`rename`はメールボックスを変更し、`BODY[...]`の`fetch`はメッセージを既読にします。`--read-only`の下では、`--allow-action imap`で指定しない限り、このアクションを使うステップは拒否されます。
+`--read-only`には従いません。コマンドがメールボックスを変更することがあるためです。`store`はメッセージにフラグを付け、`copy`、`create`、`delete`、`rename`はメールボックスを変更し、`BODY[...]`の`fetch`はメッセージを既読にします。`--read-only`の下では、`--allow-action github.com/mozership/probe-imap@<commit SHA>`のように`actions`に書いた参照を`--allow-action`で指定しない限り、このアクションを使うステップは拒否されます。ワークフローが付けた`imap`という名前では許可できません。ワークフローがほかのアクションにその名前を付けて実行させることを防ぐためです。
 
 拒否されたステップは、種別`refused`で失敗します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
