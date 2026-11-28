@@ -271,9 +271,8 @@ func render(t theme, mark wordmark, fs fonts) (string, error) {
 
 	c.text(40, 60, "Hi-Level Architecture", 28, textOpts{bold: true, start: true})
 
-	c.box(40, 330, 340, 170, "YAML", boxOpts{sub: "Declarative Workflow", size: 34, bold: true, thick: true})
-	c.text(210, 482, "jobs · steps · needs", 19, textOpts{class: "t m"})
-	c.box(40, 560, 340, 110, "Variables", boxOpts{sub: "--var · --vars-file · --env-file", size: 28, bold: true, thick: true})
+	c.box(40, 355, 340, 120, "YAML", boxOpts{sub: "Declarative Workflow", size: 34, bold: true, thick: true})
+	c.box(40, 560, 340, 110, "Variables", boxOpts{size: 28, bold: true, thick: true})
 
 	const px, py, pw, ph = 480.0, 130.0, 1100.0, 780.0
 	const ex, ew = 590.0, 340.0
@@ -292,16 +291,9 @@ func render(t theme, mark wordmark, fs fonts) (string, error) {
 	c.text(0, 0, "Parser / Validator", 30, textOpts{bold: true, class: "t inv", transform: fmt.Sprintf("translate(%s,%s) rotate(-90)", num(px+38), num(py+ph/2))})
 
 	c.text(ex+ew/2, 250, "Workflow Engine", 32, textOpts{bold: true})
-	engine := []struct{ label, sub string }{
-		{"Scheduler", "needs · DAG · fail_fast"},
-		{"Executor", "retry · repeat · iteration"},
-		{"Expr", "test · outputs · skipif"},
-		{"Guard", "--read-only · --allow-host"},
-		{"Printer / Reporter", "terminal · --report"},
-		{"Action Runner", "go-plugin · process per step"},
-	}
-	for i, e := range engine {
-		c.box(ex, 290+float64(i)*96, ew, 78, e.label, boxOpts{sub: e.sub, size: 27})
+	engine := []string{"Scheduler", "Executor", "Expr", "Guard", "Printer / Reporter", "Action Runner"}
+	for i, label := range engine {
+		c.box(ex, 290+float64(i)*96, ew, 78, label, boxOpts{size: 27})
 	}
 	runnerY := 290 + float64(len(engine)-1)*96 + 39
 
