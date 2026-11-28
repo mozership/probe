@@ -4,7 +4,7 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
-## Unreleased
+## v1.45.0 (2026-11-29)
 
 ### Breaking Changes
 
