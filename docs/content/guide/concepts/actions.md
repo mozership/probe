@@ -578,7 +578,7 @@ probe workflow.yml  # Starts the built-in actions its steps use
 
 # No separate installation needed for built-in actions:
 # http, shell, ssh, smtp,
-# dns, file, embedded, hello
+# file, embedded, hello
 ```
 
 ## Action Best Practices
@@ -853,6 +853,7 @@ These external actions are published alongside Probe, each in a repository of it
 | [browser](/reference/actions/browser) | Drives a real Chrome through chromedp: opens pages, reads and types into them, and takes screenshots. It was built into Probe up to v1.21.0 |
 | [container](/reference/actions/container) | Starts a container for the steps after it, on a free port and optionally waiting until it is ready, and removes the containers of a run once the run is over. It runs `docker`, or another runtime such as Podman |
 | [db](/reference/actions/db) | Runs SQL against MySQL, PostgreSQL and SQLite, and returns the rows it read or the count of rows it changed. Under `--read-only` it runs only a statement that reads, in a read-only transaction. It was built into Probe up to v1.41.0 |
+| [dns](/reference/actions/dns) | Asks a DNS server for the records of a name, such as the addresses, the MX or the TXT records, and returns what it answered. A query writes nothing, so it runs under `--read-only`, and under `--allow-host` it asks only a server the run allows. It was built into Probe up to v1.44.0 |
 | [github-notes](/reference/actions/github-notes) | Puts the [notes](/reference/yaml-configuration#notes) of a run on GitHub: in a comment on the pull request, the summary of the job, or an issue, and edits the same one on the next run |
 | [graphql](/reference/actions/graphql) | Sends a GraphQL query over HTTP, and returns the `data` and `errors` of the response apart |
 | [grpc](/reference/actions/grpc) | Calls gRPC and Connect services, streaming included, by reflection or from `.proto` files, and checks the calls against them. It was built into Probe up to v1.41.0 |

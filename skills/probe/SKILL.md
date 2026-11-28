@@ -14,7 +14,7 @@ The installed `probe` prints its own documentation, matching its version. Read t
 ```bash
 probe guide                       # list the topics
 probe guide yaml                  # every workflow, job and step field
-probe guide http                  # one action's parameters and response (also: shell, ssh, dns, ...)
+probe guide http                  # one action's parameters and response (also: shell, ssh, smtp, ...)
 probe guide concepts/expressions  # expressions, templates and the functions available
 probe guide cli                   # flags, reports, exit codes
 ```

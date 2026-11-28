@@ -781,7 +781,7 @@ probe workflow.yml  # Stepが使う組み込みアクションを起動します
 
 # 組み込みアクションに別途インストールは不要:
 # http, shell, ssh, smtp,
-# dns, file, embedded, hello
+# file, embedded, hello
 ```
 
 ## アクションのベストプラクティス
@@ -1056,6 +1056,7 @@ Probeとあわせて公開している外部アクションです。それぞれ
 | [browser](/ja/reference/actions/browser) | chromedpを通して実際のChromeを操作します。ページを開き、内容を読み、入力し、スクリーンショットを撮ります。Probe v1.21.0までは組み込みアクションでした |
 | [container](/ja/reference/actions/container) | 後続のステップのためにコンテナを起動します。空いているポートで公開し、準備ができるまで待つこともできます。実行が終わると、その実行のコンテナを削除します。`docker`のほか、Podmanなどのランタイムでも動きます |
 | [db](/ja/reference/actions/db) | MySQL、PostgreSQL、SQLiteに対してSQLを実行し、読み取った行か、変更した行の数を返します。`--read-only`の下では、読み取るだけの文を読み取り専用のトランザクションで実行します。Probe v1.41.0までは組み込みアクションでした |
+| [dns](/ja/reference/actions/dns) | 名前のレコード（アドレス、MX、TXTなど）をDNSサーバーに問い合わせ、返ってきた内容を返します。問い合わせは何も書き込まないので`--read-only`の下でも動き、`--allow-host`の下では実行で許可されたサーバーにだけ問い合わせます。Probe v1.44.0までは組み込みアクションでした |
 | [github-notes](/ja/reference/actions/github-notes) | 実行の[ノート](/ja/reference/yaml-configuration#notes)をGitHubに投稿します。投稿先はプルリクエストのコメント、ジョブのサマリー、Issueのいずれかで、次の実行では同じものを編集します |
 | [graphql](/ja/reference/actions/graphql) | GraphQLのクエリをHTTPで送り、レスポンスの`data`と`errors`を分けて返します |
 | [grpc](/ja/reference/actions/grpc) | gRPCとConnectのサービスを、ストリーミングも含めて、リフレクションか`.proto`ファイルから呼び出し、それに照らして呼び出しを確かめます。Probe v1.41.0までは組み込みアクションでした |

@@ -35,7 +35,7 @@ func TestKeeps(t *testing.T) {
 		}
 	}
 	// The others keep to every kind.
-	for _, name := range []string{"dns", "embedded", "file", "hello", "http"} {
+	for _, name := range []string{"embedded", "file", "hello", "http"} {
 		for _, k := range known {
 			if !slices.Contains(Keeps()[name], k) {
 				t.Errorf("%s should keep to %q, got %v", name, k, Keeps()[name])

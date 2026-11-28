@@ -41,7 +41,7 @@ Probeは、その確認を変更のたびに繰り返せるように、そして
 ほかのツールを選んだほうがよい場合は、[類似ソフトウェアとの比較](/ja/guide/introduction/comparison)で説明しています。
 
 ### 複数のプロトコルを1回の実行で
-HTTP、SMTP、DNS、SSH、シェルが組み込みで、IMAP、gRPCやMySQL、PostgreSQL、SQLiteなどは外部アクションで扱えます。ジョブは`needs`で順序を決めない限り並行して動きます。
+HTTP、SMTP、SSH、シェルが組み込みで、DNS、IMAP、gRPCやMySQL、PostgreSQL、SQLiteなどは外部アクションで扱えます。ジョブは`needs`で順序を決めない限り並行して動きます。
 
 ### 読みやすい
 ワークフローは、`jobs`、`steps`、`uses`、`with`で構成する、GitHub Actionsに近いYAMLです。AIエージェントが書いたものを人がレビューできます。
@@ -125,7 +125,6 @@ jobs:
 |---|---|
 | [`http`](/ja/reference/actions/http) | HTTPリクエストとその応答 |
 | [`smtp`](/ja/reference/actions/smtp) | メールの送信 |
-| [`dns`](/ja/reference/actions/dns) | 名前に対してDNSサーバーが返すレコード |
 | [`file`](/ja/reference/actions/file) | Probeを動かすマシン上のログなどのファイル。ワークフローが作って片付けるファイルも |
 | [`ssh`](/ja/reference/actions/ssh) | リモートホストでのコマンド実行 |
 | [`shell`](/ja/reference/actions/shell) | Probeを実行しているマシンでのコマンド実行 |
@@ -133,7 +132,7 @@ jobs:
 | [`hello`](/ja/reference/actions/hello) | レポートへの出力 |
 
 外部アクションはそれぞれ独立したリポジトリにあり、ステップからコミットを指定して使います。
-[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[db](/ja/reference/actions/db)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[grpc](/ja/reference/actions/grpc)、[imap](/ja/reference/actions/imap)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[slurm](/ja/reference/actions/slurm)、[websocket](/ja/reference/actions/websocket)があります。
+[agent](/ja/reference/actions/agent)、[android](/ja/reference/actions/android)、[aws](/ja/reference/actions/aws)、[browser](/ja/reference/actions/browser)、[container](/ja/reference/actions/container)、[db](/ja/reference/actions/db)、[dns](/ja/reference/actions/dns)、[github-notes](/ja/reference/actions/github-notes)、[graphql](/ja/reference/actions/graphql)、[grpc](/ja/reference/actions/grpc)、[imap](/ja/reference/actions/imap)、[ios](/ja/reference/actions/ios)、[jmap](/ja/reference/actions/jmap)、[mail-latency](/ja/reference/actions/mail-latency)、[redis](/ja/reference/actions/redis)、[slack](/ja/reference/actions/slack)、[slurm](/ja/reference/actions/slurm)、[websocket](/ja/reference/actions/websocket)があります。
 
 ### カスタムアクション
 

@@ -12,7 +12,6 @@ import (
 
 	"github.com/mozership/probe/internal/check"
 
-	"github.com/mozership/probe/internal/actions/dns"
 	"github.com/mozership/probe/internal/actions/embedded"
 	"github.com/mozership/probe/internal/actions/file"
 	"github.com/mozership/probe/internal/actions/hello"
@@ -28,7 +27,6 @@ import (
 // what each function of this package returns is held by nothing else. The
 // embedded action is declared by what init gives it.
 var specs = map[string]func() actionspec.Spec{
-	"dns":      dns.Spec,
 	"embedded": embedded.Spec,
 	"file":     file.Spec,
 	"hello":    hello.Spec,

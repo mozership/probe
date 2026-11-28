@@ -1,9 +1,13 @@
 name: DNS Examples
 description: |
-  Examples for using the dns action. They ask the server of e2e/dns-server,
-  which answers for example.test:
+  Examples for using the dns action. They ask the server of the e2e tests of
+  probe-dns, which answers for example.test:
 
-    go run ./e2e/dns-server -addr 127.0.0.1:15353
+    go run github.com/mozership/probe-dns/e2e/dns-server@v0.1.0 -addr 127.0.0.1:15353
+
+# The dns action is an external action, pinned by commit.
+actions:
+  dns: github.com/mozership/probe-dns@7eabd1b1960f73ec32b6dbe3be21ea566070d1f8 # v0.1.0
 
 vars:
   server: "{{DNS_SERVER ?? '127.0.0.1:15353'}}"

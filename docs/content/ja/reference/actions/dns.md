@@ -2,12 +2,19 @@
 
 `dns`アクションは、名前のレコードをDNSサーバーに問い合わせ、サーバーの応答を返します。名前が期待どおりのアドレスに解決されること、メールの流れが依存するMX、SPF、DKIM、DMARCのレコードが揃っていること、ゾーンの変更がネームサーバーに届いたことなどを確認できます。
 
+[外部アクション](/ja/guide/concepts/actions#外部アクション)として[mozership/probe-dns](https://github.com/mozership/probe-dns)で公開しています。ワークフローが初めて使うときにProbeがダウンロードし、固定したコミットの`action.yml`が示すSHA-256と一致する実行ファイルだけを実行します。`dns`という名前を付けるにはProbe v1.45.0以降が必要です。v1.45.0より前はProbeに組み込まれていました。例の`<commit SHA>`には、固定するコミットを書きます。最新リリースの`uses`の行は`probe guide dns`が表示し、各リリースのノートにもあります。
+
 ## 基本構文
 
-DNSのステップには、問い合わせる名前と、アドレス以外を問い合わせる場合はレコードの種類を指定します。
+ワークフローでは40文字のコミットSHAでアクションを固定し、[`actions`](/ja/reference/yaml-configuration#actions)で`dns`という名前を一度だけ付けます。ステップでは`uses: dns`、`defaults`では`dns:`と書きます。DNSのステップには、問い合わせる名前と、アドレス以外を問い合わせる場合はレコードの種類を指定します。
 
 ```yaml
-steps:
+name: Mail records
+actions:
+  dns: github.com/mozership/probe-dns@<commit SHA>
+jobs:
+- name: dns
+  steps:
   - name: Where the mail of example.com goes
     uses: dns
     with:
@@ -15,6 +22,8 @@ steps:
       type: MX
     test: res.rcode == "NOERROR" && res.answers[0].host == "mail.example.com"
 ```
+
+以降の例では、ステップだけを示します。
 
 ## パラメータ
 
@@ -149,7 +158,7 @@ UDPで途中までしか返らなかった応答は、`dig`と同じくTCPで問
 
 ## ガードの下で
 
-問い合わせは何も書き込まないので、`--read-only`の下でもそのまま実行されます。`--allow-host`の下では、実行が許可するサーバーにだけ問い合わせを送ります。ポートは、`server`に指定がなければ53、`protocol: tls`では853として照合します。`server`を省略した場合は、問い合わせがどのリゾルバにも送られうるため、マシンのすべてのリゾルバが許可されている必要があります。そうでなければステップは拒否され、拒否のメッセージには`server`を指定するように書かれます。問い合わせる名前はアクションが接続するホストではないので、照合しません。拒否されたステップは種類`refused`で失敗します。[ガード](/ja/guide/concepts/guard)を参照してください。
+このアクションは両方の種類のガードを守り、`action.yml`で`guard: [read-only, allow-host]`と宣言しています。問い合わせは何も書き込まないので、`--read-only`の下でもそのまま実行されます。`--allow-host`の下では、実行が許可するサーバーにだけ問い合わせを送ります。ポートは、`server`に指定がなければ53、`protocol: tls`では853として照合します。`server`を省略した場合は、問い合わせがどのリゾルバにも送られうるため、マシンのすべてのリゾルバが許可されている必要があります。そうでなければステップは拒否され、拒否のメッセージには`server`を指定するように書かれます。問い合わせる名前はアクションが接続するホストではないので、照合しません。拒否されたステップは種類`refused`で失敗します。[ガード](/ja/guide/concepts/guard)を参照してください。
 
 ```bash
 probe --allow-host 1.1.1.1 workflow.yml

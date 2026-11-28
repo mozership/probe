@@ -307,7 +307,7 @@ func render(t theme, mark wordmark, fs fonts) (string, error) {
 
 	const bx, by, bw, bh = 1010.0, 230.0, 500.0, 520.0
 	c.frame(bx, by, bw, bh, "Built-in Actions", 32, false)
-	for i, name := range []string{"HTTP", "Shell", "SMTP", "SSH", "DNS", "File", "Embedded"} {
+	for i, name := range []string{"HTTP", "Shell", "SMTP", "SSH", "File", "Embedded"} {
 		col, row := float64(i%2), float64(i/2)
 		c.box(bx+40+col*225, by+50+row*90, 195, 66, name, boxOpts{size: 28})
 	}
@@ -319,17 +319,17 @@ func render(t theme, mark wordmark, fs fonts) (string, error) {
 	externals := []string{
 		"Agent", "Android", "AWS",
 		"Browser", "Container", "DB",
-		"GitHub Notes", "GraphQL", "gRPC",
-		"IMAP", "iOS", "JMAP",
-		"Mail Latency", "Redis", "Slack",
-		"Slurm", "Web Socket",
+		"DNS", "GitHub Notes", "GraphQL",
+		"gRPC", "IMAP", "iOS",
+		"JMAP", "Mail Latency", "Redis",
+		"Slack", "Slurm", "Web Socket",
 	}
 	for i, name := range externals {
 		col, row := float64(i%3), float64(i/3)
-		c.box(xx+40+col*205, xy+60+row*88, 185, 64, name, boxOpts{size: 24})
+		c.box(xx+40+col*205, xy+60+row*78, 185, 60, name, boxOpts{size: 24})
 	}
 	n := len(externals)
-	c.box(xx+40+float64(n%3)*205, xy+60+float64(n/3)*88, 185, 64, "Your own", boxOpts{size: 24, dashed: true})
+	c.box(xx+40+float64(n%3)*205, xy+60+float64(n/3)*78, 185, 60, "Your own", boxOpts{size: 24, dashed: true})
 	c.text(xx+xw/2, xy+xh-160, "uses: github.com/<owner>/<repo>@<SHA>", 20, textOpts{class: "t m"})
 	c.text(xx+xw/2, xy+xh-130, "or a local ./path", 20, textOpts{class: "t m"})
 	c.text(xx+xw/2, xy+xh-85, "release binary named in action.yml,", 20, textOpts{class: "t m"})

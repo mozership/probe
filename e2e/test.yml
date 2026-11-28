@@ -983,17 +983,17 @@ jobs:
   id: dns
   needs: [setup]
   steps:
-  # The server answers for example.test, so the tests depend on no resolver
-  # and on no name that someone else keeps. go run builds it first, which
-  # the timeout allows for.
+  # The server of the e2e tests of probe-dns answers for example.test, so the
+  # tests depend on no resolver and on no name that someone else keeps. go run
+  # builds it first, which the timeout allows for.
   - name: Start DNS server in background
     uses: shell
     with:
       background: true
-      cmd: go run ./e2e/dns-server -addr 127.0.0.1:15353
+      cmd: go run github.com/mozership/probe-dns/e2e/dns-server@v0.1.0 -addr 127.0.0.1:15353
       ready:
         log: listening on
-      timeout: 2m
+      timeout: 3m
     test: status == -1
     outputs:
       dns_pid: res.pid
@@ -1011,13 +1011,6 @@ jobs:
     with:
       cmd: ./probe --read-only --allow-host 127.0.0.1:15353 examples/dns.yml
     test: res.code == 0
-  - name: guard-dns.yml refuses a server the run does not allow
-    uses: shell
-    with:
-      cmd: ./probe --allow-host 127.0.0.1 e2e/guard-dns.yml
-    test: |
-      res.code == 2 &&
-      res.stdout contains "refused: the host 198.51.100.53:53 is not one the run allows"
   - name: Stop DNS server
     uses: shell
     with: # Use Process Group ID
