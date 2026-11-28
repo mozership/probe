@@ -57,11 +57,10 @@ The guard is not a sandbox. It keeps a workflow from writing to, or reaching, wh
 |---|---|---|
 | `http` | Sends only `GET`, `HEAD` and `OPTIONS` | The host of the URL, and of each redirect; a URL without a port is taken at the port of its scheme |
 | `embedded` | Runs the job under the guard | Runs the job under the guard |
-| `dns` | Nothing to refuse: a query writes nothing | The server the query is sent to, at port 53 when `server` names none, or 853 with `protocol: tls`; without `server`, every resolver of the machine |
 | `file` | Only reads: `write`, `append` and `delete` are refused | Nothing to reach |
 | `hello` | Nothing to refuse | Nothing to reach |
 
-The external [db](/reference/actions/db) and [grpc](/reference/actions/grpc) actions declare both kinds, and their pages say what each refuses. The external [imap](/reference/actions/imap) action declares `allow-host` alone, as its commands may change a mailbox.
+The external [db](/reference/actions/db), [dns](/reference/actions/dns) and [grpc](/reference/actions/grpc) actions declare both kinds, and their pages say what each refuses. The external [imap](/reference/actions/imap) action declares `allow-host` alone, as its commands may change a mailbox.
 
 The built-in `shell`, `ssh` and `smtp` cannot tell what a command or a script will do, and declare no guard, nor does the external [browser](/reference/actions/browser) action, which cannot tell what a page will do. A step using one is refused under a guard unless `--allow-action` names it, and it then runs as it is, without the guard.
 

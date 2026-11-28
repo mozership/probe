@@ -70,7 +70,7 @@ type Choices struct {
 	// Values are the values the key takes.
 	Values []string
 	// IgnoreCase says that the key takes a value in any case, as the
-	// protocol of the dns action takes TCP for tcp.
+	// starttls of the smtp action takes it.
 	IgnoreCase bool
 }
 

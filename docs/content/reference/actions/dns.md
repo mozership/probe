@@ -2,12 +2,19 @@
 
 The `dns` action asks a DNS server for the records of a name, and returns what the server answered. Use it to check that a name resolves to the addresses expected, that the MX, SPF, DKIM and DMARC records a mail flow depends on are in place, or that a change to a zone has reached a name server.
 
+It is an [external action](/guide/concepts/actions#external-actions), published in [mozership/probe-dns](https://github.com/mozership/probe-dns). Probe downloads it the first time a workflow uses it, and runs the executable whose SHA-256 the `action.yml` at the pinned commit names. It needs Probe v1.45.0 or later to be given the name `dns`; until then it was built into Probe. The examples write `<commit SHA>` for the commit to pin: `probe guide dns` prints the `uses` line of the latest release, and so do the notes of each release.
+
 ## Basic Syntax
 
-A DNS step gives the name to ask for, and the type of record when it is not an address.
+A workflow pins the action by a full commit SHA, and gives it the name `dns` once, under [`actions`](/reference/yaml-configuration#actions). Its steps then write `uses: dns`, and its `defaults` `dns:`. A DNS step gives the name to ask for, and the type of record when it is not an address.
 
 ```yaml
-steps:
+name: Mail records
+actions:
+  dns: github.com/mozership/probe-dns@<commit SHA>
+jobs:
+- name: dns
+  steps:
   - name: Where the mail of example.com goes
     uses: dns
     with:
@@ -15,6 +22,8 @@ steps:
       type: MX
     test: res.rcode == "NOERROR" && res.answers[0].host == "mail.example.com"
 ```
+
+The examples below show the steps alone.
 
 ## Parameters
 
@@ -149,7 +158,7 @@ A server that answers with an error is a result the test can check, not a failed
 
 ## Under a Guard
 
-A query writes nothing, so the action runs under `--read-only` as it is. Run with `--allow-host`, it sends the query only to a server the run allows, at port 53 when `server` names none, or 853 with `protocol: tls`. Without `server`, every resolver of the machine must be allowed, since the query may go to any of them; a step is refused otherwise, and says to give `server`. The name asked for is not a host the action connects to, and is not checked. A refused step fails with the kind `refused`. See [Guard](/guide/concepts/guard).
+The action keeps to both kinds of guard, and its `action.yml` declares `guard: [read-only, allow-host]`. A query writes nothing, so the action runs under `--read-only` as it is. Run with `--allow-host`, it sends the query only to a server the run allows, at port 53 when `server` names none, or 853 with `protocol: tls`. Without `server`, every resolver of the machine must be allowed, since the query may go to any of them; a step is refused otherwise, and says to give `server`. The name asked for is not a host the action connects to, and is not checked. A refused step fails with the kind `refused`. See [Guard](/guide/concepts/guard).
 
 ```bash
 probe --allow-host 1.1.1.1 workflow.yml

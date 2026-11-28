@@ -57,11 +57,10 @@ Probeは、アクションの宣言を検証せずにそのまま使います。
 |---|---|---|
 | `http` | `GET`、`HEAD`、`OPTIONS`だけを送る | URLのホストと、各リダイレクト先のホスト。ポートのないURLは、スキームの既定のポートとして扱う |
 | `embedded` | ジョブをガードの下で実行する | ジョブをガードの下で実行する |
-| `dns` | 拒否するものがない。問い合わせは何も書き込みません | 問い合わせを送るサーバー。ポートは`server`に指定がなければ53、`protocol: tls`では853。`server`を省略した場合はマシンのすべてのリゾルバ |
 | `file` | 読むだけ。`write`、`append`、`delete`は拒否します | 接続するものがない |
 | `hello` | 拒否するものがない | 接続するものがない |
 
-外部の[db](/ja/reference/actions/db)アクションと[grpc](/ja/reference/actions/grpc)アクションは両方の種類を宣言しています。それぞれが何を拒否するかは、各アクションのページにあります。外部の[imap](/ja/reference/actions/imap)アクションは、コマンドがメールボックスを変更することがあるため、`allow-host`だけを宣言しています。
+外部の[db](/ja/reference/actions/db)、[dns](/ja/reference/actions/dns)、[grpc](/ja/reference/actions/grpc)アクションは両方の種類を宣言しています。それぞれが何を拒否するかは、各アクションのページにあります。外部の[imap](/ja/reference/actions/imap)アクションは、コマンドがメールボックスを変更することがあるため、`allow-host`だけを宣言しています。
 
 組み込みの`shell`、`ssh`、`smtp`は、コマンドやスクリプトが何をするかを判定できないため、ガードを宣言していません。ページが何をするかを判定できない外部の[browser](/ja/reference/actions/browser)アクションも、同じく宣言していません。これらを使うステップは、`--allow-action`で指定しない限り、ガードの下では拒否されます。指定した場合は、ガードがないときと同じように実行します。
 

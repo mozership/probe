@@ -35,6 +35,7 @@ var officialActions = []OfficialAction{
 	{"browser", "Drive a browser with chromedp"},
 	{"container", "Start a container, and remove it once the run is over"},
 	{"db", "Run SQL against MySQL, PostgreSQL and SQLite"},
+	{"dns", "Ask a DNS server for the records of a name, and return what it answered"},
 	{"github-notes", "Put the notes of a run on GitHub, in a pull request comment, the job summary or an issue"},
 	{"graphql", "Send a GraphQL query over HTTP"},
 	{"grpc", "Call gRPC and Connect services, and check the calls against .proto files"},

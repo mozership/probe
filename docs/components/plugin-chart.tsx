@@ -13,7 +13,6 @@ const BUILT_IN = [
   'shell',
   'ssh',
   'smtp',
-  'dns',
   'file',
   'embedded',
 ]

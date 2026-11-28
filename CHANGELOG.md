@@ -4,6 +4,31 @@ Release notes for each version are generated from the commits by GoReleaser.
 This file records what those notes cannot carry well: changes that break code
 importing probe as a library.
 
+## Unreleased
+
+### Breaking Changes
+
+The `dns` action is no longer built into Probe. It is the external action
+[probe-dns](https://github.com/mozership/probe-dns), with the same
+parameters and the same result, and it takes miekg/dns out of the probe
+executable. A workflow that uses it names it once under `actions`, and its
+steps, and the `defaults` written for it, stay as they are:
+
+```yaml
+actions:
+  dns: github.com/mozership/probe-dns@<commit SHA>
+```
+
+probe-dns keeps to `--read-only` and `--allow-host`, as the built-in action
+did, so a step runs under a guard as before.
+
+`probe guide dns` prints the `uses` line of its latest release. Without the
+line under `actions`, a workflow that uses `dns` stops before its first job
+with exit status 2, as for any action that is not there.
+
+An action that calls `dns` with `sdk.Caller` calls what the workflow names
+so under `actions`.
+
 ## v1.44.0 (2026-11-27)
 
 ### Breaking Changes
