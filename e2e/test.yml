@@ -985,12 +985,15 @@ jobs:
   steps:
   # The server of the e2e tests of probe-dns answers for example.test, so the
   # tests depend on no resolver and on no name that someone else keeps. go run
-  # builds it first, which the timeout allows for.
+  # builds it first, which the timeout allows for, with the Go its go.mod
+  # asks for, which may be newer than that of Probe.
   - name: Start DNS server in background
     uses: shell
     with:
       background: true
       cmd: go run github.com/mozership/probe-dns/e2e/dns-server@v0.1.0 -addr 127.0.0.1:15353
+      env:
+        GOTOOLCHAIN: auto
       ready:
         log: listening on
       timeout: 3m
