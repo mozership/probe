@@ -1,8 +1,8 @@
 package main
 
 import (
-	_ "embed"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -11,12 +11,47 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-var (
-	//go:embed fonts/Inter-Regular.ttf
-	interRegular []byte
-	//go:embed fonts/Inter-Bold.ttf
-	interBold []byte
-)
+// fontFile is the Helvetica of macOS. The diagram is drawn on a Mac and
+// committed, so the font is read where it is rather than kept here.
+const fontFile = "/System/Library/Fonts/Helvetica.ttc"
+
+// fonts are the faces of fontFile the diagram is drawn with.
+type fonts struct {
+	regular, bold *sfnt.Font
+}
+
+func loadFonts(path string) (fonts, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fonts{}, err
+	}
+	c, err := sfnt.ParseCollection(data)
+	if err != nil {
+		return fonts{}, err
+	}
+	var fs fonts
+	var buf sfnt.Buffer
+	for i := range c.NumFonts() {
+		f, err := c.Font(i)
+		if err != nil {
+			return fonts{}, err
+		}
+		sub, err := f.Name(&buf, sfnt.NameIDSubfamily)
+		if err != nil {
+			return fonts{}, err
+		}
+		switch sub {
+		case "Regular":
+			fs.regular = f
+		case "Bold":
+			fs.bold = f
+		}
+	}
+	if fs.regular == nil || fs.bold == nil {
+		return fonts{}, fmt.Errorf("%s has no Regular or no Bold face", path)
+	}
+	return fs, nil
+}
 
 // typeface turns text into the outlines of its glyphs, so that the diagram
 // looks the same whatever fonts the viewer has.
@@ -33,12 +68,8 @@ type typeface struct {
 	defs []string
 }
 
-func parseTypeface(data []byte, prefix string) (*typeface, error) {
-	f, err := sfnt.Parse(data)
-	if err != nil {
-		return nil, err
-	}
-	return &typeface{font: f, ppem: fixed.I(int(f.UnitsPerEm())), prefix: prefix, ids: map[sfnt.GlyphIndex]string{}}, nil
+func newTypeface(f *sfnt.Font, prefix string) *typeface {
+	return &typeface{font: f, ppem: fixed.I(int(f.UnitsPerEm())), prefix: prefix, ids: map[sfnt.GlyphIndex]string{}}
 }
 
 func (t *typeface) glyphs(s string) ([]sfnt.GlyphIndex, error) {

@@ -2,8 +2,9 @@
 // show, which follows the reader's system setting, and the two the docs site
 // shows, one for each of its themes.
 //
-// It is a module of its own, so that the font it reads does not become a
-// dependency of Probe. Run it from its directory:
+// It outlines its text in the Helvetica of macOS, so it is run on a Mac. It
+// is a module of its own, so that what it needs to read the font does not
+// become a dependency of Probe. Run it from its directory:
 //
 //	go run .
 package main
@@ -47,8 +48,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fs, err := loadFonts(fontFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 	for _, o := range outputs {
-		svg, err := render(o.theme, mark)
+		svg, err := render(o.theme, mark, fs)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -260,15 +265,8 @@ func (c *canvas) logo(m wordmark, x, cy, height float64) {
 	c.add(`</g>`)
 }
 
-func render(t theme, mark wordmark) (string, error) {
-	regular, err := parseTypeface(interRegular, "r")
-	if err != nil {
-		return "", err
-	}
-	bold, err := parseTypeface(interBold, "b")
-	if err != nil {
-		return "", err
-	}
+func render(t theme, mark wordmark, fs fonts) (string, error) {
+	regular, bold := newTypeface(fs.regular, "r"), newTypeface(fs.bold, "b")
 	c := canvas{regular: regular, bold: bold}
 
 	c.text(40, 60, "Hi-Level Architecture", 28, textOpts{bold: true, start: true})
@@ -334,7 +332,7 @@ func render(t theme, mark wordmark) (string, error) {
 	c.box(xx+40+float64(n%3)*205, xy+60+float64(n/3)*88, 185, 64, "Your own", boxOpts{size: 24, dashed: true})
 	c.text(xx+xw/2, xy+xh-160, "uses: github.com/<owner>/<repo>@<SHA>", 20, textOpts{class: "t m"})
 	c.text(xx+xw/2, xy+xh-130, "or a local ./path", 20, textOpts{class: "t m"})
-	c.text(xx+xw/2, xy+xh-85, "action.yml → release binary,", 20, textOpts{class: "t m"})
+	c.text(xx+xw/2, xy+xh-85, "release binary named in action.yml,", 20, textOpts{class: "t m"})
 	c.text(xx+xw/2, xy+xh-55, "SHA-256 checked on every start", 20, textOpts{class: "t m"})
 
 	const branchX = bx + bw/2

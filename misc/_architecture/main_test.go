@@ -20,14 +20,27 @@ func readLogo(t *testing.T) wordmark {
 	return m
 }
 
+// readFonts skips the test where the font is not, as off a Mac.
+func readFonts(t *testing.T) fonts {
+	t.Helper()
+	if _, err := os.Stat(fontFile); err != nil {
+		t.Skipf("no %s: %v", fontFile, err)
+	}
+	fs, err := loadFonts(fontFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fs
+}
+
 func TestOutputsAreUpToDate(t *testing.T) {
-	mark := readLogo(t)
+	mark, fs := readLogo(t), readFonts(t)
 	for _, o := range outputs {
 		got, err := os.ReadFile(o.path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		want, err := render(o.theme, mark)
+		want, err := render(o.theme, mark, fs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +97,7 @@ func TestStyleFollowsTheme(t *testing.T) {
 }
 
 func TestGlyphsAreDefinedOnce(t *testing.T) {
-	svg, err := render(light, readLogo(t))
+	svg, err := render(light, readLogo(t), readFonts(t))
 	if err != nil {
 		t.Fatal(err)
 	}
